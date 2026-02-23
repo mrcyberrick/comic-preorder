@@ -134,6 +134,13 @@
   if (!navData) return;
   const { user, profile } = navData;
 
+  // Check maintenance mode — admins bypass
+  try { await checkMaintenanceMode(profile?.is_admin); } catch(e) { return; }
+
+  // Block non-admins during maintenance
+  try { await checkMaintenanceMode(profile?.is_admin); }
+  catch(e) { if (e.message === 'maintenance') return; }
+
   const PAGE_SIZE = 48;
   let currentPage = 1;
   let currentMonth = null;
