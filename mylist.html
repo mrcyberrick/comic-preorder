@@ -127,12 +127,12 @@
 
     // Stats
     document.getElementById('stat-count').textContent = allItems.length;
-    const total = allItems.reduce((sum, i) => sum + (parseFloat(i.catalog?.price_usd) || 0), 0);
+    const total = allItems.reduce((sum, i) => sum + ((parseFloat(i.catalog?.price_usd) || 0) * (i.quantity || 1)), 0);
     document.getElementById('stat-total').textContent = `$${total.toFixed(2)}`;
     document.getElementById('stat-lunar').textContent =
-      allItems.filter(i => i.catalog?.distributor === 'Lunar').length;
+      allItems.filter(i => i.catalog?.distributor === 'Lunar').reduce((s,i) => s + (i.quantity||1), 0);
     document.getElementById('stat-prh').textContent =
-      allItems.filter(i => i.catalog?.distributor === 'PRH').length;
+      allItems.filter(i => i.catalog?.distributor === 'PRH').reduce((s,i) => s + (i.quantity||1), 0);
 
     if (!filtered.length) {
       container.innerHTML = `
@@ -163,7 +163,9 @@
             <th>Publisher</th>
             <th>Distributor</th>
             <th>On Sale</th>
+            <th>Qty</th>
             <th>Price</th>
+            <th>Line Total</th>
             <th></th>
           </tr>
         </thead>
@@ -187,7 +189,15 @@
                   <span class="badge badge-${c.distributor.toLowerCase()}">${escapeHtml(c.distributor)}</span>
                 </td>
                 <td style="color:var(--text-muted); font-size:0.8rem">${formatDate(c.on_sale_date)}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:4px">
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem">−</button>
+                    <span class="qty-display" style="min-width:20px;text-align:center;font-weight:600">${item.quantity || 1}</span>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem">+</button>
+                  </div>
+                </td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
+                <td style="font-weight:600;color:var(--accent)">$${((parseFloat(c.price_usd)||0)*(item.quantity||1)).toFixed(2)}</td>
                 <td>
                   <button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">
                     Remove
@@ -199,6 +209,40 @@
         </tbody>
       </table>
     `;
+
+    // Quantity buttons
+    container.querySelectorAll('.qty-minus-btn, .qty-plus-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const item = allItems.find(i => i.id === btn.dataset.preorderId);
+        if (!item) return;
+        const isPlus = btn.classList.contains('qty-plus-btn');
+        const newQty = Math.min(99, Math.max(1, (item.quantity || 1) + (isPlus ? 1 : -1)));
+        if (newQty === (item.quantity || 1)) return;
+
+        btn.disabled = true;
+        const { error } = await Preorders.updateQuantity(
+          AdminContext.resolveUserId(user.id), btn.dataset.catalogId, newQty
+        );
+        if (error) {
+          toast('Failed to update quantity', 'error');
+        } else {
+          item.quantity = newQty;
+          // Update display inline without full re-render
+          const row = btn.closest('tr');
+          row.querySelector('.qty-display').textContent = newQty;
+          const price = parseFloat(item.catalog?.price_usd) || 0;
+          const cells = row.querySelectorAll('td');
+          // Line total is second to last td before Remove
+          const lineTotalCell = row.querySelector('td:nth-last-child(2)');
+          if (lineTotalCell) lineTotalCell.textContent = '$' + (price * newQty).toFixed(2);
+          // Refresh stats
+          const total = allItems.reduce((s,i) => s + ((parseFloat(i.catalog?.price_usd)||0)*(i.quantity||1)), 0);
+          document.getElementById('stat-total').textContent = '$' + total.toFixed(2);
+          document.getElementById('stat-count').textContent = allItems.length;
+        }
+        btn.disabled = false;
+      });
+    });
 
     // Cancel buttons
     container.querySelectorAll('.cancel-btn').forEach(btn => {
