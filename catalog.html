@@ -112,7 +112,14 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" id="modal-close">Close</button>
-      <button class="btn btn-primary" id="modal-reserve">Reserve</button>
+      <div class="qty-stepper" id="modal-qty-wrap">
+        <button class="qty-btn" id="qty-minus">−</button>
+        <input type="number" id="modal-qty" value="1" min="1" max="99"
+          style="width:44px;text-align:center;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);font-size:0.9rem;padding:4px;border-radius:var(--radius);">
+        <button class="qty-btn" id="qty-plus">+</button>
+      </div>
+      <button class="btn btn-primary" id="modal-reserve">+ Reserve</button>
     </div>
   </div>
 </div>
@@ -190,13 +197,13 @@
       }
       // Reload reservations for the newly selected user
       reservedIds = await Preorders.getMyIds(AdminContext.resolveUserId(user.id));
-      document.getElementById('stat-reserved').textContent = reservedIds.size;
+      document.getElementById('stat-reserved').textContent = [...reservedIds.values()].reduce((s,q) => s+q, 0);
       await loadCatalog(1);
     });
   }
 
   reservedIds = await Preorders.getMyIds(AdminContext.resolveUserId(user.id));
-  document.getElementById('stat-reserved').textContent = reservedIds.size;
+  document.getElementById('stat-reserved').textContent = [...reservedIds.values()].reduce((s,q) => s+q, 0);
 
   // Load publishers for filter
   if (currentMonth) {
@@ -269,7 +276,7 @@
       return;
     }
 
-    grid.innerHTML = displayed.map(c => buildComicCard(c, reservedIds.has(c.id))).join('');
+    grid.innerHTML = displayed.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
     renderPagination(total, page);
 
     // Fade in images once loaded
@@ -325,7 +332,7 @@
   }
 
   // ── Reserve Toggle ────────────────────────────────────────
-  async function toggleReserve(catalogId, btn) {
+  async function toggleReserve(catalogId, btn, quantity = 1) {
     const isReserved = reservedIds.has(catalogId);
     const targetUserId = AdminContext.resolveUserId(user.id);
     btn.disabled = true;
@@ -337,26 +344,24 @@
         reservedIds.delete(catalogId);
         btn.textContent = '+ Reserve';
         btn.classList.remove('reserved');
-        // Remove badge on card
-        const badge = btn.closest('.comic-card').querySelector('.reserved-indicator');
+        const badge = btn.closest('.comic-card')?.querySelector('.reserved-indicator');
         if (badge) badge.remove();
         toast('Reservation cancelled');
         updateReservedStat();
       }
     } else {
-      const { error } = await Preorders.reserve(targetUserId, catalogId);
+      const { error } = await Preorders.reserve(targetUserId, catalogId, quantity);
       if (error) {
         toast(error.code === '23505' ? 'Already reserved' : 'Failed to reserve', 'error');
       } else {
-        reservedIds.add(catalogId);
+        reservedIds.set(catalogId, quantity);
         btn.textContent = '✓ Reserved';
         btn.classList.add('reserved');
-        // Add badge
-        const cover = btn.closest('.comic-card').querySelector('.comic-cover');
-        if (!cover.querySelector('.reserved-indicator')) {
+        const cover = btn.closest('.comic-card')?.querySelector('.comic-cover');
+        if (cover && !cover.querySelector('.reserved-indicator')) {
           const badge = document.createElement('div');
           badge.className = 'reserved-indicator';
-          badge.textContent = 'Reserved';
+          badge.textContent = 'Qty: ' + quantity;
           cover.appendChild(badge);
         }
         toast('Reserved!');
@@ -376,7 +381,7 @@
   }
 
   function updateReservedStat() {
-    document.getElementById('stat-reserved').textContent = reservedIds.size;
+    document.getElementById('stat-reserved').textContent = [...reservedIds.values()].reduce((s,q) => s+q, 0);
     // Update subtitle to reflect whose list we're managing
     const subtitle = document.getElementById('catalog-subtitle');
     if (AdminContext.isActive()) {
@@ -434,13 +439,32 @@
       </div>
     `).join('');
 
+    // ── Quantity stepper setup ──────────────────────────────
+    const qtyInput  = document.getElementById('modal-qty');
+    const qtyWrap   = document.getElementById('modal-qty-wrap');
+    const currentQty = reservedIds.get(catalogId) || 1;
+    qtyInput.value = currentQty;
+
+    // Hide stepper if already reserved (show cancel instead)
+    qtyWrap.style.display = isReserved ? 'none' : 'flex';
+
+    document.getElementById('qty-minus').onclick = () => {
+      const v = parseInt(qtyInput.value) || 1;
+      if (v > 1) qtyInput.value = v - 1;
+    };
+    document.getElementById('qty-plus').onclick = () => {
+      const v = parseInt(qtyInput.value) || 1;
+      if (v < 99) qtyInput.value = v + 1;
+    };
+
     const reserveBtn = document.getElementById('modal-reserve');
-    reserveBtn.textContent = isReserved ? '✓ Cancel Reservation' : '+ Reserve';
+    reserveBtn.textContent = isReserved ? '✕ Cancel Reservation' : '+ Reserve';
+    reserveBtn.className   = isReserved ? 'btn btn-danger' : 'btn btn-primary';
     reserveBtn.onclick = () => {
+      const qty     = parseInt(qtyInput.value) || 1;
       const cardBtn = grid.querySelector(`.btn-reserve[data-id="${catalogId}"]`);
-      toggleReserve(catalogId, reserveBtn);
+      toggleReserve(catalogId, reserveBtn, qty);
       if (cardBtn) {
-        // Sync card
         setTimeout(() => {
           const nowReserved = reservedIds.has(catalogId);
           cardBtn.textContent = nowReserved ? '✓ Reserved' : '+ Reserve';
