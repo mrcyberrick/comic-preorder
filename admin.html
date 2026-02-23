@@ -117,38 +117,37 @@
   let allPreorders = [];
 
   // ── Load Data ─────────────────────────────────────────────
-  // Admin query: fetch all preorders with user + catalog info
-  const { data, error } = await db
-    .from('preorders')
-    .select(`
-      id,
-      created_at,
-      user_id,
-      user_profiles ( full_name ),
-      catalog (
-        id, distributor, item_code, title, series_name, publisher,
-        issue_number, format, price_usd, foc_date, on_sale_date,
-        writer, artist, cover_url, variant_type
-      )
-    `)
-    .order('created_at', { ascending: false });
+  // Fetch preorders and user_profiles separately to avoid schema cache join issue
 
-  if (error) {
+  const [preordersRes, profilesRes] = await Promise.all([
+    db.from('preorders')
+      .select(`
+        id,
+        created_at,
+        user_id,
+        catalog (
+          id, distributor, item_code, title, series_name, publisher,
+          issue_number, format, price_usd, foc_date, on_sale_date,
+          writer, artist, cover_url, variant_type
+        )
+      `)
+      .order('created_at', { ascending: false }),
+    db.from('user_profiles').select('id, full_name'),
+  ]);
+
+  if (preordersRes.error) {
     document.getElementById('customer-groups').innerHTML =
-      `<div class="alert alert-error">Failed to load: ${error.message}</div>`;
+      `<div class="alert alert-error">Failed to load: ${preordersRes.error.message}</div>`;
     return;
   }
 
-  // Also get all user emails
-  const { data: usersData } = await db
-    .from('user_profiles')
-    .select('id, full_name');
+  // Build a lookup map: user_id -> full_name
   const profileMap = {};
-  (usersData || []).forEach(u => profileMap[u.id] = u);
+  (profilesRes.data || []).forEach(u => profileMap[u.id] = u.full_name);
 
-  allPreorders = (data || []).map(p => ({
+  allPreorders = (preordersRes.data || []).map(p => ({
     ...p,
-    customer_name: p.user_profiles?.full_name || 'Unknown',
+    customer_name: profileMap[p.user_id] || 'Unknown',
   }));
 
   renderStats();
