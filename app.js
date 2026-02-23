@@ -5,8 +5,8 @@
 // Project Settings → API
 // ================================================================
 
-const SUPABASE_URL      = 'https://plgegklqtdjxeglvyjte.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_ShA2TQAvsnJEizW9F7RP6w_HQ5eiVM3';
+const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 
 // ── Supabase Client (CDN version, no npm needed) ─────────────
 const { createClient } = supabase;
@@ -270,10 +270,16 @@ function renderSkeletons(count = 12, container) {
   `).join('');
 }
 
+// Inline SVG placeholder — shown while image loads and as fallback if it breaks
+const COVER_PLACEHOLDER = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='225' viewBox='0 0 150 225'%3E%3Crect width='150' height='225' fill='%23222'/%3E%3Crect x='20' y='20' width='110' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='32' width='80' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='60' width='110' height='80' rx='4' fill='%23333'/%3E%3Crect x='20' y='156' width='90' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='168' width='60' height='4' rx='2' fill='%23333'/%3E%3C/svg%3E`;
+
 function buildComicCard(comic, isReserved) {
-  const coverHtml = comic.cover_url
-    ? `<img src="${escapeHtml(comic.cover_url)}" alt="${escapeHtml(comic.title)}" loading="lazy">`
-    : `<div class="no-cover">${escapeHtml(comic.title)}</div>`;
+  const coverHtml = `<img
+    src="${comic.cover_url ? escapeHtml(comic.cover_url) : COVER_PLACEHOLDER}"
+    alt="${escapeHtml(comic.title)}"
+    loading="lazy"
+    onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;"
+  >`;
 
   const reservedBadge = isReserved
     ? `<div class="reserved-indicator">Reserved</div>`
