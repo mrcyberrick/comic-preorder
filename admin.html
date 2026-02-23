@@ -24,9 +24,19 @@
 </nav>
 
 <div class="container">
-  <div class="page-header">
-    <h1>Admin Dashboard</h1>
-    <p>All customer pre-orders for the current order cycle</p>
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
+    <div>
+      <h1>Admin Dashboard</h1>
+      <p>All customer pre-orders for the current order cycle</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding-top:8px">
+      <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500" id="maint-label">Maintenance Mode</span>
+      <label class="toggle-switch" title="Lock site for catalog update">
+        <input type="checkbox" id="maint-toggle">
+        <span class="toggle-slider"></span>
+      </label>
+      <span id="maint-status" style="font-size:0.78rem;font-weight:600;color:var(--text-muted)">OFF</span>
+    </div>
   </div>
 
   <!-- Summary Stats -->
@@ -188,15 +198,16 @@
     container.innerHTML = Object.entries(grouped)
       .sort(([a],[b]) => a.localeCompare(b))
       .map(([name, items]) => {
-        const total = items.reduce((s, p) => s + (parseFloat(p.catalog?.price_usd) || 0), 0);
-        const lunarCount = items.filter(p => p.catalog?.distributor === 'Lunar').length;
-        const prhCount   = items.filter(p => p.catalog?.distributor === 'PRH').length;
+        const total      = items.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
+        const totalQty   = items.reduce((s, p) => s + (p.quantity||1), 0);
+        const lunarCount = items.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
+        const prhCount   = items.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
         return `
           <div class="customer-group">
             <div class="customer-group-header">
               <div>
                 <div class="customer-group-name">${escapeHtml(name)}</div>
-                <div class="customer-group-meta">${items.length} items · Est. $${total.toFixed(2)} · Lunar: ${lunarCount} · PRH: ${prhCount}</div>
+                <div class="customer-group-meta">${totalQty} item${totalQty!==1?'s':''} · Est. $${total.toFixed(2)} · Lunar: ${lunarCount} · PRH: ${prhCount}</div>
               </div>
               <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="m6 9 6 6 6-6"/>
@@ -313,13 +324,17 @@
             <th>Publisher</th>
             <th>Distributor</th>
             <th>Code</th>
-            <th>Price</th>
+            <th>Qty</th>
+            <th>Unit Price</th>
+            <th>Line Total</th>
             <th>On Sale</th>
           </tr>
         </thead>
         <tbody>
           ${items.map(p => {
-            const c = p.catalog || {};
+            const c   = p.catalog || {};
+            const qty = p.quantity || 1;
+            const lineTotal = ((parseFloat(c.price_usd)||0) * qty).toFixed(2);
             return `
               <tr>
                 <td class="td-cover">
@@ -335,7 +350,9 @@
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td><span class="badge badge-${(c.distributor||'').toLowerCase()}">${escapeHtml(c.distributor || '—')}</span></td>
                 <td style="font-size:0.72rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
+                <td style="text-align:center;font-weight:700;color:${qty>1?'var(--accent)':'var(--text-primary)'}">${qty}</td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
+                <td style="font-weight:600;color:var(--accent)">$${lineTotal}</td>
                 <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(c.on_sale_date)}</td>
               </tr>
             `;
@@ -395,6 +412,37 @@
     const prh = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
     exportToCsv(makeExportRows(prh), `prh-orders-${new Date().toISOString().split('T')[0]}.csv`);
   });
+
+  // ── Maintenance Mode Toggle ───────────────────────────────
+  const maintToggle = document.getElementById('maint-toggle');
+  const maintStatus = document.getElementById('maint-status');
+
+  // Load current state
+  const currentMaint = await Settings.isMaintenanceMode();
+  maintToggle.checked = currentMaint;
+  updateMaintStatus(currentMaint);
+
+  maintToggle.addEventListener('change', async () => {
+    const on = maintToggle.checked;
+    maintToggle.disabled = true;
+    const { error } = await Settings.setMaintenanceMode(on);
+    if (error) {
+      toast('Failed to update maintenance mode', 'error');
+      maintToggle.checked = !on; // revert
+    } else {
+      updateMaintStatus(on);
+      toast(on ? '⚠ Maintenance mode ON — customers are locked out' : '✓ Maintenance mode OFF — site is live', on ? 'error' : 'success');
+    }
+    maintToggle.disabled = false;
+  });
+
+  function updateMaintStatus(on) {
+    maintStatus.textContent = on ? 'ON' : 'OFF';
+    maintStatus.style.color = on ? 'var(--accent)' : 'var(--text-muted)';
+    // Highlight the toggle label area when active
+    const label = document.getElementById('maint-label');
+    label.style.color = on ? 'var(--accent)' : 'var(--text-muted)';
+  }
 
 })();
 </script>
