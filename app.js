@@ -5,8 +5,8 @@
 // Project Settings → API
 // ================================================================
 
-const SUPABASE_URL      = 'https://plgegklqtdjxeglvyjte.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_ShA2TQAvsnJEizW9F7RP6w_HQ5eiVM3';
+const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 
 // ── Supabase Client (CDN version, no npm needed) ─────────────
 const { createClient } = supabase;
@@ -146,6 +146,61 @@ const Catalog = {
       return true;
     }).map(r => r.publisher);
   },
+};
+
+// ── Admin Impersonation State ────────────────────────────────
+const AdminContext = {
+  activeUserId:   null,
+  activeUserName: null,
+
+  set(userId, userName) {
+    this.activeUserId   = userId;
+    this.activeUserName = userName;
+    this.updateBanner();
+  },
+
+  clear() {
+    this.activeUserId   = null;
+    this.activeUserName = null;
+    this.updateBanner();
+  },
+
+  isActive() { return !!this.activeUserId; },
+
+  resolveUserId(ownUserId) {
+    return this.activeUserId || ownUserId;
+  },
+
+  updateBanner() {
+    let banner = document.getElementById('admin-impersonation-banner');
+    if (this.activeUserId) {
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'admin-impersonation-banner';
+        banner.style.cssText = [
+          'position:fixed;top:60px;left:0;right:0;z-index:90;',
+          'background:var(--accent);color:white;',
+          'padding:8px 24px;font-size:0.82rem;font-weight:600;',
+          'display:flex;align-items:center;justify-content:space-between;',
+          'letter-spacing:0.03em;box-shadow:0 2px 12px rgba(0,0,0,0.4);'
+        ].join('');
+        document.body.appendChild(banner);
+      }
+      const name = escapeHtml(AdminContext.activeUserName);
+      banner.innerHTML =
+        '<span>&#9888; Managing pull list for: <strong>' + name + '</strong></span>' +
+        '<button id="banner-exit-btn" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:white;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:0.78rem">' +
+        '&#x2715; Back to my account</button>';
+      document.getElementById('banner-exit-btn').addEventListener('click', () => {
+        AdminContext.clear();
+        const sel = document.getElementById('admin-user-select');
+        if (sel) sel.value = '';
+        window.location.reload();
+      });
+    } else if (banner) {
+      banner.remove();
+    }
+  }
 };
 
 // ── Pre-order API ─────────────────────────────────────────────
