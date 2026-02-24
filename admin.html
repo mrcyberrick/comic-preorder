@@ -29,13 +29,19 @@
       <h1>Admin Dashboard</h1>
       <p>All customer pre-orders for the current order cycle</p>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;padding-top:8px">
-      <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500" id="maint-label">Maintenance Mode</span>
-      <label class="toggle-switch" title="Lock site for catalog update">
-        <input type="checkbox" id="maint-toggle">
-        <span class="toggle-slider"></span>
-      </label>
-      <span id="maint-status" style="font-size:0.78rem;font-weight:600;color:var(--text-muted)">OFF</span>
+    <div style="display:flex;align-items:center;gap:16px;padding-top:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" id="btn-invite-customer"
+        style="display:flex;align-items:center;gap:6px;font-size:0.82rem">
+        <span style="font-size:1rem;line-height:1">+</span> Invite Customer
+      </button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500" id="maint-label">Maintenance Mode</span>
+        <label class="toggle-switch" title="Lock site for catalog update">
+          <input type="checkbox" id="maint-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="maint-status" style="font-size:0.78rem;font-weight:600;color:var(--text-muted)">OFF</span>
+      </div>
     </div>
   </div>
 
@@ -115,6 +121,55 @@
 </div>
 
 <div id="toast-container"></div>
+
+<!-- ── Invite Customer Modal ───────────────────────────────── -->
+<div id="invite-modal-overlay" style="display:none;position:fixed;inset:0;z-index:200;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:32px;width:100%;max-width:420px;margin:16px;position:relative">
+    <button id="invite-modal-close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 6px;font-size:1.1rem">Invite Customer</h2>
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 24px;line-height:1.6">
+      An email will be sent with a link to set up their account.<br>
+      Their profile will be created automatically.
+    </p>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label style="display:block;font-size:0.78rem;font-weight:600;
+                       color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
+          FULL NAME
+        </label>
+        <input id="invite-name" type="text" placeholder="Jane Smith"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.78rem;font-weight:600;
+                       color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
+          EMAIL ADDRESS
+        </label>
+        <input id="invite-email" type="email" placeholder="jane@example.com"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="invite-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="invite-send-btn">
+        Send Invite
+      </button>
+    </div>
+
+    <div id="invite-result" style="display:none;margin-top:16px;padding:10px 14px;
+         border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="app.js"></script>
@@ -411,6 +466,97 @@
   document.getElementById('btn-export-prh').addEventListener('click', () => {
     const prh = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
     exportToCsv(makeExportRows(prh), `prh-orders-${new Date().toISOString().split('T')[0]}.csv`);
+  });
+
+  // ── Invite Customer Modal ────────────────────────────────
+  const inviteOverlay  = document.getElementById('invite-modal-overlay');
+  const inviteNameEl   = document.getElementById('invite-name');
+  const inviteEmailEl  = document.getElementById('invite-email');
+  const inviteResult   = document.getElementById('invite-result');
+  const inviteSendBtn  = document.getElementById('invite-send-btn');
+
+  function openInviteModal() {
+    inviteNameEl.value  = '';
+    inviteEmailEl.value = '';
+    inviteResult.style.display = 'none';
+    inviteSendBtn.textContent  = 'Send Invite';
+    inviteSendBtn.disabled     = false;
+    inviteOverlay.style.display = 'flex';
+    setTimeout(() => inviteNameEl.focus(), 50);
+  }
+
+  function closeInviteModal() {
+    inviteOverlay.style.display = 'none';
+  }
+
+  document.getElementById('btn-invite-customer').addEventListener('click', openInviteModal);
+  document.getElementById('invite-modal-close').addEventListener('click', closeInviteModal);
+  document.getElementById('invite-cancel-btn').addEventListener('click', closeInviteModal);
+  inviteOverlay.addEventListener('click', e => { if (e.target === inviteOverlay) closeInviteModal(); });
+
+  // Enter key submits
+  [inviteNameEl, inviteEmailEl].forEach(el =>
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') inviteSendBtn.click(); })
+  );
+
+  inviteSendBtn.addEventListener('click', async () => {
+    const name  = inviteNameEl.value.trim();
+    const email = inviteEmailEl.value.trim();
+
+    // Validate
+    if (!name)  { inviteNameEl.focus();  return; }
+    if (!email || !email.includes('@')) { inviteEmailEl.focus(); return; }
+
+    inviteSendBtn.disabled    = true;
+    inviteSendBtn.textContent = 'Sending…';
+    inviteResult.style.display = 'none';
+
+    try {
+      // Call the Edge Function which uses service_role to invite + create profile
+      const { data: { session } } = await db.auth.getSession();
+      const resp = await fetch(
+        `${SUPABASE_URL}/functions/v1/invite-customer`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ name, email }),
+        }
+      );
+
+      const result = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(result.error || 'Unknown error');
+      }
+
+      // Success
+      inviteResult.style.display     = 'block';
+      inviteResult.style.background  = 'rgba(34,197,94,0.12)';
+      inviteResult.style.border      = '1px solid rgba(34,197,94,0.3)';
+      inviteResult.style.color       = '#4ade80';
+      inviteResult.innerHTML =
+        `✓ Invite sent to <strong>${escapeHtml(email)}</strong><br>
+         <span style="color:var(--text-muted)">Profile created for ${escapeHtml(name)}.
+         They'll receive an email to set up their password.</span>`;
+      inviteSendBtn.textContent = '✓ Sent';
+
+      // Refresh customer list in background
+      await loadData();
+
+    } catch (err) {
+      inviteResult.style.display    = 'block';
+      inviteResult.style.background = 'rgba(230,57,70,0.12)';
+      inviteResult.style.border     = '1px solid rgba(230,57,70,0.3)';
+      inviteResult.style.color      = 'var(--accent)';
+      inviteResult.innerHTML =
+        `✗ Failed to send invite<br>
+         <span style="color:var(--text-muted)">${escapeHtml(err.message)}</span>`;
+      inviteSendBtn.disabled    = false;
+      inviteSendBtn.textContent = 'Send Invite';
+    }
   });
 
   // ── Maintenance Mode Toggle ───────────────────────────────
