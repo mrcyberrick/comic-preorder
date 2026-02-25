@@ -513,13 +513,26 @@
     inviteResult.style.display = 'none';
 
     try {
-      // Call DB function — creates user + profile, returns invite link
-      const { data: result, error: rpcErr } = await db.rpc('generate_invite_link', {
-        customer_email: email,
-        customer_name:  name,
+      // Call Edge Function — uses generateLink() to get proper Supabase token_hash
+      const { data: sessionData } = await db.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Session expired — please sign out and back in');
+
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/invite-customer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey':        SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ name, email }),
       });
 
-      if (rpcErr) throw new Error(rpcErr.message);
+      let result;
+      try { result = await resp.json(); }
+      catch { result = { error: `HTTP ${resp.status}` }; }
+
+      if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
 
       // Success — show invite link to copy and send manually
       const inviteLink = result?.invite_link || '';
