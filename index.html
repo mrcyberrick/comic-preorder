@@ -10,35 +10,110 @@
 
 <div class="login-page">
   <div class="login-card">
+
     <div class="login-logo">PULL<span>LIST</span></div>
-    <div class="login-tagline">Monthly Comic Pre-Orders</div>
+    <div class="login-tagline">BookStop Comics — Monthly Pre-Orders</div>
 
-    <h2>Sign in to your account</h2>
-
-    <div id="login-error" class="alert alert-error" style="display:none"></div>
-
-    <div class="form-group">
-      <label for="email">Email Address</label>
-      <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+    <!-- ── Invite Welcome Banner (shown when invite token detected) ── -->
+    <div id="invite-banner" style="display:none;margin-bottom:24px;
+         background:rgba(232,50,28,0.08);border:1px solid rgba(232,50,28,0.25);
+         border-radius:var(--radius);padding:16px;">
+      <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.06em;
+                  color:var(--accent);margin-bottom:6px;text-transform:uppercase">
+        You've been invited
+      </div>
+      <div id="invite-greeting" style="font-size:1rem;font-weight:600;
+           color:var(--text-primary);margin-bottom:8px;line-height:1.4">
+        Welcome to your pull list!
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7">
+        Richard at <strong style="color:var(--text-primary)">BookStop Comics</strong>
+        has set up an account for you. Set your password below to get started —
+        you can then browse the monthly catalog and reserve your titles.
+      </div>
+      <!-- Trust signals -->
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:4px;
+                  font-size:0.75rem;color:var(--text-muted)">
+        <div>✓ &nbsp;This invite was sent personally by BookStop Comics</div>
+        <div>✓ &nbsp;Reservations only — you will never be charged through this site</div>
+        <div>✓ &nbsp;Questions? Reply to the invite email or call the shop</div>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label for="password">Password</label>
-      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    <!-- ── Set Password Form (shown for invite flow) ── -->
+    <div id="set-password-form" style="display:none">
+      <h2 id="set-password-heading">Create your password</h2>
+      <div id="set-password-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label for="new-password">Choose a Password</label>
+        <input type="password" id="new-password" placeholder="At least 8 characters"
+               autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="confirm-password">Confirm Password</label>
+        <input type="password" id="confirm-password" placeholder="Repeat your password"
+               autocomplete="new-password">
+      </div>
+      <button id="btn-set-password" class="btn btn-primary btn-full" style="margin-top:8px">
+        Set Password &amp; Enter
+      </button>
+      <p style="margin-top:16px;font-size:0.75rem;color:var(--text-muted);
+                text-align:center;line-height:1.6">
+        Already set your password?
+        <a href="#" id="switch-to-login"
+           style="color:var(--accent);text-decoration:underline">Sign in instead</a>
+      </p>
     </div>
 
-    <button id="btn-login" class="btn btn-primary btn-full" style="margin-top:8px">
-      Sign In
-    </button>
+    <!-- ── Standard Sign In Form ── -->
+    <div id="sign-in-form">
+      <h2 id="signin-heading">Sign in to your account</h2>
+      <div id="login-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="••••••••"
+               autocomplete="current-password">
+      </div>
+      <button id="btn-login" class="btn btn-primary btn-full" style="margin-top:8px">
+        Sign In
+      </button>
+      <p style="margin-top:16px;text-align:center">
+        <a href="forgot-password.html"
+           style="font-size:0.82rem;color:var(--text-muted);text-decoration:underline">
+          Forgot your password?
+        </a>
+      </p>
+      <p style="margin-top:10px;font-size:0.78rem;color:var(--text-muted);
+                text-align:center;line-height:1.6">
+        Don't have an account? Contact the shop and<br>we'll get you set up.
+      </p>
+    </div>
 
-    <p style="margin-top:16px; text-align:center">
-      <a href="forgot-password.html" style="font-size:0.82rem; color:var(--text-muted); text-decoration:underline">
-        Forgot your password?
-      </a>
-    </p>
-    <p style="margin-top:10px; font-size:0.78rem; color:var(--text-muted); text-align:center; line-height:1.6">
-      Don't have an account? Contact the shop and<br>we'll get you set up.
-    </p>
+    <!-- ── Success State ── -->
+    <div id="success-state" style="display:none;text-align:center;padding:16px 0">
+      <div style="font-size:2.5rem;margin-bottom:12px">🎉</div>
+      <div style="font-size:1rem;font-weight:600;color:var(--text-primary);margin-bottom:8px">
+        You're all set!
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
+        Your account is ready. Taking you to the catalog…
+      </div>
+      <div style="width:100%;height:3px;background:var(--bg-elevated);border-radius:2px;overflow:hidden">
+        <div id="progress-bar" style="height:100%;background:var(--accent);
+             width:0%;transition:width 2.5s ease;border-radius:2px"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Shop footer -->
+  <div style="position:fixed;bottom:20px;left:0;right:0;text-align:center;
+              font-size:0.72rem;color:var(--text-muted);letter-spacing:0.03em">
+    BookStop Comics &nbsp;·&nbsp; Pull List Pre-Order System
   </div>
 </div>
 
@@ -46,13 +121,129 @@
 <script src="app.js"></script>
 <script>
 (async () => {
-  // Redirect if already logged in
-  const session = await Auth.getSession();
-  if (session) {
-    window.location.href = 'catalog.html';
-    return;
+
+  // ── Parse URL hash for tokens ──────────────────────────────
+  const hash   = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const accessToken  = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  const type         = params.get('type'); // 'invite', 'recovery', etc.
+
+  // ── Redirect if already logged in (no invite in URL) ───────
+  if (!accessToken) {
+    const session = await Auth.getSession();
+    if (session) {
+      window.location.href = 'catalog.html';
+      return;
+    }
   }
 
+  // ── Elements ───────────────────────────────────────────────
+  const inviteBanner     = document.getElementById('invite-banner');
+  const inviteGreeting   = document.getElementById('invite-greeting');
+  const setPasswordForm  = document.getElementById('set-password-form');
+  const signInForm       = document.getElementById('sign-in-form');
+  const successState     = document.getElementById('success-state');
+
+  // ── Invite / Recovery flow ─────────────────────────────────
+  if (accessToken && (type === 'invite' || type === 'recovery')) {
+
+    // Exchange token for session so we can read user metadata
+    const { data: sessionData, error: sessionErr } =
+      await db.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
+
+    if (!sessionErr && sessionData?.user) {
+      const user     = sessionData.user;
+      const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+
+      // Show personalised greeting
+      if (fullName) {
+        inviteGreeting.textContent = `Welcome, ${fullName}!`;
+      }
+
+      // Update heading for recovery vs invite
+      if (type === 'recovery') {
+        document.getElementById('set-password-heading').textContent = 'Reset your password';
+        document.querySelector('#invite-banner .login-tagline-inner')?.remove();
+      }
+    }
+
+    // Show invite banner and set-password form, hide sign-in
+    inviteBanner.style.display    = 'block';
+    setPasswordForm.style.display = 'block';
+    signInForm.style.display      = 'none';
+
+    // Clear the hash from the URL (cleaner, hides token)
+    history.replaceState(null, '', window.location.pathname);
+
+  } else {
+    // Normal sign-in — hide invite UI
+    inviteBanner.style.display    = 'none';
+    setPasswordForm.style.display = 'none';
+    signInForm.style.display      = 'block';
+  }
+
+  // ── Set Password handler ───────────────────────────────────
+  const newPasswordEl     = document.getElementById('new-password');
+  const confirmPasswordEl = document.getElementById('confirm-password');
+  const btnSetPassword    = document.getElementById('btn-set-password');
+  const setPasswordError  = document.getElementById('set-password-error');
+
+  async function doSetPassword() {
+    const pwd     = newPasswordEl.value;
+    const confirm = confirmPasswordEl.value;
+
+    if (pwd.length < 8) {
+      setPasswordError.textContent = 'Password must be at least 8 characters.';
+      setPasswordError.style.display = 'block';
+      return;
+    }
+    if (pwd !== confirm) {
+      setPasswordError.textContent = 'Passwords do not match.';
+      setPasswordError.style.display = 'block';
+      return;
+    }
+
+    btnSetPassword.disabled    = true;
+    btnSetPassword.textContent = 'Setting password…';
+    setPasswordError.style.display = 'none';
+
+    const { error } = await db.auth.updateUser({ password: pwd });
+
+    if (error) {
+      setPasswordError.textContent   = error.message || 'Failed to set password. Please try again.';
+      setPasswordError.style.display = 'block';
+      btnSetPassword.disabled    = false;
+      btnSetPassword.textContent = 'Set Password & Enter';
+    } else {
+      // Show success state
+      inviteBanner.style.display    = 'none';
+      setPasswordForm.style.display = 'none';
+      successState.style.display    = 'block';
+
+      // Animate progress bar then redirect
+      setTimeout(() => {
+        document.getElementById('progress-bar').style.width = '100%';
+      }, 50);
+      setTimeout(() => {
+        window.location.href = 'catalog.html';
+      }, 2700);
+    }
+  }
+
+  btnSetPassword?.addEventListener('click', doSetPassword);
+  confirmPasswordEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doSetPassword(); });
+  newPasswordEl?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmPasswordEl.focus(); });
+
+  // Switch to sign-in link
+  document.getElementById('switch-to-login')?.addEventListener('click', e => {
+    e.preventDefault();
+    inviteBanner.style.display    = 'none';
+    setPasswordForm.style.display = 'none';
+    signInForm.style.display      = 'block';
+  });
+
+  // ── Standard Sign In handler ───────────────────────────────
   const emailEl    = document.getElementById('email');
   const passwordEl = document.getElementById('password');
   const btnLogin   = document.getElementById('btn-login');
@@ -63,13 +254,13 @@
     const password = passwordEl.value;
 
     if (!email || !password) {
-      errorEl.textContent = 'Please enter your email and password.';
+      errorEl.textContent   = 'Please enter your email and password.';
       errorEl.style.display = 'block';
       return;
     }
 
-    btnLogin.disabled     = true;
-    btnLogin.textContent  = 'Signing in…';
+    btnLogin.disabled    = true;
+    btnLogin.textContent = 'Signing in…';
     errorEl.style.display = 'none';
 
     const { error } = await Auth.signIn(email, password);
@@ -77,16 +268,17 @@
     if (error) {
       errorEl.textContent   = 'Invalid email or password. Please try again.';
       errorEl.style.display = 'block';
-      btnLogin.disabled     = false;
-      btnLogin.textContent  = 'Sign In';
+      btnLogin.disabled    = false;
+      btnLogin.textContent = 'Sign In';
     } else {
       window.location.href = 'catalog.html';
     }
   }
 
-  btnLogin.addEventListener('click', doLogin);
-  passwordEl.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-  emailEl.addEventListener('keydown', e => { if (e.key === 'Enter') passwordEl.focus(); });
+  btnLogin?.addEventListener('click', doLogin);
+  passwordEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  emailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') passwordEl.focus(); });
+
 })();
 </script>
 
