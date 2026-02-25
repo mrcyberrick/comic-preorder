@@ -148,24 +148,39 @@
   // ── Invite / Recovery flow ─────────────────────────────────
   if (accessToken && (type === 'invite' || type === 'recovery')) {
 
-    // Exchange token for session so we can read user metadata
+    // Our invite tokens are raw hex confirmation tokens from the DB
+    // Use verifyOtp to exchange them for a real session
     const { data: sessionData, error: sessionErr } =
-      await db.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
+      await db.auth.verifyOtp({
+        token_hash: accessToken,
+        type:       type === 'recovery' ? 'recovery' : 'invite',
+      });
 
     if (!sessionErr && sessionData?.user) {
       const user     = sessionData.user;
-      const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+      const fullName = user.user_metadata?.full_name
+                    || user.raw_user_meta_data?.full_name
+                    || user.email?.split('@')[0]
+                    || '';
 
-      // Show personalised greeting
       if (fullName) {
         inviteGreeting.textContent = `Welcome, ${fullName}!`;
       }
 
-      // Update heading for recovery vs invite
       if (type === 'recovery') {
         document.getElementById('set-password-heading').textContent = 'Reset your password';
-        document.querySelector('#invite-banner .login-tagline-inner')?.remove();
       }
+    } else if (sessionErr) {
+      // Token expired or already used — show sign in with message
+      inviteBanner.style.display = 'block';
+      inviteGreeting.textContent = 'Your invite link has expired.';
+      inviteGreeting.style.color = 'var(--accent)';
+      document.querySelector('#invite-banner div:last-child').textContent =
+        'Please contact BookStop Comics to get a new invite link sent to you.';
+      setPasswordForm.style.display = 'none';
+      signInForm.style.display      = 'block';
+      history.replaceState(null, '', window.location.pathname);
+      return;
     }
 
     // Show invite banner and set-password form, hide sign-in
@@ -207,6 +222,16 @@
     btnSetPassword.disabled    = true;
     btnSetPassword.textContent = 'Setting password…';
     setPasswordError.style.display = 'none';
+
+    // Verify we have an active session before trying to update
+    const { data: { session: currentSession } } = await db.auth.getSession();
+    if (!currentSession) {
+      setPasswordError.textContent   = 'Your invite link has expired. Please contact BookStop Comics for a new one.';
+      setPasswordError.style.display = 'block';
+      btnSetPassword.disabled    = false;
+      btnSetPassword.textContent = 'Set Password & Enter';
+      return;
+    }
 
     const { error } = await db.auth.updateUser({ password: pwd });
 
