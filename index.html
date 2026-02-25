@@ -122,15 +122,20 @@
 <script>
 (async () => {
 
-  // ── Parse URL hash for tokens ──────────────────────────────
-  const hash   = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  const accessToken  = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-  const type         = params.get('type'); // 'invite', 'recovery', etc.
+  // ── Parse URL for tokens (query params AND hash fragment) ──
+  const qParams     = new URLSearchParams(window.location.search);
+  const hashParams  = new URLSearchParams(window.location.hash.substring(1));
+
+  // token_hash comes from our Edge Function (query param)
+  // access_token comes from Supabase magic links (hash fragment)
+  const tokenHash    = qParams.get('token_hash');
+  const accessToken  = hashParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token');
+  const type         = qParams.get('type') || hashParams.get('type');
+  const hasInvite    = (tokenHash || accessToken) && type;
 
   // ── Redirect if already logged in (no invite in URL) ───────
-  if (!accessToken) {
+  if (!hasInvite) {
     const session = await Auth.getSession();
     if (session) {
       window.location.href = 'catalog.html';
@@ -146,15 +151,17 @@
   const successState     = document.getElementById('success-state');
 
   // ── Invite / Recovery flow ─────────────────────────────────
-  if (accessToken && (type === 'invite' || type === 'recovery')) {
+  if (hasInvite) {
 
-    // Our invite tokens are raw hex confirmation tokens from the DB
-    // Use verifyOtp to exchange them for a real session
+    // Exchange token for session using verifyOtp
+    // token_hash (from query param) = Supabase's generateLink hashed_token
+    // access_token (from hash fragment) = legacy magic link format
+    const otpPayload = tokenHash
+      ? { token_hash: tokenHash, type: type === 'recovery' ? 'recovery' : 'invite' }
+      : { token_hash: accessToken, type: type === 'recovery' ? 'recovery' : 'invite' };
+
     const { data: sessionData, error: sessionErr } =
-      await db.auth.verifyOtp({
-        token_hash: accessToken,
-        type:       type === 'recovery' ? 'recovery' : 'invite',
-      });
+      await db.auth.verifyOtp(otpPayload);
 
     if (!sessionErr && sessionData?.user) {
       const user     = sessionData.user;
@@ -188,7 +195,7 @@
     setPasswordForm.style.display = 'block';
     signInForm.style.display      = 'none';
 
-    // Clear the hash from the URL (cleaner, hides token)
+    // Clear tokens from URL (cleaner, hides token)
     history.replaceState(null, '', window.location.pathname);
 
   } else {
