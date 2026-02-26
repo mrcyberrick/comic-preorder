@@ -154,15 +154,37 @@
   // ── Invite / Recovery flow ─────────────────────────────────
   if (hasInvite) {
 
-    // Exchange token for session using verifyOtp
-    // token_hash (from query param) = Supabase's generateLink hashed_token
-    // access_token (from hash fragment) = legacy magic link format
-    const otpPayload = tokenHash
-      ? { token_hash: tokenHash, type: type === 'recovery' ? 'recovery' : 'invite' }
-      : { token_hash: accessToken, type: type === 'recovery' ? 'recovery' : 'invite' };
+    // Two cases:
+    // 1. access_token in hash = Supabase already verified the token and redirected here
+    //    with a live session — use setSession()
+    // 2. token_hash in query params = raw token, use verifyOtp()
+    let sessionData, sessionErr
 
-    const { data: sessionData, error: sessionErr } =
-      await db.auth.verifyOtp(otpPayload);
+    if (accessToken && refreshToken) {
+      // Case 1: arriving from Supabase verify redirect with full session tokens
+      const result = await db.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      })
+      sessionData = result.data
+      sessionErr  = result.error
+    } else if (accessToken && !refreshToken) {
+      // Case 1b: access_token only (some Supabase versions omit refresh_token)
+      const result = await db.auth.verifyOtp({
+        token_hash: accessToken,
+        type: type === 'recovery' ? 'recovery' : 'invite',
+      })
+      sessionData = result.data
+      sessionErr  = result.error
+    } else {
+      // Case 2: token_hash in query params from our generateLink flow
+      const result = await db.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: type === 'recovery' ? 'recovery' : 'invite',
+      })
+      sessionData = result.data
+      sessionErr  = result.error
+    }
 
     if (!sessionErr && sessionData?.user) {
       const user     = sessionData.user;
