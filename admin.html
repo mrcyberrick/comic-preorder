@@ -457,16 +457,48 @@
     });
   }
 
+  // Consolidated order sheet — one row per title, total qty across all customers
+  function makeOrderSheetRows(items) {
+    const map = {};
+    items.forEach(p => {
+      const c   = p.catalog || {};
+      const key = c.id;
+      if (!key) return;
+      if (!map[key]) {
+        map[key] = {
+          Distributor: c.distributor,
+          ItemCode:    c.item_code,
+          Title:       c.title,
+          Series:      c.series_name,
+          Publisher:   c.publisher,
+          Format:      c.format,
+          IssueNumber: c.issue_number,
+          VariantType: c.variant_type,
+          TotalQty:    0,
+          UnitPrice:   c.price_usd,
+          TotalValue:  0,
+          FOCDate:     c.foc_date,
+          OnSaleDate:  c.on_sale_date,
+        };
+      }
+      const qty = p.quantity || 1;
+      map[key].TotalQty   += qty;
+      map[key].TotalValue  = ((parseFloat(map[key].UnitPrice) || 0) * map[key].TotalQty).toFixed(2);
+    });
+    // Sort by item code for easy reference when calling in orders
+    return Object.values(map).sort((a, b) => (a.ItemCode || '').localeCompare(b.ItemCode || ''));
+  }
+
   document.getElementById('btn-export-all').addEventListener('click', () => {
     exportToCsv(makeExportRows(allPreorders), `all-preorders-${new Date().toISOString().split('T')[0]}.csv`);
   });
   document.getElementById('btn-export-lunar').addEventListener('click', () => {
     const lunar = allPreorders.filter(p => p.catalog?.distributor === 'Lunar');
-    exportToCsv(makeExportRows(lunar), `lunar-orders-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCsv(makeOrderSheetRows(lunar), `lunar-order-sheet-${new Date().toISOString().split('T')[0]}.csv`);
   });
   document.getElementById('btn-export-prh').addEventListener('click', () => {
     const prh = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
-    exportToCsv(makeExportRows(prh), `prh-orders-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCsv(makeOrderSheetRows(prh), `prh-order-sheet-${new Date().toISOString().split('T')[0]}.csv`);
   });
 
   // ── Invite Customer Modal ────────────────────────────────
