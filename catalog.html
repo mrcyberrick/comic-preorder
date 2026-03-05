@@ -230,6 +230,67 @@
     renderSkeletons(10, grid);
     currentPage = page;
 
+    const reserveFilter = resEl.value; // 'reserved', 'unreserved', or ''
+
+    // ── FIX: When filtering by reserved/unreserved, we must fetch ALL matching
+    // items across the full catalog — not just the current page — because
+    // reservedIds is a client-side Set and pagination would hide results on
+    // other pages. We bypass server-side paging in this case and paginate
+    // the filtered result set ourselves.
+    if (reserveFilter === 'reserved' || reserveFilter === 'unreserved') {
+      const filters = {
+        month:       currentMonth,
+        distributor: distEl.value,
+        publisher:   pubEl.value,
+        search:      searchEl.value.trim(),
+        page:        1,
+        pageSize:    2000, // fetch all; catalog is ~1900 items per month
+      };
+
+      const { items, total, error } = await Catalog.fetch(filters);
+
+      if (error) {
+        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${error.message}</div>`;
+        return;
+      }
+
+      // Apply client-side reserved filter across ALL items
+      const filtered = reserveFilter === 'reserved'
+        ? items.filter(i => reservedIds.has(i.id))
+        : items.filter(i => !reservedIds.has(i.id));
+
+      // Now paginate the filtered result ourselves
+      const filteredTotal = filtered.length;
+      const from = (page - 1) * PAGE_SIZE;
+      const displayed = filtered.slice(from, from + PAGE_SIZE);
+
+      allItems   = items; // keep full set so modal can find any item
+      totalCount = total;
+
+      document.getElementById('stat-total').textContent = total;
+
+      countEl.textContent = `Showing ${Math.min(displayed.length, filteredTotal)} of ${filteredTotal} ${reserveFilter === 'reserved' ? 'reserved' : 'unreserved'} items`;
+
+      if (!displayed.length) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H9l4-8v4h2l-4 8z"/>
+            </svg>
+            <h3>No items found</h3>
+            <p>Try adjusting your search or filters</p>
+          </div>`;
+        paginEl.style.display = 'none';
+        return;
+      }
+
+      grid.innerHTML = displayed.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
+      renderPagination(filteredTotal, page);
+      attachGridEvents();
+      return;
+    }
+
+    // ── Standard paginated path (no reserved filter active) ──
     const filters = {
       month:       currentMonth,
       distributor: distEl.value,
@@ -249,11 +310,6 @@
     allItems   = items;
     totalCount = total;
 
-    // Apply client-side reserved filter
-    let displayed = items;
-    if (resEl.value === 'reserved')   displayed = items.filter(i => reservedIds.has(i.id));
-    if (resEl.value === 'unreserved') displayed = items.filter(i => !reservedIds.has(i.id));
-
     // Stats — query full counts across entire catalog month, not just current page
     document.getElementById('stat-total').textContent = total;
     if (page === 1 && !distEl.value && !pubEl.value && !searchEl.value.trim()) {
@@ -268,9 +324,9 @@
       document.getElementById('stat-prh').textContent   = prhCount.count  ?? 0;
     }
 
-    countEl.textContent = `Showing ${displayed.length} of ${total} items`;
+    countEl.textContent = `Showing ${items.length} of ${total} items`;
 
-    if (!displayed.length) {
+    if (!items.length) {
       grid.innerHTML = `
         <div class="empty-state" style="grid-column:1/-1">
           <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -283,16 +339,20 @@
       return;
     }
 
-    grid.innerHTML = displayed.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
+    grid.innerHTML = items.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
     renderPagination(total, page);
+    attachGridEvents();
+  }
 
+  // ── Attach card event listeners (shared by both render paths) ─
+  function attachGridEvents() {
     // Fade in images once loaded
     grid.querySelectorAll('img').forEach(img => {
       if (img.complete) {
         img.classList.add('loaded');
       } else {
         img.addEventListener('load', () => img.classList.add('loaded'));
-        img.addEventListener('error', () => img.classList.add('loaded')); // show placeholder immediately on error
+        img.addEventListener('error', () => img.classList.add('loaded'));
       }
     });
 
