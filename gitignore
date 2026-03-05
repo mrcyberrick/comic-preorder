@@ -1,0 +1,20 @@
+# Local scripts with credentials — never commit these
+scripts/import.js
+catalogs/import-catalog.ps1
+
+# Catalog data — can be large and contains distributor info
+catalogs/*.csv
+catalogs/normalized_catalog.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+*.env
