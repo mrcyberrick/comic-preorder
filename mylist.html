@@ -5,6 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My List — Pull List</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Print Styles ─────────────────────────────────────── */
+    @media print {
+      /* Hide everything except the list */
+      .nav, .toolbar, .btn, .qty-btn, .cancel-btn,
+      #toast-container, .page-header p,
+      #admin-impersonation-banner,
+      th:last-child, td:last-child,          /* Remove column */
+      th:nth-last-child(2), td:nth-last-child(2) /* Qty stepper column */ { display: none !important; }
+
+      /* Reset page */
+      body { background: white; color: black; font-family: Arial, sans-serif; }
+      .container { max-width: 100%; padding: 0; margin: 0; }
+
+      /* Print header */
+      .print-header { display: block !important; }
+
+      /* Stats bar */
+      .stats-bar { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 16px; }
+      .stat-value { color: black !important; }
+
+      /* Table */
+      .list-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+      .list-table th { background: #f0f0f0 !important; color: black !important;
+                       border-bottom: 2px solid #ccc; padding: 6px 8px; text-align: left; }
+      .list-table td { border-bottom: 1px solid #eee; padding: 5px 8px; color: black !important; }
+      .list-table tr:nth-child(even) td { background: #fafafa; }
+
+      /* Hide cover images in print — save space */
+      .td-cover { display: none !important; }
+
+      /* Badges print friendly */
+      .badge { border: 1px solid #ccc !important; color: black !important;
+               background: white !important; padding: 1px 4px; font-size: 0.7rem; }
+
+      /* Page breaks */
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; }
+
+      /* Footer total line */
+      .print-footer { display: block !important; margin-top: 12px;
+                      border-top: 2px solid #ccc; padding-top: 8px;
+                      font-weight: bold; font-size: 0.9rem; }
+    }
+
+    /* Hide print-only elements on screen */
+    .print-header, .print-footer { display: none; }
+  </style>
 </head>
 <body>
 
@@ -24,6 +72,23 @@
 </nav>
 
 <div class="container">
+
+  <!-- Print-only header (hidden on screen) -->
+  <div class="print-header">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+      <div>
+        <div style="font-size:1.4rem;font-weight:700;letter-spacing:0.05em">PULL<span>LIST</span></div>
+        <div id="print-title" style="font-size:1.1rem;font-weight:600;margin-top:4px"></div>
+        <div id="print-subtitle" style="font-size:0.8rem;color:#666;margin-top:2px"></div>
+      </div>
+      <div style="text-align:right;font-size:0.8rem;color:#666">
+        <div style="font-weight:700;font-size:0.95rem;color:#111">Ray &amp; Judy's Book Stop</div>
+        <div style="margin-top:2px">973-586-9182</div>
+        <div style="margin-top:6px" id="print-date"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="page-header">
     <h1>My Pull List</h1>
     <p>Your current reservations for this order cycle</p>
@@ -65,6 +130,9 @@
     <button class="btn btn-secondary btn-sm" id="btn-export">
       ↓ Export CSV
     </button>
+    <button class="btn btn-secondary btn-sm" id="btn-print">
+      ⎙ Print / Save PDF
+    </button>
     <a href="catalog.html" class="btn btn-primary btn-sm">
       + Add More
     </a>
@@ -76,6 +144,18 @@
       <p style="color:var(--text-muted)">Loading your list…</p>
     </div>
   </div>
+
+  <!-- Print-only footer (hidden on screen) -->
+  <div class="print-footer">
+    <div style="font-size:0.8rem;font-weight:400;color:#555;margin-bottom:8px;border:1px solid #ddd;border-radius:3px;padding:8px 10px;background:#fafafa">
+      Payment is due at pickup. Please check the on&#8209;sale date to confirm availability.
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span id="print-footer-count"></span>
+      <span id="print-footer-total"></span>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast-container"></div>
@@ -91,23 +171,20 @@
 
   // Check maintenance mode — admins bypass
   try { await checkMaintenanceMode(profile?.is_admin); } catch(e) { return; }
-
-  // Block non-admins during maintenance
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
 
   let allItems = [];
 
-  const searchEl = document.getElementById('search');
-  const distEl   = document.getElementById('filter-distributor');
-  const container = document.getElementById('list-container');
+  const searchEl   = document.getElementById('search');
+  const distEl     = document.getElementById('filter-distributor');
+  const container  = document.getElementById('list-container');
 
   async function loadList() {
     const targetUserId = AdminContext.resolveUserId(user.id);
-    // Update page title if managing a customer
     if (AdminContext.isActive()) {
       document.querySelector('.page-header h1').textContent = AdminContext.activeUserName + "'s Pull List";
-      document.querySelector('.page-header p').textContent = 'Managing reservations on behalf of this customer';
+      document.querySelector('.page-header p').textContent  = 'Managing reservations on behalf of this customer';
     }
     const { items, error } = await Preorders.getMy(targetUserId);
     if (error) {
@@ -141,6 +218,12 @@
       allItems.filter(i => i.catalog?.distributor === 'Lunar').reduce((s,i) => s + (i.quantity||1), 0);
     document.getElementById('stat-prh').textContent =
       allItems.filter(i => i.catalog?.distributor === 'PRH').reduce((s,i) => s + (i.quantity||1), 0);
+
+    // Update print footer values whenever list renders
+    document.getElementById('print-footer-count').textContent =
+      `${allItems.length} item${allItems.length !== 1 ? 's' : ''} reserved`;
+    document.getElementById('print-footer-total').textContent =
+      `Estimated Total: $${total.toFixed(2)}`;
 
     if (!filtered.length) {
       container.innerHTML = `
@@ -235,18 +318,15 @@
           toast('Failed to update quantity', 'error');
         } else {
           item.quantity = newQty;
-          // Update display inline without full re-render
           const row = btn.closest('tr');
           row.querySelector('.qty-display').textContent = newQty;
           const price = parseFloat(item.catalog?.price_usd) || 0;
-          const cells = row.querySelectorAll('td');
-          // Line total is second to last td before Remove
           const lineTotalCell = row.querySelector('td:nth-last-child(2)');
           if (lineTotalCell) lineTotalCell.textContent = '$' + (price * newQty).toFixed(2);
-          // Refresh stats
           const total = allItems.reduce((s,i) => s + ((parseFloat(i.catalog?.price_usd)||0)*(i.quantity||1)), 0);
           document.getElementById('stat-total').textContent = '$' + total.toFixed(2);
           document.getElementById('stat-count').textContent = allItems.length;
+          document.getElementById('print-footer-total').textContent = `Estimated Total: $${total.toFixed(2)}`;
         }
         btn.disabled = false;
       });
@@ -270,7 +350,25 @@
     });
   }
 
-  // Export
+  // ── Print ─────────────────────────────────────────────────
+  document.getElementById('btn-print').addEventListener('click', () => {
+    // Populate print header with correct name and date
+    const listOwner = AdminContext.isActive()
+      ? AdminContext.activeUserName
+      : document.getElementById('nav-username').textContent;
+
+    document.getElementById('print-title').textContent  = listOwner + "'s Pull List";
+    document.getElementById('print-subtitle').textContent =
+      AdminContext.isActive()
+        ? `Catalog for ${currentMonth} — printed by store admin`
+        : `Catalog for ${currentMonth}`;
+    document.getElementById('print-date').textContent   =
+      'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    window.print();
+  });
+
+  // ── Export CSV ────────────────────────────────────────────
   document.getElementById('btn-export').addEventListener('click', () => {
     const rows = allItems.map(item => {
       const c = item.catalog || {};
@@ -294,6 +392,7 @@
   searchEl.addEventListener('input', debounce(renderList, 250));
   distEl.addEventListener('change', renderList);
 
+  const currentMonth = await Catalog.getLatestMonth();
   await loadList();
 })();
 </script>
