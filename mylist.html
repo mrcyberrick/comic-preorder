@@ -359,7 +359,9 @@
 
     document.getElementById('print-title').textContent  = listOwner + "'s Pull List";
     document.getElementById('print-subtitle').textContent =
-      AdminContext.isActive() ? 'Printed by store admin' : 'Current order cycle reservations';
+      AdminContext.isActive()
+        ? `Catalog for ${currentMonth} — printed by store admin`
+        : `Catalog for ${currentMonth}`;
     document.getElementById('print-date').textContent   =
       'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -390,6 +392,7 @@
   searchEl.addEventListener('input', debounce(renderList, 250));
   distEl.addEventListener('change', renderList);
 
+  const currentMonth = await Catalog.getLatestMonth();
   await loadList();
 })();
 </script>
