@@ -11,6 +11,7 @@
       /* Hide everything except the list */
       .nav, .toolbar, .btn, .qty-btn, .cancel-btn,
       #toast-container, .page-header p,
+      #admin-impersonation-banner,
       th:last-child, td:last-child,          /* Remove column */
       th:nth-last-child(2), td:nth-last-child(2) /* Qty stepper column */ { display: none !important; }
 
@@ -74,14 +75,16 @@
 
   <!-- Print-only header (hidden on screen) -->
   <div class="print-header">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div>
         <div style="font-size:1.4rem;font-weight:700;letter-spacing:0.05em">PULL<span>LIST</span></div>
         <div id="print-title" style="font-size:1.1rem;font-weight:600;margin-top:4px"></div>
         <div id="print-subtitle" style="font-size:0.8rem;color:#666;margin-top:2px"></div>
       </div>
       <div style="text-align:right;font-size:0.8rem;color:#666">
-        <div id="print-date"></div>
+        <div style="font-weight:700;font-size:0.95rem;color:#111">Ray &amp; Judy's Book Stop</div>
+        <div style="margin-top:2px">973-586-9182</div>
+        <div style="margin-top:6px" id="print-date"></div>
       </div>
     </div>
   </div>
@@ -144,9 +147,13 @@
 
   <!-- Print-only footer (hidden on screen) -->
   <div class="print-footer">
-    <span id="print-footer-count"></span>
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    <span id="print-footer-total"></span>
+    <div style="font-size:0.8rem;font-weight:400;color:#555;margin-bottom:8px;border:1px solid #ddd;border-radius:3px;padding:8px 10px;background:#fafafa">
+      Payment is due at pickup. Please check the on&#8209;sale date to confirm availability.
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span id="print-footer-count"></span>
+      <span id="print-footer-total"></span>
+    </div>
   </div>
 
 </div>
