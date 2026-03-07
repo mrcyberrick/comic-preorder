@@ -6,24 +6,6 @@
   <title>This Week — Pull List</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Arrivals badge on nav ─────────────────────────────── */
-    .nav-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--accent);
-      color: white;
-      font-size: 0.65rem;
-      font-weight: 700;
-      min-width: 17px;
-      height: 17px;
-      border-radius: 999px;
-      padding: 0 4px;
-      margin-left: 5px;
-      vertical-align: middle;
-      line-height: 1;
-    }
-
     /* ── Empty state ───────────────────────────────────────── */
     .arrivals-empty {
       text-align: center;
@@ -196,9 +178,6 @@
   document.getElementById('page-subtitle').textContent =
     `${arrivals.length} reserved title${arrivals.length !== 1 ? 's' : ''} arriving ${wedDisplay}`;
 
-  // Update nav badge count (for mylist link — reuse same count logic)
-  updateNavBadge(arrivals.length);
-
   if (!arrivals.length) {
     container.innerHTML = `
       <div class="arrivals-empty">
@@ -241,20 +220,6 @@
     if (img.complete) img.classList.add('loaded');
     else img.addEventListener('load', () => img.classList.add('loaded'));
   });
-
-  // ── Nav badge helper ──────────────────────────────────────
-  function updateNavBadge(count) {
-    const link = document.getElementById('nav-arrivals-link');
-    if (!link) return;
-    const existing = link.querySelector('.nav-badge');
-    if (existing) existing.remove();
-    if (count > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'nav-badge';
-      badge.textContent = count;
-      link.appendChild(badge);
-    }
-  }
 
 })();
 </script>
