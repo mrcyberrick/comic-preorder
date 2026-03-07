@@ -155,13 +155,10 @@
   function getThisWednesday() {
     const today = new Date();
     const day   = today.getDay(); // 0=Sun, 3=Wed
-    const diff  = (3 - day + 7) % 7;  // days until next/this Wed
-    // If today IS Wednesday, diff=0; if past Wednesday this week, show next
-    // Comic day is always the current week's Wednesday
-    const wed = new Date(today);
-    // Go to the most recent Wednesday (or today if Wednesday)
-    const daysSinceWed = (day - 3 + 7) % 7;
-    wed.setDate(today.getDate() - daysSinceWed);
+    // Days until next Wednesday; if today IS Wednesday, use today (diff=0)
+    const diff  = (3 - day + 7) % 7;
+    const wed   = new Date(today);
+    wed.setDate(today.getDate() + diff);
     return wed.toISOString().split('T')[0]; // YYYY-MM-DD
   }
 
@@ -189,7 +186,8 @@
   const arrivals = items.filter(item => item.catalog?.on_sale_date === thisWednesday);
 
   // Format Wednesday for display
-  const wedDisplay = new Date(thisWednesday + 'T12:00:00').toLocaleDateString('en-US', {
+  const [y, m, d] = thisWednesday.split('-').map(Number);
+  const wedDisplay = new Date(y, m - 1, d).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
   });
   document.getElementById('page-subtitle').textContent =
