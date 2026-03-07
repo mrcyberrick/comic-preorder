@@ -152,7 +152,7 @@ const NavBubble = {
     bubble.textContent = count > 99 ? '99+' : String(count);
     bubble.title = `${count} reserved item${count !== 1 ? 's' : ''} on sale within 7 days`;
     bubble.style.cssText = [
-      'position:absolute;top:-6px;right:-10px;',
+      'position:absolute;top:-6px;right:-18px;',
       'background:#e74c3c;color:white;',
       'font-size:0.62rem;font-weight:700;',
       'min-width:16px;height:16px;',
