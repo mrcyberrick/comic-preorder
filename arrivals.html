@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>This Week — Pull List</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Arrivals badge on nav ─────────────────────────────── */
+    .nav-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent);
+      color: white;
+      font-size: 0.65rem;
+      font-weight: 700;
+      min-width: 17px;
+      height: 17px;
+      border-radius: 999px;
+      padding: 0 4px;
+      margin-left: 5px;
+      vertical-align: middle;
+      line-height: 1;
+    }
+
+    /* ── Empty state ───────────────────────────────────────── */
+    .arrivals-empty {
+      text-align: center;
+      padding: 80px 24px;
+      color: var(--text-muted);
+    }
+    .arrivals-empty h2 { font-size: 1.2rem; margin-bottom: 8px; color: var(--text-secondary); }
+    .arrivals-empty p  { font-size: 0.88rem; }
+
+    /* ── Arrivals grid ─────────────────────────────────────── */
+    .arrivals-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      margin-top: 8px;
+    }
+
+    .arrival-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.15s;
+    }
+    .arrival-card:hover { border-color: var(--accent); }
+
+    .arrival-cover {
+      position: relative;
+      aspect-ratio: 2/3;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .arrival-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .arrival-cover img.loaded { opacity: 1; }
+
+    .arrival-dist-badge {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.03em;
+    }
+
+    .arrival-info {
+      padding: 10px 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+    .arrival-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+    .arrival-price {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: auto;
+      padding-top: 6px;
+    }
+    .arrival-qty {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav" id="main-nav">
+  <div class="container nav-inner">
+    <a href="catalog.html" class="nav-logo">PULL<span>LIST</span></a>
+    <ul class="nav-links">
+      <li><a href="catalog.html">Catalog</a></li>
+      <li><a href="mylist.html">My List</a></li>
+      <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
+      <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
+    </ul>
+    <div class="nav-user">
+      <span>Welcome, <strong id="nav-username"></strong></span>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+
+  <div class="page-header">
+    <h1 id="page-title">This Week's Arrivals</h1>
+    <p id="page-subtitle">Your reserved titles arriving at the store this week</p>
+  </div>
+
+  <div id="arrivals-container">
+    <div class="empty-state">
+      <p style="color:var(--text-muted)">Loading…</p>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const navData = await initNav();
+  if (!navData) return;
+  const { user, profile } = navData;
+
+  try { await checkMaintenanceMode(profile?.is_admin); }
+  catch(e) { if (e.message === 'maintenance') return; }
+
+  // ── Calculate this Wednesday ──────────────────────────────
+  function getThisWednesday() {
+    const today = new Date();
+    const day   = today.getDay(); // 0=Sun, 3=Wed
+    const diff  = (3 - day + 7) % 7;  // days until next/this Wed
+    // If today IS Wednesday, diff=0; if past Wednesday this week, show next
+    // Comic day is always the current week's Wednesday
+    const wed = new Date(today);
+    // Go to the most recent Wednesday (or today if Wednesday)
+    const daysSinceWed = (day - 3 + 7) % 7;
+    wed.setDate(today.getDate() - daysSinceWed);
+    return wed.toISOString().split('T')[0]; // YYYY-MM-DD
+  }
+
+  const thisWednesday = getThisWednesday();
+
+  // ── Fetch preorders and filter to this Wednesday ──────────
+  const targetUserId = AdminContext.resolveUserId(user.id);
+
+  if (AdminContext.isActive()) {
+    document.getElementById('page-title').textContent =
+      AdminContext.activeUserName + "'s Arrivals This Week";
+    document.getElementById('page-subtitle').textContent =
+      'Reserved titles arriving at the store this week';
+  }
+
+  const { items, error } = await Preorders.getMy(targetUserId);
+  const container = document.getElementById('arrivals-container');
+
+  if (error) {
+    container.innerHTML = `<div class="alert alert-error">Failed to load arrivals: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  // Filter to items whose on_sale_date matches this Wednesday
+  const arrivals = items.filter(item => item.catalog?.on_sale_date === thisWednesday);
+
+  // Format Wednesday for display
+  const wedDisplay = new Date(thisWednesday + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  });
+  document.getElementById('page-subtitle').textContent =
+    `${arrivals.length} reserved title${arrivals.length !== 1 ? 's' : ''} arriving ${wedDisplay}`;
+
+  // Update nav badge count (for mylist link — reuse same count logic)
+  updateNavBadge(arrivals.length);
+
+  if (!arrivals.length) {
+    container.innerHTML = `
+      <div class="arrivals-empty">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:16px;color:var(--text-muted)">
+          <path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
+          <path d="M16 3H8L6 7h12l-2-4z"/>
+        </svg>
+        <h2>Nothing arriving this week</h2>
+        <p>Your next arrivals are on a different week — check your <a href="mylist.html" style="color:var(--accent)">full pull list</a>.</p>
+      </div>`;
+    return;
+  }
+
+  // Sort alphabetically by title
+  arrivals.sort((a, b) => (a.catalog?.title || '').localeCompare(b.catalog?.title || ''));
+
+  container.innerHTML = `<div class="arrivals-grid">${arrivals.map(item => {
+    const c = item.catalog;
+    const cover = c.cover_url
+      ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;this.classList.add('loaded');">`
+      : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
+
+    return `
+      <div class="arrival-card">
+        <div class="arrival-cover">
+          <span class="arrival-dist-badge badge-${c.distributor?.toLowerCase()}">${escapeHtml(c.distributor || '')}</span>
+          ${cover}
+        </div>
+        <div class="arrival-info">
+          <div class="arrival-title">${escapeHtml(c.title)}</div>
+          ${item.quantity > 1 ? `<div class="arrival-qty">Qty: ${item.quantity}</div>` : ''}
+          <div class="arrival-price">${formatPrice(c.price_usd)}</div>
+        </div>
+      </div>
+    `;
+  }).join('')}</div>`;
+
+  // Fade in images
+  container.querySelectorAll('img').forEach(img => {
+    if (img.complete) img.classList.add('loaded');
+    else img.addEventListener('load', () => img.classList.add('loaded'));
+  });
+
+  // ── Nav badge helper ──────────────────────────────────────
+  function updateNavBadge(count) {
+    const link = document.getElementById('nav-arrivals-link');
+    if (!link) return;
+    const existing = link.querySelector('.nav-badge');
+    if (existing) existing.remove();
+    if (count > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'nav-badge';
+      badge.textContent = count;
+      link.appendChild(badge);
+    }
+  }
+
+})();
+</script>
+</body>
+</html>
