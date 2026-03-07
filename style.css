@@ -918,7 +918,8 @@ button { cursor: pointer; font-family: var(--font-body); }
   .nav-links.open { display: flex; }
   .nav-links li { width: 100%; }
   .nav-links a {
-    display: block;
+    display: flex;
+    align-items: center;
     padding: 10px 16px;
     font-size: 0.95rem;
     white-space: nowrap;
