@@ -47,6 +47,27 @@ const Auth = {
       window.location.href = redirectTo;
       return null;
     }
+    
+// ── Hamburger toggle ──────────────────────────────────
+const hamburger = nav.querySelector('#nav-hamburger');
+const navLinks  = nav.querySelector('.nav-links');
+const navUser   = nav.querySelector('.nav-user');
+if (hamburger) {
+  hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('open');
+    navLinks.classList.toggle('open');
+    navUser.classList.toggle('open');
+  });
+  // Close menu when a link is clicked
+  navLinks.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => {
+      hamburger.classList.remove('open');
+      navLinks.classList.remove('open');
+      navUser.classList.remove('open');
+    });
+  });
+}
+
     return { user, profile };
   },
 
