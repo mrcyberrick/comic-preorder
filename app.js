@@ -1,12 +1,9 @@
 // ================================================================
 // Comic Pre-Order System — Shared App Logic
 // ================================================================
-// IMPORTANT: Replace these two values with your own from Supabase
-// Project Settings → API
-// ================================================================
-
-// Credentials are loaded from config.js
+// IMPORTANT: Credentials are loaded from config.js
 // See config.js — do not add credentials here
+// ================================================================
 
 // ── Supabase Client (CDN version, no npm needed) ─────────────
 const { createClient } = supabase;
@@ -100,8 +97,81 @@ async function initNav() {
   // Restore admin banner on every page load if context is active
   if (profile?.is_admin) AdminContext.restore();
 
+  // Load upcoming items notification bubble
+  // Runs async — does not block page load
+  NavBubble.load(AdminContext.resolveUserId(user.id));
+
   return { user, profile };
 }
+
+// ── Nav Notification Bubble ───────────────────────────────────
+// Shows a red badge on the My List nav link when the active user
+// has reserved items with an on_sale_date in the next 7 days.
+// Reflects the managed customer when admin context is active.
+const NavBubble = {
+  async load(userId) {
+    try {
+      const today = new Date();
+      const in7   = new Date(today);
+      in7.setDate(today.getDate() + 7);
+
+      const todayStr = today.toISOString().split('T')[0];
+      const in7Str   = in7.toISOString().split('T')[0];
+
+      const { data, error } = await db
+        .from('preorders')
+        .select('id, catalog!inner(on_sale_date)')
+        .eq('user_id', userId)
+        .gte('catalog.on_sale_date', todayStr)
+        .lte('catalog.on_sale_date', in7Str);
+
+      if (error || !data) return;
+
+      const count = data.length;
+      this.render(count);
+    } catch (e) {
+      // Bubble is non-critical — fail silently
+    }
+  },
+
+  render(count) {
+    // Remove any existing bubble first
+    document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
+    if (count < 1) return;
+
+    // Find the My List nav link
+    const myListLink = document.querySelector('.nav-links a[href="mylist.html"]');
+    if (!myListLink) return;
+
+    // Wrap the link in a relative container if not already
+    const li = myListLink.parentElement;
+    li.style.position = 'relative';
+
+    const bubble = document.createElement('span');
+    bubble.className = 'nav-bubble';
+    bubble.textContent = count > 99 ? '99+' : String(count);
+    bubble.title = `${count} reserved item${count !== 1 ? 's' : ''} on sale within 7 days`;
+    bubble.style.cssText = [
+      'position:absolute;top:-6px;right:-10px;',
+      'background:#e74c3c;color:white;',
+      'font-size:0.62rem;font-weight:700;',
+      'min-width:16px;height:16px;',
+      'border-radius:8px;padding:0 4px;',
+      'display:flex;align-items:center;justify-content:center;',
+      'pointer-events:none;line-height:1;',
+      'box-shadow:0 1px 4px rgba(0,0,0,0.4);',
+      'letter-spacing:0;',
+    ].join('');
+
+    li.appendChild(bubble);
+  },
+
+  // Call this when admin context changes to refresh the bubble
+  async refresh(userId) {
+    document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
+    await this.load(userId);
+  },
+};
 
 // ── Catalog API ───────────────────────────────────────────────
 const Catalog = {
