@@ -161,9 +161,6 @@ render(count) {
     const myListLink = document.querySelector('.nav-links a[href="mylist.html"]');
     if (!myListLink) return;
 
-    const li = myListLink.parentElement;
-    li.style.position = 'relative';
-
     const bubble = document.createElement('span');
     bubble.className = 'nav-bubble';
     bubble.textContent = count > 99 ? '99+' : String(count);
@@ -182,7 +179,10 @@ render(count) {
         'box-shadow:0 1px 4px rgba(0,0,0,0.4);',
         'letter-spacing:0;vertical-align:middle;',
       ].join('');
+      myListLink.appendChild(bubble);
     } else {
+      const li = myListLink.parentElement;
+      li.style.position = 'relative';
       bubble.style.cssText = [
         'position:absolute;top:-6px;right:-18px;',
         'background:#e74c3c;color:white;',
@@ -194,9 +194,8 @@ render(count) {
         'box-shadow:0 1px 4px rgba(0,0,0,0.4);',
         'letter-spacing:0;',
       ].join('');
+      li.appendChild(bubble);
     }
-
-    li.appendChild(bubble);
   },
 
   // Call this when admin context changes to refresh the bubble
