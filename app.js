@@ -1,12 +1,9 @@
 // ================================================================
 // Comic Pre-Order System — Shared App Logic
 // ================================================================
-// IMPORTANT: Replace these two values with your own from Supabase
-// Project Settings → API
-// ================================================================
-
-// Credentials are loaded from config.js
+// IMPORTANT: Credentials are loaded from config.js
 // See config.js — do not add credentials here
+// ================================================================
 
 // ── Supabase Client (CDN version, no npm needed) ─────────────
 const { createClient } = supabase;
@@ -100,8 +97,100 @@ async function initNav() {
   // Restore admin banner on every page load if context is active
   if (profile?.is_admin) AdminContext.restore();
 
+  // Load upcoming items notification bubble
+  // Runs async — does not block page load
+  NavBubble.load(AdminContext.resolveUserId(user.id));
+
+  // ── Hamburger toggle ──────────────────────────────────
+  const hamburger = nav.querySelector('#nav-hamburger');
+  const navLinks  = nav.querySelector('.nav-links');
+  const navUser   = nav.querySelector('.nav-user');
+  if (hamburger) {
+    hamburger.addEventListener('click', () => {
+      hamburger.classList.toggle('open');
+      navLinks.classList.toggle('open');
+      navUser.classList.toggle('open');
+    });
+    // Close menu when a link is clicked
+    navLinks.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => {
+        hamburger.classList.remove('open');
+        navLinks.classList.remove('open');
+        navUser.classList.remove('open');
+      });
+    });
+  }
+
   return { user, profile };
 }
+
+// ── Nav Notification Bubble ───────────────────────────────────
+// Shows a red badge on the This Week nav link when the active user
+// has reserved items with an on_sale_date in the next 7 days.
+// Reflects the managed customer when admin context is active.
+const NavBubble = {
+  async load(userId) {
+    try {
+      const today = new Date();
+      const in7   = new Date(today);
+      in7.setDate(today.getDate() + 7);
+
+      const todayStr = today.toISOString().split('T')[0];
+      const in7Str   = in7.toISOString().split('T')[0];
+
+      const { data, error } = await db
+        .from('preorders')
+        .select('id, catalog!inner(on_sale_date)')
+        .eq('user_id', userId)
+        .gte('catalog.on_sale_date', todayStr)
+        .lte('catalog.on_sale_date', in7Str);
+
+      if (error || !data) return;
+
+      this.render(data.length);
+    } catch (e) {
+      // Bubble is non-critical — fail silently
+    }
+  },
+
+  render(count) {
+    document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
+    if (count < 1) return;
+
+    const arrivalsLink = document.querySelector('.nav-links a[href="arrivals.html"]');
+    if (!arrivalsLink) return;
+
+    const li = arrivalsLink.parentElement;
+    li.style.position = 'relative';
+    li.style.display  = 'flex';
+    li.style.alignItems = 'center';
+
+    const bubble = document.createElement('span');
+    bubble.className = 'nav-bubble';
+    bubble.textContent = count > 99 ? '99+' : String(count);
+    bubble.title = `${count} reserved item${count !== 1 ? 's' : ''} arriving this week`;
+    bubble.style.cssText = [
+      'display:inline-flex;align-items:center;justify-content:center;',
+      'background:#e74c3c;color:white;',
+      'font-size:0.62rem;font-weight:700;',
+      'min-width:16px;height:16px;',
+      'border-radius:8px;padding:0 4px;',
+      'pointer-events:none;line-height:1;',
+      'box-shadow:0 1px 4px rgba(0,0,0,0.4);',
+      'letter-spacing:0;',
+      'flex-shrink:0;',
+    ].join('');
+
+    // Append bubble after the <a> tag inside the <li>
+    li.appendChild(bubble);
+  },
+
+  // Call this when admin context changes to refresh the bubble
+  async refresh(userId) {
+    document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
+    await this.load(userId);
+  },
+};
 
 // ── Catalog API ───────────────────────────────────────────────
 const Catalog = {
@@ -255,7 +344,6 @@ async function checkMaintenanceMode(isAdmin) {
   if (isAdmin) return; // admins always get through
   const maint = await Settings.isMaintenanceMode();
   if (maint) {
-    // Show fullscreen maintenance overlay
     document.body.innerHTML = `
       <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;
                   background:var(--bg);font-family:var(--font-body);">
@@ -418,7 +506,6 @@ function renderSkeletons(count = 12, container) {
 const COVER_PLACEHOLDER = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='225' viewBox='0 0 150 225'%3E%3Crect width='150' height='225' fill='%23222'/%3E%3Crect x='20' y='20' width='110' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='32' width='80' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='60' width='110' height='80' rx='4' fill='%23333'/%3E%3Crect x='20' y='156' width='90' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='168' width='60' height='4' rx='2' fill='%23333'/%3E%3C/svg%3E`;
 
 function buildComicCard(comic, reservedQty) {
-  // reservedQty: 0 = not reserved, >0 = reserved with that quantity
   const isReserved = reservedQty > 0;
   const coverHtml = `<img
     src="${comic.cover_url ? escapeHtml(comic.cover_url) : COVER_PLACEHOLDER}"
