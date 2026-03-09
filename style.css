@@ -907,7 +907,7 @@ button { cursor: pointer; font-family: var(--font-body); }
     position: absolute;
     top: 100%;
     right: 0;
-    width: 220px;
+    width: 200px;
     background: #111;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -918,8 +918,7 @@ button { cursor: pointer; font-family: var(--font-body); }
   .nav-links.open { display: flex; }
   .nav-links li { width: 100%; }
   .nav-links a {
-    display: flex;
-    align-items: center;
+    display: block;
     padding: 10px 16px;
     font-size: 0.95rem;
     white-space: nowrap;
@@ -936,4 +935,15 @@ button { cursor: pointer; font-family: var(--font-body); }
     justify-content: space-between;
     align-items: center;
   }
+}
+
+/* ── Footer ────────────────────────────────────────────── */
+.site-footer {
+  margin-top: 64px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
 }
