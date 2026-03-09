@@ -18,28 +18,28 @@
 
       .print-header { display: block !important; }
 
-      .arrivals-grid {
-        display: grid !important;
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
-        gap: 12px !important;
-      }
-      .arrival-card {
-        border: 1px solid #ddd !important;
-        background: white !important;
-        break-inside: avoid;
-      }
-      .arrival-cover img { opacity: 1 !important; }
-      .arrival-title { color: black !important; font-size: 0.75rem !important; }
-      .arrival-price { color: black !important; font-weight: 700 !important; }
-      .arrival-dist-badge { border: 1px solid #ccc !important; color: black !important; background: white !important; }
+      /* Hide the screen card grid — show table instead */
+      #arrivals-container { display: none !important; }
+      .print-table-wrap { display: block !important; }
+
+      .print-arrivals-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+      .print-arrivals-table th { background: #f0f0f0 !important; color: black !important;
+                       border-bottom: 2px solid #ccc; padding: 6px 8px; text-align: left; }
+      .print-arrivals-table td { border-bottom: 1px solid #eee; padding: 5px 8px; color: black !important; }
+      .print-arrivals-table tr:nth-child(even) td { background: #fafafa; }
+      .badge { border: 1px solid #ccc !important; color: black !important;
+               background: white !important; padding: 1px 4px; font-size: 0.7rem; }
 
       .print-footer { display: block !important; margin-top: 12px;
                       border-top: 2px solid #ccc; padding-top: 8px;
                       font-weight: bold; font-size: 0.9rem; }
+
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; }
     }
 
     /* Hide print-only elements on screen */
-    .print-header, .print-footer { display: none; }
+    .print-header, .print-footer, .print-table-wrap { display: none; }
 
     /* ── Empty state ───────────────────────────────────────── */
     .arrivals-empty {
@@ -181,6 +181,44 @@
   </div>
 
 
+
+  <!-- Print-only table (hidden on screen) -->
+  <div class="print-table-wrap" id="print-table-wrap">
+    <table class="print-arrivals-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Publisher</th>
+          <th>Distributor</th>
+          <th>On Sale</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Line Total</th>
+        </tr>
+      </thead>
+      <tbody id="print-table-body"></tbody>
+    </table>
+  </div>
+
+
+  <!-- Print-only table (hidden on screen) -->
+  <div class="print-table-wrap" id="print-table-wrap">
+    <table class="print-arrivals-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Publisher</th>
+          <th>Distributor</th>
+          <th>On Sale</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Line Total</th>
+        </tr>
+      </thead>
+      <tbody id="print-table-body"></tbody>
+    </table>
+  </div>
+
   <!-- Print-only footer -->
   <div class="print-footer">
     <div style="font-size:0.8rem;font-weight:400;color:#555;margin-bottom:8px;border:1px solid #ddd;border-radius:3px;padding:8px 10px;background:#fafafa">
@@ -272,6 +310,26 @@
 
   // Sort alphabetically by title
   arrivals.sort((a, b) => (a.catalog?.title || '').localeCompare(b.catalog?.title || ''));
+
+  // Populate print table
+  document.getElementById('print-table-body').innerHTML = arrivals.map(item => {
+    const c = item.catalog;
+    const qty = item.quantity || 1;
+    const lineTotal = ((parseFloat(c.price_usd) || 0) * qty).toFixed(2);
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:600">${escapeHtml(c.title)}</div>
+          ${c.series_name ? `<div style="font-size:0.72rem;color:#666">${escapeHtml(c.series_name)}</div>` : ''}
+        </td>
+        <td>${escapeHtml(c.publisher || '—')}</td>
+        <td><span class="badge">${escapeHtml(c.distributor || '')}</span></td>
+        <td>${formatDate(c.on_sale_date)}</td>
+        <td style="text-align:center">${qty}</td>
+        <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
+        <td style="font-weight:600">$${lineTotal}</td>
+      </tr>`;
+  }).join('');
 
   container.innerHTML = `<div class="arrivals-grid">${arrivals.map(item => {
     const c = item.catalog;
