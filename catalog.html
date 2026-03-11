@@ -272,7 +272,7 @@
       const total = batch1.count ?? 0;
 
       if (error) {
-        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${error.message}</div>`;
+        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(error.message || JSON.stringify(error))}</div>`;
         return;
       }
 
@@ -283,8 +283,8 @@
 
       // Now paginate the filtered result ourselves
       const filteredTotal = filtered.length;
-      const from = (page - 1) * PAGE_SIZE;
-      const displayed = filtered.slice(from, from + PAGE_SIZE);
+      const pageFrom = (page - 1) * PAGE_SIZE;
+      const displayed = filtered.slice(pageFrom, pageFrom + PAGE_SIZE);
 
       allItems   = items; // keep full set so modal can find any item
       totalCount = total;
