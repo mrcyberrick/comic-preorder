@@ -262,17 +262,19 @@
                 .range(from, to);
       };
 
-      const [batch1, batch2] = await Promise.all([
-        buildQuery(0, 999),
-        buildQuery(1000, 1999),
-      ]);
+      const batch1 = await buildQuery(0, 999);
+      const total  = batch1.count ?? 0;
+
+      let batch2 = { data: [], error: null };
+      if (total > 1000) {
+        batch2 = await buildQuery(1000, 1999);
+      }
 
       const error = batch1.error || batch2.error;
       const items = [...(batch1.data || []), ...(batch2.data || [])];
-      const total = batch1.count ?? 0;
 
       if (error) {
-        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${error.message}</div>`;
+        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(error.message || JSON.stringify(error))}</div>`;
         return;
       }
 
@@ -283,8 +285,8 @@
 
       // Now paginate the filtered result ourselves
       const filteredTotal = filtered.length;
-      const from = (page - 1) * PAGE_SIZE;
-      const displayed = filtered.slice(from, from + PAGE_SIZE);
+      const pageFrom = (page - 1) * PAGE_SIZE;
+      const displayed = filtered.slice(pageFrom, pageFrom + PAGE_SIZE);
 
       allItems   = items; // keep full set so modal can find any item
       totalCount = total;
