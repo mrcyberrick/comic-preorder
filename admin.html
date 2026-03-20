@@ -17,6 +17,7 @@
     <ul class="nav-links">
       <li><a href="catalog.html">Catalog</a></li>
       <li><a href="mylist.html">My List</a></li>
+      <li><a href="subscriptions.html">Subscriptions</a></li>
       <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
       <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
     </ul>
@@ -85,6 +86,7 @@
     <button class="admin-tab active" data-tab="by-customer">By Customer</button>
     <button class="admin-tab" data-tab="by-distributor">By Distributor</button>
     <button class="admin-tab" data-tab="all-items">All Reservations</button>
+    <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
   </div>
 
   <!-- Tab: By Customer -->
@@ -122,7 +124,19 @@
     </div>
     <div id="all-items-list"></div>
   </div>
+
+  <!-- Tab: Subscriptions -->
+  <div class="admin-section" id="tab-subscriptions">
+    <div id="subscriptions-list">
+      <div class="empty-state"><p>Loading…</p></div>
+    </div>
+  </div>
+
 </div>
+
+<footer class="site-footer">
+  Service provided by Ray &amp; Judy's Book Stop &middot; Rockaway, NJ
+</footer>
 
 <div id="toast-container"></div>
 
@@ -627,6 +641,68 @@
     const label = document.getElementById('maint-label');
     label.style.color = on ? 'var(--accent)' : 'var(--text-muted)';
   }
+
+  // ── Subscriptions Tab ────────────────────────────────────
+  async function loadSubscriptions() {
+    const { items, error } = await Subscriptions.getAllAdmin();
+    const container = document.getElementById('subscriptions-list');
+
+    if (error) {
+      container.innerHTML = `<div class="alert alert-error">Failed to load subscriptions: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    if (!items.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <h3>No subscriptions yet</h3>
+          <p>Customers can subscribe to series from the catalog item detail view.</p>
+        </div>`;
+      return;
+    }
+
+    // Group by series_name + distributor, list customers
+    const groups = {};
+    items.forEach(sub => {
+      const key = `${sub.series_name}||${sub.distributor}`;
+      if (!groups[key]) groups[key] = { series_name: sub.series_name, distributor: sub.distributor, customers: [] };
+      groups[key].customers.push(sub.user_profiles?.full_name || 'Unknown');
+    });
+
+    const rows = Object.values(groups).sort((a, b) => a.series_name.localeCompare(b.series_name));
+
+    container.innerHTML = `
+      <table class="list-table">
+        <thead>
+          <tr>
+            <th>Series</th>
+            <th>Distributor</th>
+            <th>Subscribers</th>
+            <th>Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(g => `
+            <tr>
+              <td style="font-weight:600">${escapeHtml(g.series_name)}</td>
+              <td><span class="badge badge-${g.distributor.toLowerCase()}">${escapeHtml(g.distributor)}</span></td>
+              <td style="color:var(--text-secondary);font-size:0.85rem">${g.customers.map(escapeHtml).join(', ')}</td>
+              <td style="font-weight:600;color:var(--accent)">${g.customers.length}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // Load subscriptions when tab is clicked
+  document.querySelector('[data-tab="subscriptions"]').addEventListener('click', () => {
+    const container = document.getElementById('subscriptions-list');
+    if (container.querySelector('.empty-state p')?.textContent === 'Loading…' ||
+        !container.querySelector('table')) {
+      loadSubscriptions();
+    }
+  });
+
 
 })();
 </script>
