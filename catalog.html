@@ -592,7 +592,8 @@
 
     // ── Subscribe button ───────────────────────────────────
     const subscribeBtn = document.getElementById('modal-subscribe');
-    if (comic.series_name && !AdminContext.isActive() && (!comic.variant_type || comic.variant_type === 'Standard')) {
+    const isStandardCover = !comic.variant_type || comic.variant_type === 'Standard' || comic.variant_type === 'Primary Title';
+    if (comic.series_name && !AdminContext.isActive() && isStandardCover) {
       const subKey = `${comic.series_name}||${comic.distributor}`;
       const isSubscribed = mySubscriptions.has(subKey);
       subscribeBtn.style.display = '';
