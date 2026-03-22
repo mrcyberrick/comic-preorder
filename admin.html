@@ -86,7 +86,6 @@
     <button class="admin-tab active" data-tab="by-customer">By Customer</button>
     <button class="admin-tab" data-tab="by-distributor">By Distributor</button>
     <button class="admin-tab" data-tab="all-items">All Reservations</button>
-    <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
   </div>
 
   <!-- Tab: By Customer -->
@@ -123,6 +122,14 @@
       </div>
     </div>
     <div id="all-items-list"></div>
+  </div>
+
+  <!-- Tab: This Week -->
+  <div class="admin-section" id="tab-this-week">
+    <div id="this-week-header" style="margin-bottom:16px"></div>
+    <div id="this-week-groups">
+      <div class="empty-state"><p>Loading…</p></div>
+    </div>
   </div>
 
   <!-- Tab: Subscriptions -->
@@ -642,45 +649,143 @@
     label.style.color = on ? 'var(--accent)' : 'var(--text-muted)';
   }
 
-  // ── Subscriptions Tab ────────────────────────────────────
-  async function loadSubscriptions() {
-    const { items, error } = await Subscriptions.getAllAdmin();
-    const container = document.getElementById('subscriptions-list');
+  // ── This Week ─────────────────────────────────────────────
+  function getThisWednesday() {
+    const today = new Date();
+    const diff  = (3 - today.getDay() + 7) % 7;
+    const wed   = new Date(today);
+    wed.setDate(today.getDate() + diff);
+    const y = wed.getFullYear();
+    const m = String(wed.getMonth() + 1).padStart(2, '0');
+    const d = String(wed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
 
-    if (error) {
-      container.innerHTML = `<div class="alert alert-error">Failed to load subscriptions: ${escapeHtml(error.message)}</div>`;
-      return;
-    }
+  function renderThisWeek() {
+    const thisWednesday = getThisWednesday();
+    const arriving = allPreorders.filter(p => p.catalog?.on_sale_date === thisWednesday);
 
-    if (!items.length) {
+    // Format Wednesday for display
+    const [y, m, d] = thisWednesday.split('-').map(Number);
+    const wedDisplay = new Date(y, m - 1, d).toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+
+    const headerEl = document.getElementById('this-week-header');
+    const container = document.getElementById('this-week-groups');
+
+    if (!arriving.length) {
+      headerEl.innerHTML = `
+        <div style="color:var(--text-muted);font-size:0.85rem">
+          No reservations arriving <strong style="color:var(--text-secondary)">${wedDisplay}</strong>
+        </div>`;
       container.innerHTML = `
         <div class="empty-state">
-          <h3>No subscriptions yet</h3>
-          <p>Customers can subscribe to series from the catalog item detail view.</p>
+          <h3>Nothing arriving this week</h3>
+          <p>No customers have reservations with an on-sale date of ${wedDisplay}.</p>
         </div>`;
       return;
     }
 
-    // Group by series_name + distributor, list customers
+    // Summary header
+    const totalItems = arriving.reduce((s, p) => s + (p.quantity || 1), 0);
+    const totalValue = arriving.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity || 1)), 0);
+    const customers  = new Set(arriving.map(p => p.user_id)).size;
+
+    headerEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+                  padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);
+                  border-radius:var(--radius-lg);margin-bottom:4px">
+        <div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
+                      text-transform:uppercase;color:var(--text-muted)">On Sale</div>
+          <div style="font-weight:700;color:var(--text-primary)">${wedDisplay}</div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
+                      text-transform:uppercase;color:var(--text-muted)">Customers</div>
+          <div style="font-weight:700;color:var(--text-primary)">${customers}</div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
+                      text-transform:uppercase;color:var(--text-muted)">Total Items</div>
+          <div style="font-weight:700;color:var(--lunar)">${totalItems}</div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
+                      text-transform:uppercase;color:var(--text-muted)">Est. Value</div>
+          <div style="font-weight:700;color:var(--success)">$${totalValue.toFixed(2)}</div>
+        </div>
+      </div>`;
+
+    // Group by customer — same pattern as By Customer tab
+    const grouped = {};
+    arriving.forEach(p => {
+      const key = p.customer_name;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(p);
+    });
+
+    container.innerHTML = Object.entries(grouped)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, items]) => {
+        const total    = items.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
+        const totalQty = items.reduce((s, p) => s + (p.quantity||1), 0);
+        const lunarCount = items.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
+        const prhCount   = items.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
+        return `
+          <div class="customer-group">
+            <div class="customer-group-header">
+              <div>
+                <div class="customer-group-name">${escapeHtml(name)}</div>
+                <div class="customer-group-meta">${totalQty} item${totalQty!==1?'s':''} · Est. $${total.toFixed(2)} · Lunar: ${lunarCount} · PRH: ${prhCount}</div>
+              </div>
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </div>
+            <div class="customer-group-body">
+              ${renderMiniTable(items)}
+            </div>
+          </div>`;
+      }).join('');
+
+    // Collapsible
+    container.querySelectorAll('.customer-group-header').forEach(header => {
+      header.addEventListener('click', () => {
+        header.closest('.customer-group').classList.toggle('open');
+      });
+    });
+  }
+
+  // Load This Week when tab is clicked
+  document.querySelector('[data-tab="this-week"]').addEventListener('click', () => {
+    renderThisWeek();
+  });
+
+
+  // ── Subscriptions Tab ────────────────────────────────────
+  async function loadSubscriptions() {
+    const { items, error } = await Subscriptions.getAllAdmin();
+    const container = document.getElementById('subscriptions-list');
+    if (error) {
+      container.innerHTML = `<div class="alert alert-error">Failed to load subscriptions: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+    if (!items.length) {
+      container.innerHTML = `<div class="empty-state"><h3>No subscriptions yet</h3><p>Customers can subscribe to series from the catalog item detail view.</p></div>`;
+      return;
+    }
     const groups = {};
     items.forEach(sub => {
       const key = `${sub.series_name}||${sub.distributor}`;
       if (!groups[key]) groups[key] = { series_name: sub.series_name, distributor: sub.distributor, customers: [] };
       groups[key].customers.push(sub.user_profiles?.full_name || 'Unknown');
     });
-
     const rows = Object.values(groups).sort((a, b) => a.series_name.localeCompare(b.series_name));
-
     container.innerHTML = `
       <table class="list-table">
-        <thead>
-          <tr>
-            <th>Series</th>
-            <th>Distributor</th>
-            <th>Subscribers</th>
-            <th>Count</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Series</th><th>Distributor</th><th>Subscribers</th><th>Count</th></tr></thead>
         <tbody>
           ${rows.map(g => `
             <tr>
@@ -688,19 +793,14 @@
               <td><span class="badge badge-${g.distributor.toLowerCase()}">${escapeHtml(g.distributor)}</span></td>
               <td style="color:var(--text-secondary);font-size:0.85rem">${g.customers.map(escapeHtml).join(', ')}</td>
               <td style="font-weight:600;color:var(--accent)">${g.customers.length}</td>
-            </tr>
-          `).join('')}
+            </tr>`).join('')}
         </tbody>
       </table>`;
   }
 
-  // Load subscriptions when tab is clicked
   document.querySelector('[data-tab="subscriptions"]').addEventListener('click', () => {
     const container = document.getElementById('subscriptions-list');
-    if (container.querySelector('.empty-state p')?.textContent === 'Loading…' ||
-        !container.querySelector('table')) {
-      loadSubscriptions();
-    }
+    if (!container.querySelector('table')) loadSubscriptions();
   });
 
 
