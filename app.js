@@ -391,7 +391,7 @@ const Preorders = {
         catalog (
           id, distributor, item_code, title, series_name, publisher,
           issue_number, format, price_usd, foc_date, on_sale_date,
-          writer, artist, cover_url, variant_type
+          writer, artist, cover_url, variant_type, catalog_month
         )
       `)
       .eq('user_id', userId)
