@@ -210,7 +210,12 @@
   let allPreorders = [];
 
   // ── Load Data ─────────────────────────────────────────────
+  let currentCatalogMonth = null;
+
   async function loadData() {
+    // Get current catalog month first so we can scope all views to it
+    currentCatalogMonth = await Catalog.getLatestMonth();
+
     const [preordersRes, profilesRes] = await Promise.all([
       db.from('preorders')
         .select(`
@@ -221,7 +226,7 @@
           catalog (
             id, distributor, item_code, title, series_name, publisher,
             issue_number, format, price_usd, foc_date, on_sale_date,
-            writer, artist, cover_url, variant_type
+            writer, artist, cover_url, variant_type, catalog_month
           )
         `)
         .order('created_at', { ascending: false }),
@@ -237,10 +242,22 @@
     const profileMap = {};
     (profilesRes.data || []).forEach(u => profileMap[u.id] = u.full_name);
 
-    allPreorders = (preordersRes.data || []).map(p => ({
-      ...p,
-      customer_name: profileMap[p.user_id] || 'Unknown',
-    }));
+    // Scope to current catalog month only
+    allPreorders = (preordersRes.data || [])
+      .filter(p => p.catalog?.catalog_month === currentCatalogMonth)
+      .map(p => ({
+        ...p,
+        customer_name: profileMap[p.user_id] || 'Unknown',
+      }));
+
+    // Update page subtitle to show current month
+    if (currentCatalogMonth) {
+      const [y, m] = currentCatalogMonth.split('-');
+      const monthLabel = new Date(parseInt(y), parseInt(m) - 1, 1)
+        .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      document.querySelector('.page-header p').textContent =
+        `Customer pre-orders for ${monthLabel}`;
+    }
 
     renderStats();
     renderByCustomer();
