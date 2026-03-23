@@ -292,7 +292,7 @@
 
   <div class="page-header">
     <h1>My Pull List</h1>
-    <p>Your current reservations for this order cycle</p>
+    <p id="mylist-subtitle">Your reservations for the current order cycle</p>
   </div>
 
   <!-- Summary -->
@@ -415,6 +415,7 @@
   catch(e) { if (e.message === 'maintenance') return; }
 
   let allItems = [];
+  let allUpcoming = []; // all future reservations across all months
 
   const searchEl   = document.getElementById('search');
   const distEl     = document.getElementById('filter-distributor');
@@ -431,12 +432,13 @@
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
       return;
     }
-    // Hide items from previous months where on_sale_date has already passed.
-    // Items with no on_sale_date, or with a future/today date, are always shown.
+    // Main list shows current catalog month only.
+    // Upcoming Arrivals section uses allUpcoming which includes all future months.
     const today = new Date().toISOString().split('T')[0];
-    allItems = items.filter(i => {
+    allItems = items.filter(i => i.catalog?.catalog_month === currentMonth);
+    allUpcoming = items.filter(i => {
       const d = i.catalog?.on_sale_date;
-      return !d || d >= today;
+      return d && d >= today;
     });
     renderList();
   }
@@ -702,12 +704,8 @@
 
   // ── Upcoming Arrivals ────────────────────────────────────
   function renderArrivingThisMonth() {
-    const today = new Date().toISOString().split('T')[0];
-
-    // All items with a future or today on_sale_date
-    const arriving = allItems.filter(i =>
-      i.catalog?.on_sale_date && i.catalog.on_sale_date >= today
-    );
+    // Use allUpcoming which spans all catalog months
+    const arriving = allUpcoming;
 
     const section = document.getElementById('month-arrivals-section');
     const grid    = document.getElementById('month-arrivals-grid');
@@ -781,6 +779,15 @@
   distEl.addEventListener('change', renderList);
 
   const currentMonth = await Catalog.getLatestMonth();
+  if (currentMonth) {
+    const [y, m] = currentMonth.split('-');
+    const monthLabel = new Date(parseInt(y), parseInt(m) - 1, 1)
+      .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const subtitleEl = document.getElementById('mylist-subtitle');
+    if (subtitleEl && !AdminContext.isActive()) {
+      subtitleEl.textContent = `Your reservations for ${monthLabel}`;
+    }
+  }
   await loadList();
   renderArrivingThisMonth();
   await loadMySubscriptions();
