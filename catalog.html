@@ -74,6 +74,7 @@
     </select>
     <select class="filter-select" id="filter-reserved">
       <option value="">All Items</option>
+      <option value="recommended">Recommended For You</option>
       <option value="reserved">Reserved Only</option>
       <option value="unreserved">Not Yet Reserved</option>
     </select>
@@ -247,6 +248,74 @@
     currentPage = page;
 
     const reserveFilter = resEl.value; // 'reserved', 'unreserved', or ''
+
+    // ── Recommended For You path ──────────────────────────────
+    // Ranks the current month's catalog by relevance to this user:
+    // personalized series first (from their history), then by overall popularity.
+    // Only fetches lightweight id+series fields for ranking, then fetches full
+    // records for the current page only — no 1900-row full-data fetch needed.
+    if (reserveFilter === 'recommended') {
+      const targetUserId = AdminContext.resolveUserId(user.id);
+      const { ids: recommendedIds, hasPersonal } =
+        await Recommendations.getCatalogIds(targetUserId, currentMonth);
+
+      if (!recommendedIds.length) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H9l4-8v4h2l-4 8z"/>
+            </svg>
+            <h3>No recommendations yet</h3>
+            <p>Reserve some items and check back next month for personalized picks</p>
+          </div>`;
+        paginEl.style.display = 'none';
+        countEl.textContent = '';
+        return;
+      }
+
+      // Client-side pagination of the ranked ID list
+      const filteredTotal = recommendedIds.length;
+      const pageFrom      = (page - 1) * PAGE_SIZE;
+      const pageIds       = recommendedIds.slice(pageFrom, pageFrom + PAGE_SIZE);
+
+      // Fetch full catalog records for only this page's IDs
+      const { data: pageData, error: pageError } = await db
+        .from('catalog')
+        .select('*')
+        .in('id', pageIds);
+
+      if (pageError) {
+        grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load recommendations: ${escapeHtml(pageError.message)}</div>`;
+        return;
+      }
+
+      // Reorder fetched rows to match recommendation rank (`.in()` doesn't preserve order)
+      const itemById     = new Map((pageData || []).map(i => [i.id, i]));
+      const orderedItems = pageIds.map(id => itemById.get(id)).filter(Boolean);
+
+      allItems = orderedItems; // modal lookup only needs the current page
+
+      const label = hasPersonal ? 'recommended' : 'popular';
+      countEl.textContent = `Showing ${Math.min(PAGE_SIZE, filteredTotal - pageFrom)} of ${filteredTotal} ${label} items`;
+
+      if (!orderedItems.length) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H9l4-8v4h2l-4 8z"/>
+            </svg>
+            <h3>No items found</h3>
+            <p>Try adjusting your search or filters</p>
+          </div>`;
+        paginEl.style.display = 'none';
+        return;
+      }
+
+      grid.innerHTML = orderedItems.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
+      renderPagination(filteredTotal, page);
+      attachGridEvents();
+      return;
+    }
 
     // ── FIX: When filtering by reserved/unreserved, we must fetch ALL matching
     // items across the full catalog — not just the current page — because

@@ -502,6 +502,117 @@ const Subscriptions = {
   },
 };
 
+// ── Recommendations ───────────────────────────────────────────
+const Recommendations = {
+
+  // Returns a Set of "series_name||distributor" keys the user has ever reserved.
+  // Unions reservation_history (past months, archived) with current live preorders.
+  // Both tables are accessible via RLS using the user's own session.
+  async _getUserSignal(userId) {
+    const [histRes, preorderRes] = await Promise.all([
+      db.from('reservation_history')
+        .select('series_name, distributor')
+        .eq('user_id', userId)
+        .not('series_name', 'is', null),
+      db.from('preorders')
+        .select('catalog(series_name, distributor)')
+        .eq('user_id', userId),
+    ]);
+
+    const signal = new Set();
+    (histRes.data || []).forEach(r => {
+      if (r.series_name) signal.add(`${r.series_name}||${r.distributor}`);
+    });
+    (preorderRes.data || []).forEach(r => {
+      const c = r.catalog;
+      if (c?.series_name) signal.add(`${c.series_name}||${c.distributor}`);
+    });
+    return signal; // Set<"series_name||distributor">
+  },
+
+  // Returns [{series_name, distributor, reservation_count}] sorted by popularity
+  // descending. Uses a SECURITY DEFINER SQL function so the anon-key client can
+  // see aggregate counts without RLS exposing individual users' preorder rows.
+  async _getPopularSeries(month) {
+    const { data } = await db.rpc('get_popular_series', { p_catalog_month: month });
+    return data || [];
+  },
+
+  // Returns { ids: string[], hasPersonal: boolean }
+  //   ids         — catalog IDs for the current month, ordered by relevance:
+  //                 Tier 1 (personalized): series the user has reserved before
+  //                 Tier 2 (popular):      most-reserved series by all customers
+  //   hasPersonal — true if the user had any historical signal (used for UI label)
+  //
+  // Items with no series affiliation are omitted; the view stays focused on
+  // content the customer is likely to care about.
+  async getCatalogIds(userId, month) {
+    const [userSignal, popularSeries] = await Promise.all([
+      this._getUserSignal(userId),
+      this._getPopularSeries(month),
+    ]);
+
+    // Fetch only id + series fields for the full catalog month — lightweight
+    // relative to select('*'), but still needs two batches for Supabase's 1000-row cap.
+    const countRes = await db
+      .from('catalog')
+      .select('*', { count: 'exact', head: true })
+      .eq('catalog_month', month)
+      .not('series_name', 'is', null);
+    const total = countRes.count ?? 0;
+
+    if (!total) return { ids: [], hasPersonal: false };
+
+    const [b1, b2] = await Promise.all([
+      db.from('catalog')
+        .select('id, series_name, distributor')
+        .eq('catalog_month', month)
+        .not('series_name', 'is', null)
+        .range(0, 999),
+      total > 1000
+        ? db.from('catalog')
+            .select('id, series_name, distributor')
+            .eq('catalog_month', month)
+            .not('series_name', 'is', null)
+            .range(1000, 1999)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const seriesRows = [...(b1.data || []), ...(b2.data || [])];
+
+    // Build series key → [catalog IDs] lookup
+    const byKey = new Map();
+    for (const row of seriesRows) {
+      const key = `${row.series_name}||${row.distributor}`;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(row.id);
+    }
+
+    const seen       = new Set();
+    const personalIds = [];
+    const popularIds  = [];
+
+    // Tier 1: items from series the user has reserved before
+    for (const key of userSignal) {
+      for (const id of (byKey.get(key) || [])) {
+        if (!seen.has(id)) { personalIds.push(id); seen.add(id); }
+      }
+    }
+
+    // Tier 2: items from the most-reserved series (SQL returns them pre-sorted)
+    for (const series of popularSeries) {
+      const key = `${series.series_name}||${series.distributor}`;
+      for (const id of (byKey.get(key) || [])) {
+        if (!seen.has(id)) { popularIds.push(id); seen.add(id); }
+      }
+    }
+
+    return {
+      ids: [...personalIds, ...popularIds],
+      hasPersonal: userSignal.size > 0,
+    };
+  },
+};
+
 // ── UI Helpers ────────────────────────────────────────────────
 function toast(message, type = 'success') {
   let container = document.getElementById('toast-container');
