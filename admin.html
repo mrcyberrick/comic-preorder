@@ -88,6 +88,7 @@
     <button class="admin-tab" data-tab="all-items">All Reservations</button>
     <button class="admin-tab" data-tab="this-week">This Week</button>
     <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
+    <button class="admin-tab" data-tab="top-series">Top Series</button>
   </div>
 
   <!-- Tab: By Customer -->
@@ -137,6 +138,25 @@
   <!-- Tab: Subscriptions -->
   <div class="admin-section" id="tab-subscriptions">
     <div id="subscriptions-list">
+      <div class="empty-state"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- Tab: Top Series -->
+  <div class="admin-section" id="tab-top-series">
+    <div id="top-series-header" style="display:flex;align-items:center;justify-content:space-between;
+         flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <div style="font-size:0.82rem;color:var(--text-muted)" id="top-series-subtitle"></div>
+      <button class="btn btn-secondary btn-sm" id="btn-print-top-series"
+        style="display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print
+      </button>
+    </div>
+    <div id="top-series-list">
       <div class="empty-state"><p>Loading…</p></div>
     </div>
   </div>
@@ -820,6 +840,159 @@
   document.querySelector('[data-tab="subscriptions"]').addEventListener('click', () => {
     const container = document.getElementById('subscriptions-list');
     if (!container.querySelector('table')) loadSubscriptions();
+  });
+
+
+  // ── Top Series Tab ────────────────────────────────────────
+  async function loadTopSeries() {
+    const container  = document.getElementById('top-series-list');
+    const subtitleEl = document.getElementById('top-series-subtitle');
+
+    container.innerHTML = `<div class="empty-state"><p>Loading…</p></div>`;
+
+    const { data, error } = await db.rpc('get_popular_series', {
+      p_catalog_month: currentCatalogMonth,
+    });
+
+    if (error) {
+      container.innerHTML = `<div class="alert alert-error">Failed to load: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    if (!data || !data.length) {
+      container.innerHTML = `<div class="empty-state"><h3>No data yet</h3>
+        <p>Reservations will appear here once customers have reserved items this month.</p></div>`;
+      subtitleEl.textContent = '';
+      return;
+    }
+
+    // Format month label for display (e.g. "April 2026")
+    const [y, m] = (currentCatalogMonth || '').split('-');
+    const monthLabel = currentCatalogMonth
+      ? new Date(parseInt(y), parseInt(m) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : '';
+
+    subtitleEl.textContent = `${data.length} series with reservations · ${monthLabel}`;
+
+    container.innerHTML = `
+      <table class="list-table" id="top-series-table">
+        <thead>
+          <tr>
+            <th style="width:40px;text-align:center">#</th>
+            <th>Series</th>
+            <th>Distributor</th>
+            <th style="text-align:center">Reservations</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.map((row, i) => `
+            <tr>
+              <td style="text-align:center;color:var(--text-muted);font-size:0.82rem">${i + 1}</td>
+              <td style="font-weight:600">${escapeHtml(row.series_name || '—')}</td>
+              <td><span class="badge badge-${(row.distributor || '').toLowerCase()}">${escapeHtml(row.distributor || '—')}</span></td>
+              <td style="text-align:center;font-family:var(--font-display);
+                         font-size:1.2rem;color:var(--accent)">${row.reservation_count}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  document.querySelector('[data-tab="top-series"]').addEventListener('click', () => {
+    const table = document.getElementById('top-series-table');
+    if (!table) loadTopSeries();
+  });
+
+  // ── Print Top Series ──────────────────────────────────────
+  // Opens a focused print window containing only the Top Series table —
+  // avoids fighting with the dark-mode admin UI in a global @media print rule.
+  document.getElementById('btn-print-top-series').addEventListener('click', () => {
+    const table = document.getElementById('top-series-table');
+    if (!table) return;
+
+    const [y, m] = (currentCatalogMonth || '').split('-');
+    const monthLabel = currentCatalogMonth
+      ? new Date(parseInt(y), parseInt(m) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : '';
+
+    const rows = [...table.querySelectorAll('tbody tr')].map(tr => {
+      const cells = tr.querySelectorAll('td');
+      return {
+        rank:        cells[0]?.textContent.trim() || '',
+        series:      cells[1]?.textContent.trim() || '',
+        distributor: cells[2]?.textContent.trim() || '',
+        count:       cells[3]?.textContent.trim() || '',
+      };
+    });
+
+    const printWin = window.open('', '_blank', 'width=700,height=900');
+    printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Top Series — ${monthLabel}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Georgia, serif; font-size: 12pt; color: #111; padding: 32px; }
+    .header { margin-bottom: 24px; padding-bottom: 14px; border-bottom: 2px solid #111; }
+    .store   { font-size: 9pt; color: #555; margin-bottom: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .title   { font-size: 20pt; font-weight: 700; letter-spacing: 0.02em; }
+    .title span { color: #c0392b; }
+    .subtitle { font-size: 10pt; color: #444; margin-top: 6px; }
+    table  { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    thead tr { border-bottom: 2px solid #111; }
+    th { font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+         text-align: left; padding: 6px 8px; color: #333; }
+    th.center { text-align: center; }
+    tbody tr { border-bottom: 1px solid #ddd; }
+    tbody tr:nth-child(even) { background: #f7f7f7; }
+    td { padding: 7px 8px; font-size: 11pt; vertical-align: middle; }
+    td.rank  { text-align: center; color: #888; font-size: 9pt; width: 36px; }
+    td.count { text-align: center; font-weight: 700; font-size: 15pt; color: #c0392b; }
+    td.dist  { font-size: 9pt; color: #555; }
+    .footer  { margin-top: 24px; padding-top: 10px; border-top: 1px solid #ccc;
+               font-size: 8pt; color: #888; display: flex; justify-content: space-between; }
+    @media print {
+      body { padding: 16px; }
+      @page { margin: 0.75in; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="store">Ray &amp; Judy's Book Stop &middot; Rockaway, NJ</div>
+    <div class="title">PULL<span>LIST</span></div>
+    <div class="subtitle">Top Series by Reservations &mdash; ${monthLabel}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th class="center">#</th>
+        <th>Series</th>
+        <th>Distributor</th>
+        <th class="center">Reservations</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => `
+        <tr>
+          <td class="rank">${escapeHtml(r.rank)}</td>
+          <td>${escapeHtml(r.series)}</td>
+          <td class="dist">${escapeHtml(r.distributor)}</td>
+          <td class="count">${escapeHtml(r.count)}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>
+  <div class="footer">
+    <span>PULLLIST Admin Report</span>
+    <span>Printed ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+  </div>
+  <script>window.onload = () => { window.print(); }<\/script>
+</body>
+</html>`);
+    printWin.document.close();
   });
 
 
