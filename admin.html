@@ -989,10 +989,14 @@
     <span>PULLLIST Admin Report</span>
     <span>Printed ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
   </div>
-  <script>window.onload = () => { window.print(); }<\/script>
 </body>
 </html>`);
     printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+      printWin.print();
+      printWin.close();
+    }, 250);
   });
 
 
