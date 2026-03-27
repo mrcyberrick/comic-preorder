@@ -12,11 +12,11 @@
   <div class="login-card">
 
     <div style="display:flex;justify-content:center;margin-bottom:16px">
-      <img src="bookstop_logo.png" alt="BookStop Comics"
+      <img src="bookstop_logo.png" alt="Ray &amp; Judy's Book Stop"
            style="height:72px;width:auto;object-fit:contain">
     </div>
     <div class="login-logo">PULL<span>LIST</span></div>
-    <div class="login-tagline">BookStop Comics — Monthly Pre-Orders</div>
+    <div class="login-tagline">Ray &amp; Judy's Book Stop — Monthly Pre-Orders</div>
 
     <!-- ── Invite Welcome Banner (shown when invite token detected) ── -->
     <div id="invite-banner" style="display:none;margin-bottom:24px;
@@ -31,14 +31,13 @@
         Welcome to your pull list!
       </div>
       <div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7">
-        Richard at <strong style="color:var(--text-primary)">BookStop Comics</strong>
-        has set up an account for you. Set your password below to get started —
+        Ray &amp; Judy's Book Stop has set up an account for you. Set your password below to get started —
         you can then browse the monthly catalog and reserve your titles.
       </div>
       <!-- Trust signals -->
       <div style="margin-top:12px;display:flex;flex-direction:column;gap:4px;
                   font-size:0.75rem;color:var(--text-muted)">
-        <div>✓ &nbsp;This invite was sent personally by BookStop Comics</div>
+        <div>✓ &nbsp;This invite was sent personally by Ray &amp; Judy's Book Stop</div>
         <div>✓ &nbsp;Reservations only — you will never be charged through this site</div>
         <div>✓ &nbsp;Questions? Reply to the invite email or call the shop</div>
       </div>
@@ -118,7 +117,7 @@
   <!-- Shop footer -->
   <div style="position:fixed;bottom:20px;left:0;right:0;text-align:center;
               font-size:0.72rem;color:var(--text-muted);letter-spacing:0.03em">
-    BookStop Comics &nbsp;·&nbsp; Pull List Pre-Order System
+    Ray &amp; Judy's Book Stop &nbsp;·&nbsp; Pull List Pre-Order System
   </div>
 </div>
 
@@ -210,8 +209,8 @@
       inviteBanner.style.display = 'block';
       inviteGreeting.textContent = 'Your invite link has expired.';
       inviteGreeting.style.color = 'var(--accent)';
-      document.querySelector('#invite-banner div:last-child').textContent =
-        'Please contact BookStop Comics to get a new invite link sent to you.';
+      document.querySelector('#invite-banner div:last-child').innerHTML =
+        'Use the <strong style="color:var(--text-primary)">Forgot your password?</strong> link below — we\'ll send a fresh link to your email right away.';
       setPasswordForm.style.display = 'none';
       signInForm.style.display      = 'block';
       history.replaceState(null, '', window.location.pathname);
@@ -315,7 +314,7 @@
     // Verify we have an active session before trying to update
     const { data: { session: currentSession } } = await db.auth.getSession();
     if (!currentSession) {
-      setPasswordError.textContent   = 'Your invite link has expired. Please contact BookStop Comics for a new one.';
+      setPasswordError.textContent   = 'Your link has expired. Use "Forgot your password?" below — we\'ll send a fresh link to your email.';
       setPasswordError.style.display = 'block';
       btnSetPassword.disabled    = false;
       btnSetPassword.textContent = 'Set Password & Enter';
