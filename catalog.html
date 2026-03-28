@@ -696,19 +696,20 @@
       reserveBtn.disabled    = false;
       reserveBtn.style.opacity = '';
     }
-    if (!isPending) reserveBtn.onclick = () => {
-      const qty     = parseInt(qtyInput.value) || 1;
-      const cardBtn = grid.querySelector(`.btn-reserve[data-id="${catalogId}"]`);
-      toggleReserve(catalogId, reserveBtn, qty);
-      if (cardBtn) {
-        setTimeout(() => {
-          const nowReserved = reservedIds.has(catalogId);
-          cardBtn.textContent = nowReserved ? '\u2713 Reserved' : '+ Reserve';
-          cardBtn.classList.toggle('reserved', nowReserved);
-        }, 300);
-      }
-    };
-    }  // end if (!isPending)
+    if (!isPending) {
+      reserveBtn.onclick = () => {
+        const qty     = parseInt(qtyInput.value) || 1;
+        const cardBtn = grid.querySelector(`.btn-reserve[data-id="${catalogId}"]`);
+        toggleReserve(catalogId, reserveBtn, qty);
+        if (cardBtn) {
+          setTimeout(() => {
+            const nowReserved = reservedIds.has(catalogId);
+            cardBtn.textContent = nowReserved ? '\u2713 Reserved' : '+ Reserve';
+            cardBtn.classList.toggle('reserved', nowReserved);
+          }, 300);
+        }
+      };
+    }
 
     // ── Subscribe button ───────────────────────────────────
     const subscribeBtn = document.getElementById('modal-subscribe');
