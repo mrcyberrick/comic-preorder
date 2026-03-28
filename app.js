@@ -503,6 +503,56 @@ const Subscriptions = {
 };
 
 // ── Recommendations ───────────────────────────────────────────
+
+// ── Users (Admin) ─────────────────────────────────
+// Requires admin RLS. Methods use anon-key session allowed by
+// the "admins update all profiles" policy added in staging-setup.sql.
+const Users = {
+  // All pending (self-registered, awaiting approval) accounts
+  async getPending() {
+    const { data, error } = await db
+      .from('user_profiles')
+      .select('id, full_name, email, status, created_at')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    return { items: data || [], error };
+  },
+
+  // Approve: calls approve-customer edge function (status update + email)
+  async approve(userId, sessionToken) {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/approve-customer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${sessionToken}`,
+        'apikey':        SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { error: result.error || `HTTP ${resp.status}` };
+    return { data: result };
+  },
+
+  // Suspend an account (pending or active)
+  async suspend(userId) {
+    const { error } = await db
+      .from('user_profiles')
+      .update({ status: 'suspended' })
+      .eq('id', userId);
+    return { error };
+  },
+
+  // Remove profile row — auth user remains but loses all access
+  async deleteProfile(userId) {
+    const { error } = await db
+      .from('user_profiles')
+      .delete()
+      .eq('id', userId);
+    return { error };
+  },
+};
+
 const Recommendations = {
 
   // Returns a Set of "series_name||distributor" keys the user has ever reserved.

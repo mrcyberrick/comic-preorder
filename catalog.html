@@ -153,6 +153,37 @@
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
 
+  // ── Pending account detection ────────────────────────────────
+  // Pending users can browse but cannot reserve or subscribe.
+  // Admins are never treated as pending regardless of their status field.
+  const isPending = !profile?.is_admin && profile?.status === 'pending';
+  if (isPending) {
+    // Inject the pending banner below the page header
+    const header = document.querySelector('.page-header');
+    if (header) {
+      const banner = document.createElement('div');
+      banner.id = 'pending-banner';
+      banner.style.cssText = [
+        'background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.35);',
+        'border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;',
+        'display:flex;align-items:flex-start;gap:12px;',
+      ].join('');
+      banner.innerHTML =
+        '<div style="font-size:1.1rem;line-height:1;margin-top:2px">&#128274;</div>' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--warning,#eab308);margin-bottom:4px">' +
+            'Your account is being reviewed' +
+          '</div>' +
+          '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
+            'You can browse the upcoming catalog while we confirm your details. ' +
+            'Reservations will be available once Ray\u0026nbsp;&amp;\u0026nbsp;Judy\u2019s Book Stop approves your account. ' +
+            'Questions? Call us at (973)\u0026nbsp;586-9182.' +
+          '</div>' +
+        '</div>';
+      header.insertAdjacentElement('afterend', banner);
+    }
+  }
+
   const PAGE_SIZE = 48;
   let currentPage = 1;
   let currentMonth = null;
@@ -485,6 +516,15 @@
 
     // Reserve button
     grid.querySelectorAll('.btn-reserve').forEach(btn => {
+      if (isPending) {
+        // Pending users see a locked button — no action, visual cue only
+        btn.disabled = true;
+        btn.title = 'Available once your account is approved';
+        btn.style.opacity = '0.45';
+        btn.style.cursor  = 'not-allowed';
+        btn.textContent   = '\uD83D\uDD12 Pending';
+        return;
+      }
       btn.addEventListener('click', e => {
         e.stopPropagation();
         toggleReserve(btn.dataset.id, btn);
@@ -644,25 +684,36 @@
     };
 
     const reserveBtn = document.getElementById('modal-reserve');
-    reserveBtn.textContent = isReserved ? '✕ Cancel Reservation' : '+ Reserve';
-    reserveBtn.className   = isReserved ? 'btn btn-danger' : 'btn btn-primary';
-    reserveBtn.onclick = () => {
+    if (isPending) {
+      reserveBtn.textContent = '\uD83D\uDD12 Approval pending';
+      reserveBtn.className   = 'btn btn-ghost';
+      reserveBtn.disabled    = true;
+      reserveBtn.style.opacity = '0.5';
+      reserveBtn.onclick     = null;
+    } else {
+      reserveBtn.textContent = isReserved ? '\u2715 Cancel Reservation' : '+ Reserve';
+      reserveBtn.className   = isReserved ? 'btn btn-danger' : 'btn btn-primary';
+      reserveBtn.disabled    = false;
+      reserveBtn.style.opacity = '';
+    }
+    if (!isPending) reserveBtn.onclick = () => {
       const qty     = parseInt(qtyInput.value) || 1;
       const cardBtn = grid.querySelector(`.btn-reserve[data-id="${catalogId}"]`);
       toggleReserve(catalogId, reserveBtn, qty);
       if (cardBtn) {
         setTimeout(() => {
           const nowReserved = reservedIds.has(catalogId);
-          cardBtn.textContent = nowReserved ? '✓ Reserved' : '+ Reserve';
+          cardBtn.textContent = nowReserved ? '\u2713 Reserved' : '+ Reserve';
           cardBtn.classList.toggle('reserved', nowReserved);
         }, 300);
       }
     };
+    }  // end if (!isPending)
 
     // ── Subscribe button ───────────────────────────────────
     const subscribeBtn = document.getElementById('modal-subscribe');
     const isStandardCover = !comic.variant_type || comic.variant_type === 'Standard' || comic.variant_type === 'Primary Title';
-    if (comic.series_name && !AdminContext.isActive() && isStandardCover) {
+    if (comic.series_name && !AdminContext.isActive() && isStandardCover && !isPending) {
       const subKey = `${comic.series_name}||${comic.distributor}`;
       const isSubscribed = mySubscriptions.has(subKey);
       subscribeBtn.style.display = '';

@@ -176,7 +176,7 @@
       // Case 1b: access_token only (some Supabase versions omit refresh_token)
       const result = await db.auth.verifyOtp({
         token_hash: accessToken,
-        type: type === 'recovery' ? 'recovery' : 'invite',
+        type: type === 'recovery' ? 'recovery' : type === 'magiclink' ? 'magiclink' : 'invite',
       })
       sessionData = result.data
       sessionErr  = result.error
@@ -184,7 +184,7 @@
       // Case 2: token_hash in query params from our generateLink flow
       const result = await db.auth.verifyOtp({
         token_hash: tokenHash,
-        type: type === 'recovery' ? 'recovery' : 'invite',
+        type: type === 'recovery' ? 'recovery' : type === 'magiclink' ? 'magiclink' : 'invite',
       })
       sessionData = result.data
       sessionErr  = result.error
@@ -196,6 +196,14 @@
                     || user.raw_user_meta_data?.full_name
                     || user.email?.split('@')[0]
                     || '';
+
+      // Magic link = pending browse session or approved login.
+      // No password setup needed — send them straight to catalog.
+      if (type === 'magiclink') {
+        history.replaceState(null, '', window.location.pathname);
+        window.location.href = 'catalog.html';
+        return;
+      }
 
       if (fullName) {
         inviteGreeting.textContent = `Welcome, ${fullName}!`;
