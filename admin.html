@@ -72,6 +72,10 @@
       <div class="stat-value" style="color:var(--success)" id="stat-value">—</div>
       <div class="stat-label">Est. Order Value</div>
     </div>
+    <div class="stat" id="stat-pending-wrap" style="display:none">
+      <div class="stat-value" style="color:var(--warning,#eab308)" id="stat-pending">—</div>
+      <div class="stat-label">Pending Approval</div>
+    </div>
   </div>
 
   <!-- Export Bar -->
@@ -89,6 +93,7 @@
     <button class="admin-tab" data-tab="this-week">This Week</button>
     <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
     <button class="admin-tab" data-tab="top-series">Top Series</button>
+    <button class="admin-tab" data-tab="pending" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
   </div>
 
   <!-- Tab: By Customer -->
@@ -138,6 +143,19 @@
   <!-- Tab: Subscriptions -->
   <div class="admin-section" id="tab-subscriptions">
     <div id="subscriptions-list">
+      <div class="empty-state"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- Tab: Pending Accounts -->
+  <div class="admin-section" id="tab-pending">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+      <p style="font-size:0.85rem;color:var(--text-secondary);margin:0">
+        Self-registered accounts awaiting approval. Approving sends a magic-link email so the customer can start reserving immediately.
+      </p>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh-pending" style="flex-shrink:0">&#8635; Refresh</button>
+    </div>
+    <div id="pending-list">
       <div class="empty-state"><p>Loading…</p></div>
     </div>
   </div>
@@ -998,6 +1016,171 @@
       printWin.close();
     }, 250);
   });
+
+
+
+  // ── Pending Accounts Tab ───────────────────────────────
+  async function loadPendingAccounts() {
+    const container = document.getElementById('pending-list');
+    container.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
+
+    const { items, error } = await Users.getPending();
+
+    // Update badge and stat
+    const badge = document.getElementById('pending-badge');
+    const statWrap = document.getElementById('stat-pending-wrap');
+    const statEl   = document.getElementById('stat-pending');
+    if (items.length > 0) {
+      badge.textContent  = items.length;
+      badge.style.display = 'inline';
+      statWrap.style.display = '';
+      statEl.textContent  = items.length;
+    } else {
+      badge.style.display = 'none';
+      statWrap.style.display = 'none';
+    }
+
+    if (error) {
+      container.innerHTML = `<div class="alert alert-error">Failed to load pending accounts: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    if (!items.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <h3>No pending accounts</h3>
+          <p>All self-registered accounts have been reviewed.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <table class="list-table" id="pending-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Requested</th>
+            <th style="text-align:right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(u => `
+            <tr id="pending-row-${u.id}">
+              <td style="font-weight:600">${escapeHtml(u.full_name || '—')}</td>
+              <td style="color:var(--text-secondary);font-size:0.85rem">${escapeHtml(u.email || '—')}</td>
+              <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(u.created_at?.split('T')[0])}</td>
+              <td style="text-align:right">
+                <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+                  <button class="btn btn-primary btn-sm pending-approve-btn"
+                    data-id="${u.id}" data-name="${escapeHtml(u.full_name || '')}">
+                    ✓ Approve
+                  </button>
+                  <button class="btn btn-danger btn-sm pending-decline-btn"
+                    data-id="${u.id}" data-name="${escapeHtml(u.full_name || '')}">
+                    ✕ Decline
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+
+    // Approve handler
+    container.querySelectorAll('.pending-approve-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { id, name } = btn.dataset;
+        if (!confirm(`Approve ${name} and send them an invitation email?`)) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Approving…';
+
+        const { data: sessionData } = await db.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) { toast('Session expired — please sign out and back in', 'error'); return; }
+
+        const { data, error } = await Users.approve(id, token);
+
+        if (error) {
+          toast(`Failed to approve: ${error}`, 'error');
+          btn.disabled = false;
+          btn.textContent = '✓ Approve';
+          return;
+        }
+
+        // Remove row and refresh counts
+        const row = document.getElementById(`pending-row-${id}`);
+        if (row) row.remove();
+        toast(`${name} approved — invitation email sent`);
+
+        // Check if table is now empty
+        const tbody = document.querySelector('#pending-table tbody');
+        if (!tbody?.children.length) {
+          container.innerHTML = '<div class="empty-state"><h3>No pending accounts</h3><p>All self-registered accounts have been reviewed.</p></div>';
+        }
+
+        // Refresh badge count
+        const remaining = document.querySelectorAll('#pending-table tbody tr').length;
+        const badge = document.getElementById('pending-badge');
+        const statEl = document.getElementById('stat-pending');
+        if (remaining > 0) {
+          badge.textContent = remaining;
+          statEl.textContent = remaining;
+        } else {
+          badge.style.display = 'none';
+          document.getElementById('stat-pending-wrap').style.display = 'none';
+        }
+      });
+    });
+
+    // Decline handler
+    container.querySelectorAll('.pending-decline-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { id, name } = btn.dataset;
+        if (!confirm(`Decline and remove ${name}'s account? This cannot be undone.`)) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Removing…';
+
+        const { error } = await Users.deleteProfile(id);
+        if (error) {
+          toast(`Failed to remove: ${error.message}`, 'error');
+          btn.disabled = false;
+          btn.textContent = '✕ Decline';
+          return;
+        }
+
+        const row = document.getElementById(`pending-row-${id}`);
+        if (row) row.remove();
+        toast(`${name}'s request removed`);
+
+        const tbody = document.querySelector('#pending-table tbody');
+        if (!tbody?.children.length) {
+          container.innerHTML = '<div class="empty-state"><h3>No pending accounts</h3><p>All self-registered accounts have been reviewed.</p></div>';
+        }
+
+        const remaining = document.querySelectorAll('#pending-table tbody tr').length;
+        const badge = document.getElementById('pending-badge');
+        if (remaining > 0) {
+          badge.textContent = remaining;
+          document.getElementById('stat-pending').textContent = remaining;
+        } else {
+          badge.style.display = 'none';
+          document.getElementById('stat-pending-wrap').style.display = 'none';
+        }
+      });
+    });
+  }
+
+  // Load pending accounts eagerly so the badge populates on page load
+  loadPendingAccounts();
+
+  // Refresh button
+  document.getElementById('btn-refresh-pending').addEventListener('click', loadPendingAccounts);
+
+  // Tab click also reloads
+  document.querySelector('[data-tab="pending"]').addEventListener('click', loadPendingAccounts);
 
 
 })();
