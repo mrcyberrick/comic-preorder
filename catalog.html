@@ -227,11 +227,11 @@
   }
 
   // ── Order deadline banner ─────────────────────────────────────
+  // Reads the admin-set order_deadline from settings.
   // Shown only while the deadline has not yet passed — hides itself automatically.
   if (currentMonth) {
-    Catalog.getOrderDeadline(currentMonth).then(deadline => {
+    Settings.getOrderDeadline().then(deadline => {
       if (!deadline) return;
-      // Compare deadline to today using local date parts (no UTC shift)
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       if (deadline < todayStr) return; // past deadline — stay hidden

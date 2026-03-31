@@ -227,32 +227,6 @@ const Catalog = {
     return { items: data || [], error, total: count || 0 };
   },
 
-  // Returns the order deadline for a given catalog month:
-  // the earliest FOC date in that month minus 3 days, as a 'YYYY-MM-DD' string.
-  // Returns null if no FOC dates exist for the month.
-  // Uses local date arithmetic — never toISOString() — to avoid UTC shift.
-  async getOrderDeadline(month) {
-    const { data } = await db
-      .from('catalog')
-      .select('foc_date')
-      .eq('catalog_month', month)
-      .not('foc_date', 'is', null)
-      .order('foc_date', { ascending: true })
-      .limit(1)
-      .single();
-
-    if (!data?.foc_date) return null;
-
-    const [y, m, d] = data.foc_date.split('-').map(Number);
-    const deadline = new Date(y, m - 1, d);
-    deadline.setDate(deadline.getDate() - 3);
-
-    const dy = deadline.getFullYear();
-    const dm = String(deadline.getMonth() + 1).padStart(2, '0');
-    const dd = String(deadline.getDate()).padStart(2, '0');
-    return `${dy}-${dm}-${dd}`;
-  },
-
   async getPublishers(month) {
     // Fetch in two batches to get all publishers across both distributors
     // Supabase default page limit is 1000, catalog has ~1900 rows
@@ -362,6 +336,17 @@ const Settings = {
 
   async setMaintenanceMode(on) {
     return await this.set('maintenance_mode', on ? 'true' : 'false');
+  },
+
+  // Order deadline — admin-set date string ('YYYY-MM-DD') or null if unset.
+  // The catalog banner reads this and hides itself once the date has passed.
+  async getOrderDeadline() {
+    const val = await this.get('order_deadline');
+    return val || null; // empty string treated as unset
+  },
+
+  async setOrderDeadline(dateStr) {
+    return await this.set('order_deadline', dateStr || '');
   },
 };
 
