@@ -381,6 +381,12 @@
     </div>
   </div>
 
+  <!-- Past-month items indicator — shown when hidden items exist from previous months -->
+  <div id="past-items-note" style="display:none;margin-top:12px;padding:10px 14px;
+       background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
+       font-size:0.82rem;color:var(--text-muted);display:none">
+  </div>
+
   <!-- Print-only footer (hidden on screen) -->
   <div class="print-footer">
     <div style="font-size:0.8rem;font-weight:400;color:#555;margin-bottom:8px;border:1px solid #ddd;border-radius:3px;padding:8px 10px;background:#fafafa">
@@ -596,6 +602,26 @@
         }
       });
     });
+
+    // ── Past-month hidden items note ──────────────────────────
+    // Items from previous months with future on_sale_dates live in
+    // allUpcoming but are filtered out of allItems (current month only).
+    // Show a reassuring note so customers don't think their order is lost.
+    const noteEl = document.getElementById('past-items-note');
+    if (noteEl) {
+      const hiddenCount = allUpcoming.filter(
+        i => i.catalog?.catalog_month && i.catalog.catalog_month !== currentMonth
+      ).length;
+      if (hiddenCount > 0) {
+        noteEl.innerHTML =
+          '📦 ' + hiddenCount + ' item' + (hiddenCount !== 1 ? 's' : '') +
+          ' from a previous order cycle ' + (hiddenCount !== 1 ? 'are' : 'is') +
+          ' on the way — <a href="arrivals.html" style="color:var(--accent);text-decoration:none">check Upcoming Arrivals</a>.';
+        noteEl.style.display = 'block';
+      } else {
+        noteEl.style.display = 'none';
+      }
+    }
   }
 
   // ── Print ─────────────────────────────────────────────────
