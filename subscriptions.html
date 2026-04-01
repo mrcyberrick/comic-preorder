@@ -49,6 +49,82 @@
       color: var(--text-secondary);
     }
     .sub-empty p { font-size: 0.88rem; }
+
+    /* ── Series Search ────────────────────────────────────── */
+    .series-search-wrap {
+      flex: 1;
+      min-width: 220px;
+      position: relative;
+    }
+    .series-search-wrap svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .series-search-input {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 0.875rem;
+      padding: 9px 14px 9px 38px;
+      outline: none;
+      transition: var(--transition);
+    }
+    .series-search-input:focus {
+      border-color: var(--border-accent);
+      background: var(--bg-elevated);
+    }
+    .series-search-input::placeholder { color: var(--text-muted); }
+    .search-results-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .search-results-header {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-result-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .search-result-row:last-child { border-bottom: none; }
+    .search-result-row:hover { background: var(--bg-elevated); }
+    .search-result-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .search-result-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .search-no-results {
+      padding: 20px 14px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -77,7 +153,7 @@
 
   <div class="page-header">
     <h1 id="page-title">My Subscriptions</h1>
-    <p id="page-subtitle">Series automatically added to your pull list each month</p>
+    <p id="page-subtitle">When a new catalog loads each month, subscribed series are automatically added to your pull list — no action needed.</p>
   </div>
 
   <!-- Stats -->
@@ -98,10 +174,18 @@
 
   <!-- Toolbar -->
   <div class="toolbar" style="margin-bottom:16px">
-    <a href="catalog.html" class="btn btn-primary btn-sm">
-      + Browse Catalog
-    </a>
+    <div class="series-search-wrap">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" class="series-search-input" id="series-search"
+        placeholder="Search for a series to subscribe…" autocomplete="off">
+    </div>
+    <a href="catalog.html" class="btn btn-secondary btn-sm">Browse Catalog</a>
   </div>
+
+  <!-- Search results — shown while searching -->
+  <div id="search-results-panel" style="display:none" class="search-results-panel"></div>
 
   <!-- Subscriptions list -->
   <div id="subs-container">
@@ -229,6 +313,114 @@
   }
 
   await loadSubs();
+
+  // ── Series Search ──────────────────────────────────────────
+  // Queries the catalog for matching series names (standard covers only)
+  // and lets the customer subscribe directly from the results.
+  // Skips search in admin impersonation context — subscribe button is hidden there.
+  const searchInput   = document.getElementById('series-search');
+  const resultsPanel  = document.getElementById('search-results-panel');
+
+  if (AdminContext.isActive()) {
+    searchInput.disabled = true;
+    searchInput.placeholder = 'Series search unavailable in admin context';
+  }
+
+  async function searchSeries(query) {
+    const q = query.trim();
+    if (!q) { resultsPanel.style.display = 'none'; return; }
+
+    resultsPanel.style.display = 'block';
+    resultsPanel.innerHTML = '<div class="search-no-results">Searching…</div>';
+
+    // Fetch matching series — standard covers only across all catalog months
+    const { data, error } = await db
+      .from('catalog')
+      .select('series_name, distributor, variant_type')
+      .ilike('series_name', `%${q}%`)
+      .not('series_name', 'is', null)
+      .or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title')
+      .order('series_name')
+      .limit(100);
+
+    if (error || !data?.length) {
+      resultsPanel.innerHTML = '<div class="search-no-results">No series found matching that name.</div>';
+      return;
+    }
+
+    // Deduplicate by series_name + distributor
+    const seen = new Set();
+    const unique = data.filter(r => {
+      const key = `${r.series_name}||${r.distributor}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const subKeys = new Set(allSubs.map(s => `${s.series_name}||${s.distributor}`));
+
+    resultsPanel.innerHTML =
+      '<div class="search-results-header">Results — click Subscribe to auto-reserve this series each month</div>' +
+      unique.map(r => {
+        const key       = `${r.series_name}||${r.distributor}`;
+        const isSubbed  = subKeys.has(key);
+        const distClass = r.distributor.toLowerCase();
+        return `
+          <div class="search-result-row" data-key="${escapeHtml(key)}">
+            <div class="search-result-name">${escapeHtml(r.series_name)}</div>
+            <div class="search-result-actions">
+              <span class="badge badge-${distClass}">${escapeHtml(r.distributor)}</span>
+              ${isSubbed
+                ? '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>'
+                : `<button class="btn btn-primary btn-sm sub-search-btn"
+                     data-series="${escapeHtml(r.series_name)}"
+                     data-distributor="${escapeHtml(r.distributor)}">
+                     ☆ Subscribe
+                   </button>`
+              }
+            </div>
+          </div>`;
+      }).join('');
+
+    // Wire up subscribe buttons in results
+    resultsPanel.querySelectorAll('.sub-search-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Subscribing…';
+        const targetUserId = AdminContext.resolveUserId(user.id);
+        const { error } = await Subscriptions.subscribe(
+          targetUserId, btn.dataset.series, btn.dataset.distributor
+        );
+        if (error) {
+          toast('Failed to subscribe', 'error');
+          btn.disabled = false;
+          btn.textContent = '☆ Subscribe';
+        } else {
+          // Update local state and re-render both results and subscriptions table
+          allSubs.push({
+            series_name:  btn.dataset.series,
+            distributor:  btn.dataset.distributor,
+            created_at:   new Date().toISOString(),
+          });
+          toast(`Subscribed to ${btn.dataset.series}!`);
+          renderSubs();
+          // Swap button to subscribed state in results panel
+          const actions = btn.closest('.search-result-actions');
+          actions.innerHTML = '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>';
+        }
+      });
+    });
+  }
+
+  searchInput.addEventListener('input', debounce(e => searchSeries(e.target.value), 350));
+
+  // Clear results when input is emptied
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      searchInput.value = '';
+      resultsPanel.style.display = 'none';
+    }
+  });
 })();
 </script>
 </body>
