@@ -1008,6 +1008,48 @@ button { cursor: pointer; font-family: var(--font-body); }
   }
 }
 
+/* ── FOC Tooltip ───────────────────────────────────────────── */
+/* Used on .foc-label elements in the modal dates and deadline banner */
+.foc-label {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: default;
+  position: relative;
+  border-bottom: 1px dashed var(--border-accent);
+  letter-spacing: 0.02em;
+}
+.foc-label[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  white-space: nowrap;
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.foc-label[data-tooltip]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--border-accent);
+  z-index: 51;
+  pointer-events: none;
+}
+
 /* ── Footer ────────────────────────────────────────────── */
 .site-footer {
   margin-top: 64px;

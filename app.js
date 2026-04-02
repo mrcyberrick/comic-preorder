@@ -204,7 +204,7 @@ const Catalog = {
     return data?.catalog_month || null;
   },
 
-  async fetch({ month, distributor, publisher, search, page = 1, pageSize = 48 }) {
+  async fetch({ month, distributor, publisher, search, hideVariants = false, page = 1, pageSize = 48 }) {
     let query = db.from('catalog').select('*', { count: 'exact' });
 
     if (month)       query = query.eq('catalog_month', month);
@@ -214,6 +214,10 @@ const Catalog = {
       query = query.or(
         `title.ilike.%${search}%,series_name.ilike.%${search}%,writer.ilike.%${search}%,publisher.ilike.%${search}%,upc.ilike.%${search}%,isbn.ilike.%${search}%`
       );
+    }
+    // Standard covers only: variant_type IS NULL, 'Standard' (Lunar), or 'Primary Title' (PRH)
+    if (hideVariants) {
+      query = query.or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title');
     }
 
     const from = (page - 1) * pageSize;
@@ -745,6 +749,15 @@ function formatDate(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr + 'T12:00:00');
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Returns true when a FOC date string ('YYYY-MM-DD') is strictly before today.
+// Uses local date parts to avoid UTC shift.
+function isFocPast(dateStr) {
+  if (!dateStr) return false;
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  return dateStr < todayStr;
 }
 
 function formatPrice(price) {
