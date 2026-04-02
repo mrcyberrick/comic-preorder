@@ -248,6 +248,101 @@
 
     /* Hide print-only elements on screen */
     .print-header, .print-footer { display: none; }
+
+    /* ── Mobile List Cards ────────────────────────────────── */
+    /* Hidden on desktop — shown at ≤640px in place of the table */
+    .mobile-list { display: none; }
+
+    @media (max-width: 640px) {
+      /* Hide the desktop table on mobile screens only
+         — print media always overrides back to table */
+      .list-table { display: none !important; }
+      .mobile-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .mobile-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        display: flex;
+        gap: 12px;
+        padding: 12px;
+        align-items: flex-start;
+      }
+      .mobile-card-cover {
+        width: 54px;
+        height: 81px;
+        flex-shrink: 0;
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--bg-elevated);
+      }
+      .mobile-card-cover img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .mobile-card-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .mobile-card-title {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.3;
+      }
+      .mobile-card-series {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .mobile-card-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .mobile-card-date {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+      }
+      .mobile-card-pricing {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .mobile-card-price {
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+      }
+      .line-total-val {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .mobile-card-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 2px;
+      }
+      .mobile-qty {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      /* Toolbar wrapping on mobile */
+      .toolbar { gap: 8px; }
+      .toolbar .search-wrap { min-width: 100%; order: -1; }
+    }
   </style>
 </head>
 <body>
@@ -547,6 +642,43 @@
           }).join('')}
         </tbody>
       </table>
+
+      <div class="mobile-list">
+        ${filtered.map(item => {
+          const c   = item.catalog;
+          const qty = item.quantity || 1;
+          const lineTotal = ((parseFloat(c.price_usd) || 0) * qty).toFixed(2);
+          const cover = c.cover_url
+            ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
+            : `<img src="${COVER_PLACEHOLDER}" alt="">`;
+          return `
+            <div class="mobile-card" data-preorder-id="${item.id}">
+              <div class="mobile-card-cover">${cover}</div>
+              <div class="mobile-card-body">
+                <div class="mobile-card-title">${escapeHtml(c.title)}</div>
+                ${c.series_name ? `<div class="mobile-card-series">${escapeHtml(c.series_name)}</div>` : ''}
+                <div class="mobile-card-meta">
+                  <span class="badge badge-${c.distributor.toLowerCase()}">${escapeHtml(c.distributor)}</span>
+                  ${c.on_sale_date ? `<span class="mobile-card-date">${formatDate(c.on_sale_date)}</span>` : ''}
+                </div>
+                <div class="mobile-card-pricing">
+                  <span class="mobile-card-price">${formatPrice(c.price_usd)}</span>
+                  <span class="line-total-val">$${lineTotal}</span>
+                </div>
+                <div class="mobile-card-actions">
+                  <div class="mobile-qty">
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px">−</button>
+                    <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px">+</button>
+                  </div>
+                  <button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
     `;
 
     // Quantity buttons
@@ -566,10 +698,12 @@
           toast('Failed to update quantity', 'error');
         } else {
           item.quantity = newQty;
-          const row = btn.closest('tr');
+          // Works for both <tr> (desktop table) and .mobile-card (mobile cards)
+          const row = btn.closest('tr, .mobile-card');
           row.querySelector('.qty-display').textContent = newQty;
           const price = parseFloat(item.catalog?.price_usd) || 0;
-          const lineTotalCell = row.querySelector('td:nth-last-child(2)');
+          // td:nth-last-child(2) targets table line total; .line-total-val targets mobile card
+          const lineTotalCell = row.querySelector('td:nth-last-child(2), .line-total-val');
           if (lineTotalCell) lineTotalCell.textContent = '$' + (price * newQty).toFixed(2);
           const total = allItems.reduce((s,i) => s + ((parseFloat(i.catalog?.price_usd)||0)*(i.quantity||1)), 0);
           document.getElementById('stat-total').textContent = '$' + total.toFixed(2);
