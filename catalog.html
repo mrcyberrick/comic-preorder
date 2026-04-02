@@ -81,6 +81,10 @@
       <option value="reserved">Reserved Only</option>
       <option value="unreserved">Not Yet Reserved</option>
     </select>
+    <select class="filter-select" id="filter-variants">
+      <option value="standard">Standard Covers</option>
+      <option value="">All Covers</option>
+    </select>
     <!-- Admin only: shown after init if user is admin -->
     <select class="filter-select" id="admin-user-select" style="display:none;border-color:var(--accent);color:var(--accent)">
       <option value="">&#9881; Manage customer…</option>
@@ -209,16 +213,24 @@
   const distEl      = document.getElementById('filter-distributor');
   const pubEl       = document.getElementById('filter-publisher');
   const resEl       = document.getElementById('filter-reserved');
+  const variantEl   = document.getElementById('filter-variants');
   const countEl     = document.getElementById('results-count');
   const paginEl     = document.getElementById('pagination');
   const overlay     = document.getElementById('modal-overlay');
 
   // ── Init ──────────────────────────────────────────────────
   // Force dropdowns to reset on load (prevents browser caching previous selection)
-  distEl.value = "";
-  pubEl.value  = "";
-  resEl.value  = "";
-  searchEl.value = "";
+  distEl.value    = "";
+  pubEl.value     = "";
+  resEl.value     = "";
+  variantEl.value = "standard"; // default: hide variants
+  searchEl.value  = "";
+
+  // Helper: standard cover test used for client-side variant filtering
+  function isStandardCover(item) {
+    const vt = item.variant_type;
+    return !vt || vt === 'Standard' || vt === 'Primary Title';
+  }
 
   currentMonth = await Catalog.getLatestMonth();
   if (currentMonth) {
@@ -247,7 +259,9 @@
       const banner = document.getElementById('deadline-banner');
       banner.innerHTML =
         '<span style="font-size:1rem;flex-shrink:0">⏰</span>' +
-        '<span>Reserve by <strong>' + formatted + '</strong> to lock in your ' + monthLabel + ' picks.</span>';
+        '<span>Reserve by <strong>' + formatted + '</strong> to lock in your ' + monthLabel + ' picks.' +
+        ' <span class="foc-label" data-tooltip="Final Order Cutoff — the date the shop must submit your order to the distributor">What\'s this?</span>' +
+        '</span>';
       banner.style.display = 'flex';
     });
   }
@@ -357,13 +371,22 @@
       }
 
       // Reorder fetched rows to match recommendation rank (`.in()` doesn't preserve order)
-      const itemById     = new Map((pageData || []).map(i => [i.id, i]));
-      const orderedItems = pageIds.map(id => itemById.get(id)).filter(Boolean);
+      const itemById = new Map((pageData || []).map(i => [i.id, i]));
+      const hideVariants = variantEl.value === 'standard';
+      const orderedItems = pageIds
+        .map(id => itemById.get(id))
+        .filter(Boolean)
+        .filter(c => !hideVariants || isStandardCover(c));
 
       allItems = orderedItems; // modal lookup only needs the current page
 
       const label = hasPersonal ? 'recommended' : 'popular';
-      countEl.textContent = `Showing ${Math.min(PAGE_SIZE, filteredTotal - pageFrom)} of ${filteredTotal} ${label} items`;
+      // Use orderedItems.length for the "showing" count — it reflects variant filtering.
+      // filteredTotal is the pre-filter recommended ID count so we can't use it as
+      // a denominator when variants are hidden (we only have the current page's data).
+      countEl.textContent = hideVariants
+        ? `Showing ${orderedItems.length} ${label} items (standard covers)`
+        : `Showing ${Math.min(PAGE_SIZE, filteredTotal - pageFrom)} of ${filteredTotal} ${label} items`;
 
       if (!orderedItems.length) {
         grid.innerHTML = `
@@ -440,10 +463,12 @@
         }
       }
 
-      // Apply client-side reserved filter across ALL items
-      const filtered = reserveFilter === 'reserved'
+      // Apply client-side variant + reserved filters across ALL items
+      const hideVariants = variantEl.value === 'standard';
+      const filtered = (reserveFilter === 'reserved'
         ? items.filter(i => reservedIds.has(i.id))
-        : items.filter(i => !reservedIds.has(i.id));
+        : items.filter(i => !reservedIds.has(i.id))
+      ).filter(i => !hideVariants || isStandardCover(i));
 
       // Now paginate the filtered result ourselves
       const filteredTotal = filtered.length;
@@ -478,12 +503,13 @@
 
     // ── Standard paginated path (no reserved filter active) ──
     const filters = {
-      month:       currentMonth,
-      distributor: distEl.value,
-      publisher:   pubEl.value,
-      search:      searchEl.value.trim(),
+      month:        currentMonth,
+      distributor:  distEl.value,
+      publisher:    pubEl.value,
+      search:       searchEl.value.trim(),
+      hideVariants: variantEl.value === 'standard',
       page,
-      pageSize:    PAGE_SIZE,
+      pageSize:     PAGE_SIZE,
     };
 
     const { items, total, error } = await Catalog.fetch(filters);
@@ -674,10 +700,21 @@
     document.getElementById('modal-price').textContent   = formatPrice(comic.price_usd);
     document.getElementById('modal-description').textContent = comic.description || 'No description available.';
 
-    const dates = [];
-    if (comic.foc_date)     dates.push(`FOC: ${formatDate(comic.foc_date)}`);
-    if (comic.on_sale_date) dates.push(`On Sale: ${formatDate(comic.on_sale_date)}`);
-    document.getElementById('modal-dates').textContent = dates.join('  ·  ');
+    const datesParts = [];
+    if (comic.foc_date) {
+      const focPast  = isFocPast(comic.foc_date);
+      const focColor = focPast ? 'color:var(--accent)' : '';
+      datesParts.push(
+        `<span style="${focColor}">` +
+        `<span class="foc-label" data-tooltip="Final Order Cutoff — the date the shop must submit your order">FOC ?</span>` +
+        ` ${formatDate(comic.foc_date)}` +
+        `</span>`
+      );
+    }
+    if (comic.on_sale_date) {
+      datesParts.push(`On Sale: ${formatDate(comic.on_sale_date)}`);
+    }
+    document.getElementById('modal-dates').innerHTML = datesParts.join('  ·  ');
 
     // Badges
     const badgesEl = document.getElementById('modal-badges');
@@ -803,6 +840,7 @@
   distEl.addEventListener('change', () => loadCatalog(1));
   pubEl.addEventListener('change', () => loadCatalog(1));
   resEl.addEventListener('change', () => loadCatalog(1));
+  variantEl.addEventListener('change', () => loadCatalog(1));
 
 })();
 </script>
