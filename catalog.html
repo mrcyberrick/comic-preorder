@@ -198,14 +198,27 @@
     WelcomeModal.show(user.id, profile);
   }
 
-  const PAGE_SIZE = 48;
+  const PAGE_SIZE = 50;
   let currentPage = 1;
   let currentMonth = null;
   let reservedIds = new Set();
+  let currentMonthQty = 0;  // reserved qty scoped to current catalog month only
   let mySubscriptions = new Set(); // Set of "series_name||distributor" keys
   let allItems = [];
   let totalCount = 0;
   let modalComicId = null;
+
+  // Fetches the total reserved quantity for the current catalog month only.
+  // Runs once on init (and on admin context switch) to populate currentMonthQty.
+  async function loadCurrentMonthQty(userId) {
+    if (!currentMonth) return 0;
+    const { data } = await db
+      .from('preorders')
+      .select('quantity, catalog!inner(catalog_month)')
+      .eq('user_id', userId)
+      .eq('catalog.catalog_month', currentMonth);
+    return (data || []).reduce((s, r) => s + (r.quantity || 1), 0);
+  }
 
   // ── Elements ──────────────────────────────────────────────
   const grid        = document.getElementById('catalog-grid');
@@ -298,13 +311,15 @@
       }
       // Reload reservations for the newly selected user
       reservedIds = await Preorders.getMyIds(AdminContext.resolveUserId(user.id));
-      document.getElementById('stat-reserved').textContent = [...reservedIds.values()].reduce((s,q) => s+q, 0);
+      currentMonthQty = await loadCurrentMonthQty(AdminContext.resolveUserId(user.id));
+      document.getElementById('stat-reserved').textContent = currentMonthQty;
       await loadCatalog(1);
     });
   }
 
   reservedIds = await Preorders.getMyIds(AdminContext.resolveUserId(user.id));
-  document.getElementById('stat-reserved').textContent = [...reservedIds.values()].reduce((s,q) => s+q, 0);
+  currentMonthQty = await loadCurrentMonthQty(AdminContext.resolveUserId(user.id));
+  document.getElementById('stat-reserved').textContent = currentMonthQty;
 
   // Load subscriptions for subscribe button state
   const { items: subItems } = await Subscriptions.getAll(user.id);
@@ -629,7 +644,9 @@
       const { error } = await Preorders.cancel(targetUserId, catalogId);
       if (error) { toast('Failed to cancel reservation', 'error'); }
       else {
+        const oldQty = reservedIds.get(catalogId) || 1;
         reservedIds.delete(catalogId);
+        currentMonthQty -= oldQty;
         btn.textContent = '+ Reserve';
         btn.classList.remove('reserved');
         const badge = btn.closest('.comic-card')?.querySelector('.reserved-indicator');
@@ -643,6 +660,7 @@
         toast(error.code === '23505' ? 'Already reserved' : 'Failed to reserve', 'error');
       } else {
         reservedIds.set(catalogId, quantity);
+        currentMonthQty += quantity;
         btn.textContent = '✓ Reserved';
         btn.classList.add('reserved');
         const cover = btn.closest('.comic-card')?.querySelector('.comic-cover');
@@ -669,7 +687,7 @@
   }
 
   function updateReservedStat() {
-    document.getElementById('stat-reserved').textContent = [...reservedIds.values()].reduce((s,q) => s+q, 0);
+    document.getElementById('stat-reserved').textContent = currentMonthQty;
     // Update subtitle to reflect whose list we're managing
     const subtitle = document.getElementById('catalog-subtitle');
     if (AdminContext.isActive()) {
