@@ -1049,10 +1049,13 @@ button { cursor: pointer; font-family: var(--font-body); }
   padding: 6px 10px;
   font-size: 0.75rem;
   font-weight: 400;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: min(260px, 80vw);
+  width: max-content;
   z-index: 50;
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  word-break: break-word;
 }
 .foc-label[data-tooltip]:hover::before {
   content: '';
