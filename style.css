@@ -1068,6 +1068,17 @@ button { cursor: pointer; font-family: var(--font-body); }
   z-index: 51;
   pointer-events: none;
 }
+/* Banner variant — tooltip opens downward since banner is near top of page */
+.foc-label--below[data-tooltip]:hover::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+.foc-label--below[data-tooltip]:hover::before {
+  bottom: auto;
+  top: calc(100% + 1px);
+  border-top-color: transparent;
+  border-bottom-color: var(--border-accent);
+}
 
 /* ── Footer ────────────────────────────────────────────── */
 .site-footer {
