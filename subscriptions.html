@@ -125,6 +125,61 @@
       color: var(--text-muted);
       text-align: center;
     }
+
+    /* ── Popular Series (empty-state discovery) ───────────── */
+    .popular-series-section {
+      margin-top: 28px;
+    }
+    .popular-series-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding-bottom: 10px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .popular-series-note {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .popular-series-list {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .popular-series-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .popular-series-row:last-child { border-bottom: none; }
+    .popular-series-row:hover { background: var(--bg-elevated); }
+    .popular-series-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .popular-series-publisher {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      flex: 1;
+    }
+    .popular-series-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -225,6 +280,23 @@
   }
 
   let allSubs = [];
+  let popularSeries = []; // loaded once from settings table
+
+  // Fetches the admin-curated popular series list from the settings table.
+  // Expects settings.value to be a JSON array: [{ series_name, distributor, publisher }, ...]
+  // Returns [] gracefully if the key doesn't exist yet.
+  async function loadPopularSeries() {
+    try {
+      const { data } = await db
+        .from('settings')
+        .select('value')
+        .eq('key', 'popular_series')
+        .maybeSingle();
+      if (data?.value) popularSeries = JSON.parse(data.value);
+    } catch(e) {
+      // Settings key not set yet — silently ignore
+    }
+  }
 
   async function loadSubs() {
     const targetUserId = AdminContext.resolveUserId(user.id);
@@ -248,6 +320,30 @@
       allSubs.filter(s => s.distributor === 'PRH').length;
 
     if (!allSubs.length) {
+      const subKeys = new Set(); // empty — no existing subs
+
+      const popularRows = popularSeries.length && !AdminContext.isActive()
+        ? `<div class="popular-series-section">
+            <div class="popular-series-header">⭐ Popular at Book Stop</div>
+            <p class="popular-series-note">Series our customers love — subscribe to auto-reserve your copy each month.</p>
+            <div class="popular-series-list">
+              ${popularSeries.map(s => `
+                <div class="popular-series-row">
+                  <div class="popular-series-name">${escapeHtml(s.series_name)}</div>
+                  <div class="popular-series-publisher">${escapeHtml(s.publisher || '')}</div>
+                  <div class="popular-series-actions">
+                    <span class="badge badge-${(s.distributor || '').toLowerCase()}">${escapeHtml(s.distributor || '')}</span>
+                    <button class="btn btn-primary btn-sm pop-sub-btn"
+                      data-series="${escapeHtml(s.series_name)}"
+                      data-distributor="${escapeHtml(s.distributor)}">
+                      ☆ Subscribe
+                    </button>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>`
+        : '';
+
       container.innerHTML = `
         <div class="sub-empty">
           <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"
@@ -257,7 +353,34 @@
           <h3>No subscriptions yet</h3>
           <p>Open any series in the catalog and click <strong>☆ Subscribe</strong> to get started.</p>
           <a href="catalog.html" class="btn btn-primary" style="margin-top:16px">Browse Catalog</a>
-        </div>`;
+        </div>
+        ${popularRows}`;
+
+      // Wire up subscribe buttons in the popular series section
+      container.querySelectorAll('.pop-sub-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = 'Subscribing…';
+          const targetUserId = AdminContext.resolveUserId(user.id);
+          const { error } = await Subscriptions.subscribe(
+            targetUserId, btn.dataset.series, btn.dataset.distributor
+          );
+          if (error) {
+            toast('Failed to subscribe', 'error');
+            btn.disabled = false;
+            btn.textContent = '☆ Subscribe';
+          } else {
+            allSubs.push({
+              series_name:  btn.dataset.series,
+              distributor:  btn.dataset.distributor,
+              created_at:   new Date().toISOString(),
+            });
+            toast(`Subscribed to ${btn.dataset.series}!`);
+            renderSubs(); // re-renders — now allSubs has an entry, shows the table
+          }
+        });
+      });
+
       return;
     }
 
@@ -312,6 +435,7 @@
     });
   }
 
+  await loadPopularSeries();
   await loadSubs();
 
   // ── Series Search ──────────────────────────────────────────
