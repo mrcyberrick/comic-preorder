@@ -200,7 +200,7 @@
       /* Hide everything except the list */
       .nav, .toolbar, .btn, .qty-btn, .cancel-btn, .my-subs,
       #toast-container, .page-header p,
-      #admin-impersonation-banner,
+      #admin-impersonation-banner, #first-issues-section,
       th:last-child, td:last-child,          /* Remove column */
       th:nth-last-child(2), td:nth-last-child(2) /* Qty stepper column */ { display: none !important; }
 
@@ -248,6 +248,90 @@
 
     /* Hide print-only elements on screen */
     .print-header, .print-footer { display: none; }
+
+    /* ── New Series Discovery (empty-state) ──────────────── */
+    .new-series-section {
+      margin-top: 32px;
+    }
+    .new-series-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .new-series-count {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.75rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .new-series-cta {
+      margin-left: auto;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .new-series-cta:hover { text-decoration: underline; }
+    .new-series-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .new-series-card {
+      width: 100px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: default;
+    }
+    .new-series-cover {
+      width: 100px;
+      height: 150px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      transition: border-color 0.15s;
+    }
+    .new-series-cover:hover { border-color: var(--accent); }
+    .new-series-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .new-series-cover img.loaded { opacity: 1; }
+    .new-series-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .new-series-publisher {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+    .new-series-price {
+      font-size: 0.70rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
 
     /* ── Mobile List Cards ────────────────────────────────── */
     /* Hidden on desktop — shown at ≤640px in place of the table */
@@ -514,6 +598,23 @@
 
   let allItems = [];
   let allUpcoming = []; // all future reservations across all months
+  let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
+
+  // Fetches standard-cover #1 issues from the current catalog month.
+  // Results are cached so filter/search events don't re-fire the query.
+  async function loadFirstIssues() {
+    if (cachedFirstIssues !== null) return cachedFirstIssues;
+    const { data } = await db
+      .from('catalog')
+      .select('id, title, publisher, distributor, cover_url, price_usd, on_sale_date')
+      .eq('catalog_month', currentMonth)
+      .eq('issue_number', '1')
+      .or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title')
+      .order('title')
+      .limit(24);
+    cachedFirstIssues = data || [];
+    return cachedFirstIssues;
+  }
 
   const searchEl   = document.getElementById('search');
   const distEl     = document.getElementById('filter-distributor');
@@ -572,6 +673,7 @@
       `Estimated Total: $${total.toFixed(2)}`;
 
     if (!filtered.length) {
+      const isEmptyList = !allItems.length;
       container.innerHTML = `
         <div class="empty-state">
           <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -580,7 +682,46 @@
           <h3>${allItems.length ? 'No matches' : 'Your list is empty'}</h3>
           <p>${allItems.length ? 'Try adjusting your filters' : 'Browse the catalog and reserve items to build your pull list'}</p>
           ${!allItems.length ? '<a href="catalog.html" class="btn btn-primary" style="margin-top:16px">Browse Catalog</a>' : ''}
-        </div>`;
+        </div>
+        ${isEmptyList && !AdminContext.isActive() ? '<div id="first-issues-section"></div>' : ''}`;
+
+      // When the list is truly empty and not in admin context, load #1 issues
+      // as a discovery prompt below the empty state message.
+      if (isEmptyList && !AdminContext.isActive()) {
+        loadFirstIssues().then(issues => {
+          const section = document.getElementById('first-issues-section');
+          if (!section || !issues.length) return;
+
+          section.innerHTML = `
+            <div class="new-series-section">
+              <div class="new-series-header">
+                <span>🔖 New #1 issues this month</span>
+                <span class="new-series-count">${issues.length} new series starting</span>
+                <a href="catalog.html" class="new-series-cta">See full catalog →</a>
+              </div>
+              <div class="new-series-grid">
+                ${issues.map(c => {
+                  const cover = c.cover_url
+                    ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;this.classList.add('loaded');">`
+                    : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
+                  return `
+                    <a href="catalog.html" class="new-series-card" style="text-decoration:none">
+                      <div class="new-series-cover">${cover}</div>
+                      <div class="new-series-title">${escapeHtml(c.title)}</div>
+                      <div class="new-series-publisher">${escapeHtml(c.publisher || '')}</div>
+                      <div class="new-series-price">${formatPrice(c.price_usd)}</div>
+                    </a>`;
+                }).join('')}
+              </div>
+            </div>`;
+
+          section.querySelectorAll('img').forEach(img => {
+            if (img.complete) img.classList.add('loaded');
+            else img.addEventListener('load', () => img.classList.add('loaded'));
+          });
+        });
+      }
+
       return;
     }
 
