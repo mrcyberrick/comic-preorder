@@ -152,6 +152,32 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .deadline-banner strong { color: var(--text-primary); }
 
+/* ── Pickup Notice (My List page) ──────────────────────────── */
+.pickup-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(59, 130, 246, 0.07);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: var(--radius);
+  padding: 11px 16px;
+  margin-bottom: 20px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.pickup-notice strong { color: var(--text-primary); }
+.pickup-notice a { color: var(--lunar); text-decoration: none; }
+.pickup-notice a:hover { text-decoration: underline; }
+.pickup-notice-icon {
+  font-style: normal;
+  font-size: 1rem;
+  color: var(--lunar);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+@media print { .pickup-notice { display: none !important; } }
+
 /* ── Login Page ────────────────────────────────────────────── */
 .login-page {
   min-height: 100vh;

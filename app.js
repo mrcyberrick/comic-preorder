@@ -727,11 +727,15 @@ const WelcomeModal = {
         <h2>Welcome to PULLLIST</h2>
         <p>
           Each month, Ray &amp; Judy's Book Stop loads the latest catalog from our distributors.
-          Browse the Catalog, reserve what you want, and we'll have it waiting for you.
+          Browse the Catalog, reserve what you want, and we'll order it specifically for you.
           Watch the <strong>order deadline</strong> at the top of the Catalog page — that's your
           cutoff to lock in picks for the month. Use <strong>Subscriptions</strong> to
           auto-reserve a series every month without lifting a finger, and check
           <strong>This Week</strong> on Wednesdays to see what's arrived for you.
+        </p>
+        <p>
+          <strong>Important:</strong> When you reserve an item, we order it just for you.
+          Please stop in to pick up and pay for your items when they arrive — payment is due at pickup.
         </p>
         <button class="btn btn-primary" id="welcome-got-it">Got it</button>
       </div>
