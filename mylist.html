@@ -474,6 +474,12 @@
     <p id="mylist-subtitle">Your reservations for the current order cycle</p>
   </div>
 
+  <!-- Pickup notice — always visible, hidden in admin impersonation context -->
+  <div class="pickup-notice" id="pickup-notice">
+    <span class="pickup-notice-icon">ℹ</span>
+    <span>Items on your pull list are ordered specifically for you. Please stop in to <strong>pick up and pay</strong> for your items when they arrive. Questions? Call us at <a href="tel:9735869182">973-586-9182</a>.</span>
+  </div>
+
   <!-- Summary -->
   <div class="stats-bar">
     <div class="stat">
@@ -625,6 +631,8 @@
     if (AdminContext.isActive()) {
       document.querySelector('.page-header h1').textContent = AdminContext.activeUserName + "'s Pull List";
       document.querySelector('.page-header p').textContent  = 'Managing reservations on behalf of this customer';
+      const noticeEl = document.getElementById('pickup-notice');
+      if (noticeEl) noticeEl.style.display = 'none';
     }
     const { items, error } = await Preorders.getMy(targetUserId);
     if (error) {
@@ -1063,7 +1071,7 @@
       .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const subtitleEl = document.getElementById('mylist-subtitle');
     if (subtitleEl && !AdminContext.isActive()) {
-      subtitleEl.textContent = `Your reservations for ${monthLabel}`;
+      subtitleEl.textContent = `Reserved for pickup — ${monthLabel}`;
     }
   }
   // ── Email My List ──────────────────────────────────────────
