@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — Pull List</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Analytics-specific styles ─────────────────────────── */
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .analytics-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+
+    .analytics-card h3 {
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin: 0 0 16px;
+    }
+
+    .analytics-card.full-width {
+      grid-column: 1 / -1;
+    }
+
+    /* Summary stat pills */
+    .summary-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 24px;
+      min-width: 120px;
+      flex: 1;
+    }
+
+    .pill-value {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .pill-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* Mini bar chart */
+    .bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 1fr 60px;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .bar-track {
+      height: 22px;
+      background: var(--bg-elevated);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      padding-left: 8px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: white;
+      white-space: nowrap;
+      overflow: hidden;
+      transition: width 0.5s ease;
+    }
+
+    .bar-fill.lunar  { background: var(--lunar, #3b82f6); }
+    .bar-fill.prh    { background: var(--prh, #a855f7); }
+    .bar-fill.mixed  { background: var(--accent, #e63946); }
+    .bar-fill.sub    { background: var(--success, #22c55e); }
+
+    .bar-count {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-align: right;
+    }
+
+    .bar-label {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 2px;
+    }
+
+    /* Activity timeline */
+    .timeline-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .timeline-table th {
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+
+    .timeline-table td {
+      padding: 7px 8px;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .timeline-table tr:last-child td { border-bottom: none; }
+
+    .event-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .badge-reserve     { background: rgba(34,197,94,0.15);  color: #4ade80; }
+    .badge-cancel      { background: rgba(230,57,70,0.15);  color: #e63946; }
+    .badge-subscribe   { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .badge-unsubscribe { background: rgba(168,85,247,0.15); color: #c084fc; }
+    .badge-catalog_view { background: rgba(234,179,8,0.12); color: #facc15; }
+    .badge-login       { background: rgba(255,255,255,0.08); color: var(--text-muted); }
+    .badge-logout      { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+    /* User activity table */
+    .user-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .user-table th {
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+
+    .user-table th.right { text-align: right; }
+
+    .user-table td {
+      padding: 8px 8px;
+      font-size: 0.82rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .user-table tr:last-child td { border-bottom: none; }
+
+    .user-table td.right {
+      text-align: right;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .user-table td.muted {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    /* Date range selector */
+    .analytics-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+
+    .analytics-toolbar label {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .range-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 5px 14px;
+      border-radius: var(--radius);
+      font-size: 0.78rem;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .range-btn.active, .range-btn:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .loading-row {
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-style: italic;
+      padding: 20px 8px;
+    }
+
+    .no-data {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      padding: 24px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav" id="main-nav">
+  <div class="container nav-inner">
+    <a href="catalog.html" class="nav-logo">PULL<span>LIST</span></a>
+    <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links">
+      <li><a href="catalog.html">Catalog</a></li>
+      <li><a href="mylist.html">My List</a></li>
+      <li><a href="subscriptions.html">Subscriptions</a></li>
+      <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
+      <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
+      <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
+    </ul>
+    <div class="nav-user">
+      <span>Welcome, <strong id="nav-username"></strong></span>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
+    <div>
+      <h1>Analytics</h1>
+      <p id="analytics-subtitle">Customer activity &amp; engagement</p>
+    </div>
+    <button class="btn btn-secondary btn-sm" id="btn-refresh" style="padding-top:8px">
+      ↺ Refresh
+    </button>
+  </div>
+
+  <!-- Date Range Selector -->
+  <div class="analytics-toolbar">
+    <label>Time window:</label>
+    <button class="range-btn" data-days="7">7 days</button>
+    <button class="range-btn active" data-days="30">30 days</button>
+    <button class="range-btn" data-days="90">90 days</button>
+    <button class="range-btn" data-days="0">All time</button>
+  </div>
+
+  <!-- Summary Pills -->
+  <div class="summary-pills" id="summary-pills">
+    <div class="pill"><div class="pill-value" id="pill-reserves">—</div><div class="pill-label">Reserves</div></div>
+    <div class="pill"><div class="pill-value" id="pill-cancels">—</div><div class="pill-label">Cancels</div></div>
+    <div class="pill"><div class="pill-value" id="pill-subscribes">—</div><div class="pill-label">New Subscriptions</div></div>
+    <div class="pill"><div class="pill-value" id="pill-logins">—</div><div class="pill-label">Logins</div></div>
+    <div class="pill"><div class="pill-value" id="pill-views">—</div><div class="pill-label">Catalog Views</div></div>
+    <div class="pill"><div class="pill-value" id="pill-active-users">—</div><div class="pill-label">Active Users</div></div>
+  </div>
+
+  <!-- Charts Grid -->
+  <div class="analytics-grid">
+
+    <!-- Top Reserved Titles -->
+    <div class="analytics-card">
+      <h3>Most Reserved Titles</h3>
+      <div id="chart-top-reserved"><p class="loading-row">Loading…</p></div>
+    </div>
+
+    <!-- Top Subscribed Series -->
+    <div class="analytics-card">
+      <h3>Most Subscribed Series</h3>
+      <div id="chart-top-subscribed"><p class="loading-row">Loading…</p></div>
+    </div>
+
+    <!-- Most Cancelled -->
+    <div class="analytics-card">
+      <h3>Most Cancelled Titles</h3>
+      <div id="chart-top-cancelled"><p class="loading-row">Loading…</p></div>
+    </div>
+
+    <!-- Event type breakdown -->
+    <div class="analytics-card">
+      <h3>Event Breakdown</h3>
+      <div id="chart-event-breakdown"><p class="loading-row">Loading…</p></div>
+    </div>
+
+    <!-- User Activity Table -->
+    <div class="analytics-card full-width">
+      <h3>Customer Activity</h3>
+      <div id="chart-user-activity" style="overflow-x:auto"><p class="loading-row">Loading…</p></div>
+    </div>
+
+    <!-- Recent Events Feed -->
+    <div class="analytics-card full-width">
+      <h3>Recent Events</h3>
+      <div id="chart-recent-events" style="overflow-x:auto"><p class="loading-row">Loading…</p></div>
+    </div>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  Service provided by Ray &amp; Judy's Book Stop &middot; Rockaway, NJ
+</footer>
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const navData = await Auth.requireAdmin();
+  if (!navData) return;
+  await initNav();
+
+  // Show analytics nav link for admins
+  const navAnalytics = document.getElementById('nav-analytics');
+  if (navAnalytics) navAnalytics.style.display = 'block';
+
+  let activeDays = 30; // default window
+
+  // ── Date range helpers ───────────────────────────────────
+  function cutoffTs(days) {
+    if (!days) return null; // "all time"
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString();
+  }
+
+  function applyWindow(query, days) {
+    const ts = cutoffTs(days);
+    return ts ? query.gte('created_at', ts) : query;
+  }
+
+  // ── Range buttons ────────────────────────────────────────
+  document.querySelectorAll('.range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeDays = parseInt(btn.dataset.days) || 0;
+      loadAll();
+    });
+  });
+
+  document.getElementById('btn-refresh').addEventListener('click', loadAll);
+
+  // ── Summary pills ────────────────────────────────────────
+  async function loadSummary() {
+    let q = db.from('usage_events').select('event_type, user_id');
+    q = applyWindow(q, activeDays);
+    const { data, error } = await q;
+    if (error || !data) return;
+
+    const counts = { reserve: 0, cancel: 0, subscribe: 0, login: 0, catalog_view: 0 };
+    const activeUsers = new Set();
+    data.forEach(e => {
+      if (counts[e.event_type] !== undefined) counts[e.event_type]++;
+      if (e.user_id) activeUsers.add(e.user_id);
+    });
+
+    document.getElementById('pill-reserves').textContent    = counts.reserve;
+    document.getElementById('pill-cancels').textContent     = counts.cancel;
+    document.getElementById('pill-subscribes').textContent  = counts.subscribe;
+    document.getElementById('pill-logins').textContent      = counts.login;
+    document.getElementById('pill-views').textContent       = counts.catalog_view;
+    document.getElementById('pill-active-users').textContent = activeUsers.size;
+  }
+
+  // ── Bar chart renderer ────────────────────────────────────
+  function renderBarChart(containerId, rows, labelKey, countKey, colorClass = 'mixed', limit = 10) {
+    const el = document.getElementById(containerId);
+    const top = rows.slice(0, limit);
+    if (!top.length) { el.innerHTML = '<p class="no-data">No data yet for this period.</p>'; return; }
+    const max = top[0][countKey] || 1;
+    el.innerHTML = `<div class="bar-chart">` + top.map(r => {
+      const pct   = Math.max(4, Math.round((r[countKey] / max) * 100));
+      const label = escapeHtml(r[labelKey] || '—');
+      const sub   = r.distributor ? ` <span style="color:var(--text-muted);font-size:0.7rem">${escapeHtml(r.distributor)}</span>` : '';
+      const cls   = r.distributor === 'Lunar' ? 'lunar' : r.distributor === 'PRH' ? 'prh' : colorClass;
+      return `
+        <div>
+          <div class="bar-label">${label}${sub}</div>
+          <div class="bar-row">
+            <div class="bar-track">
+              <div class="bar-fill ${cls}" style="width:${pct}%">${pct > 20 ? label : ''}</div>
+            </div>
+            <div class="bar-count">${r[countKey]}</div>
+          </div>
+        </div>`;
+    }).join('') + `</div>`;
+  }
+
+  // ── Top Reserved ─────────────────────────────────────────
+  async function loadTopReserved() {
+    let q = db.from('usage_events')
+      .select('metadata')
+      .eq('event_type', 'reserve')
+      .not('metadata->>title', 'is', null);
+    q = applyWindow(q, activeDays);
+    const { data, error } = await q;
+    if (error) { document.getElementById('chart-top-reserved').innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+
+    // Aggregate client-side (view isn't window-aware)
+    const map = {};
+    (data || []).forEach(e => {
+      const key = e.metadata?.title;
+      if (!key) return;
+      if (!map[key]) map[key] = { title: key, distributor: e.metadata?.distributor, reserve_count: 0 };
+      map[key].reserve_count++;
+    });
+    const rows = Object.values(map).sort((a, b) => b.reserve_count - a.reserve_count);
+    renderBarChart('chart-top-reserved', rows, 'title', 'reserve_count', 'mixed');
+  }
+
+  // ── Top Cancelled ─────────────────────────────────────────
+  async function loadTopCancelled() {
+    let q = db.from('usage_events')
+      .select('metadata')
+      .eq('event_type', 'cancel')
+      .not('metadata->>title', 'is', null);
+    q = applyWindow(q, activeDays);
+    const { data, error } = await q;
+    if (error) { document.getElementById('chart-top-cancelled').innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+
+    const map = {};
+    (data || []).forEach(e => {
+      const key = e.metadata?.title;
+      if (!key) return;
+      if (!map[key]) map[key] = { title: key, distributor: e.metadata?.distributor, cancel_count: 0 };
+      map[key].cancel_count++;
+    });
+    const rows = Object.values(map).sort((a, b) => b.cancel_count - a.cancel_count);
+    renderBarChart('chart-top-cancelled', rows, 'title', 'cancel_count', 'mixed');
+  }
+
+  // ── Top Subscribed Series ─────────────────────────────────
+  async function loadTopSubscribed() {
+    let q = db.from('usage_events')
+      .select('event_type, metadata')
+      .in('event_type', ['subscribe', 'unsubscribe'])
+      .not('metadata->>series_name', 'is', null);
+    q = applyWindow(q, activeDays);
+    const { data, error } = await q;
+    if (error) { document.getElementById('chart-top-subscribed').innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+
+    const map = {};
+    (data || []).forEach(e => {
+      const key = e.metadata?.series_name;
+      if (!key) return;
+      if (!map[key]) map[key] = { series_name: key, distributor: e.metadata?.distributor, net_subscribers: 0 };
+      map[key].net_subscribers += e.event_type === 'subscribe' ? 1 : -1;
+    });
+    const rows = Object.values(map).sort((a, b) => b.net_subscribers - a.net_subscribers);
+    renderBarChart('chart-top-subscribed', rows, 'series_name', 'net_subscribers', 'sub');
+  }
+
+  // ── Event Type Breakdown ──────────────────────────────────
+  async function loadEventBreakdown() {
+    let q = db.from('usage_events').select('event_type');
+    q = applyWindow(q, activeDays);
+    const { data, error } = await q;
+    const el = document.getElementById('chart-event-breakdown');
+    if (error) { el.innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+
+    const counts = {};
+    (data || []).forEach(e => {
+      counts[e.event_type] = (counts[e.event_type] || 0) + 1;
+    });
+    const rows = Object.entries(counts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const colorMap = {
+      reserve: 'sub', cancel: 'mixed', subscribe: 'lunar',
+      unsubscribe: 'prh', catalog_view: 'mixed', login: 'mixed', logout: 'mixed'
+    };
+
+    if (!rows.length) { el.innerHTML = '<p class="no-data">No events yet.</p>'; return; }
+    const max = rows[0].count || 1;
+    el.innerHTML = `<div class="bar-chart">` + rows.map(r => {
+      const pct = Math.max(4, Math.round((r.count / max) * 100));
+      const cls = colorMap[r.type] || 'mixed';
+      const label = r.type.replace('_', ' ');
+      return `
+        <div>
+          <div class="bar-label">${escapeHtml(label)}</div>
+          <div class="bar-row">
+            <div class="bar-track">
+              <div class="bar-fill ${cls}" style="width:${pct}%"></div>
+            </div>
+            <div class="bar-count">${r.count}</div>
+          </div>
+        </div>`;
+    }).join('') + `</div>`;
+  }
+
+  // ── User Activity Table ───────────────────────────────────
+  async function loadUserActivity() {
+    const el = document.getElementById('chart-user-activity');
+    let q = db.from('usage_events').select('event_type, user_id, created_at');
+    q = applyWindow(q, activeDays);
+    const { data: events, error: evErr } = await q;
+    if (evErr) { el.innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+
+    // Also pull user names
+    const { data: profiles } = await db.from('user_profiles').select('id, full_name');
+    const nameMap = {};
+    (profiles || []).forEach(p => nameMap[p.id] = p.full_name);
+
+    // Aggregate per user
+    const map = {};
+    (events || []).forEach(e => {
+      if (!e.user_id) return;
+      if (!map[e.user_id]) map[e.user_id] = {
+        user_id: e.user_id, name: nameMap[e.user_id] || 'Unknown',
+        reserves: 0, cancels: 0, subscribes: 0, logins: 0, catalog_views: 0, last_seen: null
+      };
+      const u = map[e.user_id];
+      if (e.event_type === 'reserve')       u.reserves++;
+      if (e.event_type === 'cancel')        u.cancels++;
+      if (e.event_type === 'subscribe')     u.subscribes++;
+      if (e.event_type === 'login')         u.logins++;
+      if (e.event_type === 'catalog_view')  u.catalog_views++;
+      if (!u.last_seen || e.created_at > u.last_seen) u.last_seen = e.created_at;
+    });
+
+    const rows = Object.values(map).sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || ''));
+
+    if (!rows.length) { el.innerHTML = '<p class="no-data">No activity yet for this period.</p>'; return; }
+
+    el.innerHTML = `
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th class="right">Reserves</th>
+            <th class="right">Cancels</th>
+            <th class="right">Subscribes</th>
+            <th class="right">Logins</th>
+            <th class="right">Catalog Views</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(u => `
+            <tr>
+              <td style="font-weight:600">${escapeHtml(u.name)}</td>
+              <td class="right" style="color:var(--success,#22c55e)">${u.reserves}</td>
+              <td class="right" style="color:${u.cancels > 0 ? 'var(--accent)' : 'var(--text-muted)'}">${u.cancels}</td>
+              <td class="right" style="color:var(--lunar,#3b82f6)">${u.subscribes}</td>
+              <td class="right">${u.logins}</td>
+              <td class="right">${u.catalog_views}</td>
+              <td class="muted">${u.last_seen ? formatDate(u.last_seen.split('T')[0]) : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // ── Recent Events Feed ────────────────────────────────────
+  async function loadRecentEvents() {
+    const el = document.getElementById('chart-recent-events');
+
+    const { data: events, error } = await db
+      .from('usage_events')
+      .select('event_type, user_id, metadata, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) { el.innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+
+    const { data: profiles } = await db.from('user_profiles').select('id, full_name');
+    const nameMap = {};
+    (profiles || []).forEach(p => nameMap[p.id] = p.full_name);
+
+    if (!events?.length) { el.innerHTML = '<p class="no-data">No events recorded yet.</p>'; return; }
+
+    el.innerHTML = `
+      <table class="timeline-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Customer</th>
+            <th>Event</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${events.map(e => {
+            const name   = escapeHtml(nameMap[e.user_id] || 'Unknown');
+            const badge  = `<span class="event-badge badge-${e.event_type}">${e.event_type.replace('_',' ')}</span>`;
+            const detail = eventDetail(e);
+            const when   = e.created_at
+              ? new Date(e.created_at).toLocaleString('en-US', {
+                  month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit'
+                })
+              : '—';
+            return `
+              <tr>
+                <td style="white-space:nowrap;color:var(--text-muted)">${when}</td>
+                <td style="font-weight:600">${name}</td>
+                <td>${badge}</td>
+                <td style="color:var(--text-secondary)">${detail}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function eventDetail(e) {
+    const m = e.metadata || {};
+    switch (e.event_type) {
+      case 'reserve':
+      case 'cancel':
+        return escapeHtml([m.title, m.publisher].filter(Boolean).join(' · ') || '—');
+      case 'subscribe':
+      case 'unsubscribe':
+        return escapeHtml([m.series_name, m.distributor].filter(Boolean).join(' · ') || '—');
+      case 'catalog_view':
+        return escapeHtml([
+          m.catalog_month ? `month: ${m.catalog_month}` : null,
+          m.publisher     ? `publisher: ${m.publisher}` : null,
+          m.search        ? `search: "${m.search}"`     : null,
+          m.page > 1      ? `page ${m.page}`            : null,
+        ].filter(Boolean).join(', ') || 'catalog');
+      default:
+        return '—';
+    }
+  }
+
+  // ── Load all panels ───────────────────────────────────────
+  async function loadAll() {
+    // Reset to loading state
+    ['chart-top-reserved','chart-top-cancelled','chart-top-subscribed',
+     'chart-event-breakdown','chart-user-activity'].forEach(id => {
+      document.getElementById(id).innerHTML = '<p class="loading-row">Loading…</p>';
+    });
+
+    // Update subtitle
+    const label = activeDays ? `Last ${activeDays} days` : 'All time';
+    document.getElementById('analytics-subtitle').textContent = `Customer activity · ${label}`;
+
+    await Promise.all([
+      loadSummary(),
+      loadTopReserved(),
+      loadTopCancelled(),
+      loadTopSubscribed(),
+      loadEventBreakdown(),
+      loadUserActivity(),
+      loadRecentEvents(),  // always shows last 50 regardless of window
+    ]);
+  }
+
+  await loadAll();
+
+})();
+</script>
+</body>
+</html>

@@ -21,6 +21,7 @@
       <li><a href="subscriptions.html">Subscriptions</a></li>
       <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
       <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
+      <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
     </ul>
     <div class="nav-user">
       <span>Welcome, <strong id="nav-username"></strong></span>
@@ -653,6 +654,7 @@
         if (badge) badge.remove();
         toast('Reservation cancelled');
         updateReservedStat();
+        UsageEvents.cancel(user.id, allItems.find(c => c.id === catalogId));
       }
     } else {
       const { error } = await Preorders.reserve(targetUserId, catalogId, quantity);
@@ -672,6 +674,7 @@
         }
         toast('Reserved! Please pick up and pay when it arrives in store.');
         updateReservedStat();
+        UsageEvents.reserve(user.id, allItems.find(c => c.id === catalogId));
       }
     }
 
@@ -851,6 +854,18 @@
   document.getElementById('modal-close').addEventListener('click', closeModal);
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+
+  // Show analytics nav link for admins
+  if (profile?.is_admin) {
+    const navAnalytics = document.getElementById('nav-analytics');
+    if (navAnalytics) navAnalytics.style.display = 'block';
+  }
+
+  // Log catalog page view — real customers only, not admins or pending accounts
+  if (!profile?.is_admin && !isPending && !AdminContext.isActive()) {
+    UsageEvents.catalogView(user.id, { catalogMonth: currentMonth });
+  }
 
   // ── Filter Events ─────────────────────────────────────────
   const debouncedLoad = debounce(() => loadCatalog(1), 350);
