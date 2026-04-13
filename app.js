@@ -51,10 +51,16 @@ const Auth = {
   },
 
   async signIn(email, password) {
-    return await db.auth.signInWithPassword({ email, password });
+    const result = await db.auth.signInWithPassword({ email, password });
+    // Log login event after successful sign-in (non-blocking)
+    if (result.data?.user) UsageEvents.login(result.data.user.id);
+    return result;
   },
 
   async signOut() {
+    // Log logout before session is destroyed so user_id is still available
+    const user = await this.getUser();
+    if (user) UsageEvents.logout(user.id);
     await db.auth.signOut();
     window.location.href = 'index.html';
   },
@@ -354,6 +360,77 @@ const Settings = {
   },
 };
 
+// ── Usage Analytics ───────────────────────────────────────────
+// Fire-and-forget event logger. Never blocks UI — errors are silent.
+// Admin actions and impersonated sessions are not logged to keep
+// data clean (events should reflect real customer behaviour only).
+const UsageEvents = {
+  // Internal: insert one row. Returns immediately — caller does not await.
+  _log(userId, eventType, metadata = {}) {
+    if (!userId) return;
+    // Do not log events triggered while admin is impersonating a customer
+    if (AdminContext.isActive()) return;
+    db.from('usage_events')
+      .insert({ user_id: userId, event_type: eventType, metadata })
+      .then(() => {})   // suppress unhandled-promise warnings
+      .catch(() => {});  // fail silently — never surface to UI
+  },
+
+  // Public helpers — call these from page scripts
+  reserve(userId, catalogItem) {
+    this._log(userId, 'reserve', {
+      title:         catalogItem?.title        || null,
+      publisher:     catalogItem?.publisher    || null,
+      series_name:   catalogItem?.series_name  || null,
+      distributor:   catalogItem?.distributor  || null,
+      catalog_month: catalogItem?.catalog_month || null,
+      price_usd:     catalogItem?.price_usd    || null,
+    });
+  },
+
+  cancel(userId, catalogItem) {
+    this._log(userId, 'cancel', {
+      title:         catalogItem?.title        || null,
+      publisher:     catalogItem?.publisher    || null,
+      series_name:   catalogItem?.series_name  || null,
+      distributor:   catalogItem?.distributor  || null,
+      catalog_month: catalogItem?.catalog_month || null,
+    });
+  },
+
+  subscribe(userId, seriesName, distributor) {
+    this._log(userId, 'subscribe', { series_name: seriesName, distributor });
+  },
+
+  unsubscribe(userId, seriesName, distributor) {
+    this._log(userId, 'unsubscribe', { series_name: seriesName, distributor });
+  },
+
+  catalogView(userId, { catalogMonth, page, search, publisher, distributor } = {}) {
+    this._log(userId, 'catalog_view', {
+      catalog_month: catalogMonth || null,
+      page:          page         || 1,
+      search:        search       || null,
+      publisher:     publisher    || null,
+      distributor:   distributor  || null,
+    });
+  },
+
+  pageView(userId, page, metadata = {}) {
+    // page: 'mylist' | 'arrivals' | 'subscriptions'
+    this._log(userId, 'page_view', { page, ...metadata });
+  },
+
+  login(userId) {
+    // Logged immediately after successful sign-in, before redirect
+    this._log(userId, 'login');
+  },
+
+  logout(userId) {
+    this._log(userId, 'logout');
+  },
+};
+
 // Check maintenance mode — redirect non-admins to a holding page
 async function checkMaintenanceMode(isAdmin) {
   if (isAdmin) return; // admins always get through
@@ -493,6 +570,7 @@ const Subscriptions = {
       .insert({ user_id: userId, series_name: seriesName, distributor })
       .select()
       .single();
+    if (!error) UsageEvents.subscribe(userId, seriesName, distributor);
     return { data, error };
   },
 
@@ -504,6 +582,7 @@ const Subscriptions = {
       .eq('user_id', userId)
       .eq('series_name', seriesName)
       .eq('distributor', distributor);
+    if (!error) UsageEvents.unsubscribe(userId, seriesName, distributor);
     return { error };
   },
 

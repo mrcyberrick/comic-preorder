@@ -443,6 +443,7 @@
       <li><a href="subscriptions.html">Subscriptions</a></li>
       <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
       <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
+      <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
     </ul>
     <div class="nav-user">
       <span>Welcome, <strong id="nav-username"></strong></span>
@@ -596,6 +597,12 @@
   const navData = await initNav();
   if (!navData) return;
   const { user, profile } = navData;
+
+  // Show analytics nav link for admins
+  if (profile?.is_admin) {
+    const navAnalytics = document.getElementById('nav-analytics');
+    if (navAnalytics) navAnalytics.style.display = 'block';
+  }
 
   // Check maintenance mode — admins bypass
   try { await checkMaintenanceMode(profile?.is_admin); } catch(e) { return; }
@@ -871,6 +878,7 @@
       btn.addEventListener('click', async () => {
         if (!confirm('Remove this reservation?')) return;
         btn.disabled = true;
+        const item = allItems.find(i => i.id === btn.dataset.preorderId);
         const { error } = await Preorders.cancel(AdminContext.resolveUserId(user.id), btn.dataset.catalogId);
         if (error) {
           toast('Failed to remove reservation', 'error');
@@ -879,6 +887,8 @@
           allItems = allItems.filter(i => i.id !== btn.dataset.preorderId);
           toast('Reservation removed');
           renderList();
+          // Log cancel event — only for real customer sessions, not admin-managed lists
+          if (!AdminContext.isActive()) UsageEvents.cancel(user.id, item?.catalog);
         }
       });
     });
@@ -1114,6 +1124,11 @@
   await loadList();
   renderArrivingThisMonth();
   await loadMySubscriptions();
+
+  // Log page view — real customer sessions only
+  if (!profile?.is_admin && !AdminContext.isActive()) {
+    UsageEvents.pageView(user.id, 'mylist');
+  }
 })();
 </script>
 </body>

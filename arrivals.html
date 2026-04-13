@@ -181,6 +181,7 @@
       <li><a href="subscriptions.html">Subscriptions</a></li>
       <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
       <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
+      <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
     </ul>
     <div class="nav-user">
       <span>Welcome, <strong id="nav-username"></strong></span>
@@ -274,6 +275,11 @@
   const navData = await initNav();
   if (!navData) return;
   const { user, profile } = navData;
+
+  if (profile?.is_admin) {
+    const navAnalytics = document.getElementById('nav-analytics');
+    if (navAnalytics) navAnalytics.style.display = 'block';
+  }
 
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
@@ -534,6 +540,11 @@
         'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       window.print();
     });
+  }
+
+  // Log page view — real customer sessions only, includes which Wednesday was viewed
+  if (!profile?.is_admin && !AdminContext.isActive()) {
+    UsageEvents.pageView(user.id, 'arrivals', { on_sale_date: thisWednesday });
   }
 
 })();
