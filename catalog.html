@@ -90,6 +90,12 @@
     <select class="filter-select" id="admin-user-select" style="display:none;border-color:var(--accent);color:var(--accent)">
       <option value="">&#9881; Manage customer…</option>
     </select>
+    <button id="btn-pin-filters" title="Pin these filters so they reload on your next visit"
+      style="background:none;border:1px solid var(--border);border-radius:var(--radius);
+             padding:6px 10px;cursor:pointer;color:var(--text-muted);font-size:0.8rem;
+             white-space:nowrap;transition:color 0.15s,border-color 0.15s;flex-shrink:0">
+      📌 Pin filters
+    </button>
   </div>
 
   <!-- Results count -->
@@ -232,13 +238,85 @@
   const paginEl     = document.getElementById('pagination');
   const overlay     = document.getElementById('modal-overlay');
 
+  // ── Pinned Filter Persistence ─────────────────────────────
+  // Saves/restores distributor, publisher, reserved-view, and variant filters
+  // to localStorage, keyed per user so customers don't share state.
+  // Search text is intentionally excluded — pins are for structural preferences.
+  const PIN_KEY = `pulllist_pinned_filters_${user.id}`;
+  const pinBtn  = document.getElementById('btn-pin-filters');
+
+  function getPinnedFilters() {
+    try { return JSON.parse(localStorage.getItem(PIN_KEY)); } catch { return null; }
+  }
+
+  function savePinnedFilters() {
+    const state = {
+      distributor: distEl.value,
+      publisher:   pubEl.value,
+      reserved:    resEl.value,
+      variants:    variantEl.value,
+    };
+    localStorage.setItem(PIN_KEY, JSON.stringify(state));
+    updatePinBtn(true);
+  }
+
+  function clearPinnedFilters() {
+    localStorage.removeItem(PIN_KEY);
+    updatePinBtn(false);
+  }
+
+  function updatePinBtn(isPinned) {
+    if (isPinned) {
+      pinBtn.textContent = '📌 Pinned';
+      pinBtn.style.color = 'var(--accent, #e85d4a)';
+      pinBtn.style.borderColor = 'var(--accent, #e85d4a)';
+      pinBtn.title = 'Filters pinned — click to unpin and reset to defaults';
+    } else {
+      pinBtn.textContent = '📌 Pin filters';
+      pinBtn.style.color = 'var(--text-muted)';
+      pinBtn.style.borderColor = 'var(--border)';
+      pinBtn.title = 'Pin these filters so they reload on your next visit';
+    }
+  }
+
+  pinBtn.addEventListener('click', () => {
+    if (getPinnedFilters()) {
+      clearPinnedFilters();
+      // Reset to defaults
+      distEl.value    = '';
+      pubEl.value     = '';
+      resEl.value     = '';
+      variantEl.value = 'standard';
+      searchEl.value  = '';
+      loadCatalog(1);
+    } else {
+      savePinnedFilters();
+    }
+  });
+
+  // Re-save whenever a filter changes (keeps the pin current)
+  function maybeResavePin() {
+    if (getPinnedFilters()) savePinnedFilters();
+  }
+
   // ── Init ──────────────────────────────────────────────────
-  // Force dropdowns to reset on load (prevents browser caching previous selection)
-  distEl.value    = "";
-  pubEl.value     = "";
-  resEl.value     = "";
-  variantEl.value = "standard"; // default: hide variants
-  searchEl.value  = "";
+  // Restore pinned filters if present; otherwise reset to defaults.
+  const pinned = getPinnedFilters();
+  if (pinned) {
+    distEl.value    = pinned.distributor ?? '';
+    pubEl.value     = pinned.publisher   ?? '';
+    resEl.value     = pinned.reserved    ?? '';
+    variantEl.value = pinned.variants    ?? 'standard';
+    searchEl.value  = '';
+    updatePinBtn(true);
+  } else {
+    distEl.value    = '';
+    pubEl.value     = '';
+    resEl.value     = '';
+    variantEl.value = 'standard'; // default: hide variants
+    searchEl.value  = '';
+    updatePinBtn(false);
+  }
 
   // Helper: standard cover test used for client-side variant filtering
   function isStandardCover(item) {
@@ -335,6 +413,8 @@
       opt.textContent = p;
       pubEl.appendChild(opt);
     });
+    // Restore pinned publisher now that options exist
+    if (pinned?.publisher) pubEl.value = pinned.publisher;
   }
 
   await loadCatalog();
@@ -875,10 +955,10 @@
   // ── Filter Events ─────────────────────────────────────────
   const debouncedLoad = debounce(() => loadCatalog(1), 350);
   searchEl.addEventListener('input', debouncedLoad);
-  distEl.addEventListener('change', () => loadCatalog(1));
-  pubEl.addEventListener('change', () => loadCatalog(1));
-  resEl.addEventListener('change', () => loadCatalog(1));
-  variantEl.addEventListener('change', () => loadCatalog(1));
+  distEl.addEventListener('change',    () => { maybeResavePin(); loadCatalog(1); });
+  pubEl.addEventListener('change',     () => { maybeResavePin(); loadCatalog(1); });
+  resEl.addEventListener('change',     () => { maybeResavePin(); loadCatalog(1); });
+  variantEl.addEventListener('change', () => { maybeResavePin(); loadCatalog(1); });
 
 })();
 </script>
