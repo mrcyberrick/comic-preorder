@@ -5,6 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Catalog — Pull List</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Search + filter toggle row — always visible */
+    .toolbar-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .toolbar-header .search-wrap { flex: 1 1 auto; }
+
+    /* Desktop: filter toggle hidden, panel always shown as normal toolbar */
+    @media (min-width: 641px) {
+      #btn-filter-toggle { display: none !important; }
+      #filter-panel      { display: flex !important; }
+    }
+
+    /* Mobile: toggle shown, panel hidden until opened */
+    @media (max-width: 640px) {
+      #btn-filter-toggle { display: flex !important; }
+      #filter-panel {
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        background: var(--bg-card, #1a1a1a);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+      #filter-panel.open { display: flex; }
+      #filter-panel .filter-select,
+      #filter-panel #btn-pin-filters {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #filter-panel #btn-pin-filters { text-align: left; }
+    }
+  </style>
 </head>
 <body>
 
@@ -60,14 +98,29 @@
     </div>
   </div>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
+  <!-- Toolbar: search always visible; filters collapse on mobile -->
+  <div class="toolbar-header">
     <div class="search-wrap">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
       <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN…">
     </div>
+    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
+      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
+             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
+             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
+             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+      Filters
+      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
+            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
+    </button>
+  </div>
+
+  <div class="toolbar" id="filter-panel">
     <select class="filter-select" id="filter-distributor">
       <option value="">All Distributors</option>
       <option value="Lunar">Lunar</option>
@@ -955,10 +1008,41 @@
   // ── Filter Events ─────────────────────────────────────────
   const debouncedLoad = debounce(() => loadCatalog(1), 350);
   searchEl.addEventListener('input', debouncedLoad);
-  distEl.addEventListener('change',    () => { maybeResavePin(); loadCatalog(1); });
-  pubEl.addEventListener('change',     () => { maybeResavePin(); loadCatalog(1); });
-  resEl.addEventListener('change',     () => { maybeResavePin(); loadCatalog(1); });
-  variantEl.addEventListener('change', () => { maybeResavePin(); loadCatalog(1); });
+  distEl.addEventListener('change',    () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
+  pubEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
+  resEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
+  variantEl.addEventListener('change', () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
+
+  // ── Mobile filter toggle ──────────────────────────────────
+  const filterToggleBtn = document.getElementById('btn-filter-toggle');
+  const filterPanel     = document.getElementById('filter-panel');
+  const filterBadge     = document.getElementById('filter-active-count');
+
+  function syncFilterBadge() {
+    const active = [
+      distEl.value !== '',
+      pubEl.value  !== '',
+      resEl.value  !== '',
+      variantEl.value !== 'standard',
+    ].filter(Boolean).length;
+
+    if (active > 0) {
+      filterBadge.textContent   = active;
+      filterBadge.style.display = 'inline';
+      filterToggleBtn.style.borderColor = 'var(--accent)';
+    } else {
+      filterBadge.style.display = 'none';
+      filterToggleBtn.style.borderColor = 'var(--border)';
+    }
+  }
+
+  filterToggleBtn.addEventListener('click', () => {
+    const isOpen = filterPanel.classList.toggle('open');
+    filterToggleBtn.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  // Reflect any restored pinned state in the badge on load
+  syncFilterBadge();
 
 })();
 </script>
