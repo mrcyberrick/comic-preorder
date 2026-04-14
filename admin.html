@@ -5,6 +5,61 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin — Pull List</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Admin mobile layout ── */
+    @media (max-width: 640px) {
+
+      /* Page header: stack title and controls vertically */
+      .page-header { flex-direction: column !important; gap: 12px !important; }
+      #admin-controls {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100%;
+        gap: 10px !important;
+        padding-top: 0 !important;
+      }
+      #admin-controls .btn { width: 100%; justify-content: center; }
+      #admin-controls .deadline-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
+      }
+      #admin-controls .deadline-group input[type="date"] { flex: 1; min-width: 0; }
+      #admin-controls .maint-group { display: flex; align-items: center; gap: 8px; }
+
+      /* Export bar: horizontally scrollable strip */
+      .export-bar {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 2px;
+      }
+      .export-bar::-webkit-scrollbar { display: none; }
+      .export-bar .btn { white-space: nowrap; flex-shrink: 0; }
+
+      /* Tabs: horizontally scrollable strip */
+      .admin-tabs {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 2px;
+      }
+      .admin-tabs::-webkit-scrollbar { display: none; }
+      .admin-tab {
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.8rem !important;
+        padding: 7px 11px !important;
+      }
+
+      /* Data tables: allow horizontal scroll */
+      .list-table { min-width: 600px; }
+      .admin-section { overflow-x: auto; }
+    }
+  </style>
 </head>
 <body>
 
@@ -35,13 +90,13 @@
       <h1>Admin Dashboard</h1>
       <p>All customer pre-orders for the current order cycle</p>
     </div>
-    <div style="display:flex;align-items:center;gap:16px;padding-top:8px;flex-wrap:wrap">
+    <div id="admin-controls" style="display:flex;align-items:center;gap:16px;padding-top:8px;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" id="btn-invite-customer"
         style="display:flex;align-items:center;gap:6px;font-size:0.82rem">
         <span style="font-size:1rem;line-height:1">+</span> Invite Customer
       </button>
       <!-- Order Deadline -->
-      <div style="display:flex;align-items:center;gap:8px">
+      <div class="deadline-group" style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500;white-space:nowrap">Order Deadline</span>
         <input type="date" id="deadline-input"
           style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);
@@ -51,7 +106,7 @@
         <button class="btn btn-secondary btn-sm" id="btn-save-deadline">Save</button>
         <button class="btn btn-ghost btn-sm" id="btn-clear-deadline" title="Clear deadline — hides banner for customers" style="color:var(--text-muted)">✕</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div class="maint-group" style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500" id="maint-label">Maintenance Mode</span>
         <label class="toggle-switch" title="Lock site for catalog update">
           <input type="checkbox" id="maint-toggle">
