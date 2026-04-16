@@ -253,6 +253,26 @@
   <!-- Tab: Paper Orders -->
   <div class="admin-section" id="tab-paper-orders">
 
+    <!-- Print order sheets -->
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" id="btn-print-lunar-order"
+        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print Lunar Order Sheet
+      </button>
+      <button class="btn btn-secondary btn-sm" id="btn-print-prh-order"
+        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print PRH Order Sheet
+      </button>
+    </div>
+
     <!-- Top bar: create customer + search side by side on wide screens -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px" id="paper-top-grid">
 
@@ -1698,6 +1718,296 @@
     toast(failed ? `Done with issues: ${parts}` : `✓ ${parts}`, failed ? 'error' : 'success');
     btn.disabled = false;
   });
+
+  // ── Print Order Sheets (Paper Orders tab) ─────────────────
+  // Fetches all catalog items for the current month + distributor,
+  // then opens a focused print window with the formatted order sheet.
+  // Columns: UPC/ISBN | Order Qty (blank write-in) | Title | Price | FOC Date
+  // Header: Distributor, catalog month, rjbookstop.com
+  // Footer margin box: Page X of Y  ·  print date  (via CSS @page)
+
+  async function fetchAllCatalogForDistributor(distributor) {
+    if (!currentCatalogMonth) {
+      toast('Catalog month not loaded — try refreshing the page', 'error');
+      return null;
+    }
+
+    // Count first to know how many batches we need
+    const countRes = await db
+      .from('catalog')
+      .select('*', { count: 'exact', head: true })
+      .eq('catalog_month', currentCatalogMonth)
+      .eq('distributor', distributor);
+    const total = countRes.count ?? 0;
+    if (!total) return [];
+
+    const batches = [];
+    for (let from = 0; from < total; from += 1000) {
+      batches.push(
+        db.from('catalog')
+          .select('item_code, upc, isbn, alternate_code, title, series_name, publisher, price_usd, foc_date, on_sale_date, variant_type')
+          .eq('catalog_month', currentCatalogMonth)
+          .eq('distributor', distributor)
+          .order('title', { ascending: true })
+          .range(from, Math.min(from + 999, total - 1))
+      );
+    }
+
+    const results = await Promise.all(batches);
+    const items = results.flatMap(r => r.data || []);
+    return items;
+  }
+
+  function buildOrderSheetHtml(distributor, items, monthLabel) {
+    const printDate = new Date().toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric'
+    });
+
+    const rows = items.map(c => {
+      // Show UPC for Lunar; ISBN (or UPC fallback) for PRH
+      const scanCode = distributor === 'Lunar'
+        ? (c.upc || c.alternate_code || '—')
+        : (c.isbn || c.upc || c.alternate_code || '—');
+
+      const price = c.price_usd ? `$${parseFloat(c.price_usd).toFixed(2)}` : '—';
+      const foc   = c.foc_date  ? (() => {
+        const [y, m, d] = c.foc_date.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      })() : '—';
+
+      return `
+        <tr>
+          <td class="col-code">${escapeHtml(scanCode)}</td>
+          <td class="col-qty"><div class="qty-box"></div></td>
+          <td class="col-title">${escapeHtml(c.title || '—')}</td>
+          <td class="col-price">${price}</td>
+          <td class="col-foc">${foc}</td>
+        </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${distributor} Order Sheet — ${monthLabel}</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── Portrait letter, tight margins, footer margin boxes ── */
+    /* Content width: 8.5in − 0.7in = 7.8in                     */
+    /* Content height: 11in − 0.75in = 10.25in usable           */
+    /* At 7.5pt rows (~12px) + 4px padding = ~18px/row           */
+    /* ≈ 55–60 data rows per page depending on title wrap         */
+    @page {
+      size: letter portrait;
+      margin: 0.4in 0.35in 0.5in 0.35in;
+      @bottom-left {
+        content: "Printed ${printDate}";
+        font-family: Arial, sans-serif;
+        font-size: 6.5pt;
+        color: #999;
+      }
+      @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: Arial, sans-serif;
+        font-size: 6.5pt;
+        color: #444;
+        font-weight: 700;
+      }
+      @bottom-right {
+        content: "rjbookstop.com";
+        font-family: Arial, sans-serif;
+        font-size: 6.5pt;
+        color: #999;
+      }
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 7.5pt;
+      color: #111;
+      background: #fff;
+      line-height: 1.2;
+    }
+
+    /* ── Compact page-1 header ── */
+    .page-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      border-bottom: 1.5px solid #111;
+      padding-bottom: 4px;
+      margin-bottom: 5px;
+    }
+    .ph-left { display: flex; align-items: baseline; gap: 8px; }
+    .ph-logo {
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .ph-logo span { color: #c0392b; }
+    .ph-dist {
+      font-size: 8pt;
+      font-weight: 600;
+      color: #333;
+    }
+    .ph-right {
+      font-size: 6.5pt;
+      color: #666;
+      text-align: right;
+      line-height: 1.5;
+    }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    thead { display: table-header-group; } /* repeats on every page */
+    tbody { display: table-row-group; }
+
+    /* Column header — repeats every page */
+    thead th {
+      font-size: 6pt;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #444;
+      text-align: left;
+      padding: 3px 3px 3px 2px;
+      background: #efefef;
+      border-top: 1px solid #bbb;
+      border-bottom: 1px solid #bbb;
+    }
+
+    /* ── Column widths — total must ≤ 7.8in ── */
+    /* UPC:0.95 + Qty:0.5 + Title:4.65 + Price:0.55 + FOC:0.6 = 7.25in */
+    .col-code  { width: 0.95in; }
+    .col-qty   { width: 0.5in;  }
+    .col-title { width: 4.65in; }
+    .col-price { width: 0.55in; }
+    .col-foc   { width: 0.6in;  }
+
+    /* ── Data rows — no page-break-inside so rows pack tightly ── */
+    tbody tr { border-bottom: 1px solid #e8e8e8; }
+    tbody tr:nth-child(even) { background: #f7f7f7; }
+
+    td {
+      padding: 2px 3px 2px 2px;
+      vertical-align: middle;
+      font-size: 7.5pt;
+      overflow: hidden;
+    }
+
+    /* UPC/ISBN */
+    .col-code {
+      font-family: 'Courier New', monospace;
+      font-size: 6.5pt;
+      color: #444;
+      letter-spacing: -0.01em;
+      word-break: break-all;
+    }
+
+    /* Qty write-in box */
+    .col-qty { text-align: center; }
+    .qty-box {
+      display: inline-block;
+      width: 28px;
+      height: 14px;
+      border: 1px solid #999;
+      border-radius: 2px;
+      background: #fff;
+    }
+
+    /* Title */
+    .col-title { font-weight: 600; line-height: 1.2; }
+
+    /* Price */
+    .col-price { text-align: right; font-weight: 600; }
+
+    /* FOC date */
+    .col-foc { text-align: center; font-size: 7pt; color: #555; }
+
+    /* Item count line at end of sheet */
+    .sheet-footer {
+      margin-top: 6px;
+      font-size: 6.5pt;
+      color: #aaa;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div class="ph-left">
+      <div class="ph-logo">PULL<span>LIST</span></div>
+      <div class="ph-dist">${escapeHtml(distributor)} Order Sheet &mdash; ${escapeHtml(monthLabel)}</div>
+    </div>
+    <div class="ph-right">
+      ${items.length.toLocaleString()} titles
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="col-code">UPC / ISBN</th>
+        <th class="col-qty" style="text-align:center">Qty</th>
+        <th class="col-title">Title</th>
+        <th class="col-price" style="text-align:right">Price</th>
+        <th class="col-foc"  style="text-align:center">FOC</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+
+  <div class="sheet-footer">${items.length.toLocaleString()} titles &middot; ${escapeHtml(distributor)} &middot; ${escapeHtml(monthLabel)}</div>
+
+</body>
+</html>`;
+  }
+
+  async function printOrderSheet(distributor) {
+    const btn = document.getElementById(
+      distributor === 'Lunar' ? 'btn-print-lunar-order' : 'btn-print-prh-order'
+    );
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    const items = await fetchAllCatalogForDistributor(distributor);
+    if (!items) { btn.disabled = false; btn.innerHTML = origText; return; }
+    if (!items.length) {
+      toast(`No ${distributor} items found for ${currentCatalogMonth}`, 'error');
+      btn.disabled = false; btn.innerHTML = origText; return;
+    }
+
+    const [y, m] = (currentCatalogMonth || '').split('-');
+    const monthLabel = currentCatalogMonth
+      ? new Date(parseInt(y), parseInt(m) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : '';
+
+    const html     = buildOrderSheetHtml(distributor, items, monthLabel);
+    const printWin = window.open('', '_blank', 'width=1100,height=800');
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+      printWin.print();
+    }, 400);
+
+    btn.disabled  = false;
+    btn.innerHTML = origText;
+  }
+
+  document.getElementById('btn-print-lunar-order').addEventListener('click', () => printOrderSheet('Lunar'));
+  document.getElementById('btn-print-prh-order').addEventListener('click',   () => printOrderSheet('PRH'));
 
   // ── Load tab on first click ──────────────────────────────
   document.querySelector('[data-tab="paper-orders"]').addEventListener('click', () => {
