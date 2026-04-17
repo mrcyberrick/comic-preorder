@@ -1752,7 +1752,11 @@
           `to the real account and permanently delete the paper account.\n\nContinue?`
         )) return;
 
-        const { error } = await PaperCustomers.claim(btn.dataset.id, realId.trim());
+        const { data: sessionData } = await db.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) { toast('Session expired — sign out and back in', 'error'); return; }
+
+        const { error } = await PaperCustomers.claim(btn.dataset.id, realId.trim(), token);
         if (error) {
           toast(`Claim failed: ${error.message}`, 'error');
         } else {

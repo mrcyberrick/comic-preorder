@@ -304,9 +304,18 @@ const AdminContext = {
         ].join('');
         document.body.appendChild(banner);
       }
-      const name = escapeHtml(AdminContext.activeUserName);
+      const name   = escapeHtml(AdminContext.activeUserName);
+      const userId = AdminContext.activeUserId;
       banner.innerHTML =
-        '<span>&#9888; Managing pull list for: <strong>' + name + '</strong></span>' +
+        '<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+          '&#9888; Managing pull list for: <strong>' + name + '</strong>' +
+          '<button id="banner-copy-uuid-btn" title="Copy UUID to clipboard — use this when merging into a real account" style="' +
+            'background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);' +
+            'color:white;padding:2px 8px;border-radius:3px;cursor:pointer;' +
+            'font-size:0.7rem;font-weight:400;letter-spacing:0.02em;font-family:monospace;' +
+            'white-space:nowrap' +
+          '">' + userId.slice(0, 8) + '… Copy UUID</button>' +
+        '</span>' +
         '<button id="banner-exit-btn" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:white;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:0.78rem">' +
         '&#x2715; Back to my account</button>';
       document.getElementById('banner-exit-btn').addEventListener('click', () => {
@@ -314,6 +323,26 @@ const AdminContext = {
         const sel = document.getElementById('admin-user-select');
         if (sel) sel.value = '';
         window.location.reload();
+      });
+      document.getElementById('banner-copy-uuid-btn').addEventListener('click', async () => {
+        const copyBtn = document.getElementById('banner-copy-uuid-btn');
+        try {
+          await navigator.clipboard.writeText(userId);
+          copyBtn.textContent = '✓ Copied';
+          setTimeout(() => { if (copyBtn) copyBtn.textContent = userId.slice(0, 8) + '… Copy UUID'; }, 2000);
+        } catch {
+          // Fallback for non-HTTPS or permission denied
+          const ta = document.createElement('textarea');
+          ta.value = userId;
+          ta.style.position = 'fixed';
+          ta.style.opacity  = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          copyBtn.textContent = '✓ Copied';
+          setTimeout(() => { if (copyBtn) copyBtn.textContent = userId.slice(0, 8) + '… Copy UUID'; }, 2000);
+        }
       });
     } else if (banner) {
       banner.remove();
@@ -725,13 +754,21 @@ const PaperCustomers = {
   },
 
   // Merge a paper account's preorder history into a real (self-registered) account,
-  // then delete the paper account. Calls the claim_paper_account SQL function.
-  async claim(paperUserId, realUserId) {
-    const { error } = await db.rpc('claim_paper_account', {
-      paper_user_id: paperUserId,
-      real_user_id:  realUserId,
+  // then delete the paper account. Calls the claim-paper-customer Edge Function
+  // (service role required — anon key cannot DELETE from auth.users directly).
+  async claim(paperUserId, realUserId, sessionToken) {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/claim-paper-customer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${sessionToken}`,
+        'apikey':        SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ paper_user_id: paperUserId, real_user_id: realUserId }),
     });
-    return { error };
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { error: { message: result.error || `HTTP ${resp.status}` } };
+    return { data: result };
   },
 };
 
