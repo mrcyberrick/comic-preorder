@@ -146,6 +146,10 @@
       <div class="stat-value" style="color:var(--warning,#eab308)" id="stat-pending">—</div>
       <div class="stat-label">Pending Approval</div>
     </div>
+    <div class="stat" id="stat-fulfilled-wrap" style="display:none">
+      <div class="stat-value" style="color:var(--success,#22c55e)" id="stat-fulfilled">—</div>
+      <div class="stat-label">Fulfilled (excl. exports)</div>
+    </div>
   </div>
 
   <!-- Export Bar -->
@@ -427,6 +431,8 @@
           created_at,
           user_id,
           quantity,
+          fulfilled,
+          fulfilled_at,
           catalog (
             id, distributor, item_code, upc, isbn, title, series_name, publisher,
             issue_number, format, price_usd, foc_date, on_sale_date,
@@ -473,16 +479,28 @@
 
   // ── Stats ─────────────────────────────────────────────────
   function renderStats() {
-    const customers = new Set(allPreorders.map(p => p.user_id)).size;
-    const lunar  = allPreorders.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
-    const prh    = allPreorders.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
-    const value  = allPreorders.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity||1)), 0);
+    const customers  = new Set(allPreorders.map(p => p.user_id)).size;
+    const lunar      = allPreorders.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
+    const prh        = allPreorders.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
+    const value      = allPreorders.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity||1)), 0);
+    const fulfilled  = allPreorders.filter(p => p.fulfilled).length;
 
     document.getElementById('stat-total').textContent     = allPreorders.reduce((s,p) => s+(p.quantity||1), 0);
     document.getElementById('stat-customers').textContent = customers;
     document.getElementById('stat-lunar').textContent     = lunar;
     document.getElementById('stat-prh').textContent       = prh;
     document.getElementById('stat-value').textContent     = `$${value.toFixed(2)}`;
+
+    // Show fulfilled count badge if any items are marked fulfilled this month
+    const fulfilledWrap = document.getElementById('stat-fulfilled-wrap');
+    if (fulfilledWrap) {
+      if (fulfilled > 0) {
+        fulfilledWrap.style.display = '';
+        document.getElementById('stat-fulfilled').textContent = fulfilled;
+      } else {
+        fulfilledWrap.style.display = 'none';
+      }
+    }
   }
 
   // ── By Customer ───────────────────────────────────────────
@@ -538,15 +556,16 @@
     const lunar = allPreorders.filter(p => p.catalog?.distributor === 'Lunar');
     const prh   = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
 
-    // Group by item, count how many customers want it
+    // Group by item, count how many customers want it and how many are fulfilled
     function groupByItem(items) {
       const map = {};
       items.forEach(p => {
         const id = p.catalog?.id;
         if (!id) return;
-        if (!map[id]) map[id] = { catalog: p.catalog, customers: [], totalQty: 0 };
-        map[id].customers.push({ name: p.customer_name, qty: p.quantity || 1 });
-        map[id].totalQty += (p.quantity || 1);
+        if (!map[id]) map[id] = { catalog: p.catalog, customers: [], totalQty: 0, fulfilledCount: 0 };
+        map[id].customers.push({ name: p.customer_name, qty: p.quantity || 1, fulfilled: !!p.fulfilled });
+        map[id].totalQty      += (p.quantity || 1);
+        if (p.fulfilled) map[id].fulfilledCount++;
       });
       return Object.values(map).sort((a, b) => (a.catalog?.foc_date || '').localeCompare(b.catalog?.foc_date || ''));
     }
@@ -565,11 +584,15 @@
               <th>FOC Date</th>
               <th>Total Qty</th>
               <th>Customers</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            ${grouped.map(({ catalog: c, customers, totalQty }) => `
-              <tr>
+            ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
+              const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
+              const someFulfilled = fulfilledCount > 0 && !allFulfilled;
+              return `
+              <tr${allFulfilled ? ' style="opacity:0.6"' : ''}>
                 <td class="td-cover">
                   ${c.cover_url
                     ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
@@ -579,6 +602,8 @@
                   <div class="col-title">${escapeHtml(c.title)}</div>
                   ${c.variant_type && c.variant_type !== 'Standard'
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
+                  ${allFulfilled
+                    ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.72rem">\u2713 Fulfilled — excluded from order exports</div>` : ''}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
@@ -588,10 +613,32 @@
                   ${totalQty}
                 </td>
                 <td style="font-size:0.75rem;color:var(--text-muted)">
-                  ${customers.map(c => escapeHtml(c.name) + (c.qty > 1 ? ' <span style="color:var(--accent)">(x'+c.qty+')</span>' : '')).join(', ')}
+                  ${customers.map(cust =>
+                    (cust.fulfilled ? '<span style="color:var(--success,#22c55e)" title="Fulfilled">\u2713</span> ' : '') +
+                    escapeHtml(cust.name) +
+                    (cust.qty > 1 ? ' <span style="color:var(--accent)">(x' + cust.qty + ')</span>' : '')
+                  ).join(', ')}
+                </td>
+                <td>
+                  <button
+                    class="btn btn-sm fulfill-toggle-btn"
+                    data-catalog-id="${c.id}"
+                    data-fulfilled="${allFulfilled}"
+                    style="${allFulfilled
+                      ? 'color:var(--success,#22c55e);border-color:var(--success,#22c55e)'
+                      : someFulfilled
+                        ? 'color:var(--warning,#eab308);border-color:var(--warning,#eab308)'
+                        : ''}"
+                    title="${allFulfilled
+                      ? 'All copies fulfilled — click to undo'
+                      : someFulfilled
+                        ? fulfilledCount + ' of ' + customers.length + ' fulfilled — click to mark all fulfilled'
+                        : 'Mark all copies of this title as fulfilled (in hand — skip in order exports)'}">
+                    ${allFulfilled ? '\u2713 Fulfilled' : someFulfilled ? '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')' : 'Mark Fulfilled'}
+                  </button>
                 </td>
               </tr>
-            `).join('')}
+            `}).join('')}
           </tbody>
         </table>
       `;
@@ -599,6 +646,51 @@
 
     document.getElementById('lunar-list').innerHTML = renderDistTable(groupByItem(lunar));
     document.getElementById('prh-list').innerHTML   = renderDistTable(groupByItem(prh));
+
+    // ── Fulfill toggle — event delegation on each distributor list ──
+    // One click handler per container, attached fresh each time renderByDistributor runs.
+    // Using event delegation avoids stale references after innerHTML replacement.
+    ['lunar-list', 'prh-list'].forEach(containerId => {
+      const container = document.getElementById(containerId);
+      // Remove previous listener by cloning the node (cheap for a <div>)
+      const fresh = container.cloneNode(true);
+      container.parentNode.replaceChild(fresh, container);
+
+      fresh.addEventListener('click', async e => {
+        const btn = e.target.closest('.fulfill-toggle-btn');
+        if (!btn) return;
+
+        const catalogId    = btn.dataset.catalogId;
+        const currentState = btn.dataset.fulfilled === 'true';
+        const newState     = !currentState;
+
+        btn.disabled    = true;
+        btn.textContent = '\u2026';
+
+        const { error } = await Preorders.setFulfilledByCatalogId(catalogId, newState);
+        if (error) {
+          toast('Failed to update fulfilled status', 'error');
+          btn.disabled = false;
+          btn.textContent = currentState ? '\u2713 Fulfilled' : 'Mark Fulfilled';
+          return;
+        }
+
+        // Update in-memory data so export filters and re-renders are consistent
+        const ts = newState ? new Date().toISOString() : null;
+        allPreorders = allPreorders.map(p =>
+          p.catalog?.id === catalogId
+            ? { ...p, fulfilled: newState, fulfilled_at: ts }
+            : p
+        );
+
+        toast(newState ? '\u2713 Marked as fulfilled' : 'Marked as not fulfilled',
+              newState ? 'success' : undefined);
+
+        // Re-render both distributor lists and stats so fulfilled count is live
+        renderByDistributor();
+        renderStats();
+      });
+    });
   }
 
   // ── All Items (flat) ──────────────────────────────────────
@@ -641,7 +733,7 @@
             const qty = p.quantity || 1;
             const lineTotal = ((parseFloat(c.price_usd)||0) * qty).toFixed(2);
             return `
-              <tr>
+              <tr${p.fulfilled ? ' style="opacity:0.6"' : ''}>
                 <td class="td-cover">
                   ${c.cover_url
                     ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title || '')}">`
@@ -651,6 +743,9 @@
                 <td>
                   <div class="col-title">${escapeHtml(c.title || '—')}</div>
                   ${c.series_name ? `<div class="col-sub">${escapeHtml(c.series_name)}</div>` : ''}
+                  ${p.fulfilled
+                    ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.7rem">\u2713 Fulfilled${p.fulfilled_at ? ' &middot; ' + formatDate(p.fulfilled_at.split('T')[0]) : ''}</div>`
+                    : ''}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td><span class="badge badge-${(c.distributor||'').toLowerCase()}">${escapeHtml(c.distributor || '—')}</span></td>
@@ -708,10 +803,12 @@
     });
   }
 
-  // Consolidated order sheet — one row per title, total qty across all customers
+  // Consolidated order sheet — one row per title, total qty across all customers.
+  // Fulfilled items are excluded: they are already in hand and must not be re-ordered.
   function makeOrderSheetRows(items) {
+    const unfulfilled = items.filter(p => !p.fulfilled);
     const map = {};
-    items.forEach(p => {
+    unfulfilled.forEach(p => {
       const c   = p.catalog || {};
       const key = c.id;
       if (!key) return;
@@ -743,7 +840,12 @@
   }
 
   document.getElementById('btn-export-all').addEventListener('click', () => {
-    exportToCsv(makeExportRows(allPreorders), `all-preorders-${new Date().toISOString().split('T')[0]}.csv`);
+    // Export All excludes fulfilled items — they are handled separately
+    const unfulfilled   = allPreorders.filter(p => !p.fulfilled);
+    const hadFulfilled  = unfulfilled.length < allPreorders.length;
+    const suffix        = hadFulfilled ? '-excl-fulfilled' : '';
+    exportToCsv(makeExportRows(unfulfilled),
+      `all-preorders-${new Date().toISOString().split('T')[0]}${suffix}.csv`);
   });
 
   // Lunar order-entry format:
@@ -751,9 +853,11 @@
   //   Uses item_code (Lunar product code) as the primary identifier; falls
   //   back to UPC then ISBN if item_code is absent.
   document.getElementById('btn-export-lunar').addEventListener('click', () => {
-    const lunar = allPreorders.filter(p => p.catalog?.distributor === 'Lunar');
-    const consolidated = makeOrderSheetRows(lunar);
-    if (!consolidated.length) { toast('No Lunar reservations to export', 'error'); return; }
+    const lunar         = allPreorders.filter(p => p.catalog?.distributor === 'Lunar');
+    const hadFulfilled  = lunar.some(p => p.fulfilled);
+    const suffix        = hadFulfilled ? '-excl-fulfilled' : '';
+    const consolidated  = makeOrderSheetRows(lunar); // fulfilled already filtered inside
+    if (!consolidated.length) { toast('No unfulfilled Lunar reservations to export', 'error'); return; }
     const lines = consolidated.map(r => {
       const code = r.ItemCode || r.UPC || r.ISBN || '';
       return `${code},${r.TotalQty}`;
@@ -762,7 +866,7 @@
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `lunar-order-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `lunar-order-${new Date().toISOString().split('T')[0]}${suffix}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -772,9 +876,11 @@
   //   Uses ISBN as the primary identifier; falls back to item_code (PRH MainIdentifier)
   //   then UPC if ISBN is absent.
   document.getElementById('btn-export-prh').addEventListener('click', () => {
-    const prh = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
-    const consolidated = makeOrderSheetRows(prh);
-    if (!consolidated.length) { toast('No PRH reservations to export', 'error'); return; }
+    const prh          = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
+    const hadFulfilled = prh.some(p => p.fulfilled);
+    const suffix       = hadFulfilled ? '-excl-fulfilled' : '';
+    const consolidated = makeOrderSheetRows(prh); // fulfilled already filtered inside
+    if (!consolidated.length) { toast('No unfulfilled PRH reservations to export', 'error'); return; }
     const lines = consolidated.map(r => {
       const code = r.ISBN || r.ItemCode || r.UPC || '';
       return `${code},${r.TotalQty}`;
@@ -783,7 +889,7 @@
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `prh-order-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `prh-order-${new Date().toISOString().split('T')[0]}${suffix}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   });

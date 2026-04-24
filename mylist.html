@@ -56,6 +56,28 @@
       background: var(--bg);
     }
     .month-arrivals.open .month-arrivals-body { display: block; }
+
+    /* FOC-locked rows */
+    .foc-locked-row { opacity: 0.8; }
+    .foc-locked-notice {
+      color: var(--accent) !important;
+      font-size: 0.72rem;
+      margin-top: 2px;
+    }
+    .foc-locked-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim, rgba(232,50,28,0.1));
+      border: 1px solid rgba(232,50,28,0.25);
+      border-radius: 4px;
+      padding: 3px 8px;
+      white-space: nowrap;
+      cursor: default;
+    }
     .month-arrivals-grid {
       display: flex;
       flex-wrap: wrap;
@@ -765,17 +787,19 @@
         <tbody>
           ${filtered.map(item => {
             const c = item.catalog;
+            const focLocked = isFocLocked(c.foc_date);
             const cover = c.cover_url
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
             return `
-              <tr>
+              <tr${focLocked ? ' class="foc-locked-row"' : ''}>
                 <td class="td-cover">${cover}</td>
                 <td>
                   <div class="col-title">${escapeHtml(c.title)}</div>
                   ${c.series_name ? `<div class="col-sub">${escapeHtml(c.series_name)}</div>` : ''}
                   ${c.variant_type && c.variant_type !== 'Standard'
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
+                  ${focLocked ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>` : ''}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td>
@@ -784,20 +808,21 @@
                 <td style="color:var(--text-muted); font-size:0.8rem">${formatDate(c.on_sale_date)}</td>
                 <td>
                   <div style="display:flex;align-items:center;gap:4px">
-                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem">−</button>
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${focLocked ? 'disabled' : ''}>−</button>
                     <span class="qty-display" style="min-width:20px;text-align:center;font-weight:600">${item.quantity || 1}</span>
-                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem">+</button>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${focLocked ? 'disabled' : ''}>+</button>
                   </div>
                 </td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
                 <td style="font-weight:600;color:var(--accent)">$${((parseFloat(c.price_usd)||0)*(item.quantity||1)).toFixed(2)}</td>
                 <td>
-                  <button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">
-                    Remove
-                  </button>
+                  ${focLocked
+                    ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">\uD83D\uDD12 Locked</span>`
+                    : `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`}
                 </td>
               </tr>
             `;
+          }).join('')}
           }).join('')}
         </tbody>
       </table>
@@ -806,16 +831,18 @@
         ${filtered.map(item => {
           const c   = item.catalog;
           const qty = item.quantity || 1;
+          const focLocked = isFocLocked(c.foc_date);
           const lineTotal = ((parseFloat(c.price_usd) || 0) * qty).toFixed(2);
           const cover = c.cover_url
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
             : `<img src="${COVER_PLACEHOLDER}" alt="">`;
           return `
-            <div class="mobile-card" data-preorder-id="${item.id}">
+            <div class="mobile-card${focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
               <div class="mobile-card-cover">${cover}</div>
               <div class="mobile-card-body">
                 <div class="mobile-card-title">${escapeHtml(c.title)}</div>
                 ${c.series_name ? `<div class="mobile-card-series">${escapeHtml(c.series_name)}</div>` : ''}
+                ${focLocked ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>` : ''}
                 <div class="mobile-card-meta">
                   <span class="badge badge-${c.distributor.toLowerCase()}">${escapeHtml(c.distributor)}</span>
                   ${c.on_sale_date ? `<span class="mobile-card-date">${formatDate(c.on_sale_date)}</span>` : ''}
@@ -826,13 +853,13 @@
                 </div>
                 <div class="mobile-card-actions">
                   <div class="mobile-qty">
-                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px">−</button>
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${focLocked ? 'disabled' : ''}>−</button>
                     <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
-                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px">+</button>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${focLocked ? 'disabled' : ''}>+</button>
                   </div>
-                  <button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">
-                    Remove
-                  </button>
+                  ${focLocked
+                    ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">\uD83D\uDD12 Locked</span>`
+                    : `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`}
                 </div>
               </div>
             </div>`;
@@ -840,8 +867,10 @@
       </div>
     `;
 
-    // Quantity buttons
+    // Quantity buttons — disabled on FOC-locked items (HTML attr prevents clicks,
+    // but we guard explicitly for safety)
     container.querySelectorAll('.qty-minus-btn, .qty-plus-btn').forEach(btn => {
+      if (btn.disabled) return;
       btn.addEventListener('click', async () => {
         const item = allItems.find(i => i.id === btn.dataset.preorderId);
         if (!item) return;
