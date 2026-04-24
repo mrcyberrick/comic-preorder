@@ -511,6 +511,8 @@ const Preorders = {
         created_at,
         quantity,
         notes,
+        fulfilled,
+        fulfilled_at,
         catalog (
           id, distributor, item_code, title, series_name, publisher,
           issue_number, format, price_usd, foc_date, on_sale_date,
@@ -549,6 +551,31 @@ const Preorders = {
     return { error };
   },
 
+  // Mark a single preorder as fulfilled/unfulfilled (admin only).
+  async setFulfilled(preorderId, fulfilled) {
+    const { error } = await db
+      .from('preorders')
+      .update({
+        fulfilled,
+        fulfilled_at: fulfilled ? new Date().toISOString() : null,
+      })
+      .eq('id', preorderId);
+    return { error };
+  },
+
+  // Mark ALL preorders for a catalog item as fulfilled/unfulfilled (admin batch).
+  // Used when an entire title arrives — marks every customer's copy at once.
+  async setFulfilledByCatalogId(catalogId, fulfilled) {
+    const { error } = await db
+      .from('preorders')
+      .update({
+        fulfilled,
+        fulfilled_at: fulfilled ? new Date().toISOString() : null,
+      })
+      .eq('catalog_id', catalogId);
+    return { error };
+  },
+
   // Admin only
   async getAll() {
     const { data, error } = await db
@@ -557,6 +584,8 @@ const Preorders = {
         id,
         created_at,
         user_id,
+        fulfilled,
+        fulfilled_at,
         user_profiles ( full_name ),
         auth_users:user_id ( email ),
         catalog (
@@ -971,6 +1000,13 @@ function isFocPast(dateStr) {
   return dateStr < todayStr;
 }
 
+// Returns true when a title's FOC has passed and new reservations/cancellations
+// can no longer be accepted. Hard-cutoff mode: identical to isFocPast.
+// Named alias so call sites read as intent rather than date mechanics.
+function isFocLocked(dateStr) {
+  return isFocPast(dateStr);
+}
+
 // Returns true when a FOC date string ('YYYY-MM-DD') falls within the current
 // calendar month (including today, including future dates this month).
 // Uses local date parts to avoid UTC shift.
@@ -1020,7 +1056,7 @@ function renderSkeletons(count = 12, container) {
 // Inline SVG placeholder — shown while image loads and as fallback if it breaks
 const COVER_PLACEHOLDER = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='225' viewBox='0 0 150 225'%3E%3Crect width='150' height='225' fill='%23222'/%3E%3Crect x='20' y='20' width='110' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='32' width='80' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='60' width='110' height='80' rx='4' fill='%23333'/%3E%3Crect x='20' y='156' width='90' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='168' width='60' height='4' rx='2' fill='%23333'/%3E%3C/svg%3E`;
 
-function buildComicCard(comic, reservedQty) {
+function buildComicCard(comic, reservedQty, focLocked = false) {
   const isReserved = reservedQty > 0;
   const coverHtml = `<img
     src="${comic.cover_url ? escapeHtml(comic.cover_url) : COVER_PLACEHOLDER}"
@@ -1033,13 +1069,28 @@ function buildComicCard(comic, reservedQty) {
     ? `<div class="reserved-indicator">Qty: ${reservedQty}</div>`
     : '';
 
+  // FOC lock badge — amber pill shown on reserved+locked items so the customer
+  // understands this item is committed but can no longer be changed.
+  const focBadge = (focLocked && isReserved)
+    ? `<div class="foc-locked-indicator" title="Order cutoff passed — cannot be changed">FOC</div>`
+    : '';
+
   const saleDate = comic.on_sale_date ? formatDate(comic.on_sale_date) : '—';
+
+  // Button state: locked items (reserved or not) cannot be toggled.
+  const btnClass    = focLocked && !isReserved ? 'btn-reserve foc-locked'
+                    : isReserved               ? 'btn-reserve reserved'
+                    :                            'btn-reserve';
+  const btnText     = focLocked && !isReserved ? '\uD83D\uDD12 FOC Locked'
+                    : isReserved               ? '\u2713 Reserved'
+                    :                            '+ Reserve';
+  const btnDisabled = focLocked ? 'disabled' : '';
 
   return `
     <div class="comic-card" data-id="${comic.id}">
       <div class="comic-cover">
         <div class="distributor-badge badge-${comic.distributor.toLowerCase()}">${escapeHtml(comic.distributor)}</div>
-        ${reservedBadge}
+        ${reservedBadge}${focBadge}
         ${coverHtml}
       </div>
       <div class="comic-info">
@@ -1051,8 +1102,8 @@ function buildComicCard(comic, reservedQty) {
         </div>
       </div>
       <div class="comic-actions">
-        <button class="btn-reserve ${isReserved ? 'reserved' : ''}" data-id="${comic.id}">
-          ${isReserved ? '✓ Reserved' : '+ Reserve'}
+        <button class="${btnClass}" data-id="${comic.id}" ${btnDisabled}>
+          ${btnText}
         </button>
       </div>
     </div>
