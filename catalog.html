@@ -1111,7 +1111,7 @@
             toast(`Unsubscribed from ${comic.series_name}`);
           }
         } else {
-          const { error } = await Subscriptions.subscribe(user.id, comic.series_name, comic.distributor);
+          const { error } = await Subscriptions.subscribe(user.id, comic.series_name, comic.distributor, comic.format || null);
           if (error) { toast('Failed to subscribe', 'error'); }
           else {
             mySubscriptions.add(subKey);

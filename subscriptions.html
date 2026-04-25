@@ -396,6 +396,7 @@
           <tr>
             <th>Series</th>
             <th>Distributor</th>
+            <th>Format</th>
             <th>Subscribed Since</th>
             <th></th>
           </tr>
@@ -405,6 +406,7 @@
             <tr>
               <td><div class="sub-series-name">${escapeHtml(sub.series_name)}</div></td>
               <td><span class="badge badge-${sub.distributor.toLowerCase()}">${escapeHtml(sub.distributor)}</span></td>
+              <td>${sub.format ? `<span class="badge badge-format">${escapeHtml(sub.format)}</span>` : '<span style="color:var(--text-muted);font-size:0.8rem">Comic</span>'}</td>
               <td><div class="sub-since">${formatDate(sub.created_at?.split('T')[0])}</div></td>
               <td style="text-align:right">
                 <button class="btn btn-danger btn-sm unsub-btn"
@@ -466,7 +468,7 @@
     // Fetch matching series — standard covers only across all catalog months
     const { data, error } = await db
       .from('catalog')
-      .select('series_name, distributor, variant_type')
+      .select('series_name, distributor, variant_type, format')
       .ilike('series_name', `%${q}%`)
       .not('series_name', 'is', null)
       .or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title')
@@ -478,14 +480,25 @@
       return;
     }
 
-    // Deduplicate by series_name + distributor
-    const seen = new Set();
-    const unique = data.filter(r => {
+    // Deduplicate by series_name + distributor.
+    // When a series has both a comic issue and a TPB (both are standard covers),
+    // prefer the comic format so the subscribe button targets the right item.
+    function isComicFormat(fmt) {
+      if (!fmt) return true; // no format = treat as comic
+      const f = fmt.toLowerCase();
+      return !['trade paperback', 'hardcover', 'omnibus', 'graphic novel',
+               'digest', 'box set', 'album'].some(t => f.includes(t));
+    }
+    const seen = new Map();
+    for (const r of data) {
       const key = `${r.series_name}||${r.distributor}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      if (!seen.has(key)) {
+        seen.set(key, r);
+      } else if (isComicFormat(r.format) && !isComicFormat(seen.get(key).format)) {
+        seen.set(key, r); // replace TPB/HC hit with comic hit
+      }
+    }
+    const unique = [...seen.values()];
 
     const subKeys = new Set(allSubs.map(s => `${s.series_name}||${s.distributor}`));
 
@@ -495,16 +508,21 @@
         const key       = `${r.series_name}||${r.distributor}`;
         const isSubbed  = subKeys.has(key);
         const distClass = r.distributor.toLowerCase();
+        const fmtBadge  = r.format
+          ? `<span class="badge badge-format">${escapeHtml(r.format)}</span>`
+          : '';
         return `
           <div class="search-result-row" data-key="${escapeHtml(key)}">
             <div class="search-result-name">${escapeHtml(r.series_name)}</div>
             <div class="search-result-actions">
               <span class="badge badge-${distClass}">${escapeHtml(r.distributor)}</span>
+              ${fmtBadge}
               ${isSubbed
                 ? '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>'
                 : `<button class="btn btn-primary btn-sm sub-search-btn"
                      data-series="${escapeHtml(r.series_name)}"
-                     data-distributor="${escapeHtml(r.distributor)}">
+                     data-distributor="${escapeHtml(r.distributor)}"
+                     data-format="${escapeHtml(r.format || '')}">
                      ☆ Subscribe
                    </button>`
               }
@@ -519,7 +537,8 @@
         btn.textContent = 'Subscribing…';
         const targetUserId = AdminContext.resolveUserId(user.id);
         const { error } = await Subscriptions.subscribe(
-          targetUserId, btn.dataset.series, btn.dataset.distributor
+          targetUserId, btn.dataset.series, btn.dataset.distributor,
+          btn.dataset.format || null
         );
         if (error) {
           toast('Failed to subscribe', 'error');
@@ -530,6 +549,7 @@
           allSubs.push({
             series_name:  btn.dataset.series,
             distributor:  btn.dataset.distributor,
+            format:       btn.dataset.format || null,
             created_at:   new Date().toISOString(),
           });
           toast(`Subscribed to ${btn.dataset.series}!`);

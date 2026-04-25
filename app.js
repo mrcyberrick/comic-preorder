@@ -605,7 +605,7 @@ const Subscriptions = {
   async getAll(userId) {
     const { data, error } = await db
       .from('subscriptions')
-      .select('id, series_name, distributor, created_at')
+      .select('id, series_name, distributor, format, created_at')
       .eq('user_id', userId)
       .order('series_name', { ascending: true });
     return { items: data || [], error };
@@ -624,10 +624,13 @@ const Subscriptions = {
   },
 
   // Subscribe to a series
-  async subscribe(userId, seriesName, distributor) {
+  // format: the catalog format string (e.g. 'Comic Book', 'Trade Paperback').
+  // Pass null for legacy/popular-series subscriptions — the import script
+  // will default to comic-only matching via isComicFormat().
+  async subscribe(userId, seriesName, distributor, format = null) {
     const { data, error } = await db
       .from('subscriptions')
-      .insert({ user_id: userId, series_name: seriesName, distributor })
+      .insert({ user_id: userId, series_name: seriesName, distributor, format })
       .select()
       .single();
     if (!error) UsageEvents.subscribe(userId, seriesName, distributor);
@@ -650,7 +653,7 @@ const Subscriptions = {
   async getAllAdmin() {
     const { data, error } = await db
       .from('subscriptions')
-      .select('id, series_name, distributor, created_at, user_profiles ( full_name )')
+      .select('id, series_name, distributor, format, created_at, user_profiles ( full_name )')
       .order('series_name', { ascending: true });
     return { items: data || [], error };
   },
