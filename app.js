@@ -135,29 +135,32 @@ async function initNav() {
 // has reserved items with an on_sale_date in the next 7 days.
 // Reflects the managed customer when admin context is active.
 const NavBubble = {
-  async load(userId) {
-    try {
-      const today = new Date();
-      const in7   = new Date(today);
-      in7.setDate(today.getDate() + 7);
+async load(userId) {
+       try {
+         // "This Wednesday" using local date parts — matches arrivals.html exactly.
+         // Never use toISOString() here; UTC drift after 8pm EDT shifts the date forward.
+         const today = new Date();
+         const diff  = (3 - today.getDay() + 7) % 7;
+         const wed   = new Date(today);
+         wed.setDate(today.getDate() + diff);
+         const y = wed.getFullYear();
+         const m = String(wed.getMonth() + 1).padStart(2, '0');
+         const d = String(wed.getDate()).padStart(2, '0');
+         const thisWednesday = `${y}-${m}-${d}`;
 
-      const todayStr = today.toISOString().split('T')[0];
-      const in7Str   = in7.toISOString().split('T')[0];
+         const { data, error } = await db
+           .from('preorders')
+           .select('id, catalog!inner(on_sale_date)')
+           .eq('user_id', userId)
+           .eq('catalog.on_sale_date', thisWednesday);
 
-      const { data, error } = await db
-        .from('preorders')
-        .select('id, catalog!inner(on_sale_date)')
-        .eq('user_id', userId)
-        .gte('catalog.on_sale_date', todayStr)
-        .lte('catalog.on_sale_date', in7Str);
+         if (error || !data) return;
 
-      if (error || !data) return;
-
-      this.render(data.length);
-    } catch (e) {
-      // Bubble is non-critical — fail silently
-    }
-  },
+         this.render(data.length);
+       } catch (e) {
+         // Bubble is non-critical — fail silently
+       }
+     },
 
   render(count) {
     document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
