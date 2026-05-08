@@ -419,6 +419,21 @@ agentic sessions without explicit user approval:
   a dedicated hardening sub-deploy (3.7+ or Phase 4 prerequisite) that audits
   and tightens table-level grants across all tenant-scoped tables.
 
+  - **import.js (production) — required patches before first prod run
+  after Phase 1 schema migration:**
+  - Match all Phase 2 + 3.2 + 3.3 + soak hot-fixes already applied
+    to `import-staging.js`, including:
+    - `tenant_id` field on every record passed to `weekly_shipment`
+      (the soak-discovered gap from 2026-05-08, fixed in
+      `upsertShipment()` row builders)
+    - All other `TENANT_ID` references that exist in the staging
+      script as of the cutover date
+  - Until production gets Phase 1 schema, **do not** apply these
+    patches — production schema does not have `tenant_id` columns
+    and the patches will fail.
+  - The cleanest path is: production migration ships the schema +
+    patched script together as a single coordinated change.
+
 If a session needs to touch any of the above, stop and confirm with the user first.
 
 ---
@@ -452,7 +467,12 @@ If a session needs to touch any of the above, stop and confirm with the user fir
 - **Admin label/input warning**: `admin.html` has a DevTools a11y warning
   ("No label associated with a form field"). Pre-existing, not tenant-related,
   defer to Phase 3.6 when admin UI work happens.
-
+- **import-staging.js was hot-patched on 2026-05-08** for a
+  `weekly_shipment` tenant_id NOT NULL violation. Two row-object
+  literals in `upsertShipment()` now pass `tenant_id: TENANT_ID`.
+  Re-syncing the script from any earlier backup will reintroduce
+  the bug. See `docs/phase-3-tenant-resolution.md` § Discovered
+  During Soak entry dated 2026-05-08 for context.
 ---
 
 ## Files That Must Stay in Sync

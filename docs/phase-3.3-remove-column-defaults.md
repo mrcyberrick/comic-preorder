@@ -659,6 +659,35 @@ preorder/subscription reassignment by tenant. Not a 3.3 concern
 (no NOT NULL violation possible) but worth revisiting when paper-
 customer flows are exercised cross-tenant in a future phase.
 
+**2026-05-08 — Retrospective: V5b skipped, regression surfaced during soak**
+
+Phase 3.3's V5b ("Test full import with shipments") was listed as
+optional in the verification matrix because staging shipment CSV
+files were not readily available at verification time. The plan
+documented this as acceptable: V5a (catalog refresh only) covered
+the catalog upsert and auto-reserve paths, which were the highest-
+volume writes affected by the column-default removal.
+
+The cost surfaced on 2026-05-08 when the next real import run
+included shipment invoices. The `weekly_shipment` row builders in
+`upsertShipment()` had been missed during Phase 2's import-script
+tenant-awareness work, and the column default was the only thing
+keeping the writes succeeding. Removing the default in 3.3
+correctly exposed the gap, but verification didn't catch it —
+because V5b ran zero shipment rows.
+
+Honest version: 3.3's verification was incomplete by design (V5b
+optional), and the gap was real, and the soak caught it. That's
+the system working — not perfectly, but as intended. The fix is
+documented in `docs/phase-3-tenant-resolution.md` § Discovered
+During Soak (entry dated 2026-05-08).
+
+Lesson for future verification matrices: "optional" tests that
+exercise low-frequency code paths are exactly the tests where
+soak periods earn their keep. Don't skip them silently — if the
+test files aren't available, document the skip explicitly so the
+next session knows that path is unverified.
+
 ---
 
 ## Reference

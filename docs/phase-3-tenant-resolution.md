@@ -183,6 +183,65 @@ preorders not represented in shipment and merges them with shipment-
 matched reservations into `myRowsCombined`. Five touchpoints in
 arrivals.html updated to render from the combined list.
 
+**2026-05-08 — import-staging.js: weekly_shipment writes missing tenant_id (post-3.4 soak)**
+
+Bug discovered during routine staging import after Phase 3.3 removed
+`tenant_id` column defaults. Running
+`node import-staging.js <lunar.csv> <prh.csv> <ship1> <ship2>` fails
+in the shipment-upsert step with `null value in column "tenant_id"
+of relation "weekly_shipment" violates not-null constraint` for both
+the Lunar and PRH batches.
+
+Root cause: when Phase 2 made the import script tenant-aware, the two
+row builders in `upsertShipment()` were missed. Catalog upsert and
+auto-reserve writes were correctly patched (they pass `tenant_id`),
+but the two `weekly_shipment` row-object literals — one for Lunar
+shipment rows (around line 425), one for PRH (around line 442) —
+were never updated. The Phase 1 column default masked the gap; Phase
+3.3's removal of that default exposed it.
+
+This should have been caught by Phase 3.3's V5b verification ("Test
+full import with shipments"). V5b was marked optional in the 3.3
+plan because shipment files weren't readily available at verification
+time, so the test was skipped. The cost of skipping was a soak-period
+regression that surfaced when shipment files next arrived.
+
+Fix applied inline as part of soak hot-fix (same precedent as the
+arrivals.html and archive_stale_reservations 3.3 patches): added
+`tenant_id: TENANT_ID` to both row-object literals in
+`upsertShipment()`. The `TENANT_ID` constant was already defined at
+the top of the file from earlier Phase 2 work — no new constants
+introduced.
+
+Files changed:
+- `import-staging.js` (local scripts folder, not in repo) — two
+  one-line additions, same lexical position relative to the existing
+  fields, no other changes
+
+Verification: re-ran the failing import command with the same CSVs
+and shipment files; both Lunar and PRH batches succeeded; sanity
+check on `weekly_shipment` confirmed all new rows have
+`tenant_id = '72e29f67-...'`.
+
+Architectural notes for later (logged here, not actioned in 3.4):
+
+- The PRH delete-then-insert path in `upsertShipment()` issues a
+  service-role DELETE filtered only by `distributor=eq.PRH` and
+  `on_sale_date=eq.<date>`. With service role the DELETE bypasses
+  RLS; with a second tenant on the system, this would silently
+  delete the other tenant's PRH shipment for the same date. Same
+  issue exists in `buildCatalogIdMap()` — service-role catalog
+  lookups don't filter by tenant, so cross-tenant rows could match.
+  Both belong in the same future hardening pass as Finding E from
+  the 3.4 plan (overly-broad table grants). One sentence each
+  noted; no action this session.
+
+- `import.js` (production) has the same `weekly_shipment` gap baked
+  in. Per the existing rule "DO NOT modify until production gets
+  Phase 1 schema," the prod script is not patched. When production
+  migration begins (Phase 4), prod `import.js` needs the same two-
+  line patch before its first run.
+
 ## Reference
 
 - Active sub-deploy plan: see the Sub-Deploys table above
