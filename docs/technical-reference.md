@@ -1596,11 +1596,10 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   `app_settings` (same key, same JSON, founding-tenant scoped);
   (b) `subscriptions.html` updated to read via `Settings.get()`
   instead of direct `db.from('settings')` query; (c) orphan
-  `settings.maintenance_mode` row deleted. Step (d) — delete
-  `settings.popular_series` from legacy table — held until
-  subscriptions.html smoke test passes on staging (migration file
-  `06-f4d-delete-settings-popular-series.sql` committed but not yet run).
-  `settings` table itself not yet dropped (separate dead-code pass).
+  `settings.maintenance_mode` row deleted; (d) `settings.popular_series`
+  deleted after staging smoke test confirmed the panel still renders.
+  `settings` table is now empty. Table itself not yet dropped —
+  separate dead-code cleanup pass.
 - The legacy `settings` table holds `popular_series` (read by
   subscriptions.html) and `maintenance_mode` (orphan duplicate of the
   `app_settings.maintenance_mode` row). The modern `app_settings` table
