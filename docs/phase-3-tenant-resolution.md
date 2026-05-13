@@ -1,6 +1,6 @@
 # Phase 3 — Tenant Resolution
 
-**Status:** In progress (3.6 complete, 3.7 plan pending)
+**Status:** Complete 2026-05-13
 **Branch base:** `staging`
 **Started:** 2026-05-01
 **Estimated total duration:** 3–6 weekend sessions across all four sub-deploys
@@ -60,7 +60,7 @@ not exist — write them when their turn comes, not before.
 | 3.4 | Analytics views rebuild                            | `phase-3.4-analytics-rls-and-drop-views.md`   | Complete    | 2026-05-07  |
 | 3.5 | Usage events purge job (90-day retention)          | `phase-3.5-usage-events-purge.md`             | Complete    | 2026-05-10  |
 | 3.6 | Admin operational tooling — Wednesday workflow     | `phase-3.6-admin-wednesday-tooling.md`        | Complete    | 2026-05-11  |
-| 3.7 | Smoke test automation (Playwright)                 | (not yet written — written before Phase 4)    | Pending     | —           |
+| 3.7 | Smoke test automation (Playwright)                 | `phase-3.7-playwright-smoke-tests.md`         | Complete    | 2026-05-13  |
 
 Each sub-deploy ends in a working state, smoke-testable, reversible.
 **Do not bundle multiple sub-deploys into one session.** See the
@@ -130,16 +130,18 @@ that should have been pure tenant-awareness work. Don't repeat that.
 
 Phase 3 is complete when **all** of the following are true on staging:
 
-- [ ] All sub-deploys in the Sub-Deploys table above marked Complete
-- [ ] `app.js` writes all pass `tenant_id` explicitly (verifiable by `grep`)
-- [ ] All `tenant_id` column defaults removed from the database (verifiable by `\d <table>`)
-- [ ] Analytics views all filter by `current_tenant_id()` (verifiable by `pg_get_viewdef`)
-- [ ] A test second tenant inserted via SQL is fully isolated from Ray & Judy's
+- [x] All sub-deploys in the Sub-Deploys table above marked Complete
+- [x] `app.js` writes all pass `tenant_id` explicitly (verifiable by `grep`)
+- [x] All `tenant_id` column defaults removed from the database (verifiable by `\d <table>`)
+- [x] Analytics views all filter by `current_tenant_id()` (verifiable by `pg_get_viewdef`)
+- [x] A test second tenant inserted via SQL is fully isolated from Ray & Judy's
       data in every analytics view, every page query, and every admin tool
-- [ ] No regression in customer or admin smoke tests
-- [ ] `CLAUDE.md` § Current Migration Phase updated to reflect Phase 3 complete
+      (verified by Playwright spec 07 — F15 and F20 subtests green 2026-05-13)
+- [x] No regression in customer or admin smoke tests
+      (Playwright suite 13/13 green 2026-05-13)
+- [x] `CLAUDE.md` § Current Migration Phase updated to reflect Phase 3 complete
       and the next phase queued
-- [ ] All sub-deploy plan files committed to `docs/`
+- [x] All sub-deploy plan files committed to `docs/`
 
 ---
 

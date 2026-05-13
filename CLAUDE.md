@@ -7,19 +7,20 @@ comic pre-order system. **Read this file in full at the start of every session.*
 
 ## 🚨 Current Migration Phase
 
-**Active phase:** Phase 3 — Tenant Resolution
-**Plan (parent):** `docs/phase-3-tenant-resolution.md`
-**Active sub-deploy plan:** Sub-deploy 3.6 complete. 3.7 (Playwright smoke automation) is the last remaining sub-deploy in Phase 3.
-**Last completed sub-deploy:** 3.6 — see `docs/phase-3.6-admin-wednesday-tooling.md`
-**Last completed phase:** Phase 2 — see `docs/phase-2-completion.md`
+**Active phase:** Phase 4 — Production Migration (queued; not yet started)
+**Phase 3 status:** Complete 2026-05-13 — see `docs/phase-3-tenant-resolution.md`
+**Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
+**Last completed sub-deploy:** 3.7 — see `docs/phase-3.7-playwright-smoke-tests.md`
+**Last completed phase:** Phase 3 — all sub-deploys 3.1–3.7 complete
+**Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md` and `docs/pre-multitenancy-state.md`
 
-**Out of scope this phase:**
-- Phase 4+ work (production migration, hosting migration, self-service tenant signup, billing, branding rendering)
-- Production deploys of any kind
-- Edge Function business logic changes beyond passing `tenant_id`
-- Sub-deploys not yet active (3.6 admin operational tooling)
-- The two deferred fulfillment bugs (customer can cancel fulfilled item; partial fulfillment) — see Known Out-of-Scope Items
+**Phase 4 scope (not yet planned in detail):**
+- Production database migration (apply Phase 1–3 schema to prod)
+- Update `import.js` (production) with all Phase 2–3.7 patches (see § Known Out-of-Scope Items)
+- Hosting migration (GitHub Pages → Cloudflare Pages or Vercel) for subdomain routing
+- Per-tenant branding rendering
+- Pre-Phase-4 hardening pass: F16/F34 deep audit (see `technical-reference.md` § 13)
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -224,6 +225,12 @@ git commit -m "<type>: <description>"
 git checkout staging
 git merge feature/<description>
 git push origin staging
+
+# Run smoke tests before deploying to staging
+# cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
+# .\run-smoke.ps1
+# Stop if anything fails — do not push.
+
 git push staging staging:main    # deploys to staging GitHub Pages
 
 # Test at: mrcyberrick.github.io/comic-preorder-staging/
@@ -427,6 +434,12 @@ agentic sessions without explicit user approval:
       `auto_fulfill_past_on_sale(p_tenant_id)` immediately before the
       `"✅ Import complete!"` line. Mirrors the Phase 3.5 purge call;
       same shape, same tenant ID resolution.
+    - **Phase 3.7 row-builder refactor:** extract the two inline row-builder
+      blocks in `upsertShipment()` into named helpers `buildLunarShipmentRows`
+      and `buildPrhShipmentRows` (pure functions, `tenantId` passed explicitly).
+      Wrap `main()` in `if (require.main === module)`. Add
+      `module.exports = { buildLunarShipmentRows, buildPrhShipmentRows }` at
+      the bottom. Mirrors the refactor already applied to `import-staging.js`.
   - Until production gets Phase 1 schema, **do not** apply these
     patches — production schema does not have `tenant_id` columns
     and the patches will fail.
@@ -483,3 +496,35 @@ immediately before `<div id="toast-container"></div>`.
 
 The `<script>` load order must be the same on every page:
 Supabase UMD bundle → `config.js` → `app.js` → page-specific code.
+
+---
+
+## Smoke Test Suite (local)
+
+**Location:** `C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright\`
+(local-only — never committed to any branch)
+
+**How to run:**
+```powershell
+cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
+.\run-smoke.ps1        # full suite: Node import regression + 13 Playwright specs
+.\run-smoke.ps1 -Headed  # headed mode (browser window visible)
+npx playwright test 04-arrivals-this-week  # single spec
+```
+
+**What it covers:** magic-link auth, catalog reserve → mylist, cancel guards,
+arrivals orphan-reserved rendering (2026-05-06 soak regression), subscriptions
+subscribe/unsubscribe, admin bagging list + week nav, and tenant isolation
+including F15 (`weekly_shipment` RLS) and F20 (`get_popular_series` per-tenant
+counts). Also includes a Node unit test for the import-script row builders
+(2026-05-08 soak regression).
+
+**Rules:**
+- Local-only. Never committed. Never runs against production.
+- `SUPABASE_URL` in `.env` must be the staging Supabase URL; the config and
+  runner both abort if it's the production URL.
+- All `goto()` calls in specs use paths without a leading slash (e.g.,
+  `'mylist.html'`). A leading slash resolves against the GitHub Pages origin
+  root and redirects to the production custom domain.
+
+**Canonical detail:** `docs/phase-3.7-playwright-smoke-tests.md`
