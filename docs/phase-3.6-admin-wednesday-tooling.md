@@ -735,6 +735,13 @@ in 3.6. Recorded so they don't get lost:
   paper-side reconciliation tool until a digital version is needed.
 - **Partial fulfillment** — still a product decision pending.
 - **POS integration** — future phase.
+- **"This Week" rule corrected in 3.8 (added 2026-05-14)** — The bagging
+  tab anchor in 3.6 used `weekAnchorWednesday` and a Mon-Sat range
+  (Wed-2 to Wed+3). Phase 3.8 replaces this with a Mon-Sun rule anchored
+  on Monday (`weekAnchorMonday`, `DateUtils.weekRange()` from `app.js`).
+  The bagging list UI, print layout, week-nav buttons, and per-customer
+  email button are unchanged; only the date range and anchor variable
+  changed. See `phase-3.8-pre-phase-4-hardening.md`.
 
 ---
 
