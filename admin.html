@@ -864,7 +864,7 @@
     const hadFulfilled  = unfulfilled.length < allPreorders.length;
     const suffix        = hadFulfilled ? '-excl-fulfilled' : '';
     exportToCsv(makeExportRows(unfulfilled),
-      `all-preorders-${new Date().toISOString().split('T')[0]}${suffix}.csv`);
+      `all-preorders-${DateUtils.todayLocal()}${suffix}.csv`);
   });
 
   // Lunar order-entry format:
@@ -885,7 +885,7 @@
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `lunar-order-${new Date().toISOString().split('T')[0]}${suffix}.txt`;
+    a.download = `lunar-order-${DateUtils.todayLocal()}${suffix}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -908,7 +908,7 @@
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `prh-order-${new Date().toISOString().split('T')[0]}${suffix}.txt`;
+    a.download = `prh-order-${DateUtils.todayLocal()}${suffix}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   });
