@@ -9,6 +9,7 @@ Deno.serve(async (req) => {
 
   try {
     const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_ANON      = Deno.env.get('SUPABASE_ANON_KEY')
     const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
     const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
@@ -44,8 +45,19 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
     }
 
-    // Verify auth and fetch user email in one call using the admin users endpoint.
-    // The service key has access to this endpoint — no anon key needed.
+    // Verify the caller's JWT and confirm they are requesting their own list.
+    const callerRes = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      headers: { Authorization: authHeader, apikey: SUPABASE_ANON }
+    })
+    if (!callerRes.ok) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+    }
+    const callerUser = await callerRes.json()
+    if (callerUser.id !== user_id) {
+      return Response.json({ error: 'Forbidden — can only request your own list' }, { status: 403, headers: corsHeaders })
+    }
+
+    // Fetch user email via the admin endpoint (service key required).
     const authUserRes = await fetch(
       `${SUPABASE_URL}/auth/v1/admin/users/${user_id}`,
       { headers: authHeaders }
