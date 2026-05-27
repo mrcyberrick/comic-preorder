@@ -206,7 +206,7 @@ purge_stale_catalog          | 3        | true      | null
 | 2026-05-26 | C1.B F34 EF audit | 8 functions read (3 from repo, 3 from edge-functions-phase2/, 2 from staging CLI download) | approve-customer staging ≠ Downloads/prod; claim-paper-customer staging = Downloads/prod. B3 JWT status pending Supabase dashboard check |
 | 2026-05-26 | C6/C7/C8 applied | import-staging.js: three tenant_id=eq.${TENANT_ID} patches applied (lines 671, 515, 532) | Verified via Select-String |
 | 2026-05-26 | C2 SQL | Both reservation_history policies dropped and recreated: admin uses `current_user_is_admin() AND tenant_id = current_tenant_id()`; user uses `auth.uid() = user_id AND tenant_id = current_tenant_id()` | Verified via pg_policies SELECT |
-| 2026-05-26 | C3 SQL | [pending user paste] | |
+| 2026-05-26 | C3 SQL | DROP FUNCTION claim_paper_account(uuid, uuid) — success; 0 rows in pg_proc verify | No policy references confirmed pre-drop |
 | 2026-05-26 | C4 SQL | [pending user paste] | |
 | 2026-05-26 | C5 SQL | [pending user paste] | |
 | 2026-05-26 | C9 SQL | [pending user paste] | |
