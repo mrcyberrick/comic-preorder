@@ -7,12 +7,43 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  try {
-    const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
-    const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
+  // Env vars hoisted to function scope so auth check can use them
+  const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
+  const SUPABASE_ANON      = Deno.env.get('SUPABASE_ANON_KEY')
+  const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
+  const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
 
+  // Caller authentication: this function triggers a customer-wide email blast,
+  // so we verify the caller is an authenticated admin before doing anything.
+  // (JWT verification is disabled at the platform level per Supabase's recommended
+  // pattern of off-plus-in-body-auth; the check below is the actual gate.)
+  const authHeader = req.headers.get('Authorization') || ''
+  if (!authHeader) {
+    return Response.json({ error: 'Missing Authorization header' }, { status: 401, headers: corsHeaders })
+  }
+
+  // Verify the JWT
+  const userRes = await fetch(SUPABASE_URL + '/auth/v1/user', {
+    headers: { Authorization: authHeader, apikey: SUPABASE_ANON }
+  })
+  if (!userRes.ok) {
+    return Response.json({ error: 'Invalid auth' }, { status: 401, headers: corsHeaders })
+  }
+  const userData = await userRes.json()
+
+  // Confirm the caller is an admin and resolve their tenant
+  const profileRes = await fetch(
+    SUPABASE_URL + `/rest/v1/user_profiles?id=eq.${userData.id}&select=is_admin,tenant_id`,
+    { headers: { Authorization: authHeader, apikey: SUPABASE_ANON, Accept: 'application/json' } }
+  )
+  const profileData = await profileRes.json()
+  if (!Array.isArray(profileData) || profileData.length === 0 || !profileData[0].is_admin) {
+    return Response.json({ error: 'Admin required' }, { status: 403, headers: corsHeaders })
+  }
+  const callerTenantId = profileData[0].tenant_id || FOUNDING_TENANT_ID
+
+  try {
     if (!FOUNDING_TENANT_ID) {
       console.warn('notify-customers: FOUNDING_TENANT_ID secret not set — tenant scoping disabled')
     }
@@ -42,7 +73,7 @@ Deno.serve(async (req) => {
     // This is the same value shown in the catalog banner — single source of truth.
     let deadlineLabel: string | null = null
     try {
-      const tenantFilter = FOUNDING_TENANT_ID ? `&tenant_id=eq.${FOUNDING_TENANT_ID}` : ''
+      const tenantFilter = `&tenant_id=eq.${callerTenantId}`
       const settingsRes = await fetch(
         SUPABASE_URL + '/rest/v1/app_settings?key=eq.order_deadline&select=value&limit=1' + tenantFilter,
         { headers: authHeaders }
@@ -60,9 +91,9 @@ Deno.serve(async (req) => {
       // Non-fatal — email sends without a deadline line
     }
 
-    // Fetch all non-admin customers scoped to this tenant.
+    // Fetch all non-admin customers scoped to the caller's tenant.
     // Paper customers (@paper.pulllist.local) are excluded from the recipient list below.
-    const tenantFilter = FOUNDING_TENANT_ID ? `&tenant_id=eq.${FOUNDING_TENANT_ID}` : ''
+    const tenantFilter = `&tenant_id=eq.${callerTenantId}`
     const profilesRes = await fetch(
       SUPABASE_URL + '/rest/v1/user_profiles?is_admin=eq.false&select=id,full_name' + tenantFilter,
       { headers: authHeaders }
