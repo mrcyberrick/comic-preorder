@@ -1627,7 +1627,7 @@ ran.
 
 ## 13. Findings & known issues
 
-The discovery pass that produced this document surfaced 27 findings.
+The discovery pass that produced this document surfaced 27 findings; 8 additional findings (F45–F52) were surfaced during the Phase 4.1 pre-cutover audit pass.
 They are listed below in priority order: HIGH first, then medium, then
 low/trivial/info. Each entry: severity, status, description, where it
 manifests, recommended fix one-liner.
@@ -1752,7 +1752,10 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   intended; align the FKs and the prior documentation.
 
 #### F17 — `reservation_history` admin SELECT policy is unscoped
-- **Status:** open
+- **Status:** fixed 2026-05-26 (Phase 4.1 C2) — both policies dropped and recreated:
+  admin now uses `current_user_is_admin() AND tenant_id = current_tenant_id()`;
+  user now uses `auth.uid() = user_id AND tenant_id = current_tenant_id()`.
+  Also fixed the recursive EXISTS admin pattern (F46 bundled with C2).
 - Both `users view own history` (safe) and `admins view all history`
   (unsafe) lack `tenant_id` filters. Admins in tenant A could SELECT
   reservation_history from tenant B.
@@ -1761,7 +1764,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   policy.
 
 #### F21 — `claim_paper_account()` SQL function lacks defensive checks
-- **Status:** open (note: function is also unused — see F33)
+- **Status:** fixed 2026-05-26 (Phase 4.1 C3) — function dropped (see F33). Dead code removal resolves both F21 and F33.
 - The function does not verify `is_paper = true` before re-pointing
   rows, and would happily merge any two accounts. SECURITY INVOKER label
   is misleading because the function requires `auth.users` DELETE
@@ -1816,13 +1819,13 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   NULL.
 
 #### F19 — `is_admin()` is a dead duplicate of `current_user_is_admin()`
-- **Status:** confirmed
+- **Status:** fixed 2026-05-26 (Phase 4.1 C4) — function dropped; confirmed absent from pg_proc and confirmed no RLS policy referenced it.
 - Same logical result as `current_user_is_admin()`, but lacks `STABLE`
   and lacks `SET search_path`. No RLS policy references it.
 - **Fix:** drop the function.
 
 #### F23 — several DEFINER functions lack `SET search_path` hardening
-- **Status:** open
+- **Status:** fixed 2026-05-26 (Phase 4.1 C5) — `purge_stale_catalog`, `delete_dropped_catalog_items`, and `get_popular_series(text)` all given `SET search_path = public` via ALTER FUNCTION. `is_admin` dropped (F19/C4). All 8 DEFINER functions now have `search_path=public` confirmed via pg_proc.
 - `purge_stale_catalog`, `delete_dropped_catalog_items`,
   `get_popular_series`, and `is_admin` are all SECURITY DEFINER but lack
   `SET search_path = public`. Standard PostgreSQL DEFINER hardening
@@ -1830,7 +1833,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Fix:** add `SET search_path = public` to each function definition.
 
 #### F24 — `archive_stale_reservations` INVOKER but no INSERT policy on `reservation_history`
-- **Status:** open
+- **Status:** fixed 2026-05-26 (Phase 4.1 C12) — promoted to SECURITY DEFINER with `SET search_path = public` via two-step ALTER. Verified: prosecdef=true, proconfig=["search_path=public"]. See also F45.
 - INVOKER security model means the function only succeeds when called
   by a role that has INSERT privilege on `reservation_history`. RLS
   policies on the table only grant SELECT; only service-role bypasses
@@ -1904,7 +1907,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Fix:** `DROP INDEX idx_tenants_slug;`
 
 #### F26 — `admin_preorders` view bypasses RLS but has no caller
-- **Status:** confirmed dormant on two axes
+- **Status:** fixed 2026-05-26 (Phase 4.1 C11) — view dropped and recreated with `security_invoker = true`; same column list, JOINs, and ORDER BY preserved. Grants tightened: `authenticated` SELECT only, `service_role` SELECT only, `anon` no grants. See also F49.
 - `reloptions = null` means `security_invoker = false` default; view
   runs as owner and bypasses RLS on the underlying tables. View body
   has no tenant filter. **No application code currently queries the
@@ -1942,7 +1945,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   inventory in a future session.
 
 #### F33 — `claim_paper_account()` SQL function is unused
-- **Status:** confirmed
+- **Status:** fixed 2026-05-26 (Phase 4.1 C3) — function dropped; confirmed absent from pg_proc. See also F21.
 - The `claim-paper-customer` Edge Function reimplements the merge logic
   in TypeScript via REST. The SQL function has no caller in any code
   path read during this discovery pass.
@@ -2002,6 +2005,58 @@ as a side effect (no more `toISOString()` in date-math contexts).
 
 Smoke pinned in `playwright/tests/04-arrivals-this-week.spec.ts` with
 boundary-day seeds and a badge↔arrivals consistency assertion.
+
+### Phase 4.1 findings (F45–F52)
+
+Surfaced during the pre-cutover audit pass (2026-05-26). See `docs/phase-4.1-audit-findings.md` for full triage notes and raw SQL output.
+
+#### F45 — `archive_stale_reservations` deployed as SECURITY INVOKER
+- **Status:** fixed 2026-05-26 (Phase 4.1 C12) — promoted to SECURITY DEFINER + `SET search_path = public`. See F24.
+- Inconsistent with sibling tenant-aware DEFINER functions. Likely Phase 1.3 / Phase 3.3 inline-patch oversight.
+- **Where:** `archive_stale_reservations(uuid, date, text)` in pg_proc.
+- **Fix:** two-step `ALTER FUNCTION ... SECURITY DEFINER; ALTER FUNCTION ... SET search_path = public`.
+
+#### F46 — `preorders` admin policy uses recursive EXISTS subquery
+- **Status:** fixed 2026-05-26 (Phase 4.1 C9) — EXISTS replaced with `current_user_is_admin()`.
+- `admins manage tenant preorders` used `EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = true)` — the documented anti-pattern from CLAUDE.md known issues (RLS recursion risk). The 2026-05-10 F16 hot-fix added `tenant_id` scoping but did not convert the EXISTS pattern.
+- **Where:** RLS policy `admins manage tenant preorders` on `preorders`.
+- **Fix:** replace EXISTS clause with `current_user_is_admin()`.
+
+#### F47 — `notify-customers` Edge Function has no caller authentication check
+- **Status:** open — C10 blocked pending B3 JWT confirmation from Supabase dashboard.
+- Any HTTP request to the function endpoint can trigger a bulk email blast to all founding-tenant customers. Severity: MEDIUM if platform JWT verification is enabled (any authenticated user can trigger); HIGH if disabled.
+- **Where:** `notify-customers/index.ts` — no `Authorization` header check, no admin verification.
+- **Fix:** add caller auth + admin check (same pattern as `invite-customer` / `create-paper-customer`). Confirm JWT enabled on Supabase dashboard first.
+
+#### F48 — `reservation_history` and `user_profiles` user SELECT policies lack tenant scope
+- **Status:** fixed 2026-05-26 — `reservation_history` fixed in C2 (both policies); `user_profiles` fixed in C9 (user SELECT policy).
+- `users view own history` and `users view own profile` filtered by `auth.uid()` only. Defense-in-depth gap: low practical risk under single-tenant (auth UUIDs globally unique), but inconsistent with multi-tenant hygiene.
+- **Where:** RLS policies on `reservation_history` and `user_profiles`.
+- **Fix:** add `AND tenant_id = current_tenant_id()` to both user-facing SELECT policies.
+
+#### F49 — `admin_preorders` VIEW present on staging contrary to pre-multitenancy-state.md § 4
+- **Status:** fixed 2026-05-26 (Phase 4.1 C11) — view rebuilt with `security_invoker = true`; grants tightened. See F26.
+- Pre-multitenancy-state.md § 4 claimed staging lacked this view. View existed with default `security_invoker = false` and full grants to `anon` / `authenticated`. No tenant WHERE clause in view body.
+- **Where:** `admin_preorders` VIEW; `pre-multitenancy-state.md` § 4 doc discrepancy.
+- **Fix:** recreate with `security_invoker = true`; grant SELECT to `authenticated` and `service_role` only. Doc discrepancy flagged for review during 4.2 pre-flight.
+
+#### F50 — `claim-paper-customer` PATCH operations not scoped by tenant
+- **Status:** open — C10 blocked pending B3 JWT confirmation.
+- PATCH to `preorders` and `subscriptions` filters by `user_id=eq.${paper_user_id}` only. Service-role key bypasses RLS. A canary-tenant admin could (in a two-tenant context) merge a founding-tenant paper account into a real account.
+- **Where:** `claim-paper-customer/index.ts` lines ~119–155 (two PATCH URLs).
+- **Fix:** add `&tenant_id=eq.${callerTenantId}` to both PATCH URLs; resolve `callerTenantId` from caller's profile (same pattern as `create-paper-customer`).
+
+#### F51 — `send-my-list` catalog month query uses hardcoded `FOUNDING_TENANT_ID`
+- **Status:** open — C10 blocked.
+- Catalog month and preorders queries both hard-pin to founding tenant. A canary-tenant user requesting their pull list email would receive the founding-tenant catalog month in the subject line and founding-tenant preorders in the body.
+- **Where:** `send-my-list/index.ts` — `FOUNDING_TENANT_ID` used for catalog and preorder queries.
+- **Fix:** resolve `callerTenantId` from caller's profile; use for both queries.
+
+#### F52 — 5 of 8 Edge Functions not committed to the repo
+- **Status:** deferred to sub-deploy 4.6.
+- `approve-customer`, `claim-paper-customer`, `notify-customers`, `reset-password`, and `send-my-list` exist only in Supabase staging deployment (downloadable via CLI). The 4.6 plan requires a tagged-commit redeploy of all 8 EFs before cutover — not currently executable for these 5.
+- **Where:** repo `supabase/functions/` — only 3 of 8 functions present.
+- **Fix:** commit all 8 EF sources to repo as a prerequisite task in sub-deploy 4.6. Note: `approve-customer` staging source differs from the stale `Downloads/prod` copy — use staging CLI download as canonical.
 
 ---
 
