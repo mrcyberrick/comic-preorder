@@ -208,7 +208,7 @@ purge_stale_catalog          | 3        | true      | null
 | 2026-05-26 | C2 SQL | Both reservation_history policies dropped and recreated: admin uses `current_user_is_admin() AND tenant_id = current_tenant_id()`; user uses `auth.uid() = user_id AND tenant_id = current_tenant_id()` | Verified via pg_policies SELECT |
 | 2026-05-26 | C3 SQL | DROP FUNCTION claim_paper_account(uuid, uuid) — success; 0 rows in pg_proc verify | No policy references confirmed pre-drop |
 | 2026-05-26 | C4 SQL | DROP FUNCTION is_admin() — success; 0 rows in pg_proc verify | No policy references confirmed pre-drop |
-| 2026-05-26 | C5 SQL | [pending user paste] | |
+| 2026-05-26 | C5 SQL | search_path=public set on delete_dropped_catalog_items, get_popular_series(text), purge_stale_catalog — all 3 verified via pg_proc proconfig | get_popular_series signature corrected to (text) from earlier D2 re-investigation |
 | 2026-05-26 | C9 SQL | [pending user paste] | |
 | 2026-05-26 | C11 SQL | [pending user paste] | |
 | 2026-05-26 | C12 SQL | [pending user paste] | |
