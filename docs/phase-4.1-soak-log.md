@@ -42,12 +42,28 @@
 
 ---
 
-## Day 2 — pending
+## Day 2 — 2026-05-28
 
-Observation checklist for Day 2 (2026-05-28):
-- Re-run V7.1 and V7.2 SQL probes to confirm no state drift
-- Verify canary tenant rows still intact in user_profiles
-- Verify founding-tenant smoke tests still pass (catalog reserve, admin bagging list)
+### Observations
+
+- V7.1/V7.2 abbreviated SQL probes: both 0 (no state drift)
+- Canary row integrity: founding=40, canary=3 (unchanged)
+- Browser smoke (catalog.html reserve flow, admin.html customer list, paper customer create/delete): all clean after disabling conflicting browser extension (CSP error was extension `f712d548`, not app code)
+- Playwright full suite (13 specs): all pass
+- Import script regression tests (node --test, 5 tests): all pass
+
+```
+✔ buildLunarShipmentRows: every row carries tenant_id
+✔ buildLunarShipmentRows: split shipment lines collapse and sum quantity
+✔ buildPrhShipmentRows: every row carries tenant_id
+✔ buildPrhShipmentRows: rows without item_code or on_sale_date are filtered
+✔ buildLunarShipmentRows: catalog_id is wired in when catalogMap has a match
+pass 5 / fail 0
+```
+
+### Notes
+
+No findings. No regressions. Soak day 2 clean.
 
 ## Day 3 — pending
 
