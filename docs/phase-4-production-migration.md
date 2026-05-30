@@ -139,13 +139,13 @@ A failing gate is Tier 1 rollback per § Rollback Decision Tree. Maintenance mod
 - Fresh backup snapshot of production database immediately before 4.2 (in addition to existing `pre-multitenancy-v1` backup from 2026-04-29)
 - **Generate production founding tenant UUID** as Friday-evening pre-flight before any SQL runs. Write to a scratch file in the local scripts folder (gitignored, like `config.js`); every subsequent sub-deploy in the window reads from there. The scratch file's existence and contents are a hard pre-flight gate for 4.2 SQL execution (4.2 pre-flight)
 - Apply Phase 1.1 additive schema to production: `tenants` table, founding tenant row using the UUID from the scratch file, nullable `tenant_id` columns on every existing prod table, backfill (4.2)
-- **Create `app_settings` and `usage_events` tables on production** — Phase 1 deviation; they were added on staging during Phase 1 but production has never had them. Production has 7 tables in the pre-multitenancy snapshot; staging has 9 post-Phase-1 (4.2)
+- **`app_settings` and `usage_events` already exist on production** — confirmed by live audit 2026-05-28; the "create these tables" item does not apply. 4.2 adds `tenant_id` to all 9 existing tables (incl. `app_settings`, `usage_events`). See `production-baseline-2026-05-28.md` PB1. (4.2)
 - Apply Phase 1.2 constraints: `NOT NULL` promotion on every `tenant_id` column, tenant-aware unique constraints on `subscriptions` and `catalog`, `tenants` slug format check (4.3)
 - Update the existing production `admin_preorders` view with the post-Phase-1 tenant-aware definition (4.3)
 - Apply RLS recursion fix: replace any `EXISTS (SELECT 1 FROM user_profiles ...)` admin policies with `current_user_is_admin()` `SECURITY DEFINER` calls (4.3)
 - Apply Phase 1.3 RLS + functions: tenant-aware policies on every tenant-scoped table; `current_tenant_id()` and `current_user_is_admin()` helpers; updated function signatures for `purge_stale_catalog`, `delete_dropped_catalog_items`, `archive_stale_reservations` with `p_tenant_id uuid` first parameter (4.4)
 - Apply Phase 3.3 column-default removal — must be paired with app code that passes `tenant_id` explicitly. The app code is deployed via the staging→prod merge bundled with 4.6 (4.4)
-- Apply Phase 3.4 analytics view rebuilds (filter by `current_tenant_id()`): `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` (4.4)
+- Apply Phase 3.4 analytics view retrofits (filter by `current_tenant_id()`): `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` — **all 5 views already exist on production** (confirmed 2026-05-28); 4.4 retrofits them with tenant filtering rather than creating them. See `production-baseline-2026-05-28.md` PB2. (4.4)
 - Apply Phase 3.5 `purge_old_usage_events(p_tenant_id, p_retention_days)` function (4.4)
 - Apply Phase 3.6 `auto_fulfill_past_on_sale(p_tenant_id)` function with `SECURITY DEFINER`, `search_path = public`, `EXECUTE` granted to `service_role` only (4.4)
 - Apply 3.8-era hot-fix RLS / function changes: F4, F15, F16, F20, F34 fixes from 2026-05-10 (4.4)
@@ -215,7 +215,7 @@ These items were noted in Phase 3 docs as carrying into Phase 4:
 6. **F17 admin SELECT scoping** (`technical-reference.md` § 13) — Addressed by sub-deploy 4.1
 7. **`auto_fulfill_past_on_sale` production call site** (`phase-3.6-admin-wednesday-tooling.md` § Carry-forward) — Addressed by sub-deploys 4.4 (function deploy) and 4.5 (script call site)
 8. **Notify-customers `foc_date >= today` filter** (staging-only as of 2026-05-24; provenance unknown) — Addressed by sub-deploy 4.5 with explicit `git log -p` history-recovery step before merge decision
-9. **Production has 7 tables, staging has 9** — `app_settings` and `usage_events` exist on staging from Phase 1 deviations; production never received them. Addressed by sub-deploy 4.2
+9. ~~**Production has 7 tables, staging has 9**~~ — **Corrected (2026-05-28):** production has 9 base tables; `app_settings` and `usage_events` predate the 2026-04-29 snapshot. Documentation-accuracy failure, not undocumented drift. See `production-baseline-2026-05-28.md` PB6. The real gap is `tenants` + `tenant_id` columns — addressed by sub-deploy 4.2.
 
 ---
 
