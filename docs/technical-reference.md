@@ -2075,7 +2075,7 @@ Surfaced during the pre-cutover audit pass (2026-05-26). See `docs/phase-4.1-aud
 Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 
 #### F55 — production has 5 `analytics_*` views with no staging counterpart
-- **Status:** open — blocks analytics view tenant-retrofit (parent plan line 148); carved out of 4.4. Re-scope before 4.6 gate.
+- **Status:** open — blocks analytics view tenant-retrofit (parent plan line 148); carved out of 4.4. Disposition 2026-05-31: deferred to post-cutover housekeeping pass with F56/F57; not in 4.6 scope. Requires analytics.html/app.js audit to choose drop-vs-retrofit.
 - Prod has `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` as plain untenanted views. Staging has none of them — only `admin_preorders`. The parent plan's "retrofit to match staging" target is undefined.
 - **Where:** production database `public` schema; parent plan line 148.
 - **Fix:** audit `analytics.html` / `app.js` to understand how staging serves analytics data; decide drop-vs-retrofit; add staging counterparts if warranted; then apply tenant filter to prod views. Resolution required before the Phase-level structural-diff completion criterion (parent plan line 190) can pass.

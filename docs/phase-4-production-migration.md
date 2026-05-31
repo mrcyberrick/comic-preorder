@@ -145,7 +145,7 @@ A failing gate is Tier 1 rollback per § Rollback Decision Tree. Maintenance mod
 - Apply RLS recursion fix: replace any `EXISTS (SELECT 1 FROM user_profiles ...)` admin policies with `current_user_is_admin()` `SECURITY DEFINER` calls (4.3)
 - Apply Phase 1.3 RLS + functions: tenant-aware policies on every tenant-scoped table; `current_tenant_id()` and `current_user_is_admin()` helpers; updated function signatures for `purge_stale_catalog`, `delete_dropped_catalog_items`, `archive_stale_reservations` with `p_tenant_id uuid` first parameter (4.4)
 - Apply Phase 3.3 column-default removal — must be paired with app code that passes `tenant_id` explicitly. The app code is deployed via the staging→prod merge bundled with 4.6 (4.4)
-- Apply Phase 3.4 analytics view retrofits (filter by `current_tenant_id()`): `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` — **all 5 views already exist on production** (confirmed 2026-05-28); 4.4 retrofits them with tenant filtering rather than creating them. See `production-baseline-2026-05-28.md` PB2. (4.4) **CARVED OUT 2026-05-31 (F55): no staging counterpart exists; retrofit target undefined. Re-scope in parent plan before 4.6 gate.**
+- Apply Phase 3.4 analytics view retrofits (filter by `current_tenant_id()`): `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` — **all 5 views already exist on production** (confirmed 2026-05-28); 4.4 retrofits them with tenant filtering rather than creating them. See `production-baseline-2026-05-28.md` PB2. (4.4) **CARVED OUT 2026-05-31 (F55): no staging counterpart exists; retrofit target undefined. Re-scoped 2026-05-31: deferred to post-cutover housekeeping (F55 disposition in 4.6 plan).**
 - Apply Phase 3.5 `purge_old_usage_events(p_tenant_id, p_retention_days)` function (4.4)
 - Apply Phase 3.6 `auto_fulfill_past_on_sale(p_tenant_id)` function with `SECURITY DEFINER`, `search_path = public`, `EXECUTE` granted to `service_role` only (4.4)
 - Apply 3.8-era hot-fix RLS / function changes: F4, F15, F16, F20, F34 fixes from 2026-05-10 (4.4) **Status 2026-05-31: F15 + F16 subsumed by RLS rewrite; F20 applied via `get_popular_series` replace. F34 → 4.6 (Edge Function redeploy). F4 → 4.6 app-code deploy + post-cutover data drop.**
@@ -186,8 +186,8 @@ If something seems related but isn't on the IN scope list above, **stop and ask*
 Phase 4 is complete when **all** of the following are true:
 
 - [ ] All sub-deploys 4.0–4.7 in the Sub-Deploys table above marked Complete
-- [ ] Production schema mirrors post-Phase-3 staging schema (verifiable by structural diff: `pg_dump --schema-only` on each, normalize, compare)
-- [ ] Production RLS policies match staging RLS policies for every tenant-scoped table (verifiable by `pg_policies` query diff)
+- [ ] Production schema mirrors post-Phase-3 staging schema (verifiable by structural diff: `pg_dump --schema-only` on each, normalize, compare) — **known tracked difference:** 5 prod-extra `analytics_*` views pending F55 (post-cutover housekeeping); criterion satisfied-with-annotation like F58 `user_profiles` exception
+- [ ] Production RLS policies match staging RLS policies for every tenant-scoped table (verifiable by `pg_policies` query diff) — **known intentional difference:** `admins manage tenant profiles` (ALL) on `user_profiles` retained on prod (Decision B / F58); staging audit pending
 - [ ] All production Edge Functions match staging Edge Functions at the cutover tag (verifiable by source diff against tagged commit)
 - [ ] Production `import.js` has all Phase 2 + 3.x staging patches **and** preserves all production-side backfill features (verifiable by Sub-Deploy 4.5 verification queries)
 - [ ] Full Playwright suite runs green against production
