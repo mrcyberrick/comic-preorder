@@ -192,6 +192,13 @@ New observations are prefixed `PB` (production-baseline) to avoid collision with
 - Dropped on staging in 4.1 (C3 / F33) as redundant. Still exists on prod. Cleanup is already a
   deferred/out-of-scope item; recorded for completeness. Not 4.2.
 
+#### PB7 — Production founding slug is `rjbookstop` (diverges from staging `raysandjudys`) (CONFIRMED 2026-05-31)
+- The prod `tenants` row was inserted in 4.2 with `slug = rjbookstop` (deliberate; confirmed at 4.3
+  PF2). Staging uses `raysandjudys`. Both satisfy the `tenants_slug_format_check` added in 4.3 S5.
+- **Phase 5 implication:** `TENANT_SLUG_MAP` in `app.js` and any `?t=<slug>` routing must use
+  `rjbookstop` for the prod tenant, not `raysandjudys`. Non-blocking for 4.3–4.6 (single-tenant;
+  slug routing only matters when a second tenant exists).
+
 #### PB6 — Documentation under-counted production; not undocumented drift (RESOLVED 2026-05-28)
 - Production carrying `app_settings`, `usage_events`, the analytics views, and a populated RLS
   policy set contradicts the "prod never received the Phase-1 deviation" narrative across every
