@@ -2070,6 +2070,34 @@ Surfaced during the pre-cutover audit pass (2026-05-26). See `docs/phase-4.1-aud
 - **Where:** `send-my-list/index.ts`.
 - **Fix:** added `SUPABASE_ANON_KEY` env var; call `/auth/v1/user` with caller's JWT; assert `callerUser.id === user_id` before proceeding.
 
+### Phase 4.4 findings (F55–F58)
+
+Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
+
+#### F55 — production has 5 `analytics_*` views with no staging counterpart
+- **Status:** open — blocks analytics view tenant-retrofit (parent plan line 148); carved out of 4.4. Re-scope before 4.6 gate.
+- Prod has `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` as plain untenanted views. Staging has none of them — only `admin_preorders`. The parent plan's "retrofit to match staging" target is undefined.
+- **Where:** production database `public` schema; parent plan line 148.
+- **Fix:** audit `analytics.html` / `app.js` to understand how staging serves analytics data; decide drop-vs-retrofit; add staging counterparts if warranted; then apply tenant filter to prod views. Resolution required before the Phase-level structural-diff completion criterion (parent plan line 190) can pass.
+
+#### F56 — `claim_paper_account(uuid, uuid)` still present on production
+- **Status:** open — dead code; dropped on staging 2026-05-26 (Phase 4.1 C3, F33). Post-cutover cleanup pass.
+- The `claim-paper-customer` Edge Function reimplements the merge logic in TypeScript. SQL function has no caller.
+- **Where:** production `public.claim_paper_account(uuid, uuid)` in pg_proc.
+- **Fix:** `DROP FUNCTION public.claim_paper_account(uuid, uuid);` in a post-cutover cleanup sub-deploy (will be caught by Phase-level structural-diff completion criterion).
+
+#### F57 — `generate_invite_link(text, text)` present on production, absent on staging
+- **Status:** open — provenance unknown; no staging counterpart. Post-cutover cleanup pass.
+- `SECURITY DEFINER` function; no caller found in any current code path. May predate staging multi-tenancy work.
+- **Where:** production `public.generate_invite_link(text, text)` in pg_proc.
+- **Fix:** audit callers; if none, `DROP FUNCTION public.generate_invite_link(text, text);` in the same post-cutover cleanup pass as F56.
+
+#### F58 — staging RLS lacks an authenticated-key admin-write policy on `user_profiles`
+- **Status:** open — intentional prod divergence retained; staging needs audit.
+- `Users.suspend` (`app.js` UPDATE status) and `Users.deleteProfile` (`admin.html:1608` DELETE) are admin mutations via the **authenticated** client, not service-role. The staging `user_profiles` policy capture (2026-05-31) has only SELECT policies for admins — no admin ALL/UPDATE/DELETE. Either staging routes these through an unseen service-role Edge Function, or staging's admin suspend/delete is latently broken. Production intentionally keeps `admins manage tenant profiles` (ALL, authenticated). The Phase-level `pg_policies` parity check will flag this as a known intentional difference until staging is fixed.
+- **Where:** staging RLS on `user_profiles`; `app.js` `Users.suspend` and `Users.deleteProfile`; `admin.html` line 1608.
+- **Fix:** audit staging admin Users tab (suspend + delete flows) to determine actual code path; if authenticated-key, add the missing admin-write policy to staging; if service-role EF, document as the architectural intent and remove `admins manage tenant profiles` from prod to match.
+
 ---
 
 *End of document.*
