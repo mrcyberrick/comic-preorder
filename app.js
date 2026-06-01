@@ -9,6 +9,121 @@
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ============================================================================
+// TenantContext — resolves the active tenant for the current page load.
+//
+// Resolution order (highest priority first):
+//   1. Authenticated user's user_profiles.tenant_id
+//   2. ?t=<slug> query parameter (persisted to sessionStorage for the tab)
+//   3. Founding tenant fallback (raysandjudys)
+//
+// Phase 3.1: read-only — does not affect writes. Phase 3.2 will make
+// app.js writes pass tenant_id explicitly using TenantContext.current().
+//
+// The slug→id mapping for unauthenticated lookup is hardcoded here
+// because the tenants table is not readable by anon. Replaced with
+// an RPC in a later sub-deploy once a second tenant exists.
+// ============================================================================
+
+const FOUNDING_TENANT = {
+  id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790',
+  slug: 'raysandjudys',
+  display_name: "Ray & Judy's Book Stop",
+};
+
+const TENANT_SLUG_MAP = {
+  // slug → { id, slug, display_name }
+  raysandjudys: FOUNDING_TENANT,
+};
+
+const TenantContext = {
+  _current: null,
+  _source: null,
+
+  async resolve() {
+    if (this._current) return this._current;
+
+    // 1. Check for an authenticated session and try the profile route first
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (session?.user?.id) {
+        const { data: profile } = await db
+          .from('user_profiles')
+          .select('tenant_id')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile?.tenant_id) {
+          const { data: tenant } = await db
+            .from('tenants')
+            .select('id, slug, display_name')
+            .eq('id', profile.tenant_id)
+            .single();
+
+          if (tenant) {
+            this._current = tenant;
+            this._source = 'profile';
+            return this._current;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('TenantContext: profile lookup failed, falling back', err);
+    }
+
+    // 2. Check ?t= query parameter (and persist to sessionStorage)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get('t');
+      if (fromQuery) {
+        const tenant = TENANT_SLUG_MAP[fromQuery];
+        if (tenant) {
+          sessionStorage.setItem('pulllist.tenant_slug', fromQuery);
+          this._current = tenant;
+          this._source = 'query';
+          return this._current;
+        }
+        // Unknown slug — log and fall through
+        console.warn('TenantContext: unknown tenant slug in ?t=', fromQuery);
+      }
+
+      // 3. Check sessionStorage (carries query-resolved tenant across nav)
+      const fromStorage = sessionStorage.getItem('pulllist.tenant_slug');
+      if (fromStorage && TENANT_SLUG_MAP[fromStorage]) {
+        this._current = TENANT_SLUG_MAP[fromStorage];
+        this._source = 'session';
+        return this._current;
+      }
+    } catch (err) {
+      console.warn('TenantContext: query/session lookup failed', err);
+    }
+
+    // 4. Default fallback — founding tenant
+    this._current = FOUNDING_TENANT;
+    this._source = 'default';
+    return this._current;
+  },
+
+  current() {
+    if (!this._current) {
+      throw new Error('TenantContext.current() called before resolve()');
+    }
+    return this._current;
+  },
+
+  source() {
+    return this._source;
+  },
+
+  _reset() {
+    this._current = null;
+    this._source = null;
+  },
+};
+
+// Expose on window for debugging and for HTML pages to await
+window.TenantContext = TenantContext;
+
 // ── Auth Helpers ─────────────────────────────────────────────
 const Auth = {
   async getSession() {
@@ -70,6 +185,9 @@ const Auth = {
 async function initNav() {
   const nav = document.getElementById('main-nav');
   if (!nav) return;
+
+  // Must resolve before any TenantContext.current() calls on this page
+  await TenantContext.resolve();
 
   const user = await Auth.getUser();
   if (!user) {
@@ -134,33 +252,63 @@ async function initNav() {
 // Shows a red badge on the This Week nav link when the active user
 // has reserved items with an on_sale_date in the next 7 days.
 // Reflects the managed customer when admin context is active.
+// ── Date Helpers ──────────────────────────────────────────
+// Canonical local-date helpers. Avoid `toISOString()` for date math —
+// in negative-UTC timezones it shifts the calendar date past ~8 PM
+// local (the F28 footgun documented in technical-reference.md § 13).
+//
+// "This Week" is canonically the Mon-Sun calendar week containing
+// today's local date. This is the single rule used by NavBubble,
+// arrivals.html, and admin.html. Wednesday is no longer special.
+const DateUtils = {
+  /** Format a Date as YYYY-MM-DD in local time. */
+  fmtLocal(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+
+  /** Today's local date as YYYY-MM-DD. */
+  todayLocal() {
+    return this.fmtLocal(new Date());
+  },
+
+  /**
+   * Returns the Mon-Sun calendar week containing the reference date
+   * (default: today) as { start, end } YYYY-MM-DD strings.
+   *
+   * Example: refDate = Wed 2026-05-13
+   *          → { start: '2026-05-11', end: '2026-05-17' }
+   */
+  weekRange(refDate) {
+    const d = refDate ? new Date(refDate) : new Date();
+    const day = d.getDay();              // 0=Sun, 1=Mon, ..., 6=Sat
+    const daysSinceMon = (day + 6) % 7;  // Mon=0, Tue=1, ..., Sun=6
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - daysSinceMon);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { start: this.fmtLocal(monday), end: this.fmtLocal(sunday) };
+  },
+};
+
 const NavBubble = {
-async load(userId) {
-       try {
-         // "This Wednesday" using local date parts — matches arrivals.html exactly.
-         // Never use toISOString() here; UTC drift after 8pm EDT shifts the date forward.
-         const today = new Date();
-         const diff  = (3 - today.getDay() + 7) % 7;
-         const wed   = new Date(today);
-         wed.setDate(today.getDate() + diff);
-         const y = wed.getFullYear();
-         const m = String(wed.getMonth() + 1).padStart(2, '0');
-         const d = String(wed.getDate()).padStart(2, '0');
-         const thisWednesday = `${y}-${m}-${d}`;
+  async load(userId) {
+    try {
+      const { start, end } = DateUtils.weekRange();
 
-         const { data, error } = await db
-           .from('preorders')
-           .select('id, catalog!inner(on_sale_date)')
-           .eq('user_id', userId)
-           .eq('catalog.on_sale_date', thisWednesday);
+      const { data, error } = await db
+        .from('preorders')
+        .select('id, catalog!inner(on_sale_date)')
+        .eq('user_id', userId)
+        .gte('catalog.on_sale_date', start)
+        .lte('catalog.on_sale_date', end);
 
-         if (error || !data) return;
+      if (error || !data) return;
 
-         this.render(data.length);
-       } catch (e) {
-         // Bubble is non-critical — fail silently
-       }
-     },
+      this.render(data.length);
+    } catch (e) {
+      // Bubble is non-critical — fail silently
+    }
+  },
 
   render(count) {
     document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
@@ -369,7 +517,12 @@ const Settings = {
   async set(key, value) {
     const { error } = await db
       .from('app_settings')
-      .upsert({ key, value, updated_at: new Date().toISOString() });
+      .upsert({
+        key,
+        value,
+        updated_at: new Date().toISOString(),
+        tenant_id: TenantContext.current().id,
+      });
     return { error };
   },
 
@@ -404,10 +557,23 @@ const UsageEvents = {
     if (!userId) return;
     // Do not log events triggered while admin is impersonating a customer
     if (AdminContext.isActive()) return;
+
+    // Resolve tenant_id defensively — UsageEvents may be called before
+    // TenantContext.resolve() completes (it's fire-and-forget from anywhere).
+    // Fall back to FOUNDING_TENANT.id if TenantContext isn't ready.
+    // (Phase 3.3 removed the tenant_id column default — this fallback
+    //  is now the only safety net.)
+    let tenantId;
+    try {
+      tenantId = TenantContext.current().id;
+    } catch {
+      tenantId = FOUNDING_TENANT.id;
+    }
+
     db.from('usage_events')
-      .insert({ user_id: userId, event_type: eventType, metadata })
-      .then(() => {})   // suppress unhandled-promise warnings
-      .catch(() => {});  // fail silently — never surface to UI
+      .insert({ user_id: userId, event_type: eventType, metadata, tenant_id: tenantId })
+      .then(() => {})
+      .catch(() => {});
   },
 
   // Public helpers — call these from page scripts
@@ -530,7 +696,12 @@ const Preorders = {
   async reserve(userId, catalogId, quantity = 1) {
     const { data, error } = await db
       .from('preorders')
-      .insert({ user_id: userId, catalog_id: catalogId, quantity })
+      .insert({
+        user_id: userId,
+        catalog_id: catalogId,
+        quantity,
+        tenant_id: TenantContext.current().id,
+      })
       .select()
       .single();
     return { data, error };
@@ -546,11 +717,29 @@ const Preorders = {
   },
 
   async cancel(userId, catalogId) {
+    // Guard: refuse to cancel a fulfilled row. This protects the audit
+    // trail (fulfilled_at timestamp) and prevents customers from wiping
+    // out a row the store has already counted as in-hand. The post-on-sale
+    // auto-fulfill (Phase 3.6) means many rows will be fulfilled even
+    // though no admin ever clicked anything.
+    const { data: existing, error: lookupErr } = await db
+      .from('preorders')
+      .select('id, fulfilled')
+      .eq('user_id', userId)
+      .eq('catalog_id', catalogId)
+      .maybeSingle();
+    if (lookupErr) return { error: lookupErr };
+    if (!existing) return { error: { message: 'Reservation not found' } };
+    if (existing.fulfilled) {
+      return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+    }
+
     const { error } = await db
       .from('preorders')
       .delete()
       .eq('user_id', userId)
-      .eq('catalog_id', catalogId);
+      .eq('catalog_id', catalogId)
+      .eq('fulfilled', false); // defensive race guard
     return { error };
   },
 
@@ -633,7 +822,13 @@ const Subscriptions = {
   async subscribe(userId, seriesName, distributor, format = null) {
     const { data, error } = await db
       .from('subscriptions')
-      .insert({ user_id: userId, series_name: seriesName, distributor, format })
+      .insert({
+        user_id: userId,
+        series_name: seriesName,
+        distributor,
+        format,
+        tenant_id: TenantContext.current().id,
+      })
       .select()
       .single();
     if (!error) UsageEvents.subscribe(userId, seriesName, distributor);
