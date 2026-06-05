@@ -2100,9 +2100,9 @@ Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 - **Where:** staging RLS on `user_profiles`; `app.js` `Users.suspend` and `Users.deleteProfile`; `admin.html` line 1608.
 - **Fix:** audit staging admin Users tab (suspend + delete flows) to determine actual code path; if authenticated-key, add the missing admin-write policy to staging; if service-role EF, document as the architectural intent and remove `admins manage tenant profiles` from prod to match.
 
-### Phase 4.7 findings (F59)
+### Phase 4.7 findings (F59–F61)
 
-Surfaced during the 4.7 soak (2026-06-01).
+Surfaced during the 4.7 soak (2026-06-01 / 2026-06-02).
 
 #### F59 — Customer reservation cohort lost during Phase-4 cutover window (recovered)
 - **Status:** closed — data recovered 2026-06-01; prevention added to deployment workflow.
@@ -2111,6 +2111,22 @@ Surfaced during the 4.7 soak (2026-06-01).
 - **Recovery (2026-06-01):** source = 2026-05-30 DBeaver per-table export (`backups/pulllist/dump-postgres-202605302059.backup`). Parsed `preorders` COPY data; filtered 330 in-window rows (2026-04-29 → 2026-05-28); re-resolved each stale `catalog_id` to current prod catalog via ItemCode (all 330 RESOLVED, 0 unresolved); re-stamped `tenant_id` to founding UUID; preserved original `created_at`. Brian Moss spot-check oracle (23 Jul/Aug rows) confirmed. App-side: Brian's My List shows 23 items; 44 upcoming arrivals correct.
 - **Prevention:** post-merge app-file diff assertion + post-deploy write-smoke added to `CLAUDE.md` § Standard Deployment Workflow and `docs/phase-4.6-edge-functions-cutover.md` §4.
 - **Where:** production `preorders` table; PR #49 merge; `app.js` TenantContext regression.
+
+#### F60 — `notify-customers` rejects service-role callers from import script (resolved)
+- **Status:** closed — fixed and redeployed 2026-06-02.
+- **Severity:** medium — June catalog notification not sent on first post-recovery Tuesday import; admin workaround available (send from admin UI).
+- **Root cause:** `notify-customers` authenticates callers by calling `/auth/v1/user` with the provided Bearer token. `import.js` uses `Authorization: Bearer <service_role_key>` for all Supabase calls (required for RLS bypass on catalog/shipment writes). A service-role JWT is not a user session token, so `/auth/v1/user` returns 401 and the function returned `{"error":"Invalid auth"}`. This was always broken for the import→EF notification path but was never exercised (4.6 first import answered `n` to notifications).
+- **Fix:** Added a JWT role-claim bypass in `notify-customers/index.ts`: decode the Bearer token's payload and check `payload.role === 'service_role'`. If true, skip the user auth check and resolve `callerTenantId = FOUNDING_TENANT_ID`. The user-JWT path (admin UI calls) is unchanged. Safe because platform JWT verification is ON for this function — only Supabase-signed tokens reach the body.
+- **Also fixed:** platform JWT verification for `notify-customers` was ON (inconsistent with project pattern); left ON because it makes the role-claim check safe.
+- **Where:** `supabase/functions/notify-customers/index.ts` lines 26–44; `C:\Users\richa\supabase\functions\notify-customers\index.ts` (CLI deploy source).
+- **Commits:** `2488c8c` (key-comparison attempt), `2e924d8` (JWT role-claim approach, the effective fix).
+
+#### F61 — Brave/iOS suppresses `window.confirm()` on mylist.html Remove button (deferred → 4.8)
+- **Status:** open — deferred to 4.8 post-cutover housekeeping.
+- **Severity:** low — Brave/iOS users cannot cancel reservations via My List; other browsers unaffected; no data integrity impact.
+- **Root cause:** Brave on iOS suppresses native `window.confirm()` dialogs in some contexts (treated as unwanted popups). The cancel-guard in `mylist.html` uses `if (!confirm("Remove this reservation?")) return;` — this silently returns `false` on Brave/iOS, blocking all removals.
+- **Fix:** Replace `window.confirm()` with a custom in-page modal (matches the existing cancel-guard pattern used in the admin bagging tab). Scope: `mylist.html` only.
+- **Where:** `mylist.html` — the Remove button click handler.
 
 ---
 
