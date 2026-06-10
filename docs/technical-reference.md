@@ -2135,9 +2135,9 @@ Surfaced during the 4.7 soak (2026-06-01 / 2026-06-02).
 - **Fix:** Replaced `window.confirm()` with a promise-based in-page modal (reuses existing `.modal-overlay`/`.modal` CSS; `confirmDialog()` helper added page-local). The unsubscribe guard at `mylist.html:1081` was deferred; file F65 as a follow-up.
 - **Where:** `mylist.html` — Remove button click handler (line 947 post-fix).
 
-### Phase 4.8 findings (F63–F64)
+### Phase 4.8 findings (F63–F65)
 
-Surfaced during the 4.8 H4 structural diff (2026-06-10).
+Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
 
 #### F63 — Staging RLS policies missing `TO authenticated` role qualifier
 - **Status:** open — filed 4.8 H4 (2026-06-10). Needs assessment before Phase-4-level `pg_policies` parity criterion can be ticked.
@@ -2160,6 +2160,13 @@ Surfaced during the 4.8 H4 structural diff (2026-06-10).
 - **Note on F19:** `is_admin()` function is also prod-only (pre-existing F19 finding); included for completeness but tracked under F19.
 - **Where:** pg_dump `--schema-only` output for both environments, 2026-06-10.
 - **Fix:** assess each item individually; most are additive prod constraints staging lacks (safe to add). Item 5 FK target requires careful analysis — cascade behaviour differs between environments for user deletes.
+
+#### F65 — `subscriptions.html` unsubscribe guard uses `window.confirm()` (Brave/iOS suppression)
+- **Status:** open — filed 4.8 H5 candidate (2026-06-10). Same defect class as F61; deferred out of 4.8 scope per Rick.
+- **Severity:** low — Brave/iOS users cannot unsubscribe via the Subscriptions page; other browsers unaffected; no data integrity impact.
+- **Root cause:** `subscriptions.html:419` uses `if (!confirm(\`Unsubscribe from "${btn.dataset.series}"?\`)) return;` — Brave/iOS suppresses native confirm dialogs, silently blocking the unsubscribe action.
+- **Fix:** replace with in-page modal (same `confirmDialog()` pattern applied in F61 fix on `mylist.html`). Scope: `subscriptions.html` only; no `app.js` change needed.
+- **Where:** `subscriptions.html:419` — Unsubscribe button click handler.
 
 ---
 

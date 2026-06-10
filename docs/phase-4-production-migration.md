@@ -1,6 +1,6 @@
 # Phase 4 — Production Migration
 
-**Status:** In progress — 4.0–4.7 complete (4.7 soak closed 2026-06-10); active sub-deploy 4.8 (post-cutover housekeeping, planning)
+**Status:** In progress — 4.0–4.8 complete (4.8 housekeeping closed 2026-06-10); active: Phase 4 completion audit
 **Branch base:** `staging` (4.0, 4.1) → `feat/phase-4-prod-cutover` off `main` in the production repo (4.2–4.7)
 **Started:** 2026-05-24 (planning)
 **Estimated total duration:** 4–6 weekend sessions for 4.0/4.1 staging prep; one coordinated weekend window for 4.2–4.6 cutover; one calendar week of post-cutover soak (4.7)
@@ -48,7 +48,7 @@ Phase 4 is broken into **eight sub-deploys**. The first two (4.0, 4.1) ship on s
 | 4.5 | Prod `import.js` — bidirectional merge with staging                      | `phase-4.5-prod-import-merge.md`                      | Complete | 2026-05-31 |
 | 4.6 | Edge Functions redeploy + first prod import dry-run + smoke + maintenance off | `phase-4.6-edge-functions-cutover.md`            | Complete | 2026-05-31 |
 | 4.7 | One-week post-cutover soak observation                                   | `phase-4.7-post-cutover-soak.md`                      | Complete | 2026-06-10 |
-| 4.8 | Post-cutover housekeeping — F55/F56/F57 structural-diff clear + F61 modal | `phase-4.8-post-cutover-housekeeping.md`              | Planning | —         |
+| 4.8 | Post-cutover housekeeping — F55/F56/F57 structural-diff clear + F61 modal | `phase-4.8-post-cutover-housekeeping.md`              | Complete | 2026-06-10 |
 
 ### Status values
 
@@ -286,4 +286,4 @@ Hot-patch via the same Discovered During Soak pattern Phase 3 used. Document inl
 
 ---
 
-**Last updated:** 2026-06-10 (4.7 soak closed; 4.8 post-cutover housekeeping row added at Planning; stale header Status line reconciled)
+**Last updated:** 2026-06-10 (4.8 housekeeping closed; row 4.8 → Complete; pointer advanced to Phase 4 completion audit)

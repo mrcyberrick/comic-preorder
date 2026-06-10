@@ -1,6 +1,6 @@
 # Phase 4.8 — Post-Cutover Housekeeping
 
-**Status:** Planning — plan written 2026-06-10 (same session as 4.7 closeout). **Not executed.**
+**Status:** Complete — executed 2026-06-10.
 **Parent plan:** `docs/phase-4-production-migration.md` (sub-deploy row 4.8)
 **Predecessor:** `docs/phase-4.7-post-cutover-soak.md` — closed 2026-06-10 (soak clean; canary torn down). Scope source: `docs/phase-4.6-edge-functions-cutover.md` **Appendix A** (H1–H4) + **F61** deferral from the 4.7 soak (H5).
 **Branches:** H1–H4 are prod-database + doc changes (doc commits → `staging` directly). H5 is an app-code change: feature branch off `staging` → `--ff-only` merge → staging smoke → prod promotion PR per `CLAUDE.md` § Standard Deployment Workflow (F59 diff assertion + post-deploy write-smoke).
@@ -224,16 +224,16 @@ Execution order: **H1 → H2 → H3 in one prod SQL Editor sitting → H4 diff �
 
 ## 5. Completion criteria (all must be checked before parent row 4.8 → Complete)
 
-- [ ] H1: 5 `analytics_*` views dropped on prod; live `pg_views` SELECT returns zero rows; prod `analytics.html` renders post-drop
-- [ ] H2: `claim_paper_account` dropped; live `pg_proc` SELECT returns zero rows
-- [ ] H3: `generate_invite_link` dropped; live `pg_proc` SELECT returns zero rows; invite flow verified working post-drop
-- [ ] H4: structural diff + `pg_policies` diff re-run; only documented residual is F58; F55 annotations removed from parent criterion and 4.6 § 6
-- [ ] H5: `mylist.html` cancel-guard(s) use the in-page modal; no native `confirm(` left on the page; Playwright suite green; deployed to staging; prod promotion completed (or explicitly scheduled by Rick with a date) with write-smoke passed
-- [ ] F55, F56, F57, F61 marked resolved in `technical-reference.md` § 13 (F61 only after prod deploy)
-- [ ] Any new finding surfaced during 4.8 filed from the next free ID (F63+) and resolved or deferred-with-owner
-- [ ] Parent Sub-Deploys table row 4.8 → **Complete** + date; this file's Status line updated
-- [ ] `CLAUDE.md` § Current Migration Phase pointer advanced (next: **Phase-4-level completion audit** session — dump anchor, `pre-multitenancy-state.md` notes, Phase 5 stub, parent criteria tick)
-- [ ] All doc changes committed to `staging` (doc-only commits; no stray files)
+- [x] H1: 5 `analytics_*` views dropped on prod; live `pg_views` SELECT returns zero rows; prod `analytics.html` renders post-drop — ✓ 2026-06-10 (zero rows verified; analytics.html confirmed rendering)
+- [x] H2: `claim_paper_account` dropped; live `pg_proc` SELECT returns zero rows — ✓ 2026-06-10 (zero rows verified)
+- [x] H3: `generate_invite_link` dropped; live `pg_proc` SELECT returns zero rows; invite flow verified working post-drop — ✓ 2026-06-10 (zero rows verified; invite flow confirmed working)
+- [x] H4: structural diff + `pg_policies` diff re-run; only documented residual is F58; F55 annotations removed from parent criterion and 4.6 § 6 — ✓ 2026-06-10 (F58 confirmed; F55 annotations removed; F63/F64 filed for Phase 4 completion audit session)
+- [x] H5: `mylist.html` cancel-guard(s) use the in-page modal; no native `confirm(` left on the page; Playwright suite green; deployed to staging; prod promotion completed (or explicitly scheduled by Rick with a date) with write-smoke passed — ✓ 2026-06-10 (staging commit `3c212ff`; prod `92bf7dc`; Playwright 15/15; Brave Mobile verified; prod write-smoke passed; `mylist.html:1081` unsubscribe deferred → F65)
+- [x] F55, F56, F57, F61 marked resolved in `technical-reference.md` § 13 (F61 only after prod deploy) — ✓ 2026-06-10 (all four resolved)
+- [x] Any new finding surfaced during 4.8 filed from the next free ID (F63+) and resolved or deferred-with-owner — ✓ 2026-06-10 (F63, F64 filed H4; F65 filed H5 candidate; all deferred to Phase 4 completion audit with owner noted)
+- [x] Parent Sub-Deploys table row 4.8 → **Complete** + date; this file's Status line updated — ✓ 2026-06-10
+- [x] `CLAUDE.md` § Current Migration Phase pointer advanced (next: **Phase-4-level completion audit** session — dump anchor, `pre-multitenancy-state.md` notes, Phase 5 stub, parent criteria tick) — ✓ 2026-06-10
+- [x] All doc changes committed to `staging` (doc-only commits; no stray files) — ✓ 2026-06-10
 
 ### Closeout sequence (run once, when every box above is ticked)
 1. Tick the boxes above with inline result notes (mirror the 4.7 § 6.2 pattern).
@@ -285,4 +285,4 @@ Execution order: **H1 → H2 → H3 in one prod SQL Editor sitting → H4 diff �
 
 ---
 
-**Last updated:** 2026-06-10 (upgraded to self-contained CLI execution runbook: execution-model guard, multi-sitting resume rules, per-step commit messages, closeout sequence; not executed).
+**Last updated:** 2026-06-10 (closed — all H1–H5 steps executed; F63/F64/F65 filed; pointer advanced to Phase 4 completion audit).
