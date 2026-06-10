@@ -2128,16 +2128,16 @@ Surfaced during the 4.7 soak (2026-06-01 / 2026-06-02).
 - **Fix:** `send-my-list/index.ts` — on identity mismatch, fetch caller's `user_profiles.is_admin`; allow if `true`, otherwise retain 403. Own-list path (mylist.html) is unchanged.
 - **Where:** `supabase/functions/send-my-list/index.ts` lines 48–68.
 
-#### F61 — Brave/iOS suppresses `window.confirm()` on mylist.html Remove button (deferred → 4.8)
-- **Status:** open — deferred to 4.8 post-cutover housekeeping.
+#### F61 — Brave/iOS suppresses `window.confirm()` on mylist.html Remove button (resolved)
+- **Status:** resolved — in-page modal deployed to prod 2026-06-10 (Phase 4.8 H5). Staging commit `3c212ff`; prod promotion `92bf7dc`. Verified on Brave Mobile; prod write-smoke passed. `mylist.html:1081` (unsubscribe guard, same defect class) deferred per Rick — tracked as F65.
 - **Severity:** low — Brave/iOS users cannot cancel reservations via My List; other browsers unaffected; no data integrity impact.
-- **Root cause:** Brave on iOS suppresses native `window.confirm()` dialogs in some contexts (treated as unwanted popups). The cancel-guard in `mylist.html` uses `if (!confirm("Remove this reservation?")) return;` — this silently returns `false` on Brave/iOS, blocking all removals.
-- **Fix:** Replace `window.confirm()` with a custom in-page modal (matches the existing cancel-guard pattern used in the admin bagging tab). Scope: `mylist.html` only.
-- **Where:** `mylist.html` — the Remove button click handler.
+- **Root cause:** Brave on iOS suppresses native `window.confirm()` dialogs in some contexts (treated as unwanted popups). The cancel-guard in `mylist.html` used `if (!confirm("Remove this reservation?")) return;` — this silently returns `false` on Brave/iOS, blocking all removals.
+- **Fix:** Replaced `window.confirm()` with a promise-based in-page modal (reuses existing `.modal-overlay`/`.modal` CSS; `confirmDialog()` helper added page-local). The unsubscribe guard at `mylist.html:1081` was deferred; file F65 as a follow-up.
+- **Where:** `mylist.html` — Remove button click handler (line 947 post-fix).
 
-### Phase 4.8 findings (F63–F64)
+### Phase 4.8 findings (F63–F65)
 
-Surfaced during the 4.8 H4 structural diff (2026-06-10).
+Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
 
 #### F63 — Staging RLS policies missing `TO authenticated` role qualifier
 - **Status:** open — filed 4.8 H4 (2026-06-10). Needs assessment before Phase-4-level `pg_policies` parity criterion can be ticked.
@@ -2160,6 +2160,13 @@ Surfaced during the 4.8 H4 structural diff (2026-06-10).
 - **Note on F19:** `is_admin()` function is also prod-only (pre-existing F19 finding); included for completeness but tracked under F19.
 - **Where:** pg_dump `--schema-only` output for both environments, 2026-06-10.
 - **Fix:** assess each item individually; most are additive prod constraints staging lacks (safe to add). Item 5 FK target requires careful analysis — cascade behaviour differs between environments for user deletes.
+
+#### F65 — `subscriptions.html` unsubscribe guard uses `window.confirm()` (Brave/iOS suppression)
+- **Status:** open — filed 4.8 H5 candidate (2026-06-10). Same defect class as F61; deferred out of 4.8 scope per Rick.
+- **Severity:** low — Brave/iOS users cannot unsubscribe via the Subscriptions page; other browsers unaffected; no data integrity impact.
+- **Root cause:** `subscriptions.html:419` uses `if (!confirm(\`Unsubscribe from "${btn.dataset.series}"?\`)) return;` — Brave/iOS suppresses native confirm dialogs, silently blocking the unsubscribe action.
+- **Fix:** replace with in-page modal (same `confirmDialog()` pattern applied in F61 fix on `mylist.html`). Scope: `subscriptions.html` only; no `app.js` change needed.
+- **Where:** `subscriptions.html:419` — Unsubscribe button click handler.
 
 ---
 
