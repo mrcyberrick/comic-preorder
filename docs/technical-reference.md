@@ -2077,10 +2077,10 @@ Surfaced during the pre-cutover audit pass (2026-05-26). See `docs/phase-4.1-aud
 Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 
 #### F55 — production has 5 `analytics_*` views with no staging counterpart
-- **Status:** open — blocks analytics view tenant-retrofit (parent plan line 148); carved out of 4.4. Disposition 2026-05-31: deferred to post-cutover housekeeping pass with F56/F57; not in 4.6 scope. Requires analytics.html/app.js audit to choose drop-vs-retrofit.
-- Prod has `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` as plain untenanted views. Staging has none of them — only `admin_preorders`. The parent plan's "retrofit to match staging" target is undefined.
+- **Status:** resolved — dropped on production 2026-06-10 (Phase 4.8 H1, drop branch). `analytics.html` queries `usage_events` directly via PostgREST; no view reference anywhere in the codebase. Views were dead code predating the client-side analytics implementation.
+- Prod had `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` as plain untenanted views. All 5 dropped; `pg_views` verify returned zero rows; `analytics.html` renders post-drop.
 - **Where:** production database `public` schema; parent plan line 148.
-- **Fix:** audit `analytics.html` / `app.js` to understand how staging serves analytics data; decide drop-vs-retrofit; add staging counterparts if warranted; then apply tenant filter to prod views. Resolution required before the Phase-level structural-diff completion criterion (parent plan line 190) can pass.
+- **Fix:** dropped (drop branch confirmed by 4.8 § 1.1 audit). Structural-diff criterion (parent plan line 190) no longer blocked by this finding.
 
 #### F56 — `claim_paper_account(uuid, uuid)` still present on production
 - **Status:** open — dead code; dropped on staging 2026-05-26 (Phase 4.1 C3, F33). Post-cutover cleanup pass.
