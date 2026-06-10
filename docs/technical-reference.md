@@ -2083,10 +2083,10 @@ Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 - **Fix:** dropped (drop branch confirmed by 4.8 § 1.1 audit). Structural-diff criterion (parent plan line 190) no longer blocked by this finding.
 
 #### F56 — `claim_paper_account(uuid, uuid)` still present on production
-- **Status:** open — dead code; dropped on staging 2026-05-26 (Phase 4.1 C3, F33). Post-cutover cleanup pass.
-- The `claim-paper-customer` Edge Function reimplements the merge logic in TypeScript. SQL function has no caller.
+- **Status:** resolved — dropped on production 2026-06-10 (Phase 4.8 H2). `pg_proc` verify returned zero rows.
+- The `claim-paper-customer` Edge Function reimplements the merge logic in TypeScript. SQL function had no caller; only reference was a comment at `app.js:945`.
 - **Where:** production `public.claim_paper_account(uuid, uuid)` in pg_proc.
-- **Fix:** `DROP FUNCTION public.claim_paper_account(uuid, uuid);` in a post-cutover cleanup sub-deploy (will be caught by Phase-level structural-diff completion criterion).
+- **Fix:** `DROP FUNCTION public.claim_paper_account(uuid, uuid);` executed 4.8 H2.
 
 #### F57 — `generate_invite_link(text, text)` present on production, absent on staging
 - **Status:** open — provenance unknown; no staging counterpart. Post-cutover cleanup pass.
