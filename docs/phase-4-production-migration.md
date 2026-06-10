@@ -46,8 +46,8 @@ Phase 4 is broken into **seven sub-deploys**. The first two (4.0, 4.1) ship on s
 | 4.3 | Prod schema — constraints + view recreation + RLS recursion fix          | `phase-4.3-prod-schema-constraints.md`                | Complete | 2026-05-31 |
 | 4.4 | Prod schema — RLS + functions + analytics views + default removal        | `phase-4.4-prod-schema-rls.md`                        | Complete | 2026-05-31 |
 | 4.5 | Prod `import.js` — bidirectional merge with staging                      | `phase-4.5-prod-import-merge.md`                      | Complete | 2026-05-31 |
-| 4.6 | Edge Functions redeploy + first prod import dry-run + smoke + maintenance off | `phase-4.6-edge-functions-cutover.md`            | Planning | —         |
-| 4.7 | One-week post-cutover soak observation                                   | `phase-4.7-post-cutover-soak.md`                      | Pending  | —         |
+| 4.6 | Edge Functions redeploy + first prod import dry-run + smoke + maintenance off | `phase-4.6-edge-functions-cutover.md`            | Complete | 2026-05-31 |
+| 4.7 | One-week post-cutover soak observation                                   | `phase-4.7-post-cutover-soak.md`                      | Planning | —         |
 
 ### Status values
 
@@ -145,7 +145,7 @@ A failing gate is Tier 1 rollback per § Rollback Decision Tree. Maintenance mod
 - Apply RLS recursion fix: replace any `EXISTS (SELECT 1 FROM user_profiles ...)` admin policies with `current_user_is_admin()` `SECURITY DEFINER` calls (4.3)
 - Apply Phase 1.3 RLS + functions: tenant-aware policies on every tenant-scoped table; `current_tenant_id()` and `current_user_is_admin()` helpers; updated function signatures for `purge_stale_catalog`, `delete_dropped_catalog_items`, `archive_stale_reservations` with `p_tenant_id uuid` first parameter (4.4)
 - Apply Phase 3.3 column-default removal — must be paired with app code that passes `tenant_id` explicitly. The app code is deployed via the staging→prod merge bundled with 4.6 (4.4)
-- Apply Phase 3.4 analytics view retrofits (filter by `current_tenant_id()`): `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` — **all 5 views already exist on production** (confirmed 2026-05-28); 4.4 retrofits them with tenant filtering rather than creating them. See `production-baseline-2026-05-28.md` PB2. (4.4) **CARVED OUT 2026-05-31 (F55): no staging counterpart exists; retrofit target undefined. Re-scope in parent plan before 4.6 gate.**
+- Apply Phase 3.4 analytics view retrofits (filter by `current_tenant_id()`): `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` — **all 5 views already exist on production** (confirmed 2026-05-28); 4.4 retrofits them with tenant filtering rather than creating them. See `production-baseline-2026-05-28.md` PB2. (4.4) **CARVED OUT 2026-05-31 (F55): no staging counterpart exists; retrofit target undefined. Re-scoped 2026-05-31: deferred to post-cutover housekeeping (F55 disposition in 4.6 plan).**
 - Apply Phase 3.5 `purge_old_usage_events(p_tenant_id, p_retention_days)` function (4.4)
 - Apply Phase 3.6 `auto_fulfill_past_on_sale(p_tenant_id)` function with `SECURITY DEFINER`, `search_path = public`, `EXECUTE` granted to `service_role` only (4.4)
 - Apply 3.8-era hot-fix RLS / function changes: F4, F15, F16, F20, F34 fixes from 2026-05-10 (4.4) **Status 2026-05-31: F15 + F16 subsumed by RLS rewrite; F20 applied via `get_popular_series` replace. F34 → 4.6 (Edge Function redeploy). F4 → 4.6 app-code deploy + post-cutover data drop.**
@@ -186,8 +186,8 @@ If something seems related but isn't on the IN scope list above, **stop and ask*
 Phase 4 is complete when **all** of the following are true:
 
 - [ ] All sub-deploys 4.0–4.7 in the Sub-Deploys table above marked Complete
-- [ ] Production schema mirrors post-Phase-3 staging schema (verifiable by structural diff: `pg_dump --schema-only` on each, normalize, compare)
-- [ ] Production RLS policies match staging RLS policies for every tenant-scoped table (verifiable by `pg_policies` query diff)
+- [ ] Production schema mirrors post-Phase-3 staging schema (verifiable by structural diff: `pg_dump --schema-only` on each, normalize, compare) — **known tracked difference:** 5 prod-extra `analytics_*` views pending F55 (post-cutover housekeeping); criterion satisfied-with-annotation like F58 `user_profiles` exception
+- [ ] Production RLS policies match staging RLS policies for every tenant-scoped table (verifiable by `pg_policies` query diff) — **known intentional difference:** `admins manage tenant profiles` (ALL) on `user_profiles` retained on prod (Decision B / F58); staging audit pending
 - [ ] All production Edge Functions match staging Edge Functions at the cutover tag (verifiable by source diff against tagged commit)
 - [ ] Production `import.js` has all Phase 2 + 3.x staging patches **and** preserves all production-side backfill features (verifiable by Sub-Deploy 4.5 verification queries)
 - [ ] Full Playwright suite runs green against production
@@ -222,6 +222,13 @@ These items were noted in Phase 3 docs as carrying into Phase 4:
 ## Discovered During Soak
 
 (Populated as sub-deploys ship and issues surface. Same template as `phase-3-tenant-resolution.md` § Discovered During Soak.)
+
+| # | Discovered | Sub-deploy | Description | Resolution |
+|---|---|---|---|---|
+| 1 | 2026-05-31 | 4.6 (soak) | 250 April + 8 March preorders had `fulfilled=false` at cutover; bulk-UPDATE attempted, immediately rolled back (all 258 were future-dated). Correct final state: 258 future items remain `fulfilled=false`; 65 past-on-sale items already `fulfilled=true`. | Resolved inline; see 4.6 deploy log § 14. |
+| 2 | 2026-06-01 | 4.7 (soak) | **F59 — cutover-window reservation data loss.** PR #49 three-way merge kept regressed `app.js`; 330 reservations across 9 customers (2026-04-29 → 2026-05-28) failed to persist. Hotfix `554aec1` corrected app.js; data recovered from 5/30 DBeaver dump via ItemCode re-resolution. | Recovered 2026-06-01 (330 rows restored; Brian Moss spot-check ✓). F59 filed in `technical-reference.md` § 13. Prevention committed in `7c5e4cb`. |
+| 3 | 2026-06-02 | 4.7 (soak) | **F60 — `notify-customers` rejects service-role callers from import script.** First post-recovery Tuesday import answered `y` to notifications; `{"error":"Invalid auth"}` returned. Root cause: function calls `/auth/v1/user` to verify caller; service-role key is not a user session JWT. Path was never exercised (4.6 first import answered `n`). | Fixed 2026-06-02: JWT role-claim bypass added to `notify-customers/index.ts` (decode `payload.role === 'service_role'`). Redeployed to prod. Verified: 8/0 notifications sent on re-run. F60 filed in `technical-reference.md` § 13. |
+| 4 | 2026-06-02 | 4.7 (soak) | **F61 — Brave/iOS suppresses `window.confirm()` on mylist.html Remove button.** Customers on Brave/iOS cannot cancel reservations — the native confirm dialog is silently blocked, so the guard returns false and the removal never proceeds. | Deferred to 4.8 post-cutover housekeeping. Fix: replace `window.confirm()` with a custom in-page modal on `mylist.html`. F61 filed in `technical-reference.md` § 13. |
 
 ---
 

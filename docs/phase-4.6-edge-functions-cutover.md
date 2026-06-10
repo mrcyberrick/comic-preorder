@@ -20,7 +20,7 @@
 - `docs/phase-4-production-migration.md` — §§ *Sub-Deploys*, *Cutover window sequencing*, *Dry-Run Validation Gate*, *In Scope 4.6*, *Rollback Decision Tree*.
 - `docs/phase-4.4-prod-schema-rls.md` — F55 carve-out; F34/F4 routed-to-4.6 notes; Decision B (`user_profiles` admin-write retained on prod).
 - `docs/phase-4.5-prod-import-merge.md` — patch inventory P1–P16; the post-P11 builder extraction; V1–V6 results.
-- `docs/technical-reference.md` § 13 — findings index. **Highest filed = F58. F59 is free** (P16 was propagated, not skipped). Do not assign new IDs in 4.6 unless a genuine new defect surfaces.
+- `docs/technical-reference.md` § 13 — findings index. **Highest filed = F59** (filed + closed 2026-06-01; F59 = cutover-window reservation data loss, recovered). Do not assign new IDs in 4.6 unless a genuine new defect surfaces.
 - `CLAUDE.md` — § *Current Migration Phase*, § *Edge Functions* (8 names + `FOUNDING_TENANT_ID` secret), deployment workflow.
 
 ### 0.2 Files Claude must NOT touch
@@ -277,6 +277,14 @@ git merge staging --no-commit --no-ff
 git checkout main -- config.js          # preserve prod credentials (config.js tracked per-branch)
 # Verify config.js is NOT in the staged diff:
 git diff --cached --name-only | grep -x 'config.js' && echo "ABORT: config.js staged" || echo "ok: config.js preserved"
+# Assert critical app files actually changed (catches merge-base regression — see F59):
+for f in app.js mylist.html arrivals.html admin.html; do
+  if ! git diff --quiet "main:$f" "staging:$f"; then
+    echo "ok: $f differs from main (will update)"
+  else
+    echo "WARN: $f identical to main — verify this is expected, NOT a merge-base regression"
+  fi
+done
 git commit -m "feat: promote Phase 2–3.8 tenant-aware app code to production (Phase 4.6)"
 git checkout -b feat/phase-4.6-appcode-prod
 ```
@@ -450,9 +458,31 @@ docs: close Phase 4.6 (EF cutover, first prod import, maintenance off); advance 
 - Parent: `docs/phase-4-production-migration.md` — In-Scope 4.6 (lines 155–160), Dry-Run gate (106–118), sequencing (56–76), rollback (228–259), completion (184–202).
 - `docs/phase-4.4-prod-schema-rls.md` — F55 carve-out; Decision B; F34/F4 routed-to-4.6.
 - `docs/phase-4.5-prod-import-merge.md` — P1–P16; post-P11 builders; the `--no-write` design question this plan settles (§ 3).
-- `docs/technical-reference.md` § 13 — F4, F34, F55–F58; highest filed F58; F59 free.
+- `docs/technical-reference.md` § 13 — F4, F34, F55–F59; highest filed F59 (closed 2026-06-01).
 - `CLAUDE.md` — § Edge Functions (8 names, `FOUNDING_TENANT_ID`), deployment workflow (staging→main, `git checkout main -- config.js`), anti-drift stop-and-ask.
 - Prod project ref `plgegklqtdjxeglvyjte`; prod founding UUID in `scripts/phase-4-prod-tenant-uuid.txt` (gitignored).
+
+---
+
+## 14. Deploy log (recorded 2026-05-31)
+
+| Item | Value |
+|---|---|
+| Staging SHA (pinned) | `cab5dca53868eb90719f8576c4b40b67c0cc7c34` |
+| EF deploys | All 8 deployed 2026-05-31 from staging SHA `cab5dca` |
+| App-code PR | #49 `feat/phase-4.6-appcode-prod → main` |
+| Migration-artifact PR | `feat/phase-4-prod-cutover → main` |
+| Import exit code | 0 |
+| Catalog upserted | 2306 / 2306 with_tid |
+| Preorders with_tid | 325 / 325 |
+| Shipment with_tid | 486 / 486 |
+| Auto-reserve inserts | 2 (3 subscriptions; 1 no standard cover match in May catalog) |
+| Auto-fulfill (import) | 0 (all existing preorders already in fulfilled state) |
+| Usage events purged | 0 |
+| Recovery tags | `phase-4-cutover-v1` (prod), `phase-4-cutover-v1-staging` |
+| Discovered (not finding) | `app_settings` on prod uses `value TEXT` column, not boolean `maintenance_mode` column — 4.6 runbook SQL corrected inline; `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` env vars were set in Rick's shell from staging `.env`; cleared before real import |
+| Post-cutover hotfix | `fix/appjs-tenantcontext-prod → main` (commit `554aec1`) — PR #49 merge left `main:app.js` at the pre-Phase-3 version (43 KB) instead of the staging version (49 KB with TenantContext). Root cause: merge base `cab5dca` already contained staging's `app.js`; three-way merge saw no delta and kept main's regressed copy. Hotfix: `git checkout staging -- app.js` onto a fresh branch, merged immediately. Login page confirmed working post-deploy. |
+| Post-cutover discovery (soak) | 250 April preorders had `fulfilled = false` at cutover time — store had not marked April items as picked up in the app. They became invisible (My List = current month only; admin dashboard = current month only) when May import ran. Resolved 2026-05-31: bulk-UPDATE `fulfilled = true` on all April preorders via prod SQL Editor. Root cause: pre-Phase-4 workflow did not use the app's fulfill toggle consistently. **CORRECTED 2026-05-31:** Initial bulk-update (all 258 = 250 Apr + 8 Mar unfulfilled) was wrong — ALL 258 had `on_sale_date >= CURRENT_DATE` (future items not yet arrived). Rolled back immediately via `fulfilled_at >= NOW() - 2h AND on_sale_date >= CURRENT_DATE` filter. Correct final state: `fulfilled = false` for 258 future-dated items (will arrive throughout May/June); `fulfilled = true` for 65 past-on-sale items already fulfilled by store. **Lesson:** bulk-fulfill must filter by `on_sale_date < CURRENT_DATE` — only mark arrived items. |
 
 ---
 

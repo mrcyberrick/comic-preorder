@@ -1655,6 +1655,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   deleted after staging smoke test confirmed the panel still renders.
   `settings` table is now empty. Table itself not yet dropped —
   separate dead-code cleanup pass.
+  **Prod resolution 2026-05-31 (Phase 4.6):** app-code merge (§ 4) routes reads to `app_settings`; `settings` rows `popular_series` and `maintenance_mode` deleted (§ 8 data drop); `settings` table on production is now empty. F4 fully resolved on both environments.
 - The legacy `settings` table holds `popular_series` (read by
   subscriptions.html) and `maintenance_mode` (orphan duplicate of the
   `app_settings.maintenance_mode` row). The modern `app_settings` table
@@ -1727,6 +1728,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Fix:** resolve the inviting admin's tenant_id from their own profile
   (look up `user_profiles.tenant_id WHERE id = caller's auth.uid()`)
   and use that value instead of FOUNDING_TENANT_ID.
+- **Prod resolution 2026-05-31 (Phase 4.6):** `FOUNDING_TENANT_ID` secret set on prod project (§ 1); all 8 EFs redeployed from staging SHA `cab5dca` (§ 2). F34 fully resolved on production.
 
 ### Medium
 
@@ -2075,7 +2077,7 @@ Surfaced during the pre-cutover audit pass (2026-05-26). See `docs/phase-4.1-aud
 Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 
 #### F55 — production has 5 `analytics_*` views with no staging counterpart
-- **Status:** open — blocks analytics view tenant-retrofit (parent plan line 148); carved out of 4.4. Re-scope before 4.6 gate.
+- **Status:** open — blocks analytics view tenant-retrofit (parent plan line 148); carved out of 4.4. Disposition 2026-05-31: deferred to post-cutover housekeeping pass with F56/F57; not in 4.6 scope. Requires analytics.html/app.js audit to choose drop-vs-retrofit.
 - Prod has `analytics_daily_events`, `analytics_top_cancelled`, `analytics_top_reserved`, `analytics_top_subscribed`, `analytics_user_activity` as plain untenanted views. Staging has none of them — only `admin_preorders`. The parent plan's "retrofit to match staging" target is undefined.
 - **Where:** production database `public` schema; parent plan line 148.
 - **Fix:** audit `analytics.html` / `app.js` to understand how staging serves analytics data; decide drop-vs-retrofit; add staging counterparts if warranted; then apply tenant filter to prod views. Resolution required before the Phase-level structural-diff completion criterion (parent plan line 190) can pass.
@@ -2097,6 +2099,41 @@ Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 - `Users.suspend` (`app.js` UPDATE status) and `Users.deleteProfile` (`admin.html:1608` DELETE) are admin mutations via the **authenticated** client, not service-role. The staging `user_profiles` policy capture (2026-05-31) has only SELECT policies for admins — no admin ALL/UPDATE/DELETE. Either staging routes these through an unseen service-role Edge Function, or staging's admin suspend/delete is latently broken. Production intentionally keeps `admins manage tenant profiles` (ALL, authenticated). The Phase-level `pg_policies` parity check will flag this as a known intentional difference until staging is fixed.
 - **Where:** staging RLS on `user_profiles`; `app.js` `Users.suspend` and `Users.deleteProfile`; `admin.html` line 1608.
 - **Fix:** audit staging admin Users tab (suspend + delete flows) to determine actual code path; if authenticated-key, add the missing admin-write policy to staging; if service-role EF, document as the architectural intent and remove `admins manage tenant profiles` from prod to match.
+
+### Phase 4.7 findings (F59–F62)
+
+Surfaced during the 4.7 soak (2026-06-01 / 2026-06-02).
+
+#### F59 — Customer reservation cohort lost during Phase-4 cutover window (recovered)
+- **Status:** closed — data recovered 2026-06-01; prevention added to deployment workflow.
+- **Severity:** high — store-wide data loss (330 reservations across 9 customers).
+- Customer reservations created ~2026-04-29 → 2026-05-28 failed to persist to production `preorders`. Root cause: PR #49 (`staging → main` three-way merge) kept `main:app.js` at the pre-Phase-3 regressed version (43 KB) instead of the staging version (49 KB with `TenantContext`). Merge base `cab5dca` already contained staging's `app.js`; the three-way merge saw no delta on that side and silently kept the regressed copy. The deployed app did not write tenant-aware reservations (no `tenant_id`), so all INSERTs failed silently at the NOT-NULL constraint without a visible error to customers. Hotfix `554aec1` corrected `app.js` 2026-05-30; gap-period data was not carried forward.
+- **Recovery (2026-06-01):** source = 2026-05-30 DBeaver per-table export (`backups/pulllist/dump-postgres-202605302059.backup`). Parsed `preorders` COPY data; filtered 330 in-window rows (2026-04-29 → 2026-05-28); re-resolved each stale `catalog_id` to current prod catalog via ItemCode (all 330 RESOLVED, 0 unresolved); re-stamped `tenant_id` to founding UUID; preserved original `created_at`. Brian Moss spot-check oracle (23 Jul/Aug rows) confirmed. App-side: Brian's My List shows 23 items; 44 upcoming arrivals correct.
+- **Prevention:** post-merge app-file diff assertion + post-deploy write-smoke added to `CLAUDE.md` § Standard Deployment Workflow and `docs/phase-4.6-edge-functions-cutover.md` §4.
+- **Where:** production `preorders` table; PR #49 merge; `app.js` TenantContext regression.
+
+#### F60 — `notify-customers` rejects service-role callers from import script (resolved)
+- **Status:** closed — fixed and redeployed 2026-06-02.
+- **Severity:** medium — June catalog notification not sent on first post-recovery Tuesday import; admin workaround available (send from admin UI).
+- **Root cause:** `notify-customers` authenticates callers by calling `/auth/v1/user` with the provided Bearer token. `import.js` uses `Authorization: Bearer <service_role_key>` for all Supabase calls (required for RLS bypass on catalog/shipment writes). A service-role JWT is not a user session token, so `/auth/v1/user` returns 401 and the function returned `{"error":"Invalid auth"}`. This was always broken for the import→EF notification path but was never exercised (4.6 first import answered `n` to notifications).
+- **Fix:** Added a JWT role-claim bypass in `notify-customers/index.ts`: decode the Bearer token's payload and check `payload.role === 'service_role'`. If true, skip the user auth check and resolve `callerTenantId = FOUNDING_TENANT_ID`. The user-JWT path (admin UI calls) is unchanged. Safe because platform JWT verification is ON for this function — only Supabase-signed tokens reach the body.
+- **Also fixed:** platform JWT verification for `notify-customers` was ON (inconsistent with project pattern); left ON because it makes the role-claim check safe.
+- **Where:** `supabase/functions/notify-customers/index.ts` lines 26–44; `C:\Users\richa\supabase\functions\notify-customers\index.ts` (CLI deploy source).
+- **Commits:** `2488c8c` (key-comparison attempt), `2e924d8` (JWT role-claim approach, the effective fix).
+
+#### F62 — `send-my-list` F54 identity check blocks admin "books are in" email (resolved)
+- **Status:** fixed 2026-06-10 (Phase 4.7 soak, separate commit).
+- **Severity:** medium — admin "This Week" bagging tab send-email button returned 403 for all customers; admin workaround was none.
+- **Root cause:** F54 fix added `callerUser.id !== user_id → 403`. When an admin sends the email from `admin.html`, the bearer token is the admin's session but `user_id` is the target customer's id — the check always trips.
+- **Fix:** `send-my-list/index.ts` — on identity mismatch, fetch caller's `user_profiles.is_admin`; allow if `true`, otherwise retain 403. Own-list path (mylist.html) is unchanged.
+- **Where:** `supabase/functions/send-my-list/index.ts` lines 48–68.
+
+#### F61 — Brave/iOS suppresses `window.confirm()` on mylist.html Remove button (deferred → 4.8)
+- **Status:** open — deferred to 4.8 post-cutover housekeeping.
+- **Severity:** low — Brave/iOS users cannot cancel reservations via My List; other browsers unaffected; no data integrity impact.
+- **Root cause:** Brave on iOS suppresses native `window.confirm()` dialogs in some contexts (treated as unwanted popups). The cancel-guard in `mylist.html` uses `if (!confirm("Remove this reservation?")) return;` — this silently returns `false` on Brave/iOS, blocking all removals.
+- **Fix:** Replace `window.confirm()` with a custom in-page modal (matches the existing cancel-guard pattern used in the admin bagging tab). Scope: `mylist.html` only.
+- **Where:** `mylist.html` — the Remove button click handler.
 
 ---
 
