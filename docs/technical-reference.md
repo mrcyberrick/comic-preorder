@@ -2089,10 +2089,10 @@ Surfaced during the 4.4 cutover sub-deploy (2026-05-31).
 - **Fix:** `DROP FUNCTION public.claim_paper_account(uuid, uuid);` executed 4.8 H2.
 
 #### F57 — `generate_invite_link(text, text)` present on production, absent on staging
-- **Status:** open — provenance unknown; no staging counterpart. Post-cutover cleanup pass.
-- `SECURITY DEFINER` function; no caller found in any current code path. May predate staging multi-tenancy work.
+- **Status:** resolved — dropped on production 2026-06-10 (Phase 4.8 H3). `pg_proc` verify returned zero rows. Invite flow (via `invite-customer` Edge Function) verified working post-drop.
+- `SECURITY DEFINER` function; no caller in any current code path. Used pre-multitenancy `is_admin()` helper and hardcoded the staging URL in the invite link — confirmed dead code predating the current invite flow.
 - **Where:** production `public.generate_invite_link(text, text)` in pg_proc.
-- **Fix:** audit callers; if none, `DROP FUNCTION public.generate_invite_link(text, text);` in the same post-cutover cleanup pass as F56.
+- **Fix:** `DROP FUNCTION public.generate_invite_link(text, text);` executed 4.8 H3.
 
 #### F58 — staging RLS lacks an authenticated-key admin-write policy on `user_profiles`
 - **Status:** open — intentional prod divergence retained; staging needs audit.

@@ -279,6 +279,7 @@ Execution order: **H1 → H2 → H3 in one prod SQL Editor sitting → H4 diff �
 |---|---|---|---|
 | 2026-06-10 | H1 — DROP 5 analytics_* views | ✓ — zero rows on pg_views verify; analytics.html renders post-drop | Rollback defs captured step-0; 7/7 objects present |
 | 2026-06-10 | H2 — DROP claim_paper_account(uuid,uuid) | ✓ — zero rows on pg_proc verify | |
+| 2026-06-10 | H3 — DROP generate_invite_link(text,text) | ✓ — zero rows on pg_proc verify; invite flow verified working post-drop | |
 
 ---
 
