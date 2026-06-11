@@ -1,6 +1,6 @@
 # Phase 5 — Second-Tenant Onboarding
 
-**Status:** Planning — parent plan written 2026-06-10; sub-deploy 5.0 in Planning
+**Status:** In progress — 5.0 Complete 2026-06-11; sub-deploy 5.1 in Planning (plan written 2026-06-11)
 **Predecessor:** Phase 4 — Production Migration (`docs/phase-4-production-migration.md`) — **Complete 2026-06-10**
 **Branch base:** `staging` for all staging-side work; prod promotions per `CLAUDE.md` § Standard Deployment Workflow
 **Customer impact:** None until 5.5 (founding-tenant behavior is a hard invariant for 5.0–5.4); 5.1 hosting cutover is the one customer-visible infrastructure change before tenant 2 exists
@@ -35,8 +35,8 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 
 | #   | Title                                                                     | Plan                                          | Status   | Completed |
 |-----|---------------------------------------------------------------------------|-----------------------------------------------|----------|-----------|
-| 5.0 | Pre-Phase-5 housekeeping — F58/F63/F64/F65/F66 + prod `settings` row drop | `phase-5.0-pre-phase-5-housekeeping.md`       | Planning | |
-| 5.1 | Hosting migration — GitHub Pages → Cloudflare Pages or Vercel (staging first, then prod) | *(written at 5.0 close)*       | Pending  | |
+| 5.0 | Pre-Phase-5 housekeeping — F58/F63/F64/F65/F66 + prod `settings` row drop | `phase-5.0-pre-phase-5-housekeeping.md`       | Complete | 2026-06-11 |
+| 5.1 | Hosting migration — GitHub Pages → Cloudflare Pages (staging first, then prod) | `phase-5.1-hosting-migration.md`          | Planning | |
 | 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | *(written at 5.1 close)* | Pending | |
 | 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | *(written at 5.2 close)*                      | Pending  | |
 | 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | *(written at 5.3 close)* | Pending | |
@@ -148,4 +148,4 @@ Phase 5 is complete when **all** of the following are true:
 
 ---
 
-**Last updated:** 2026-06-10 (parent plan written at Phase 5 planning session; 5.0 plan + runbook created same session)
+**Last updated:** 2026-06-11 (row 5.1 → Planning; plan file `phase-5.1-hosting-migration.md` written — platform decided: Cloudflare Pages)

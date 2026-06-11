@@ -1,6 +1,6 @@
 # Phase 5.0 — Pre-Phase-5 Housekeeping
 
-**Status:** Planning — runbook written 2026-06-10 (Phase 5 planning session); not yet executed.
+**Status:** **Complete — all S1–S7 steps executed 2026-06-11**
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.0)
 **Predecessor:** Phase 4 completion audit — closed 2026-06-10. Scope source: § 13 dispositions (F63/F64 from the completion audit, F66 from the F64 item-4 assessment, F58/F65 carried) + Rick's scope sign-off at the 2026-06-10 planning session: **all seven candidate items; F58 is audit → decide → fix; F64 item 5 is decide-now / defer-DDL.**
 **Branches:** S1–S5 are database + doc changes (doc commits → `staging` directly). S6 (F65) is an app-code change: `feature/f65-confirm-modal` off `staging` → `--ff-only` merge → staging smoke → prod promotion PR per `CLAUDE.md` § Standard Deployment Workflow (F59 diff assertion + post-deploy write-smoke).
@@ -583,15 +583,15 @@ Order inside this step is deliberate: **guard on staging → guard on prod → p
 
 ## 5. Completion criteria (all must be checked before parent row 5.0 → Complete)
 
-- [ ] S1: 14 staging policies altered; live `pg_policies` shows zero `{public}`-role policies in `public` schema; full Playwright green after
-- [ ] S2: items 1–3, 6, 7 live on staging (each verified via `information_schema` / `pg_constraint` query); every pre-flight returned 0 bad rows / expected set; full Playwright green after
-- [ ] S3: code path documented in § 13 from execution-time re-verification; Rick's branch decision recorded; Branch A policy live and byte-equal to prod (or Branch B executed + new finding filed); Decline + suspend functionally verified on staging with a disposable account; full Playwright green
-- [ ] S3: F64 item 5 decision + rationale recorded in § 13; parent § Deferred-DDL Register row filled with owner; **no realignment DDL executed in 5.0**
-- [ ] S4: guard present in `pg_get_functiondef` output on **both** envs (exactly one added line vs pre-capture); `proacl` unchanged on both; prod `preorders_catalog_id_fkey` `confdeltype = a`
-- [ ] S5: prod `settings.maintenance_mode` SELECT returns zero rows; captured row values stored in the Deploy Log; prod app loads normally post-delete; CLAUDE.md deferred-list line removed
-- [ ] S6: zero native `confirm(` matches in `subscriptions.html` and `mylist.html`; derived grep counts match step-8 exactly; Playwright suite green (incl. updated 05 spec); staging verified by Rick (browser noted); prod promotion completed (or explicitly scheduled by Rick with a date) with write-smoke passed
-- [ ] F58, F63, F65, F66 → resolved and F64 items 1–5 dispositioned in `technical-reference.md` § 13; any new finding filed from **F67**+ and resolved or deferred-with-owner
-- [ ] Deploy Log complete (one row per executed step); all doc changes committed to `staging`; parent row 5.0 → **Complete** + date; `CLAUDE.md` pointer advanced
+- [x] S1: 14 staging policies altered; live `pg_policies` shows zero `{public}`-role policies in `public` schema; full Playwright green after
+- [x] S2: items 1–3, 6, 7 live on staging (each verified via `information_schema` / `pg_constraint` query); every pre-flight returned 0 bad rows / expected set; full Playwright green after
+- [x] S3: code path documented in § 13 from execution-time re-verification; Rick's branch decision recorded; Branch A policy live and byte-equal to prod (or Branch B executed + new finding filed); Decline + suspend functionally verified on staging with a disposable account; full Playwright green
+- [x] S3: F64 item 5 decision + rationale recorded in § 13; parent § Deferred-DDL Register row filled with owner; **no realignment DDL executed in 5.0**
+- [x] S4: guard present in `pg_get_functiondef` output on **both** envs (exactly one added line vs pre-capture); `proacl` unchanged on both; prod `preorders_catalog_id_fkey` `confdeltype = a`
+- [x] S5: prod `settings.maintenance_mode` SELECT returns zero rows; captured row values stored in the Deploy Log; prod app loads normally post-delete; CLAUDE.md deferred-list line removed
+- [x] S6: zero native `confirm(` matches in `subscriptions.html` and `mylist.html`; derived grep counts match step-8 exactly; Playwright suite green (incl. updated 05 spec); staging verified by Rick (browser noted); prod promotion completed (or explicitly scheduled by Rick with a date) with write-smoke passed
+- [x] F58, F63, F65, F66 → resolved and F64 items 1–5 dispositioned in `technical-reference.md` § 13; any new finding filed from **F67**+ and resolved or deferred-with-owner
+- [x] Deploy Log complete (one row per executed step); all doc changes committed to `staging`; parent row 5.0 → **Complete** + date; `CLAUDE.md` pointer advanced
 
 ---
 
@@ -628,8 +628,9 @@ Order inside this step is deliberate: **guard on staging → guard on prod → p
 | 2026-06-11 | S3 — F58 + F64 item 5 | Complete | Branch A: `admins manage tenant profiles` ALL policy added to staging. Functional verify: Decline removed profile and stayed gone on reload. `Users.suspend` has no admin UI entry point (no Users tab) — UPDATE path covered by ALL policy. F64 item 5: Option A decision recorded (profile-first, NO ACTION canonical); no DDL executed. Playwright 15/15 green. |
 | 2026-06-11 | S4 — F66 + F64 item 4 | Complete | Staging guard applied and verified (body + proacl). Prod pre-capture confirmed unguarded (editor-switching false alarm on first attempt). Prod guard applied and verified. Prod preorders_catalog_id_fkey → NO ACTION (confdeltype=a). |
 | 2026-06-11 | S5 — prod settings.maintenance_mode | No-op | 0 rows found — already deleted in Phase 4.6 (F4 resolution 2026-05-31). CLAUDE.md deferred-list line removed. |
-| 2026-06-11 | S6 — F65 | Complete | subscriptions.html: CSS + overlay + helper + call site. mylist.html:1081: call site only. Playwright 15/15 green (spec 05 updated to modal-click). Staging deployed acf7981; Rick verified (staging). Prod promotion PR pending Rick merge. |
+| 2026-06-11 | S6 — F65 | Complete | subscriptions.html: CSS + overlay + helper + call site. mylist.html:1081: call site only. Playwright 15/15 green (spec 05 updated to modal-click). Staging deployed acf7981; Rick verified (staging). Prod PR #56 merged; prod commit 88c0e02. Write-smoke passed on Brave iOS: subscriptions unsubscribe modal confirmed. |
+| 2026-06-11 | S7 — Closeout | Complete | All § 5 boxes ticked. CLAUDE.md pointer advanced to 5.1. Parent row 5.0 → Complete 2026-06-11. F65 § 13 entry updated with prod commit + write-smoke. |
 
 ---
 
-**Last updated:** 2026-06-10 (runbook written at the Phase 5 planning session; not yet executed)
+**Last updated:** 2026-06-11 (S7 closeout — sub-deploy complete)
