@@ -623,7 +623,7 @@ Order inside this step is deliberate: **guard on staging → guard on prod → p
 
 | Date | Step | Result | Notes |
 |---|---|---|---|
-| | | | |
+| 2026-06-11 | S1 — F63 | Complete | Pre-capture: 21 rows (14 `{public}`, 7 `{authenticated}`). Post-capture: 21 rows all `{authenticated}`. Playwright 15/15 green. |
 
 ---
 
