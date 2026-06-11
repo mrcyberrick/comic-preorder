@@ -10,17 +10,17 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.0 — Pre-Phase-5 housekeeping** (Planning — runbook ready, not yet executed: `docs/phase-5.0-pre-phase-5-housekeeping.md`; execution is a CLI session, Rick-in-the-loop for all SQL)
+**Active sub-deploy:** **5.1 — Hosting migration** (plan not yet written; will be authored at the 5.1 planning session)
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 4 completion audit (2026-06-10) — F63/F64 assessed, F66 filed, anchors stored
+**Last completed sub-deploy:** Phase 5.0 — Pre-Phase-5 housekeeping (2026-06-11) — F58/F63/F64 items 1–4 resolved; F64 item 5 DDL deferred; F65/F66 resolved; prod commit `88c0e02`
 **Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings — all scheduled into 5.0 (2026-06-10 planning session):** F58 → S3 (audit → decision gate → fix), F63 → S1 (14 policies; count corrected from 13), F64 → items 1–3/6/7 S2, item 4 S4, item 5 decision-only S3 (DDL in parent § Deferred-DDL Register), item 8 → sub-deploy 5.2, F65 → S6 (subscriptions.html **+ mylist.html:1081**), F66 → S4 (paired with F64 item 4). Next free finding ID: **F67**.
+**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4); F64 item 8 — `idx_tenants_slug` → prod (→ 5.2). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). Next free finding ID: **F67**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -503,12 +503,9 @@ approval.
   reads it — sub-deploy 5.3
 - **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
 
-### Scheduled — sub-deploy 5.0 (pre-Phase-5 housekeeping; runbook:
-### `docs/phase-5.0-pre-phase-5-housekeeping.md`)
-- **F58 audit/fix, F63, F64 items 1–7, F65, F66** — dispositions in
-  `technical-reference.md` § 13; step mapping in the 5.0 plan (F64 item 5 is
-  decision-only; its DDL sits in the parent § Deferred-DDL Register; F64 item 8
-  belongs to 5.2)
+### Deferred from sub-deploy 5.0 (Complete 2026-06-11)
+- **F64 item 5 DDL** — `preorders_user_id_fkey` → `user_profiles` NO ACTION; decision recorded (Option A); in parent § Deferred-DDL Register; must land before 5.4
+- **F64 item 8** — `idx_tenants_slug` → prod; belongs to sub-deploy 5.2
 
 If a session needs to touch any of the above, **stop and confirm**.
 
