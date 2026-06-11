@@ -7,10 +7,11 @@ comic pre-order system. **Read this file in full at the start of every session.*
 
 ## 🚨 Current Migration Phase
 
-**Active phase:** None — Phase 4 complete 2026-06-10; Phase 5 queued (parent plan not yet written)
+**Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** None — next work item is the Phase 5 parent plan (stub: `docs/phase-5-second-tenant-onboarding.md`)
+**Active sub-deploy:** **5.0 — Pre-Phase-5 housekeeping** (Planning — runbook ready, not yet executed: `docs/phase-5.0-pre-phase-5-housekeeping.md`; execution is a CLI session, Rick-in-the-loop for all SQL)
+**Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
 **Last completed sub-deploy:** Phase 4 completion audit (2026-06-10) — F63/F64 assessed, F66 filed, anchors stored
@@ -18,8 +19,8 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
-**Phase 5 (queued, not started — Phase 4 complete, so unblocked):** Second-tenant onboarding — hosting migration (GitHub Pages → Cloudflare/Vercel), per-tenant branding rendering, slug→id routing RPC, self-service signup. Stub with scope + carry-forward findings: `docs/phase-5-second-tenant-onboarding.md`. First Phase 5 session writes the parent plan.
-**Open findings carried into Phase 5 planning:** F58 (staging admin-write policy audit), F63 (staging `TO authenticated` DDL — assessed safe), F64 (pre-Phase-4 DDL divergences — per-item dispositions in `technical-reference.md` § 13), F65 (subscriptions.html confirm modal), F66 (`delete_dropped_catalog_items` guard — latent).
+**Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
+**Open findings — all scheduled into 5.0 (2026-06-10 planning session):** F58 → S3 (audit → decision gate → fix), F63 → S1 (14 policies; count corrected from 13), F64 → items 1–3/6/7 S2, item 4 S4, item 5 decision-only S3 (DDL in parent § Deferred-DDL Register), item 8 → sub-deploy 5.2, F65 → S6 (subscriptions.html **+ mylist.html:1081**), F66 → S4 (paired with F64 item 4). Next free finding ID: **F67**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -494,18 +495,22 @@ approval.
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
-### Deferred — Phase 5
-- **Hosting migration** (GitHub Pages → Cloudflare/Vercel)
-- **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI reads it
-- **Self-service tenant signup**
-- **Slug→id RPC** — `TENANT_SLUG_MAP` hardcoded in `app.js`
+### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
+### their own sub-deploy session)
+- **Hosting migration** (GitHub Pages → Cloudflare/Vercel) — sub-deploy 5.1
+- **Slug→id RPC** — `TENANT_SLUG_MAP` hardcoded in `app.js` — sub-deploy 5.2
+- **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI
+  reads it — sub-deploy 5.3
+- **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
 
-### Deferred — post-Phase-4 housekeeping
-- **Vestigial `settings.maintenance_mode` row** on production — nothing reads it;
-  drop post-cutover
-- **F63/F64 reconciliation + F66 guard fix** — assessed at the Phase 4
-  completion audit (2026-06-10); dispositions in `technical-reference.md` § 13;
-  schedule as pre-Phase-5 housekeeping
+### Scheduled — sub-deploy 5.0 (pre-Phase-5 housekeeping; runbook:
+### `docs/phase-5.0-pre-phase-5-housekeeping.md`)
+- **Vestigial `settings.maintenance_mode` row** on production — nothing reads it
+  — 5.0 S5
+- **F58 audit/fix, F63, F64 items 1–7, F65, F66** — dispositions in
+  `technical-reference.md` § 13; step mapping in the 5.0 plan (F64 item 5 is
+  decision-only; its DDL sits in the parent § Deferred-DDL Register; F64 item 8
+  belongs to 5.2)
 
 If a session needs to touch any of the above, **stop and confirm**.
 
