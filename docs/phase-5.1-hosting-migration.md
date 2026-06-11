@@ -323,7 +323,8 @@ docs: 5.1 S7 — soak day N checks recorded
 
 | Date | Step | Result | Notes |
 |---|---|---|---|
+| 2026-06-11 | S1 | Complete | **Q1:** Path 1 — apex domain `pulllist.app` (registered Namecheap, no existing DNS records; zone move to Cloudflare required at S5; no MailerSend records on this domain — MailerSend remains on `mrcyberrick.us` throughout 5.1). **Q2:** Option A — project name `pulllist`; staging alias `https://staging.pulllist.pages.dev/`; prod Pages URL `https://pulllist.pages.dev/`; canonical prod URL `https://pulllist.app/`. **Q3:** `_redirects` yes — `/comic-preorder/* /:splat 301` and `/comic-preorder-staging/* /:splat 301`. **Q4:** F67 owner = 5.2-adjacent housekeeping commit. **EF deployed sources (Rick paste 2026-06-11; both projects confirmed identical):** approve-customer / register-customer / invite-customer — `STAGING_BASE='https://mrcyberrick.github.io/comic-preorder-staging'` — live prod defect (High), magic-link emails non-functional for prod customers (pre-existing); reset-password — `STAGING_BASE='https://mrcyberrick.us/comic-preorder-staging'` — 404 on anomalous path, live prod defect (High, pre-existing); notify-customers — `https://mrcyberrick.us/comic-preorder/catalog.html` — correct today, breaks at domain migration (Low). **F67 filed** in `technical-reference.md` § 13. |
 
 ---
 
-**Last updated:** 2026-06-11 (plan written at 5.1 planning session; not yet executed)
+**Last updated:** 2026-06-11 (plan written at 5.1 planning session; S1 complete — `pulllist.app` selected as canonical domain, F67 filed)
