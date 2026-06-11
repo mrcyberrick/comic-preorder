@@ -2193,7 +2193,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 ---
 
-### Phase 5.1 findings (F67)
+### Phase 5.1 findings (F67–F68)
 
 #### F67 — Edge Function hardcoded app URLs — hosting-migration continuity
 - **Status:** Open — filed 2026-06-11 (5.1 S1). Owner: 5.2-adjacent housekeeping commit (per Rick, S1 gate 2026-06-11). Must land before 5.5 GH Pages teardown.
@@ -2212,6 +2212,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **5.1 continuity:** EF source changes are out of scope for 5.1 per parent plan (§ 3 Out of scope). GH Pages kept warm until 5.5 — frozen staging copy at `mrcyberrick.github.io/comic-preorder-staging/` continues serving (hits staging Supabase project; token mismatch for prod customers remains). `_redirects` on `pulllist.app` covers legacy bookmark paths. Reset-password 404 is pre-existing and independent of this migration.
 - **Fix:** Add `APP_BASE_URL` secret to each Supabase project's Edge Functions → Secrets (staging project: `https://staging.pulllist.pages.dev`; prod project: `https://pulllist.app`). Replace all five hardcoded constants/inline values with `Deno.env.get('APP_BASE_URL')`. Staging deploy first; prod after staging smoke passes.
 - **Where:** `supabase/functions/approve-customer/index.ts:13–15`, `register-customer/index.ts:29–31`, `invite-customer/index.ts:1–3`, `reset-password/index.ts:1–2`, `notify-customers/index.ts:163`.
+
+#### F68 — `register-customer` Supabase cron webhook returning 401 (prod)
+- **Status:** Open — filed 2026-06-11 (5.1 S5, observed during write-smoke). Pre-existing — not caused by 5.1 hosting migration.
+- **Severity:** Medium — a Supabase cron/webhook job named "PROD APP ONBOARDING" is scheduled to call `register-customer` and returning 401; every scheduled call fails silently. Impact on live self-registration flow unclear — requires investigation.
+- **Root cause:** Unknown. A Supabase cron/webhook job (prod project `plgegklqtdjxeglvyjte`, name "PROD APP ONBOARDING") calls `https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/register-customer?secret=pulllist-comics-2026`. Last observed: 2026-06-11 22:00:54, status 401. The `?secret=pulllist-comics-2026` query parameter is not the current documented auth mechanism for `register-customer` (which uses in-body auth). Either the function was updated to remove the secret check, or the secret value no longer matches, or the cron payload is missing required body fields.
+- **Owner:** Investigate before 5.4 (self-service tenant signup sub-deploy touches `register-customer` directly). Supabase prod dashboard → Edge Functions → Cron Jobs → "PROD APP ONBOARDING".
+- **Where:** Supabase prod project → Edge Functions → Cron Jobs, entry "PROD APP ONBOARDING"; `supabase/functions/register-customer/index.ts` auth check.
 
 ---
 

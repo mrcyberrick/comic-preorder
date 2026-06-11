@@ -20,7 +20,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4); F64 item 8 — `idx_tenants_slug` → prod (→ 5.2). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). Next free finding ID: **F67**.
+**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4); F64 item 8 — `idx_tenants_slug` → prod (→ 5.2); F67 — Edge Function hardcoded app URLs (owner: 5.2-adjacent housekeeping, must land before 5.5); F68 — `register-customer` cron webhook "PROD APP ONBOARDING" returning 401 (investigate before 5.4). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F68 filed in 5.1. Next free finding ID: **F69**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
