@@ -26,14 +26,15 @@ schema fully shaped for multi-tenancy after Phases 1, 2, and 3 (sub-deploys
 3.1–3.8) of the migration program. No second tenant exists yet; the multi-tenancy
 plumbing is exercised only by the founding tenant in production traffic.
 
-The application is a static GitHub Pages site (vanilla HTML/CSS/JS, no build
-step) that talks directly to a Supabase project. Eight Deno-based Supabase
+The application is a static Cloudflare Pages site (vanilla HTML/CSS/JS, no build
+step) that talks directly to a Supabase project. (Migrated from GitHub Pages in 5.1;
+GH Pages warm until 5.5 closes.) Eight Deno-based Supabase
 Edge Functions handle email-sending and privileged operations that need the
 service-role key. A local Node.js script imports monthly distributor catalogs
 and weekly shipment invoices.
 
 ```
-Browser (GitHub Pages, staging-only branch)
+Browser (Cloudflare Pages — prod: pulllist.app / staging: staging.pulllist.pages.dev)
   ├── index.html         ← login + invite/recovery landing
   ├── catalog.html       ← browse and reserve monthly catalog
   ├── mylist.html        ← view and manage pull list
@@ -87,13 +88,13 @@ mechanism diverges from the others.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Vanilla HTML/CSS/JS, no build step, served from GitHub Pages |
+| Frontend | Vanilla HTML/CSS/JS, no build step, served from Cloudflare Pages |
 | Database | Supabase Postgres (15.x, with `pgcrypto`, `uuid-ossp`, `pg_stat_statements`, `supabase_vault`) |
 | Auth | Supabase Auth (email/password, invite tokens, magic links, recovery tokens) |
 | Edge Functions | Deno runtime on Supabase, hand-written TypeScript |
 | Email | MailerSend (transactional) and MailerLite (subscriber webhooks) |
 | Import | Node.js, run from local scripts folder, never committed |
-| Hosting | GitHub Pages (`mrcyberrick.github.io/comic-preorder-staging/`) |
+| Hosting | Cloudflare Pages — prod: `https://pulllist.app/`; staging: `https://staging.pulllist.pages.dev/` (GH Pages warm until 5.5) |
 
 `pgcrypto` provides `gen_random_uuid()` (used by newer tables); `uuid-ossp`
 provides `uuid_generate_v4()` (used by `catalog` and `preorders`, predating
@@ -1459,8 +1460,8 @@ email address exists, to prevent account-existence enumeration.
 
 The `STAGING_BASE` constant in `reset-password` is set to
 `'https://mrcyberrick.us/comic-preorder-staging'` — **this is wrong**.
-Staging is hosted at `mrcyberrick.github.io/comic-preorder-staging`. The
-reset link sent to customers in staging would 404. F35.
+Staging is now hosted at `https://staging.pulllist.pages.dev/` (migrated 5.1). The
+reset link sent to customers in staging would 404. F35 / F67.
 
 ---
 
@@ -1783,11 +1784,10 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Status:** confirmed, **active in staging right now**
 - Line 1 of `reset-password/index.ts`:
   `STAGING_BASE = 'https://mrcyberrick.us/comic-preorder-staging'`. The
-  actual staging URL is `mrcyberrick.github.io/comic-preorder-staging`.
+  actual staging URL is now `https://staging.pulllist.pages.dev/` (migrated 5.1).
   Customers who request a password reset via staging receive a 404 link.
 - **Where:** `reset-password` Edge Function source.
-- **Fix:** change `STAGING_BASE` to
-  `'https://mrcyberrick.github.io/comic-preorder-staging'` and redeploy.
+- **Fix:** subsumed by F67 — replace `STAGING_BASE` with `Deno.env.get('APP_BASE_URL')` and set the secret to `https://staging.pulllist.pages.dev` (staging) / `https://pulllist.app` (prod).
 
 ### Low
 

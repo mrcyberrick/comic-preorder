@@ -241,8 +241,9 @@ At the end of each session:
 **App:** PULLLIST — comic pre-order system for Ray & Judy's Book Stop
 **Phone:** 973-586-9182
 **Location:** Rockaway, NJ
-**Production URL:** https://mrcyberrick.us/comic-preorder/
-**Staging URL:** https://mrcyberrick.github.io/comic-preorder-staging/
+**Production URL:** https://pulllist.app/
+**Staging URL:** https://staging.pulllist.pages.dev/
+**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — warm until 5.5; redirects to `/` via `_redirects`)
 
 ---
 
@@ -270,7 +271,7 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
 
 **Git remotes:**
 - `origin` → production repo (`github.com/mrcyberrick/comic-preorder`)
-- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`)
+- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback until 5.5 closes
 
 **Local scripts folder** (outside any repo, never committed):
 ```
@@ -301,11 +302,11 @@ C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\
 
 - **Frontend:** Vanilla HTML/CSS/JS — no build step, no npm for the web app
 - **Backend:** Supabase (PostgreSQL + Auth + Edge Functions + RLS)
-- **Hosting:** GitHub Pages (static files only)
+- **Hosting:** Cloudflare Pages (static files only; migrated from GitHub Pages in 5.1)
 - **Email:** MailerSend via Supabase Edge Functions
 - **Import:** Node.js script run locally each month
 
-GitHub Pages serves static files only — no SSR. All dynamic behavior is client-side
+Cloudflare Pages serves static files only — no SSR. All dynamic behavior is client-side
 JS calling Supabase directly.
 
 ---
@@ -333,9 +334,10 @@ cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
 # Stop if anything fails — do not push
 
 git push origin staging
-git push staging staging:main    # deploys to staging GitHub Pages
+# CF Pages auto-deploys the staging preview at https://staging.pulllist.pages.dev/
+# (Do NOT run: git push staging staging:main — retired as of 5.1)
 
-# Test at: mrcyberrick.github.io/comic-preorder-staging/
+# Test at: https://staging.pulllist.pages.dev/
 # When staging tests pass, promote to production:
 git checkout main
 git pull origin main
@@ -352,6 +354,7 @@ git checkout -b feat/<description>-prod
 git push origin feat/<description>-prod
 # Open PR: feat/<description>-prod → main
 # Verify config.js is NOT in the diff before merging
+# CF Pages auto-deploys production from main at https://pulllist.app/
 # Post-deploy write-smoke: reserve one item through the live app as a test user, confirm
 # the row lands in prod preorders with correct tenant_id, then cancel it.
 ```
