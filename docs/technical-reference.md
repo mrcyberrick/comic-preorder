@@ -2140,14 +2140,24 @@ Surfaced during the 4.7 soak (2026-06-01 / 2026-06-02).
 Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
 
 #### F63 — Staging RLS policies missing `TO authenticated` role qualifier
-- **Status:** open — filed 4.8 H4 (2026-06-10). Needs assessment before Phase-4-level `pg_policies` parity criterion can be ticked.
+- **Status:** open — assessed 2026-06-10 (Phase 4 completion audit): **safe to fix on staging; staging-only DDL; does not block Phase 4 closure.** Scheduled as pre-Phase-5 housekeeping (see `phase-5-second-tenant-onboarding.md` carry-forward list).
+- **Assessment (2026-06-10):** Adding `TO authenticated` is strictly more restrictive — it removes the policy's applicability to `anon` (and other roles), never widens it. Every affected policy's USING/WITH CHECK clause already requires an authenticated session (`current_tenant_id()`, `current_user_is_admin()`, or `auth.uid()` all return NULL/false without one), so no behavior change is expected for any existing flow; no anon code path touches the affected table/verb combinations. Prod is the correct side of this divergence — the fix direction is staging→prod parity, so the Phase-4 criterion (prod posture correct) is satisfiable with this finding annotated. Fix session pre-flight: capture staging `pg_policies` before/after; run full Playwright suite after.
 - 13 staging `CREATE POLICY` statements lack the `TO authenticated` role clause and therefore apply to the `public` role (all roles including `anon`). Prod policies all explicitly include `TO authenticated`. Systematic divergence across 9 tables, not an isolated omission. Functional impact in current single-tenant setup is low — `anon` users cannot satisfy `current_tenant_id()` USING clauses without a valid session — but the missing qualifier means staging's security posture differs from prod.
 - **Affected policies (staging lacks `TO authenticated` while prod has it):** `app_settings` (admins delete, admins update), `preorders` (admins manage, users manage), `reservation_history` (admins view, users view), `settings` (admins update), `subscriptions` (admins view, users manage), `tenants` (admins update), `usage_events` (admins read), `user_profiles` (admins view, users update, users view own profile).
 - **Where:** staging `CREATE POLICY` DDL for 9 tables; visible in 2026-06-10 `pg_dump --schema-only` output.
 - **Fix:** add `TO authenticated` to the 13 staging policies that lack it, bringing staging into parity with prod. Verify no functional regression (all existing tests pass after; anon-role access to affected tables should remain blocked by `current_tenant_id()` returning NULL).
 
 #### F64 — Pre-Phase-4 DDL structural divergences (prod vs staging)
-- **Status:** open — filed 4.8 H4 (2026-06-10). Eight pre-existing differences that pre-date Phase 4; need assessment before Phase-4-level structural-diff criterion can be ticked. Do not reconcile inline — Phase 4 completion audit session.
+- **Status:** open — assessed per-item 2026-06-10 (Phase 4 completion audit): **no item blocks Phase 4 closure** (all 8 pre-date Phase 4 and none affects the migrated multi-tenant surface). Dispositions below; reconciliation scheduled as pre-Phase-5 housekeeping / Phase 5 planning (see `phase-5-second-tenant-onboarding.md` carry-forward list).
+- **Per-item dispositions (2026-06-10 assessment):**
+  1. `catalog.price_usd` precision — **safe to align** (staging → `numeric(6,2)`); cosmetic, prod is stricter; low priority.
+  2. `catalog_distributor_check` — **safe to add to staging** (pre-flight: verify all staging rows satisfy `distributor IN ('Lunar','PRH')`).
+  3. `preorders_quantity_check` — **safe to add to staging** (pre-flight: verify existing staging rows satisfy `quantity BETWEEN 1 AND 99`).
+  4. `preorders_catalog_id_fkey` cascade — **needs prod-side fix, paired with F66.** The documented design (§ preorders Notes) treats `NO ACTION` as the safety net against naïve catalog deletion; prod's `ON DELETE CASCADE` is pre-multitenancy drift. Verified 2026-06-10: `delete_dropped_catalog_items` has no preorder guard in either env, so prod's CASCADE is a latent silent-reservation-deletion path — currently unreachable (see F66 for the call-site analysis). Recommendation: align prod → `NO ACTION` and add the guard (F66 fix) in the same housekeeping sub-deploy.
+  5. `preorders_user_id_fkey` target — **needs design decision; defer to Phase 5 planning, tied to F58.** Staging's shape (→ `user_profiles`, NO ACTION) blocks `Users.deleteProfile` for any customer with preorders; prod's shape (→ `auth.users`, CASCADE) lets the profile delete succeed but orphans preorders until the auth user is deleted (full cleanup only via auth-user delete, which cascades through both prod FKs). Neither matches a documented intent; decide the canonical user-deletion path during the F58 staging admin-flow audit, then align both envs.
+  6. `app_settings_updated_by_fkey` — **safe to add to staging** (pre-flight: verify no orphaned `updated_by` values).
+  7. `user_profiles_id_fkey` → `auth.users` ON DELETE CASCADE — **safe to add to staging.** Design-consistent: paper customers also get `auth.users` rows (`create-paper-customer` creates them via the admin API), so every profile row should have an auth parent. Pre-flight: check staging for orphaned profile rows first.
+  8. `idx_tenants_slug` — **add to prod during Phase 5** (slug→id routing will want it); additive index, trivially safe.
 - **Enumerated differences (prod vs staging) from 2026-06-10 pg_dump:**
   1. `catalog.price_usd`: prod `numeric(6,2)` vs staging `numeric` (no precision/scale)
   2. `catalog`: prod has `CONSTRAINT catalog_distributor_check CHECK (distributor = ANY (ARRAY['Lunar', 'PRH']))` — staging does not
@@ -2167,6 +2177,19 @@ Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
 - **Root cause:** `subscriptions.html:419` uses `if (!confirm(\`Unsubscribe from "${btn.dataset.series}"?\`)) return;` — Brave/iOS suppresses native confirm dialogs, silently blocking the unsubscribe action.
 - **Fix:** replace with in-page modal (same `confirmDialog()` pattern applied in F61 fix on `mylist.html`). Scope: `subscriptions.html` only; no `app.js` change needed.
 - **Where:** `subscriptions.html:419` — Unsubscribe button click handler.
+
+### Phase 4 completion audit findings (F66)
+
+Surfaced during the Phase 4 completion audit (2026-06-10).
+
+#### F66 — `delete_dropped_catalog_items` lacks preorder guard (latent silent reservation deletion on prod)
+- **Status:** open — filed 2026-06-10 (Phase 4 completion audit, during F64 item-4 assessment). Latent, currently unreachable; do not fix inline.
+- **Severity:** low today (unreachable), high if activated — silent customer-reservation data loss on prod.
+- **Root cause:** Function body (verified identical on prod and staging via `pg_proc`, 2026-06-10) is `DELETE FROM catalog WHERE tenant_id = … AND catalog_month = … AND item_code != ALL(p_item_codes)` with **no** `id NOT IN (SELECT catalog_id FROM preorders …)` guard — unlike `purge_stale_catalog`, which has one. On prod, `preorders_catalog_id_fkey` is `ON DELETE CASCADE` (F64 item 4), so an unguarded catalog delete silently removes the referencing reservations; on staging (`NO ACTION`) the same delete would fail loudly with an FK violation.
+- **Why it is currently unreachable:** the import script calls the function only when `isNewMonth` is true (`import-staging.js` `refreshCatalog`, same in prod `import.js` post-4.5), and `isNewMonth = confirmedMonth > max(catalog_month)` guarantees no rows for `confirmedMonth` existed before the just-completed upsert — every surviving row's `item_code` is in `p_item_codes`, so the DELETE matches zero rows. Auto-reserve runs after the call, so no reservations exist on the target month at delete time either.
+- **Activation risk:** wiring the function into same-month refreshes — which is what its description in § 6.2 ("drop titles that have disappeared from this month's distributor catalog between imports") implies it was meant for — would make every weekly re-import a silent-deletion opportunity for reserved-then-dropped titles on prod.
+- **Fix (scheduled with F64 item 4, pre-Phase-5 housekeeping):** add the preorder guard (`AND id NOT IN (SELECT catalog_id FROM preorders WHERE tenant_id = p_tenant_id)`) to the function on both envs, and align prod `preorders_catalog_id_fkey` to `NO ACTION` to match the documented design (§ preorders Notes).
+- **Where:** `public.delete_dropped_catalog_items(uuid, text, text[])` on both databases; call site `import-staging.js` / `import.js` `refreshCatalog()`.
 
 ---
 
