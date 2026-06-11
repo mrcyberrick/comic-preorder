@@ -7,26 +7,20 @@ comic pre-order system. **Read this file in full at the start of every session.*
 
 ## 🚨 Current Migration Phase
 
-**Active phase:** Phase 4 — Production Migration
+**Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
-**Phase 4 status:** Active — parent plan written 2026-05-24; 4.0 closed 2026-05-26; 4.1 closed 2026-05-29; 4.2 closed 2026-05-30; 4.3 closed 2026-05-31; 4.4 closed 2026-05-31; 4.5 closed 2026-05-31; 4.6 closed 2026-05-31; 4.7 closed 2026-06-10; 4.8 closed 2026-06-10
-**Active sub-deploy:** Phase 4 completion audit (dump recovery anchor, `pre-multitenancy-state.md` Phase 4 notes, F63/F64 assessment, parent criteria tick, Phase 5 stub)
+**Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
+**Active sub-deploy:** **5.0 — Pre-Phase-5 housekeeping** (Planning — runbook ready, not yet executed: `docs/phase-5.0-pre-phase-5-housekeeping.md`; execution is a CLI session, Rick-in-the-loop for all SQL)
+**Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** 4.8 — see `docs/phase-4.8-post-cutover-housekeeping.md`
-**Last completed phase:** Phase 3 — all sub-deploys 3.1–3.8 complete
+**Last completed sub-deploy:** Phase 4 completion audit (2026-06-10) — F63/F64 assessed, F66 filed, anchors stored
+**Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
-**Phase 4 scope (in progress — see `docs/phase-4-production-migration.md` for sub-deploy index):**
-- Production database migration (apply Phase 1–3 schema to prod)
-- Update `import.js` (production) with all Phase 2–3.8 patches (see § Known Out-of-Scope Items)
-- Hosting migration (GitHub Pages → Cloudflare Pages or Vercel) for subdomain routing
-- Per-tenant branding rendering
-- Pre-Phase-4 hardening sub-deploy: **complete (4.1, 2026-05-29)** — F16/F34 deep audit, Finding E grants tightening, `claim_paper_account` dropped, `upsertShipment` and `buildCatalogIdMap` scoped, F17 fixed, Edge Function auth gaps closed (F47/F50/F51/F54), 3-day canary soak clean
-
-**Phase 4 next milestones:** Phase 4 completion audit (dump recovery anchor, F63/F64 assessment, `pre-multitenancy-state.md` Phase 4 notes, parent criteria tick, Phase 5 stub) → Phase 5.
-**Phase 5 (queued, not started):** Second-tenant onboarding — hosting migration, branding rendering, slug→id routing, self-service signup.
+**Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
+**Open findings — all scheduled into 5.0 (2026-06-10 planning session):** F58 → S3 (audit → decision gate → fix), F63 → S1 (14 policies; count corrected from 13), F64 → items 1–3/6/7 S2, item 4 S4, item 5 decision-only S3 (DDL in parent § Deferred-DDL Register), item 8 → sub-deploy 5.2, F65 → S6 (subscriptions.html **+ mylist.html:1081**), F66 → S4 (paired with F64 item 4). Next free finding ID: **F67**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -501,16 +495,20 @@ approval.
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
-### Deferred — Phase 5
-- **Hosting migration** (GitHub Pages → Cloudflare/Vercel)
-- **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI reads it
-- **Self-service tenant signup**
-- **Slug→id RPC** — `TENANT_SLUG_MAP` hardcoded in `app.js`
+### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
+### their own sub-deploy session)
+- **Hosting migration** (GitHub Pages → Cloudflare/Vercel) — sub-deploy 5.1
+- **Slug→id RPC** — `TENANT_SLUG_MAP` hardcoded in `app.js` — sub-deploy 5.2
+- **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI
+  reads it — sub-deploy 5.3
+- **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
 
-### Deferred — post-Phase-4 housekeeping
-- **Vestigial `settings.maintenance_mode` row** on production — nothing reads it;
-  drop post-cutover
-- **`pre-multitenancy-state.md` § 2/§ 4 annotation** — point at production baseline doc once written for 4.2
+### Scheduled — sub-deploy 5.0 (pre-Phase-5 housekeeping; runbook:
+### `docs/phase-5.0-pre-phase-5-housekeeping.md`)
+- **F58 audit/fix, F63, F64 items 1–7, F65, F66** — dispositions in
+  `technical-reference.md` § 13; step mapping in the 5.0 plan (F64 item 5 is
+  decision-only; its DDL sits in the parent § Deferred-DDL Register; F64 item 8
+  belongs to 5.2)
 
 If a session needs to touch any of the above, **stop and confirm**.
 
