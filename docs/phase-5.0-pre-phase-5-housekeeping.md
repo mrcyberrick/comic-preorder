@@ -628,6 +628,7 @@ Order inside this step is deliberate: **guard on staging → guard on prod → p
 | 2026-06-11 | S3 — F58 + F64 item 5 | Complete | Branch A: `admins manage tenant profiles` ALL policy added to staging. Functional verify: Decline removed profile and stayed gone on reload. `Users.suspend` has no admin UI entry point (no Users tab) — UPDATE path covered by ALL policy. F64 item 5: Option A decision recorded (profile-first, NO ACTION canonical); no DDL executed. Playwright 15/15 green. |
 | 2026-06-11 | S4 — F66 + F64 item 4 | Complete | Staging guard applied and verified (body + proacl). Prod pre-capture confirmed unguarded (editor-switching false alarm on first attempt). Prod guard applied and verified. Prod preorders_catalog_id_fkey → NO ACTION (confdeltype=a). |
 | 2026-06-11 | S5 — prod settings.maintenance_mode | No-op | 0 rows found — already deleted in Phase 4.6 (F4 resolution 2026-05-31). CLAUDE.md deferred-list line removed. |
+| 2026-06-11 | S6 — F65 | Complete | subscriptions.html: CSS + overlay + helper + call site. mylist.html:1081: call site only. Playwright 15/15 green (spec 05 updated to modal-click). Staging deployed acf7981; Rick verified (staging). Prod promotion PR pending Rick merge. |
 
 ---
 
