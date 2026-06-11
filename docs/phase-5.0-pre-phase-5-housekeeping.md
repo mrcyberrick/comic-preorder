@@ -626,6 +626,8 @@ Order inside this step is deliberate: **guard on staging → guard on prod → p
 | 2026-06-11 | S1 — F63 | Complete | Pre-capture: 21 rows (14 `{public}`, 7 `{authenticated}`). Post-capture: 21 rows all `{authenticated}`. Playwright 15/15 green. |
 | 2026-06-11 | S2 — F64 items 1–3,6,7 | Complete | Items 1–3,6 clean. Item 1 required view drop/recreate (admin_preorders depends on price_usd) + REVOKE ALL (Supabase default-privilege escalation). Item 7 pre-flight found 44 Playwright orphan profiles (pw-*@example.test, 0 dependent rows); deleted inline before FK add. Playwright 15/15 green. |
 | 2026-06-11 | S3 — F58 + F64 item 5 | Complete | Branch A: `admins manage tenant profiles` ALL policy added to staging. Functional verify: Decline removed profile and stayed gone on reload. `Users.suspend` has no admin UI entry point (no Users tab) — UPDATE path covered by ALL policy. F64 item 5: Option A decision recorded (profile-first, NO ACTION canonical); no DDL executed. Playwright 15/15 green. |
+| 2026-06-11 | S4 — F66 + F64 item 4 | Complete | Staging guard applied and verified (body + proacl). Prod pre-capture confirmed unguarded (editor-switching false alarm on first attempt). Prod guard applied and verified. Prod preorders_catalog_id_fkey → NO ACTION (confdeltype=a). |
+| 2026-06-11 | S5 — prod settings.maintenance_mode | No-op | 0 rows found — already deleted in Phase 4.6 (F4 resolution 2026-05-31). CLAUDE.md deferred-list line removed. |
 
 ---
 
