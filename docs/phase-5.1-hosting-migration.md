@@ -327,4 +327,4 @@ docs: 5.1 S7 — soak day N checks recorded
 
 ---
 
-**Last updated:** 2026-06-11 (plan written at 5.1 planning session; S1 complete — `pulllist.app` selected as canonical domain, F67 filed)
+**Last updated:** 2026-06-11 (S1 complete; S2 in progress — CF Pages project `pulllist` created, staging branch deploy triggered)
