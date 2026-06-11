@@ -2214,11 +2214,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `supabase/functions/approve-customer/index.ts:13–15`, `register-customer/index.ts:29–31`, `invite-customer/index.ts:1–3`, `reset-password/index.ts:1–2`, `notify-customers/index.ts:163`.
 
 #### F68 — `register-customer` Supabase cron webhook returning 401 (prod)
-- **Status:** Open — filed 2026-06-11 (5.1 S5, observed during write-smoke). Pre-existing — not caused by 5.1 hosting migration.
-- **Severity:** Medium — a Supabase cron/webhook job named "PROD APP ONBOARDING" is scheduled to call `register-customer` and returning 401; every scheduled call fails silently. Impact on live self-registration flow unclear — requires investigation.
-- **Root cause:** Unknown. A Supabase cron/webhook job (prod project `plgegklqtdjxeglvyjte`, name "PROD APP ONBOARDING") calls `https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/register-customer?secret=pulllist-comics-2026`. Last observed: 2026-06-11 22:00:54, status 401. The `?secret=pulllist-comics-2026` query parameter is not the current documented auth mechanism for `register-customer` (which uses in-body auth). Either the function was updated to remove the secret check, or the secret value no longer matches, or the cron payload is missing required body fields.
-- **Owner:** Investigate before 5.4 (self-service tenant signup sub-deploy touches `register-customer` directly). Supabase prod dashboard → Edge Functions → Cron Jobs → "PROD APP ONBOARDING".
-- **Where:** Supabase prod project → Edge Functions → Cron Jobs, entry "PROD APP ONBOARDING"; `supabase/functions/register-customer/index.ts` auth check.
+- **Status:** **Resolved 2026-06-11** — JWT verification turned OFF in Supabase prod dashboard; MailerLite webhook confirmed 200.
+- **Severity:** Medium — MailerLite → `register-customer` webhook ("PROD APP ONBOARDING") was failing 401 on every call; new customer self-registration emails were not being sent.
+- **Root cause:** JWT verification was **ON** for `register-customer` in the Supabase prod project, so Supabase's platform layer rejected all MailerLite webhook POSTs with `UNAUTHORIZED_NO_AUTH_HEADER` before the function code ran. The function's own `?secret=` query-parameter auth is the correct gate; platform-level JWT must be OFF (off-plus-in-body-auth pattern per CLAUDE.md).
+- **Fix:** Supabase prod dashboard → Edge Functions → `register-customer` → **Verify JWT: OFF**. Confirmed: probe `curl -X POST ...?secret=pulllist-comics-2026` returned `{"error":"No valid email in payload"}` (400, past the auth gate); MailerLite test webhook → 200. Pre-existing defect — not caused by 5.1.
+- **Where:** Supabase prod project → Edge Functions → `register-customer` → JWT verification setting.
 
 ---
 
