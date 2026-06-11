@@ -27,6 +27,13 @@ If anything goes wrong during the migration, restore from these:
 
 ## 2. Database Row Counts
 
+> **Phase 4 note (2026-06-10):** superseded for production by
+> `production-baseline-2026-05-28.md` § 1.4 (pre-cutover row-count snapshot,
+> taken in the live audit immediately before sub-deploy 4.2). The counts
+> below describe the 2026-04-29 state only and remain valid as the
+> pre-*multitenancy* baseline; use the 2026-05-28 doc for any pre-*cutover*
+> integrity comparison.
+
 These numbers are the integrity checksum. Post-migration counts must match
 (or differ in known, expected ways).
 
@@ -74,6 +81,14 @@ after migration.
 ---
 
 ## 4. Schema Drift Between Environments
+
+> **Phase 4 note (2026-06-10):** superseded by
+> `production-baseline-2026-05-28.md` § 2 (per-table state vs post-Phase-3
+> staging) and § 4 (findings surfaced by that audit). Current divergence
+> tracking lives in `technical-reference.md` § 13 — see F58, F63, F64
+> (assessed at the Phase 4 completion audit) and F19. The `admin_preorders`
+> item below was resolved during Phase 4 (tenant-aware definition applied
+> to production in sub-deploy 4.3).
 
 Differences identified during pre-migration review:
 
