@@ -505,8 +505,6 @@ approval.
 
 ### Scheduled — sub-deploy 5.0 (pre-Phase-5 housekeeping; runbook:
 ### `docs/phase-5.0-pre-phase-5-housekeeping.md`)
-- **Vestigial `settings.maintenance_mode` row** on production — nothing reads it
-  — 5.0 S5
 - **F58 audit/fix, F63, F64 items 1–7, F65, F66** — dispositions in
   `technical-reference.md` § 13; step mapping in the 5.0 plan (F64 item 5 is
   decision-only; its DDL sits in the parent § Deferred-DDL Register; F64 item 8
