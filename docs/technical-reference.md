@@ -2219,6 +2219,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Root cause:** JWT verification was **ON** for `register-customer` in the Supabase prod project, so Supabase's platform layer rejected all MailerLite webhook POSTs with `UNAUTHORIZED_NO_AUTH_HEADER` before the function code ran. The function's own `?secret=` query-parameter auth is the correct gate; platform-level JWT must be OFF (off-plus-in-body-auth pattern per CLAUDE.md).
 - **Fix:** Supabase prod dashboard → Edge Functions → `register-customer` → **Verify JWT: OFF**. Confirmed: probe `curl -X POST ...?secret=pulllist-comics-2026` returned `{"error":"No valid email in payload"}` (400, past the auth gate); MailerLite test webhook → 200. Pre-existing defect — not caused by 5.1.
 - **Where:** Supabase prod project → Edge Functions → `register-customer` → JWT verification setting.
+- **Staging parity confirmed 2026-06-11:** unauthenticated empty-body POST to the staging `register-customer` endpoint returned the function's own `{"error":"Unauthorized"}` (401 from the in-function `?secret=` gate at `index.ts:56–58`) rather than the platform's `{"msg":"Missing authorization header"}` — the function code ran, so platform JWT verification is OFF on staging too. Both environments match the off-plus-in-body-auth pattern.
 
 ---
 
