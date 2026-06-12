@@ -334,4 +334,6 @@ docs: 5.1 S7 — soak day N checks recorded
 
 | 2026-06-11 | S6 | Complete | `CLAUDE.md`: § Project Overview URLs → `pulllist.app` / `staging.pulllist.pages.dev`; § Repository Structure `staging` remote annotated "no longer deploy target as of 5.1"; § Tech Stack hosting → Cloudflare Pages; § Standard Deployment Workflow: `git push staging staging:main` retired (replaced with "Do NOT run" comment), staging URL updated, CF auto-deploy note added for prod. `docs/technical-reference.md`: intro paragraph, architecture diagram label, § 2 tech-stack table (Frontend + Hosting rows) → Cloudflare Pages + new URLs; § 11 reset-password note + F35 fix → updated to `staging.pulllist.pages.dev` and cross-referenced F67. Zero live `git push staging staging:main` invocations remain (one "Do NOT run" reminder comment). |
 
-**Last updated:** 2026-06-11 (S6 complete — docs reflect CF Pages; soak running through 2026-06-14; S7 daily checks next)
+| 2026-06-12 | S7 day 1 | Pass | 12:21 EDT (16:21 UTC): `curl.exe -sI https://pulllist.app/` → `200` + `CF-RAY` ✓; `config.js` → prod ref `plgegklqtdjxeglvyjte` ✓ (Claude). CF dashboard deploy status: Rick monitoring live at this commit's push (staging preview redeploy expected; any failed deploy to be reported and this row amended). No hosting-attributed customer reports. Context: F69 (webhook secret rotation) resolved + e2e signup re-verified on prod the prior evening — additional positive serving signal. |
+
+**Last updated:** 2026-06-12 (S7 day 1 recorded — soak running through 2026-06-14; day 2 check next)
