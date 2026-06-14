@@ -1108,7 +1108,7 @@
       .select(`
         id, user_id, quantity, fulfilled, fulfilled_at,
         catalog!inner(
-          id, distributor, item_code, upc, title, series_name, publisher,
+          id, distributor, item_code, title, series_name, publisher,
           price_usd, on_sale_date, cover_url, variant_type, catalog_month
         )
       `)
@@ -1191,8 +1191,8 @@
           const unit = parseFloat(c.price_usd) || 0;
           const line = unit * qty;
           const qtyTxt = qty > 1 ? ` <span style="color:var(--text-muted)">× ${qty} = $${line.toFixed(2)}</span>` : '';
-          const codeTxt = c.upc
-            ? `<span class="bagging-upc" style="font-family:monospace;font-size:0.72rem;color:var(--text-muted);white-space:nowrap">${escapeHtml(c.upc)}</span>`
+          const codeTxt = c.item_code
+            ? `<span class="bagging-code" style="font-family:monospace;font-size:0.72rem;color:var(--text-muted);white-space:nowrap">${escapeHtml(c.item_code)}</span>`
             : '';
           return `
             <li class="bagging-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.92rem">
