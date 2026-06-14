@@ -2229,6 +2229,19 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Operational notes (debugging detour, recorded for next time):** MailerLite `subscriber.created` fires only for *new* subscriber records — re-submitting the landing-page form with an already-known email fires nothing (no webhook call, no function log). Test with fresh `+alias` emails or delete the subscriber first. A second MailerLite webhook ("Application onboarding") points at the **staging** `register-customer`; webhook active/deactivated states were being toggled for testing during this session — final intended state: prod webhook Active, staging webhook per Rick's testing needs.
 - **Where:** Supabase Edge Functions Secrets (prod `plgegklqtdjxeglvyjte`, staging `puoaiyezsreowpwxzxhj` if shared); MailerLite webhook "PROD APP ONBOARDING"; this file's F68 entry (redacted 2026-06-11).
 
+### Phase 5 enhancement-batch findings (F70)
+
+#### F70 — `import-staging.js` carries the production founding-tenant UUID
+- **Status:** Open — filed 2026-06-14 (discovered during Phase 5 Enhancement Batch 1a runbook validation; out of Batch 1a scope, surfaced not fixed per anti-drift rules). **Needs live verification before any remediation** (Rick-in-the-loop DB step).
+- **Severity:** Medium — local-only script, not in any repo, not customer-facing; no security exposure (service-role key already local-only). But it means every staging catalog/auto-reserve/RPC write tags rows with the **wrong tenant_id**, so imported rows are either invisible to the staging web app (which resolves the founding tenant to `72e29f67-…`) or rejected by the `catalog.tenant_id → tenants(id)` FK if `20941129-…` has no row in staging `tenants`. Classic "re-sync from backup reintroduces the divergence" footgun CLAUDE.md flags for this file.
+- **Detail:** `import-staging.js` line 57 correctly points `SUPABASE_URL` at the staging project (`puoaiyezsreowpwxzxhj`), but line 64 reads `const TENANT_ID = '20941129-c35a-476d-ae21-44b8f77af89c';` — the **production** founding tenant (matches prod `import.js:64`). The accompanying comment ("production founding tenant… never the staging UUID") is copy-pasted verbatim from the prod script, confirming the whole config block was synced from prod and only `SUPABASE_URL` was reverted. The documented staging founding tenant is `72e29f67-39f7-42bc-a4d5-d6f992f9d790` (CLAUDE.md § Environment Facts).
+- **Live checks needed before fixing (do not fix blind):**
+  1. Does staging `tenants` contain a row `id = '20941129-…'`? (If yes, recent staging imports succeeded but seeded a second/ghost tenant.)
+  2. What `tenant_id` do existing staging `catalog` rows carry — `72e29f67` (older, correct), `20941129` (recent, wrong), or a mix?
+  3. When was the staging import last run against this file, and did it error on a FK violation?
+- **Fix (pending live findings):** set `import-staging.js` line 64 to the staging founding tenant `72e29f67-39f7-42bc-a4d5-d6f992f9d790` and correct the comment; if any staging rows were written under `20941129-…`, decide remediation (re-tag or re-import) based on check #2. Local-only file — verify with `Select-String`, no git step.
+- **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:64` (line 57 SUPABASE_URL is correct; only the tenant UUID is wrong).
+
 ---
 
 *End of document.*
