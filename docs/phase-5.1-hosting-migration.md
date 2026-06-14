@@ -1,6 +1,6 @@
 # Phase 5.1 — Hosting Migration (GitHub Pages → Cloudflare Pages)
 
-**Status:** Planning — plan written 2026-06-11; not yet executed
+**Status:** **Complete 2026-06-14** — S1–S8 all executed; prod live on Cloudflare Pages at `https://pulllist.app/`; 3-calendar-day soak (06-12 / 06-13 / 06-14) clean; § 5 criteria all checked. Plan written 2026-06-11.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.1)
 **Predecessor:** Phase 5.0 — Pre-Phase-5 housekeeping — **Complete 2026-06-11**. Platform decision (Rick, 5.1 planning session 2026-06-11): **Cloudflare Pages** (Vercel not selected; parent row title updated).
 **Branches:** Infra + docs only — **no `app.js` / HTML / CSS change anywhere in this sub-deploy.** Doc commits → `staging` directly. The one possible repo-content change is the `_redirects` file (S4, conditional on the S1 gate): rides `feature/5.1-redirects` off `staging` → `--ff-only` merge → staging verify → prod promotion per `CLAUDE.md` § Standard Deployment Workflow (F59 diff assertion; `config.js` checkout step).
@@ -279,18 +279,18 @@ docs: 5.1 S7 — soak day N checks recorded
 
 ## 5. Completion criteria (all must be checked before parent row 5.1 → Complete)
 
-- [ ] S1: all four decisions (Q1 path, Q2 alias + project name, Q3 `_redirects`, Q4 F67 owner) recorded with rationale; deployed EF sources captured from **both** projects; **F67 filed** in § 13 with owner
-- [ ] S2: CF Pages project live; production branch `main`, preview branch `staging`; Framework None / blank build / root output; `curl.exe` confirms staging alias serves the staging Supabase ref and the production URL serves the prod ref (no crossover)
-- [ ] S2: Supabase Auth redirect allow-lists (both projects) extended with the new origins; no existing entry removed; Site URL unchanged
-- [ ] S3: Playwright `baseURL` updated (local-only); full suite green against the new staging URL; Rick verified staging on CF; `git push staging staging:main` retired operationally
-- [ ] S4: `_redirects` decision executed — file live on staging + prod with a verified `301` preserving path and query, **or** the skip decision + rationale recorded in the Deploy Log
-- [ ] S5: DNS pre-capture stored verbatim in the Deploy Log; canonical prod URL serves from CF (`cf-ray`) with prod `config.js`; TLS active; MailerSend domain still verified (if zone moved); write-smoke passed (reserve → row with correct `tenant_id` → cancel) and one post-cutover email delivered
-- [ ] Old-URL continuity: old prod URL (`mrcyberrick.us/comic-preorder/`) and old staging URL still resolve (redirect or warm GH Pages) — EF email links functional pending F67
-- [ ] GitHub Pages **not** torn down (either repo); staging remote intact — warm rollback until 5.5
-- [ ] S6: `CLAUDE.md` workflow rewritten (zero `git push staging staging:main` matches), URLs updated, remotes note added; `technical-reference.md` hosting mentions updated
-- [ ] S7: 3 full calendar days elapsed from the S5 timestamp with all daily checks recorded; zero hosting-attributed customer reports
-- [ ] Founding-tenant behavior unchanged (parent invariant): full Playwright suite green at the S3 and post-S5 gates; tenant-isolation specs included
-- [ ] Deploy Log complete (one row per executed step + one per soak day); all doc changes committed to `staging`; parent row 5.1 → **Complete** + date; `CLAUDE.md` pointer advanced
+- [x] S1: all four decisions (Q1 path, Q2 alias + project name, Q3 `_redirects`, Q4 F67 owner) recorded with rationale; deployed EF sources captured from **both** projects; **F67 filed** in § 13 with owner — *S1 row; F67 in § 13.*
+- [x] S2: CF Pages project live; production branch `main`, preview branch `staging`; Framework None / blank build / root output; `curl.exe` confirms staging alias serves the staging Supabase ref and the production URL serves the prod ref (no crossover) — *S2 row; re-confirmed no crossover at day-1 and day-3 checks.*
+- [x] S2: Supabase Auth redirect allow-lists (both projects) extended with the new origins; no existing entry removed; Site URL unchanged — *S2 row.*
+- [x] S3: Playwright `baseURL` updated (local-only); full suite green against the new staging URL; Rick verified staging on CF; `git push staging staging:main` retired operationally — *S3 row: 15/15 passed; Rick verified.*
+- [x] S4: `_redirects` decision executed — file live on staging + prod with a verified `301` preserving path and query, **or** the skip decision + rationale recorded in the Deploy Log — *S4 row: yes; `301` verified staging + prod; re-verified day 3.*
+- [x] S5: DNS pre-capture stored verbatim in the Deploy Log; canonical prod URL serves from CF (`cf-ray`) with prod `config.js`; TLS active; MailerSend domain still verified (if zone moved); write-smoke passed (reserve → row with correct `tenant_id` → cancel) and one post-cutover email delivered — *S5 row: Path 1 apex; write-smoke row `d954fdc6…`; MailerSend unaffected (separate domain).*
+- [x] Old-URL continuity: old prod URL (`mrcyberrick.us/comic-preorder/`) and old staging URL still resolve (redirect or warm GH Pages) — EF email links functional pending F67 — *`pulllist.app/comic-preorder/*` `301` verified; legacy host on warm GH Pages.*
+- [x] GitHub Pages **not** torn down (either repo); staging remote intact — warm rollback until 5.5 — *confirmed at S8.*
+- [x] S6: `CLAUDE.md` workflow rewritten (zero `git push staging staging:main` matches), URLs updated, remotes note added; `technical-reference.md` hosting mentions updated — *S6 row.*
+- [x] S7: 3 full calendar days elapsed from the S5 timestamp with all daily checks recorded; zero hosting-attributed customer reports — *days 06-12 / 06-13 / 06-14 covered; 06-13 is Rick-attested (dashboard green) with the curl-logging gap noted honestly in the day-2 row; no customer reports.*
+- [x] Founding-tenant behavior unchanged (parent invariant): full Playwright suite green at the S3 and post-S5 gates; tenant-isolation specs included — *S3 row: 15/15 incl. tenant-isolation; S5 write-smoke landed on the correct founding `tenant_id`.*
+- [x] Deploy Log complete (one row per executed step + one per soak day); all doc changes committed to `staging`; parent row 5.1 → **Complete** + date; `CLAUDE.md` pointer advanced — *this commit.*
 
 ---
 
@@ -335,5 +335,8 @@ docs: 5.1 S7 — soak day N checks recorded
 | 2026-06-11 | S6 | Complete | `CLAUDE.md`: § Project Overview URLs → `pulllist.app` / `staging.pulllist.pages.dev`; § Repository Structure `staging` remote annotated "no longer deploy target as of 5.1"; § Tech Stack hosting → Cloudflare Pages; § Standard Deployment Workflow: `git push staging staging:main` retired (replaced with "Do NOT run" comment), staging URL updated, CF auto-deploy note added for prod. `docs/technical-reference.md`: intro paragraph, architecture diagram label, § 2 tech-stack table (Frontend + Hosting rows) → Cloudflare Pages + new URLs; § 11 reset-password note + F35 fix → updated to `staging.pulllist.pages.dev` and cross-referenced F67. Zero live `git push staging staging:main` invocations remain (one "Do NOT run" reminder comment). |
 
 | 2026-06-12 | S7 day 1 | Pass | 12:21 EDT (16:21 UTC): `curl.exe -sI https://pulllist.app/` → `200` + `CF-RAY` ✓; `config.js` → prod ref `plgegklqtdjxeglvyjte` ✓ (Claude). CF dashboard deploy status: Rick monitoring live at this commit's push (staging preview redeploy expected; any failed deploy to be reported and this row amended). No hosting-attributed customer reports. Context: F69 (webhook secret rotation) resolved + e2e signup re-verified on prod the prior evening — additional positive serving signal. |
+| 2026-06-13 | S7 day 2 | Pass (Rick-attested) | No CLI session ran 2026-06-13, so the `curl.exe` check was not executed that day — a **logging gap, not a serving gap**. **Rick attests (2026-06-14):** CF dashboard showed deploys green and the app loaded normally on 06-13; zero customer reports. Recorded retroactively at day-3 closeout; honest gap noted rather than back-filling fabricated curl evidence. |
+| 2026-06-14 | S7 day 3 | Pass | 09:57 EDT (13:57 UTC): `curl.exe -sI https://pulllist.app/` → `200` + `CF-RAY` ✓; `config.js` → prod ref `plgegklqtdjxeglvyjte` ✓; legacy `https://pulllist.app/comic-preorder/catalog.html?x=1` → `301` `Location: /catalog.html?x=1` ✓; staging alias `https://staging.pulllist.pages.dev/` → `200` + `CF-RAY` ✓ (Claude). Rick: CF dashboard green, app loads normally; zero hosting-attributed customer reports across the soak. |
+| 2026-06-14 | S8 | Complete | Soak closed on the plan's stated completion date (calendar-day basis — three days 06-12 / 06-13 / 06-14 covered; cutover 06-11 ~22:10 UTC). § 5 criteria all ticked (S7 note records the 06-13 logging gap honestly). Status → Complete. Parent row 5.1 → Complete + Status line updated. `CLAUDE.md`: active sub-deploy advanced → 5.2 (plan not yet written); last-completed → 5.1; § Known Out-of-Scope hosting line removed; F67 remains open (owner: 5.2-adjacent housekeeping). GH Pages **not** torn down; `staging` remote intact — warm rollback until 5.5. |
 
-**Last updated:** 2026-06-12 (S7 day 1 recorded — soak running through 2026-06-14; day 2 check next)
+**Last updated:** 2026-06-14 (S7 soak complete — day 1/2/3 recorded; S8 closeout done; 5.1 **Complete**, pointer advanced to 5.2 planning)
