@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
       + '<h2 style="margin:0 0 16px;font-size:1.1rem;color:#fff">The ' + monthLabel + ' catalog is now live</h2>'
       + '<p style="color:#ccc;line-height:1.7;margin:0 0 16px">The new pull list is ready &mdash; browse this month\'s Lunar and PRH titles and reserve the ones you want.</p>'
       + deadlinePara
-      + '<a href="https://mrcyberrick.us/comic-preorder/catalog.html" style="display:inline-block;background:#e63946;color:white;padding:13px 28px;border-radius:4px;text-decoration:none;font-weight:700;font-size:0.9rem;letter-spacing:0.03em">Browse the Catalog &rarr;</a>'
+      + `<a href="${Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'}/catalog.html" style="display:inline-block;background:#e63946;color:white;padding:13px 28px;border-radius:4px;text-decoration:none;font-weight:700;font-size:0.9rem;letter-spacing:0.03em">Browse the Catalog &rarr;</a>`
       + '<p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">'
       + 'Questions? Stop by or give us a call.<br>'
       + 'Ray &amp; Judy\'s Book Stop &middot; 40 W Main St. Rockaway, NJ 07866 &middot; (973) 586-9182'

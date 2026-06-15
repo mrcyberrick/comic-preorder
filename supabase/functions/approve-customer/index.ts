@@ -10,9 +10,8 @@
  * Auth: Bearer token from the admin's active session (required)
  */
 
-const STAGING_BASE  = 'https://mrcyberrick.github.io/comic-preorder-staging'
-const APP_INDEX_URL = `${STAGING_BASE}/index.html`
-const APP_BASE_URL  = STAGING_BASE
+const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
+const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
