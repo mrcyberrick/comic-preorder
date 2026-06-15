@@ -10,11 +10,11 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.2 — Slug→id routing RPC** (plan written 2026-06-15 — `docs/phase-5.2-slug-id-routing-rpc.md`; incorporates F67 + F64 item 8)
+**Active sub-deploy:** **5.3 — Per-tenant branding** (planning — no plan doc yet)
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 5.1 — Hosting migration (Complete 2026-06-14) — GitHub Pages → Cloudflare Pages; prod live at `pulllist.app`; 3-calendar-day soak clean; GH Pages + `staging` remote kept warm until 5.5
+**Last completed sub-deploy:** Phase 5.2 — Slug→id routing RPC (Complete 2026-06-15) — `resolve_tenant_by_slug` RPC live both projects; `TENANT_SLUG_MAP` removed; F14/F64-8/F67 resolved; prod write-smoke clean
 **Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
@@ -500,7 +500,7 @@ approval.
 
 ### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
 ### their own sub-deploy session)
-- **Slug→id RPC** — `TENANT_SLUG_MAP` hardcoded in `app.js` — sub-deploy 5.2
+- **Slug→id RPC** — Complete 2026-06-15 (sub-deploy 5.2)
 - **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI
   reads it — sub-deploy 5.3
 - **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
