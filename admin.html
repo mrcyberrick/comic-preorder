@@ -1191,10 +1191,14 @@
           const unit = parseFloat(c.price_usd) || 0;
           const line = unit * qty;
           const qtyTxt = qty > 1 ? ` <span style="color:var(--text-muted)">× ${qty} = $${line.toFixed(2)}</span>` : '';
+          const codeTxt = c.item_code
+            ? `<span class="bagging-code" style="font-family:monospace;font-size:0.72rem;color:var(--text-muted);white-space:nowrap">${escapeHtml(c.item_code)}</span>`
+            : '';
           return `
             <li class="bagging-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.92rem">
               <input type="checkbox" class="bagging-check" ${p.fulfilled ? 'checked' : ''} aria-label="Picked up ${escapeHtml(c.title || '')}">
               <span style="flex:1">${escapeHtml(c.title || '—')}${qtyTxt}</span>
+              ${codeTxt}
               <span style="font-weight:600;color:var(--text-secondary);white-space:nowrap">$${unit.toFixed(2)}</span>
             </li>`;
         }).join('');

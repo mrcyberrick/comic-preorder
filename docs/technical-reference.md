@@ -26,14 +26,15 @@ schema fully shaped for multi-tenancy after Phases 1, 2, and 3 (sub-deploys
 3.1–3.8) of the migration program. No second tenant exists yet; the multi-tenancy
 plumbing is exercised only by the founding tenant in production traffic.
 
-The application is a static GitHub Pages site (vanilla HTML/CSS/JS, no build
-step) that talks directly to a Supabase project. Eight Deno-based Supabase
+The application is a static Cloudflare Pages site (vanilla HTML/CSS/JS, no build
+step) that talks directly to a Supabase project. (Migrated from GitHub Pages in 5.1;
+GH Pages warm until 5.5 closes.) Eight Deno-based Supabase
 Edge Functions handle email-sending and privileged operations that need the
 service-role key. A local Node.js script imports monthly distributor catalogs
 and weekly shipment invoices.
 
 ```
-Browser (GitHub Pages, staging-only branch)
+Browser (Cloudflare Pages — prod: pulllist.app / staging: staging.pulllist.pages.dev)
   ├── index.html         ← login + invite/recovery landing
   ├── catalog.html       ← browse and reserve monthly catalog
   ├── mylist.html        ← view and manage pull list
@@ -87,13 +88,13 @@ mechanism diverges from the others.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Vanilla HTML/CSS/JS, no build step, served from GitHub Pages |
+| Frontend | Vanilla HTML/CSS/JS, no build step, served from Cloudflare Pages |
 | Database | Supabase Postgres (15.x, with `pgcrypto`, `uuid-ossp`, `pg_stat_statements`, `supabase_vault`) |
 | Auth | Supabase Auth (email/password, invite tokens, magic links, recovery tokens) |
 | Edge Functions | Deno runtime on Supabase, hand-written TypeScript |
 | Email | MailerSend (transactional) and MailerLite (subscriber webhooks) |
 | Import | Node.js, run from local scripts folder, never committed |
-| Hosting | GitHub Pages (`mrcyberrick.github.io/comic-preorder-staging/`) |
+| Hosting | Cloudflare Pages — prod: `https://pulllist.app/`; staging: `https://staging.pulllist.pages.dev/` (GH Pages warm until 5.5) |
 
 `pgcrypto` provides `gen_random_uuid()` (used by newer tables); `uuid-ossp`
 provides `uuid_generate_v4()` (used by `catalog` and `preorders`, predating
@@ -1459,8 +1460,8 @@ email address exists, to prevent account-existence enumeration.
 
 The `STAGING_BASE` constant in `reset-password` is set to
 `'https://mrcyberrick.us/comic-preorder-staging'` — **this is wrong**.
-Staging is hosted at `mrcyberrick.github.io/comic-preorder-staging`. The
-reset link sent to customers in staging would 404. F35.
+Staging is now hosted at `https://staging.pulllist.pages.dev/` (migrated 5.1). The
+reset link sent to customers in staging would 404. F35 / F67.
 
 ---
 
@@ -1783,11 +1784,10 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Status:** confirmed, **active in staging right now**
 - Line 1 of `reset-password/index.ts`:
   `STAGING_BASE = 'https://mrcyberrick.us/comic-preorder-staging'`. The
-  actual staging URL is `mrcyberrick.github.io/comic-preorder-staging`.
+  actual staging URL is now `https://staging.pulllist.pages.dev/` (migrated 5.1).
   Customers who request a password reset via staging receive a 404 link.
 - **Where:** `reset-password` Edge Function source.
-- **Fix:** change `STAGING_BASE` to
-  `'https://mrcyberrick.github.io/comic-preorder-staging'` and redeploy.
+- **Fix:** subsumed by F67 — replace `STAGING_BASE` with `Deno.env.get('APP_BASE_URL')` and set the secret to `https://staging.pulllist.pages.dev` (staging) / `https://pulllist.app` (prod).
 
 ### Low
 
@@ -2193,7 +2193,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 ---
 
-### Phase 5.1 findings (F67)
+### Phase 5.1 findings (F67–F69)
 
 #### F67 — Edge Function hardcoded app URLs — hosting-migration continuity
 - **Status:** Open — filed 2026-06-11 (5.1 S1). Owner: 5.2-adjacent housekeeping commit (per Rick, S1 gate 2026-06-11). Must land before 5.5 GH Pages teardown.
@@ -2212,6 +2212,30 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **5.1 continuity:** EF source changes are out of scope for 5.1 per parent plan (§ 3 Out of scope). GH Pages kept warm until 5.5 — frozen staging copy at `mrcyberrick.github.io/comic-preorder-staging/` continues serving (hits staging Supabase project; token mismatch for prod customers remains). `_redirects` on `pulllist.app` covers legacy bookmark paths. Reset-password 404 is pre-existing and independent of this migration.
 - **Fix:** Add `APP_BASE_URL` secret to each Supabase project's Edge Functions → Secrets (staging project: `https://staging.pulllist.pages.dev`; prod project: `https://pulllist.app`). Replace all five hardcoded constants/inline values with `Deno.env.get('APP_BASE_URL')`. Staging deploy first; prod after staging smoke passes.
 - **Where:** `supabase/functions/approve-customer/index.ts:13–15`, `register-customer/index.ts:29–31`, `invite-customer/index.ts:1–3`, `reset-password/index.ts:1–2`, `notify-customers/index.ts:163`.
+
+#### F68 — `register-customer` Supabase cron webhook returning 401 (prod)
+- **Status:** **Resolved 2026-06-11** — JWT verification turned OFF in Supabase prod dashboard; MailerLite webhook confirmed 200.
+- **Severity:** Medium — MailerLite → `register-customer` webhook ("PROD APP ONBOARDING") was failing 401 on every call; new customer self-registration emails were not being sent.
+- **Root cause:** JWT verification was **ON** for `register-customer` in the Supabase prod project, so Supabase's platform layer rejected all MailerLite webhook POSTs with `UNAUTHORIZED_NO_AUTH_HEADER` before the function code ran. The function's own `?secret=` query-parameter auth is the correct gate; platform-level JWT must be OFF (off-plus-in-body-auth pattern per CLAUDE.md).
+- **Fix:** Supabase prod dashboard → Edge Functions → `register-customer` → **Verify JWT: OFF**. Confirmed: probe `curl -X POST ...?secret=<MAILERLITE_WEBHOOK_SECRET>` returned `{"error":"No valid email in payload"}` (400, past the auth gate); MailerLite test webhook → 200. Pre-existing defect — not caused by 5.1.
+- **Where:** Supabase prod project → Edge Functions → `register-customer` → JWT verification setting.
+- **Staging parity confirmed 2026-06-11:** unauthenticated empty-body POST to the staging `register-customer` endpoint returned the function's own `{"error":"Unauthorized"}` (401 from the in-function `?secret=` gate at `index.ts:56–58`) rather than the platform's `{"msg":"Missing authorization header"}` — the function code ran, so platform JWT verification is OFF on staging too. Both environments match the off-plus-in-body-auth pattern.
+
+#### F69 — MailerLite webhook secret committed to public repo (F68 doc entry)
+- **Status:** **Resolved 2026-06-11** — secret rotated in Supabase prod + MailerLite webhook URL; burned value confirmed rejected (401 probe); end-to-end re-verified same session: landing page (`yunzoi.subscribepage.io`) → MailerLite `subscriber.created` → prod `register-customer` → 200, auth user + pending `user_profiles` row created (test user `9777c8e4-bdea-4e30-b4e4-ad27e764880a`, deleted post-test). Filed 2026-06-11 (discovered during 5.1 soak-prep verification, out of 5.1 scope; Rick approved filing).
+- **Severity:** High — the live `MAILERLITE_WEBHOOK_SECRET` value was committed in this file's F68 entry (line ~2220, commits `ea41fc9` / `a30a8ae`, 2026-06-11) and pushed to the **public** `mrcyberrick/comic-preorder` repo (`staging` branch). With `register-customer` platform JWT verification OFF (correct per F68), the query-param secret is the *only* gate: anyone holding it can POST crafted MailerLite-style payloads to the prod endpoint, creating auth users + `user_profiles` rows in the founding tenant and triggering magic-link emails.
+- **Exposure scope:** Working-tree occurrence redacted (commit `8559396`), but the literal value remains in public git history (`ea41fc9`, `a30a8ae`) — treat the value as burned. Not present on `main` (F68 docs not yet promoted). **Staging confirmed on a different secret value** (burned-value probe against staging → 401 at the gate, 2026-06-11) — no staging rotation needed.
+- **Fix (executed 2026-06-11):** New secret generated by Rick (never entered chat/repo) → Supabase prod → Edge Functions → Secrets → `MAILERLITE_WEBHOOK_SECRET` updated → MailerLite webhook "PROD APP ONBOARDING" URL updated → verified: curl with new secret reached email validation (400 past gate); burned secret → 401; full e2e signup created prod account. Never commit the secret value anywhere; docs reference it only as `<MAILERLITE_WEBHOOK_SECRET>`.
+- **Operational notes (debugging detour, recorded for next time):** MailerLite `subscriber.created` fires only for *new* subscriber records — re-submitting the landing-page form with an already-known email fires nothing (no webhook call, no function log). Test with fresh `+alias` emails or delete the subscriber first. A second MailerLite webhook ("Application onboarding") points at the **staging** `register-customer`; webhook active/deactivated states were being toggled for testing during this session — final intended state: prod webhook Active, staging webhook per Rick's testing needs.
+- **Where:** Supabase Edge Functions Secrets (prod `plgegklqtdjxeglvyjte`, staging `puoaiyezsreowpwxzxhj` if shared); MailerLite webhook "PROD APP ONBOARDING"; this file's F68 entry (redacted 2026-06-11).
+
+### Phase 5 enhancement-batch findings (F70)
+
+#### F70 — `import-staging.js` carries the production founding-tenant UUID
+- **Status:** Resolved 2026-06-14 — `import-staging.js` line 63 updated to `72e29f67-39f7-42bc-a4d5-d6f992f9d790`; comment corrected. Live DB checks confirmed no ghost tenant and no bad rows (FK blocked all wrong-UUID writes; all catalog rows were under `72e29f67-…`). June 2026 import ran successfully immediately after fix: 2325 records upserted, 1 auto-reserve, 3 past-on-sale fulfilled.
+- **Severity:** Medium (resolved) — local-only script; FK protection prevented any data corruption.
+- **Detail:** `import-staging.js` line 63 previously read `const TENANT_ID = '20941129-c35a-476d-ae21-44b8f77af89c';` — the production founding tenant, copy-pasted from `import.js` with only `SUPABASE_URL` reverted. The `catalog.tenant_id → tenants(id)` FK silently blocked all staging imports run under that UUID, leaving staging on the May 2026 catalog.
+- **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
 
 ---
 
