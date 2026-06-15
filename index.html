@@ -12,11 +12,11 @@
   <div class="login-card">
 
     <div style="display:flex;justify-content:center;margin-bottom:16px">
-      <img src="bookstop_logo.png" alt="Ray &amp; Judy's Book Stop"
+      <img data-tenant-logo src="bookstop_logo.png" alt="Ray &amp; Judy's Book Stop"
            style="height:72px;width:auto;object-fit:contain">
     </div>
     <div class="login-logo">PULL<span>LIST</span></div>
-    <div class="login-tagline">Ray &amp; Judy's Book Stop — Monthly Pre-Orders</div>
+    <div class="login-tagline"><span data-tenant-name>Ray &amp; Judy's Book Stop</span> — Monthly Pre-Orders</div>
 
     <!-- ── Invite Welcome Banner (shown when invite token detected) ── -->
     <div id="invite-banner" style="display:none;margin-bottom:24px;
@@ -117,7 +117,7 @@
   <!-- Shop footer -->
   <div style="position:fixed;bottom:20px;left:0;right:0;text-align:center;
               font-size:0.72rem;color:var(--text-muted);letter-spacing:0.03em">
-    Ray &amp; Judy's Book Stop &nbsp;·&nbsp; Pull List Pre-Order System
+    <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &nbsp;·&nbsp; Pull List Pre-Order System
   </div>
 </div>
 
@@ -129,6 +129,7 @@
 
   // Capture ?t= before any redirect so sessionStorage gets the slug
   await TenantContext.resolve();
+  Branding.apply(TenantContext.current());
 
   // ── Parse URL for tokens (query params AND hash fragment) ──
   const qParams     = new URLSearchParams(window.location.search);

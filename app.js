@@ -20,16 +20,13 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 //   5. Founding tenant fallback (FOUNDING_TENANT const)
 //
 // The resolve_tenant_by_slug RPC is the sole anon slug→id path (SECURITY DEFINER,
-// returns only id/slug/display_name, anon+authenticated EXECUTE). The hardcoded
+// returns id/slug/display_name/branding, anon+authenticated EXECUTE). The hardcoded
 // slug map was removed in 5.2 S6 — the RPC is now the sole source; FOUNDING_TENANT
-// is the only hardcoded fallback.
+// is the only hardcoded fallback. FOUNDING_TENANT is loaded from per-env config.js
+// (F71, 5.3 S2) so the correct id/slug is used in each environment.
 // ============================================================================
 
-const FOUNDING_TENANT = {
-  id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790',
-  slug: 'raysandjudys',
-  display_name: "Ray & Judy's Book Stop",
-};
+const FOUNDING_TENANT = window.FOUNDING_TENANT;
 
 // Hostnames that are NOT per-tenant subdomains → resolve to the founding tenant.
 const NON_TENANT_HOSTS = new Set([
@@ -84,7 +81,7 @@ const TenantContext = {
         if (profile?.tenant_id) {
           const { data: tenant } = await db
             .from('tenants')
-            .select('id, slug, display_name')
+            .select('id, slug, display_name, branding')
             .eq('id', profile.tenant_id)
             .single();
 
@@ -169,6 +166,41 @@ const TenantContext = {
 // Expose on window for debugging and for HTML pages to await
 window.TenantContext = TenantContext;
 
+// ── Per-Tenant Branding ───────────────────────────────────────
+// Override layer: applies branding keys present in tenant.branding.
+// Absent/empty branding → zero DOM/CSS mutation → founding renders identically to today.
+const Branding = {
+  apply(tenant) {
+    try {
+      const b = (tenant && tenant.branding) || {};
+
+      // Brand color → override --accent (+ derived hover/dim). Absent ⇒ keep default.
+      if (b.primary_color && /^#[0-9a-fA-F]{6}$/.test(b.primary_color)) {
+        const root = document.documentElement;
+        root.style.setProperty('--accent', b.primary_color);
+        root.style.setProperty('--accent-hover', b.primary_color);
+        root.style.setProperty('--accent-dim', this._dim(b.primary_color));
+      }
+
+      // Display name → fill [data-tenant-name] text. Absent ⇒ keep default.
+      const name = (tenant && tenant.display_name) || null;
+      if (name) {
+        document.querySelectorAll('[data-tenant-name]').forEach(el => { el.textContent = name; });
+      }
+
+      // Logo → swap [data-tenant-logo] img src. Absent ⇒ keep default markup.
+      if (b.logo_url) {
+        document.querySelectorAll('img[data-tenant-logo]').forEach(img => { img.src = b.logo_url; });
+      }
+    } catch (err) { console.warn('Branding.apply failed; rendering defaults', err); }
+  },
+  _dim(hex) {                                   // #RRGGBB → rgba(r,g,b,0.15)
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},0.15)`;
+  },
+};
+window.Branding = Branding;
+
 // ── Auth Helpers ─────────────────────────────────────────────
 const Auth = {
   async getSession() {
@@ -233,6 +265,7 @@ async function initNav() {
 
   // Must resolve before any TenantContext.current() calls on this page
   await TenantContext.resolve();
+  Branding.apply(TenantContext.current());
 
   const user = await Auth.getUser();
   if (!user) {
