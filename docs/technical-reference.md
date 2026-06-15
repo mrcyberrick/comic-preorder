@@ -2229,6 +2229,16 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Operational notes (debugging detour, recorded for next time):** MailerLite `subscriber.created` fires only for *new* subscriber records — re-submitting the landing-page form with an already-known email fires nothing (no webhook call, no function log). Test with fresh `+alias` emails or delete the subscriber first. A second MailerLite webhook ("Application onboarding") points at the **staging** `register-customer`; webhook active/deactivated states were being toggled for testing during this session — final intended state: prod webhook Active, staging webhook per Rick's testing needs.
 - **Where:** Supabase Edge Functions Secrets (prod `plgegklqtdjxeglvyjte`, staging `puoaiyezsreowpwxzxhj` if shared); MailerLite webhook "PROD APP ONBOARDING"; this file's F68 entry (redacted 2026-06-11).
 
+### Phase 5.2 findings (none filed; F71+ reserved)
+
+#### `resolve_tenant_by_slug` RPC — contract and security rationale (S1, 2026-06-15)
+- **Status:** Created on staging 2026-06-15 (S1); created on prod at S7.
+- **Contract:** `CREATE OR REPLACE FUNCTION public.resolve_tenant_by_slug(p_slug text) RETURNS TABLE (id uuid, slug text, display_name text) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp` — returns only `id, slug, display_name`. `REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO anon, authenticated`.
+- **Why only three columns:** `branding` and `settings` jsonb are config-leak surface and belong to sub-deploy 5.3's rendering layer — the RPC deliberately does not expose them.
+- **Why exposing tenant `id` (UUID) to anon is safe:** Writes are gated by `WITH CHECK (tenant_id = current_tenant_id())`, where `current_tenant_id()` derives from the authenticated user profile — never from a client-supplied id. For anon callers, `current_tenant_id()` returns NULL → all writes blocked. Knowing a tenant UUID grants no write capability.
+- **No status filter today:** `tenants` has no `status`/`active` column. If one is added, the RPC must filter to active tenants only.
+- **Verified 2026-06-15 (staging):** `pg_get_functiondef` shows `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`, exactly three columns. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X` (PUBLIC). Anon `curl.exe` to `rpc/resolve_tenant_by_slug` with `raysandjudys` → `200`, one object, exactly keys `{id, slug, display_name}`, founding UUID `72e29f67-…`. Unknown slug → `200`, `[]`. Direct anon `GET /tenants?select=*` → `permission denied for table tenants` (RLS holds).
+
 ### Phase 5 enhancement-batch findings (F70)
 
 #### F70 — `import-staging.js` carries the production founding-tenant UUID

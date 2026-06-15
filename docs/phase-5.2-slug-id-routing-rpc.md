@@ -433,7 +433,7 @@ Execution order: **S1 → S2 → S3 (one sitting if possible) → S4 (staging SQ
 
 | Date | Step | Result | Notes |
 |---|---|---|---|
-| | S1 | | |
+| 2026-06-15 | S1 | ✅ Green | `resolve_tenant_by_slug` created on staging. `pg_get_functiondef` confirms STABLE SECURITY DEFINER + hardened search_path + 3-col projection. `proacl`: anon+authenticated EXECUTE, no PUBLIC. Anon curl: raysandjudys → 200, 3-key object (72e29f67-…); unknown slug → 200, []; direct tenants SELECT → permission denied. |
 | | S2 | | |
 | | S3 | | |
 | | S4 | | |
