@@ -450,7 +450,7 @@ Execution order: **S1 → S2 → S3 → S4 → S5 (one or two sittings on stagin
 | 2026-06-15 | S1 | Green | Staging `resolve_tenant_by_slug` extended to 4-col (`id, slug, display_name, branding`). DROP + CREATE (single-quote body); REVOKE re-run after CREATE to clear Postgres default PUBLIC grant. `proacl` clean (no PUBLIC). Anon curl: `raysandjudys` → 4 keys + `branding: {}`; unknown slug → `[]`; direct tenants → permission denied. |
 | 2026-06-15 | S2 | Green | F71 resolved: `config.js` gains `window.FOUNDING_TENANT` (staging values); `app.js` reads `window.FOUNDING_TENANT` — staging UUID no longer hardcoded. Greps: `72e29f67` → 0 in app.js; `window.FOUNDING_TENANT` → 1. Full Playwright 15/15 green incl. F15/F20 tenant isolation. |
 | 2026-06-15 | S3 | Green | `Branding` module added to `app.js`; `window.Branding` exposed. Profile branch SELECT extended to `'id, slug, display_name, branding'`. `Branding.apply()` wired in `initNav()` (5 authed pages) and `index.html` (anon landing). Greps: `Branding.apply` → 2 in app.js, 1 in index.html; `const Branding` → 1; `display_name, branding` → 1. Full Playwright 15/15 green incl. F15/F20. |
-| | S4 | | |
+| 2026-06-15 | S4 | Green | `data-tenant-name` hooks added at 9 "Yes"-row sites (6 footers across catalog/mylist/arrivals/subscriptions/admin/analytics, arrivals store-name block, index.html tagline + footer). `data-tenant-logo` on index.html logo img. No hooks on invoice/transactional copy. `mylist.html:522` print header noted but NOT hooked (not in plan table; analogous to arrivals:205 but scope-guarded). Full Playwright 15/15 green incl. F15/F20. |
 | | S5 | | |
 | | S6 | | |
 | | S7 | | |
