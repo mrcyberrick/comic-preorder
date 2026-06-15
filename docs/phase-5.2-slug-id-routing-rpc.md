@@ -439,7 +439,7 @@ Execution order: **S1 → S2 → S3 (one sitting if possible) → S4 (staging SQ
 | 2026-06-15 | S4 | ✅ Green | Staging pre-capture: idx_tenants_slug + tenants_pkey + tenants_slug_key confirmed. DROP INDEX executed; post-drop pg_indexes = {tenants_pkey, tenants_slug_key}. Prod pg_indexes confirmed identical (no idx_tenants_slug) — F64 item 8 no-op verified. F14 → resolved; F64-8 → dispositioned; § 13 + index prose + parent Deferred-DDL Register updated. |
 | 2026-06-15 | S5 (staging) | ✅ Green | APP_BASE_URL secret set (staging.pulllist.pages.dev); 5 EFs deployed. Staging verify: invite email link → redirect_to=https://staging.pulllist.pages.dev/index.html ✅ |
 | 2026-06-15 | S5 (prod) | ✅ Green | APP_BASE_URL secret set (pulllist.app); 5 EFs deployed. reset-password had JWT verification ON (same as F68) — set to OFF (public endpoint by design). Prod verify: reset-password email link → https://pulllist.app/forgot-password ✅. F67 resolved. |
-| | S6 | | |
+| 2026-06-15 | S6 | ✅ Green | TENANT_SLUG_MAP removed (0 grep hits); block comment updated to describe RPC model; FOUNDING_TENANT remains as sole hardcoded fallback. 15/15 Playwright green. Rick staging-verified (reserve → cancel normal). Committed 823b748. |
 | | S7 | | |
 | | S8 | | |
 
