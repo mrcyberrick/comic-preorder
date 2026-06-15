@@ -434,7 +434,7 @@ Execution order: **S1 → S2 → S3 (one sitting if possible) → S4 (staging SQ
 | Date | Step | Result | Notes |
 |---|---|---|---|
 | 2026-06-15 | S1 | ✅ Green | `resolve_tenant_by_slug` created on staging. `pg_get_functiondef` confirms STABLE SECURITY DEFINER + hardened search_path + 3-col projection. `proacl`: anon+authenticated EXECUTE, no PUBLIC. Anon curl: raysandjudys → 200, 3-key object (72e29f67-…); unknown slug → 200, []; direct tenants SELECT → permission denied. |
-| | S2 | | |
+| 2026-06-15 | S2 | ✅ Green | `app.js`: `lookupTenantBySlug()` + `tenantSlugFromHostname()` added; subdomain branch (1.5) inserted; `?t=`/sessionStorage branches converted to RPC-backed with TENANT_SLUG_MAP fallback retained. Greps: resolve_tenant_by_slug=3, tenantSlugFromHostname=2, TENANT_SLUG_MAP=4 (fallback present). 15/15 Playwright green incl. F15/F20. Merged feature/5.2-slug-rpc → staging (077d37a) --ff-only; pushed. |
 | | S3 | | |
 | | S4 | | |
 | | S5 | | |
