@@ -39,7 +39,7 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 | 5.1 | Hosting migration — GitHub Pages → Cloudflare Pages (staging first, then prod) | `phase-5.1-hosting-migration.md`          | Complete | 2026-06-14 |
 | 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | `phase-5.2-slug-id-routing-rpc.md` | **Complete** | 2026-06-15 |
 | 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | `phase-5.3-per-tenant-branding.md`            | **Complete** | 2026-06-15 |
-| 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | *(written at 5.3 close)* | Pending | |
+| 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | `phase-5.4-tenant-signup.md` | Planning | |
 | 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | *(written at 5.4 close)*                  | Pending  | |
 
 ### Status values
@@ -148,4 +148,4 @@ Phase 5 is complete when **all** of the following are true:
 
 ---
 
-**Last updated:** 2026-06-14 (row 5.1 → Complete — hosting migrated to Cloudflare Pages, 3-day soak clean; 5.2 plan to be written next session)
+**Last updated:** 2026-06-15 (5.2 + 5.3 → Complete; row 5.4 plan written — `phase-5.4-tenant-signup.md`, status Planning; F64 item 5 DDL given a home as 5.4 S0)
