@@ -2225,15 +2225,25 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Operational notes (debugging detour, recorded for next time):** MailerLite `subscriber.created` fires only for *new* subscriber records — re-submitting the landing-page form with an already-known email fires nothing (no webhook call, no function log). Test with fresh `+alias` emails or delete the subscriber first. A second MailerLite webhook ("Application onboarding") points at the **staging** `register-customer`; webhook active/deactivated states were being toggled for testing during this session — final intended state: prod webhook Active, staging webhook per Rick's testing needs.
 - **Where:** Supabase Edge Functions Secrets (prod `plgegklqtdjxeglvyjte`, staging `puoaiyezsreowpwxzxhj` if shared); MailerLite webhook "PROD APP ONBOARDING"; this file's F68 entry (redacted 2026-06-11).
 
-### Phase 5.2 findings (none filed; F71+ reserved)
+### Phase 5.2 findings (F71)
 
 #### `resolve_tenant_by_slug` RPC — contract and security rationale (S1, 2026-06-15)
-- **Status:** Created on staging 2026-06-15 (S1); created on prod at S7.
+- **Status:** Created on staging 2026-06-15 (S1); created on prod at S7; prod RPC verified anon-contract clean (rjbookstop → correct prod UUID + 3 keys, unknown slug → []).
 - **Contract:** `CREATE OR REPLACE FUNCTION public.resolve_tenant_by_slug(p_slug text) RETURNS TABLE (id uuid, slug text, display_name text) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp` — returns only `id, slug, display_name`. `REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO anon, authenticated`.
 - **Why only three columns:** `branding` and `settings` jsonb are config-leak surface and belong to sub-deploy 5.3's rendering layer — the RPC deliberately does not expose them.
 - **Why exposing tenant `id` (UUID) to anon is safe:** Writes are gated by `WITH CHECK (tenant_id = current_tenant_id())`, where `current_tenant_id()` derives from the authenticated user profile — never from a client-supplied id. For anon callers, `current_tenant_id()` returns NULL → all writes blocked. Knowing a tenant UUID grants no write capability.
 - **No status filter today:** `tenants` has no `status`/`active` column. If one is added, the RPC must filter to active tenants only.
 - **Verified 2026-06-15 (staging):** `pg_get_functiondef` shows `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`, exactly three columns. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X` (PUBLIC). Anon `curl.exe` to `rpc/resolve_tenant_by_slug` with `raysandjudys` → `200`, one object, exactly keys `{id, slug, display_name}`, founding UUID `72e29f67-…`. Unknown slug → `200`, `[]`. Direct anon `GET /tenants?select=*` → `permission denied for table tenants` (RLS holds).
+- **Verified 2026-06-15 (prod):** Same contract confirmed via anon `curl.exe` with `rjbookstop` → `200`, `{id: 20941129-c35a-476d-ae21-44b8f77af89c, slug: rjbookstop, display_name: "Ray & Judy's Book Stop"}`.
+
+#### F71 — `FOUNDING_TENANT` const in app.js carries staging UUID and slug
+
+- **Status:** Open — pre-existing; filed 2026-06-15 during 5.2 S7. Deferred to sub-deploy 5.3 (no impact on 5.2 completion criteria).
+- **Severity:** Low-dormant — only the unauthenticated fallback (branch 4) ever reads the const; authenticated users resolve via profile lookup (branch 1) and never hit it.
+- **Detail:** `FOUNDING_TENANT = { id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790', slug: 'raysandjudys', … }` in `app.js` contains the **staging** founding tenant's UUID and slug. Prod founding tenant has id `20941129-c35a-476d-ae21-44b8f77af89c`, slug `rjbookstop`. Discovered when S7 anon-contract check initially tested `raysandjudys` against prod and received `[]` (correctly — that slug doesn't exist on prod).
+- **Why pre-existing:** The const has held staging values since Phase 3.1 (when `TenantContext` was added). The old `TENANT_SLUG_MAP` only mapped `raysandjudys`, which also doesn't exist on prod — the fallback behavior is unchanged from before 5.2.
+- **Impact today:** Unauthenticated users arriving at `pulllist.app` without a `?t=` param hit the FOUNDING_TENANT fallback, which resolves to the staging tenant UUID. Since they're anon, RLS blocks all writes regardless of `tenant_id`. Reads that do return rows (anon-readable tables, if any) would silently scope to the wrong tenant. No user-facing data loss since the founding tenant has no anon-readable tables.
+- **Remediation options:** (A) `UPDATE public.tenants SET slug = 'raysandjudys' WHERE id = '20941129-…'` on prod — aligns prod slug with app.js const; (B) Move const to per-environment config; (C) Make the fallback query the RPC with the known apex hostname slug rather than using a hardcoded object. Decision deferred to 5.3.
 
 ### Phase 5 enhancement-batch findings (F70)
 

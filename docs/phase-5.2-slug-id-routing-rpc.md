@@ -440,7 +440,8 @@ Execution order: **S1 → S2 → S3 (one sitting if possible) → S4 (staging SQ
 | 2026-06-15 | S5 (staging) | ✅ Green | APP_BASE_URL secret set (staging.pulllist.pages.dev); 5 EFs deployed. Staging verify: invite email link → redirect_to=https://staging.pulllist.pages.dev/index.html ✅ |
 | 2026-06-15 | S5 (prod) | ✅ Green | APP_BASE_URL secret set (pulllist.app); 5 EFs deployed. reset-password had JWT verification ON (same as F68) — set to OFF (public endpoint by design). Prod verify: reset-password email link → https://pulllist.app/forgot-password ✅. F67 resolved. |
 | 2026-06-15 | S6 | ✅ Green | TENANT_SLUG_MAP removed (0 grep hits); block comment updated to describe RPC model; FOUNDING_TENANT remains as sole hardcoded fallback. 15/15 Playwright green. Rick staging-verified (reserve → cancel normal). Committed 823b748. |
-| | S7 | | |
+| 2026-06-15 | S7 (pre) | ✅ Green | Prod RPC created + definition/grants verified (same contract as staging). Anon-contract check with `rjbookstop` (prod founding slug) → `200`, `{id: 20941129-…, slug: rjbookstop, display_name: "Ray & Judy's Book Stop"}` — exactly 3 keys. Unknown slug → `[]`. F71 filed: FOUNDING_TENANT const in app.js carries staging UUID/slug; pre-existing; deferred to 5.3. Prod promotion PR opened: feat/5.2-slug-rpc-prod → main. |
+| 2026-06-15 | S7 (merge) | ⏳ Pending | PR merge + CF Pages prod deploy + post-deploy write-smoke. |
 | | S8 | | |
 
 ---
