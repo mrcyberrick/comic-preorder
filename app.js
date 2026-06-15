@@ -20,16 +20,13 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 //   5. Founding tenant fallback (FOUNDING_TENANT const)
 //
 // The resolve_tenant_by_slug RPC is the sole anon slug→id path (SECURITY DEFINER,
-// returns only id/slug/display_name, anon+authenticated EXECUTE). The hardcoded
+// returns id/slug/display_name/branding, anon+authenticated EXECUTE). The hardcoded
 // slug map was removed in 5.2 S6 — the RPC is now the sole source; FOUNDING_TENANT
-// is the only hardcoded fallback.
+// is the only hardcoded fallback. FOUNDING_TENANT is loaded from per-env config.js
+// (F71, 5.3 S2) so the correct id/slug is used in each environment.
 // ============================================================================
 
-const FOUNDING_TENANT = {
-  id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790',
-  slug: 'raysandjudys',
-  display_name: "Ray & Judy's Book Stop",
-};
+const FOUNDING_TENANT = window.FOUNDING_TENANT;
 
 // Hostnames that are NOT per-tenant subdomains → resolve to the founding tenant.
 const NON_TENANT_HOSTS = new Set([
