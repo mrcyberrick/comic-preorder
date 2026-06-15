@@ -10,17 +10,17 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.1 — Hosting migration** (Planning — plan: `docs/phase-5.1-hosting-migration.md`)
+**Active sub-deploy:** **5.2 — Slug→id routing RPC** (plan not yet written — to be authored next session; incorporates F67 + F64 item 8)
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 5.0 — Pre-Phase-5 housekeeping (2026-06-11) — F58/F63/F64 items 1–4 resolved; F64 item 5 DDL deferred; F65/F66 resolved; prod commit `88c0e02`
+**Last completed sub-deploy:** Phase 5.1 — Hosting migration (Complete 2026-06-14) — GitHub Pages → Cloudflare Pages; prod live at `pulllist.app`; 3-calendar-day soak clean; GH Pages + `staging` remote kept warm until 5.5
 **Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4); F64 item 8 — `idx_tenants_slug` → prod (→ 5.2). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). Next free finding ID: **F67**.
+**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4); F64 item 8 — `idx_tenants_slug` → prod (→ 5.2); F67 — Edge Function hardcoded app URLs (owner: 5.2-adjacent housekeeping, must land before 5.5); All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F69 filed in 5.1; F68 resolved 2026-06-11; F69 (MailerLite webhook secret leak) resolved 2026-06-11 — secret rotated, e2e re-verified. F70 — `import-staging.js` wrong TENANT_ID; resolved 2026-06-14 (FK blocked all bad writes; fix: line 63 → `72e29f67-…`; June staging import confirmed clean). Next free finding ID: **F71**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -241,8 +241,9 @@ At the end of each session:
 **App:** PULLLIST — comic pre-order system for Ray & Judy's Book Stop
 **Phone:** 973-586-9182
 **Location:** Rockaway, NJ
-**Production URL:** https://mrcyberrick.us/comic-preorder/
-**Staging URL:** https://mrcyberrick.github.io/comic-preorder-staging/
+**Production URL:** https://pulllist.app/
+**Staging URL:** https://staging.pulllist.pages.dev/
+**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — warm until 5.5; redirects to `/` via `_redirects`)
 
 ---
 
@@ -270,7 +271,7 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
 
 **Git remotes:**
 - `origin` → production repo (`github.com/mrcyberrick/comic-preorder`)
-- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`)
+- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback until 5.5 closes
 
 **Local scripts folder** (outside any repo, never committed):
 ```
@@ -301,11 +302,11 @@ C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\
 
 - **Frontend:** Vanilla HTML/CSS/JS — no build step, no npm for the web app
 - **Backend:** Supabase (PostgreSQL + Auth + Edge Functions + RLS)
-- **Hosting:** GitHub Pages (static files only)
+- **Hosting:** Cloudflare Pages (static files only; migrated from GitHub Pages in 5.1)
 - **Email:** MailerSend via Supabase Edge Functions
 - **Import:** Node.js script run locally each month
 
-GitHub Pages serves static files only — no SSR. All dynamic behavior is client-side
+Cloudflare Pages serves static files only — no SSR. All dynamic behavior is client-side
 JS calling Supabase directly.
 
 ---
@@ -333,9 +334,10 @@ cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
 # Stop if anything fails — do not push
 
 git push origin staging
-git push staging staging:main    # deploys to staging GitHub Pages
+# CF Pages auto-deploys the staging preview at https://staging.pulllist.pages.dev/
+# (Do NOT run: git push staging staging:main — retired as of 5.1)
 
-# Test at: mrcyberrick.github.io/comic-preorder-staging/
+# Test at: https://staging.pulllist.pages.dev/
 # When staging tests pass, promote to production:
 git checkout main
 git pull origin main
@@ -352,6 +354,7 @@ git checkout -b feat/<description>-prod
 git push origin feat/<description>-prod
 # Open PR: feat/<description>-prod → main
 # Verify config.js is NOT in the diff before merging
+# CF Pages auto-deploys production from main at https://pulllist.app/
 # Post-deploy write-smoke: reserve one item through the live app as a test user, confirm
 # the row lands in prod preorders with correct tenant_id, then cancel it.
 ```
@@ -497,7 +500,6 @@ approval.
 
 ### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
 ### their own sub-deploy session)
-- **Hosting migration** (GitHub Pages → Cloudflare/Vercel) — sub-deploy 5.1
 - **Slug→id RPC** — `TENANT_SLUG_MAP` hardcoded in `app.js` — sub-deploy 5.2
 - **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI
   reads it — sub-deploy 5.3
