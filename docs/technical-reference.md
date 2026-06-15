@@ -2240,12 +2240,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F71 — `FOUNDING_TENANT` const in app.js carries staging UUID and slug
 
-- **Status:** Open — pre-existing; filed 2026-06-15 during 5.2 S7. Deferred to sub-deploy 5.3 (no impact on 5.2 completion criteria).
+- **Status:** Resolved 2026-06-15 (5.3 S2) — `app.js` now reads `const FOUNDING_TENANT = window.FOUNDING_TENANT`; hardcoded staging UUID/slug removed. Staging `config.js` carries staging values (`72e29f67-…` / `raysandjudys`); `main` `config.js` will carry prod values (`20941129-…` / `rjbookstop`) added in 5.3 S6 before promotion. Playwright smoke (15/15) green after staging deploy.
+- **Decision:** Option B — move const to per-env `config.js` (Rick, 5.3 planning 2026-06-15). Idiomatic: same mechanism as `SUPABASE_ANON_KEY`; fixes both id and slug; per-env branding delivered naturally from each env's own DB via RPC/profile path.
 - **Severity:** Low-dormant — only the unauthenticated fallback (branch 4) ever reads the const; authenticated users resolve via profile lookup (branch 1) and never hit it.
-- **Detail:** `FOUNDING_TENANT = { id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790', slug: 'raysandjudys', … }` in `app.js` contains the **staging** founding tenant's UUID and slug. Prod founding tenant has id `20941129-c35a-476d-ae21-44b8f77af89c`, slug `rjbookstop`. Discovered when S7 anon-contract check initially tested `raysandjudys` against prod and received `[]` (correctly — that slug doesn't exist on prod).
-- **Why pre-existing:** The const has held staging values since Phase 3.1 (when `TenantContext` was added). The old `TENANT_SLUG_MAP` only mapped `raysandjudys`, which also doesn't exist on prod — the fallback behavior is unchanged from before 5.2.
-- **Impact today:** Unauthenticated users arriving at `pulllist.app` without a `?t=` param hit the FOUNDING_TENANT fallback, which resolves to the staging tenant UUID. Since they're anon, RLS blocks all writes regardless of `tenant_id`. Reads that do return rows (anon-readable tables, if any) would silently scope to the wrong tenant. No user-facing data loss since the founding tenant has no anon-readable tables.
-- **Remediation options:** (A) `UPDATE public.tenants SET slug = 'raysandjudys' WHERE id = '20941129-…'` on prod — aligns prod slug with app.js const; (B) Move const to per-environment config; (C) Make the fallback query the RPC with the known apex hostname slug rather than using a hardcoded object. Decision deferred to 5.3.
+- **Detail:** `FOUNDING_TENANT = { id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790', slug: 'raysandjudys', … }` in `app.js` contained the **staging** founding tenant's UUID and slug. Prod founding tenant has id `20941129-c35a-476d-ae21-44b8f77af89c`, slug `rjbookstop`. Discovered when S7 anon-contract check initially tested `raysandjudys` against prod and received `[]` (correctly — that slug doesn't exist on prod).
+- **Why pre-existing:** The const held staging values since Phase 3.1. The old `TENANT_SLUG_MAP` only mapped `raysandjudys` — fallback behavior was unchanged from before 5.2.
 
 ### Phase 5 enhancement-batch findings (F70)
 
