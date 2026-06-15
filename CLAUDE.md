@@ -10,7 +10,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.2 — Slug→id routing RPC** (plan not yet written — to be authored next session; incorporates F67 + F64 item 8)
+**Active sub-deploy:** **5.2 — Slug→id routing RPC** (plan written 2026-06-15 — `docs/phase-5.2-slug-id-routing-rpc.md`; incorporates F67 + F64 item 8)
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
@@ -20,7 +20,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4); F64 item 8 — `idx_tenants_slug` → prod (→ 5.2); F67 — Edge Function hardcoded app URLs (owner: 5.2-adjacent housekeeping, must land before 5.5); All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F69 filed in 5.1; F68 resolved 2026-06-11; F69 (MailerLite webhook secret leak) resolved 2026-06-11 — secret rotated, e2e re-verified. F70 — `import-staging.js` wrong TENANT_ID; resolved 2026-06-14 (FK blocked all bad writes; fix: line 63 → `72e29f67-…`; June staging import confirmed clean). Next free finding ID: **F71**.
+**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F69 filed in 5.1; F68 resolved 2026-06-11; F69 (MailerLite webhook secret leak) resolved 2026-06-11 — secret rotated, e2e re-verified. F70 — `import-staging.js` wrong TENANT_ID; resolved 2026-06-14. F14 resolved 2026-06-15 (idx_tenants_slug dropped staging); F64 item 8 dispositioned no-op 2026-06-15; F67 resolved 2026-06-15 (APP_BASE_URL secret + 5 EF deploys; reset-password JWT → OFF on prod). Next free finding ID: **F71**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list

@@ -1,5 +1,4 @@
-const STAGING_BASE       = 'https://mrcyberrick.us/comic-preorder-staging'
-const FORGOT_PASSWORD_URL = `${STAGING_BASE}/forgot-password.html`
+const FORGOT_PASSWORD_URL = `${Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'}/forgot-password.html`
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

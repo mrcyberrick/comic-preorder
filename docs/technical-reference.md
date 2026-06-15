@@ -284,7 +284,7 @@ exists (the founding tenant).
 **Indexes:**
 - `tenants_pkey` on `id`
 - `tenants_slug_key` (unique) on `slug`
-- `idx_tenants_slug` on `slug` — redundant with `tenants_slug_key` (F14)
+- ~~`idx_tenants_slug` on `slug`~~ — dropped on staging 2026-06-15 (F14 resolved); never existed on prod (F64 item 8 no-op — `tenants_slug_key` already serves the slug→id RPC)
 
 **Notes:**
 - Per-tenant `branding` and `settings` jsonb columns are reserved for
@@ -1036,9 +1036,7 @@ puts `tenant_id` as the leading column. The exceptions are
 `reservation_history` (F7) and `weekly_shipment` (F9), where the unique
 key omits `tenant_id`.
 
-**Redundant index:** `idx_tenants_slug` and `tenants_slug_key` (unique)
-both index `tenants.slug`. The non-unique one is dead — it cannot serve a
-query better than the unique constraint's backing index. See F14.
+**Redundant index (resolved):** `idx_tenants_slug` was dropped on staging 2026-06-15 (F14). It never existed on prod (F64 item 8 no-op). `tenants_slug_key` (unique) is the sole index on `slug` on both environments and serves the `resolve_tenant_by_slug` RPC equality lookup optimally.
 
 ---
 
@@ -1902,11 +1900,9 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 ### Trivial / info
 
 #### F14 — redundant `idx_tenants_slug` index
-- **Status:** open
-- Both `tenants_slug_key` (unique) and `idx_tenants_slug` (non-unique)
-  index `tenants.slug`. The non-unique one cannot serve a query better
-  than the unique constraint's backing index.
-- **Fix:** `DROP INDEX idx_tenants_slug;`
+- **Status:** **Resolved 2026-06-15** — `DROP INDEX public.idx_tenants_slug` executed on staging (5.2 S4). Prod never had this index (confirmed via `pg_indexes` 2026-06-15 — F64 item 8 no-op). Both environments now have only `tenants_pkey` + `tenants_slug_key` on `tenants`.
+- Both `tenants_slug_key` (unique) and `idx_tenants_slug` (non-unique) indexed `tenants.slug`. The non-unique one could not serve a query better than the unique constraint's backing index.
+- **Fix executed:** `DROP INDEX public.idx_tenants_slug;` on staging. No prod DDL needed.
 
 #### F26 — `admin_preorders` view bypasses RLS but has no caller
 - **Status:** fixed 2026-05-26 (Phase 4.1 C11) — view dropped and recreated with `security_invoker = true`; same column list, JOINs, and ORDER BY preserved. Grants tightened: `authenticated` SELECT only, `service_role` SELECT only, `anon` no grants. See also F49.
@@ -2157,7 +2153,7 @@ Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
   5. `preorders_user_id_fkey` target — **decision recorded 2026-06-11 (5.0 S3); DDL deferred to parent § Deferred-DDL Register (must execute before 5.4).** Decision: **Option A — profile-first, preorder-blocking (staging shape is canonical).** `preorders_user_id_fkey` → `user_profiles` NO ACTION on both envs. Rationale: profile DELETE fails loudly if the customer has open preorders — this is an intentional guard, not a bug. Admin must cancel preorders first, then Decline. Auth.users row cleanup is a separate GoTrue admin API step (can be wired to the Decline button in a later sub-deploy). Aligns with staging. Required prod action: `DROP CONSTRAINT preorders_user_id_fkey; ADD CONSTRAINT preorders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id);` (removes the `auth.users` target and the CASCADE). No DDL executed in 5.0.
   6. `app_settings_updated_by_fkey` — **closed 2026-06-11 (5.0 S2).** FK added to staging; pre-flight confirmed 0 orphaned `updated_by` values; verified via `pg_constraint`.
   7. `user_profiles_id_fkey` → `auth.users` ON DELETE CASCADE — **closed 2026-06-11 (5.0 S2).** Pre-flight found 44 orphaned `user_profiles` rows — all Playwright test fixtures (`pw-*@example.test`, founding tenant, 0 dependent preorders/subscriptions); deleted inline. FK then added; verified `confdeltype = c`. Post-add: future Playwright teardown auth-user deletes will cascade automatically.
-  8. `idx_tenants_slug` — **add to prod during Phase 5** (slug→id routing will want it); additive index, trivially safe.
+  8. `idx_tenants_slug` — **dispositioned no-op 2026-06-15 (5.2 S4).** The `resolve_tenant_by_slug` RPC uses a single-row equality lookup (`WHERE slug = $1`) that `tenants_slug_key` (the unique constraint's backing btree) already serves optimally on both envs. Adding a second index would be redundant. Staging `idx_tenants_slug` dropped (F14 resolved); prod never had it.
 - **Enumerated differences (prod vs staging) from 2026-06-10 pg_dump:**
   1. `catalog.price_usd`: prod `numeric(6,2)` vs staging `numeric` (no precision/scale)
   2. `catalog`: prod has `CONSTRAINT catalog_distributor_check CHECK (distributor = ANY (ARRAY['Lunar', 'PRH']))` — staging does not
@@ -2196,7 +2192,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 ### Phase 5.1 findings (F67–F69)
 
 #### F67 — Edge Function hardcoded app URLs — hosting-migration continuity
-- **Status:** Open — filed 2026-06-11 (5.1 S1). Owner: 5.2-adjacent housekeeping commit (per Rick, S1 gate 2026-06-11). Must land before 5.5 GH Pages teardown.
+- **Status:** **Resolved 2026-06-15 (5.2 S5).** `APP_BASE_URL` secret set on both projects (staging: `https://staging.pulllist.pages.dev`; prod: `https://pulllist.app`). All five functions updated to `Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'` and redeployed. Staging verify: invite email link → `redirect_to=https://staging.pulllist.pages.dev/index.html` ✅. Prod verify: reset-password email link → `https://pulllist.app/forgot-password...` ✅. **Also fixed during prod deploy:** `reset-password` had JWT verification ON on prod (same issue as F68/`register-customer`) — set to OFF; function is a public endpoint by design. Source committed to repo at `de982e5`.
 - **Severity:** High (approve-customer, register-customer, invite-customer — prod magic-link emails point at staging Supabase project; token generated by prod project fails `verifyOtp` against staging client — pre-existing live defect). High (reset-password — `redirect_to` uses an anomalous host path that 404s — pre-existing live defect). Low (notify-customers — current URL correct today; becomes stale after `pulllist.app` domain migration).
 - **Functions and values (staging branch = main branch; both projects confirmed identical at S1 — Rick paste 2026-06-11):**
 
@@ -2228,6 +2224,16 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Fix (executed 2026-06-11):** New secret generated by Rick (never entered chat/repo) → Supabase prod → Edge Functions → Secrets → `MAILERLITE_WEBHOOK_SECRET` updated → MailerLite webhook "PROD APP ONBOARDING" URL updated → verified: curl with new secret reached email validation (400 past gate); burned secret → 401; full e2e signup created prod account. Never commit the secret value anywhere; docs reference it only as `<MAILERLITE_WEBHOOK_SECRET>`.
 - **Operational notes (debugging detour, recorded for next time):** MailerLite `subscriber.created` fires only for *new* subscriber records — re-submitting the landing-page form with an already-known email fires nothing (no webhook call, no function log). Test with fresh `+alias` emails or delete the subscriber first. A second MailerLite webhook ("Application onboarding") points at the **staging** `register-customer`; webhook active/deactivated states were being toggled for testing during this session — final intended state: prod webhook Active, staging webhook per Rick's testing needs.
 - **Where:** Supabase Edge Functions Secrets (prod `plgegklqtdjxeglvyjte`, staging `puoaiyezsreowpwxzxhj` if shared); MailerLite webhook "PROD APP ONBOARDING"; this file's F68 entry (redacted 2026-06-11).
+
+### Phase 5.2 findings (none filed; F71+ reserved)
+
+#### `resolve_tenant_by_slug` RPC — contract and security rationale (S1, 2026-06-15)
+- **Status:** Created on staging 2026-06-15 (S1); created on prod at S7.
+- **Contract:** `CREATE OR REPLACE FUNCTION public.resolve_tenant_by_slug(p_slug text) RETURNS TABLE (id uuid, slug text, display_name text) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp` — returns only `id, slug, display_name`. `REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO anon, authenticated`.
+- **Why only three columns:** `branding` and `settings` jsonb are config-leak surface and belong to sub-deploy 5.3's rendering layer — the RPC deliberately does not expose them.
+- **Why exposing tenant `id` (UUID) to anon is safe:** Writes are gated by `WITH CHECK (tenant_id = current_tenant_id())`, where `current_tenant_id()` derives from the authenticated user profile — never from a client-supplied id. For anon callers, `current_tenant_id()` returns NULL → all writes blocked. Knowing a tenant UUID grants no write capability.
+- **No status filter today:** `tenants` has no `status`/`active` column. If one is added, the RPC must filter to active tenants only.
+- **Verified 2026-06-15 (staging):** `pg_get_functiondef` shows `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`, exactly three columns. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X` (PUBLIC). Anon `curl.exe` to `rpc/resolve_tenant_by_slug` with `raysandjudys` → `200`, one object, exactly keys `{id, slug, display_name}`, founding UUID `72e29f67-…`. Unknown slug → `200`, `[]`. Direct anon `GET /tenants?select=*` → `permission denied for table tenants` (RLS holds).
 
 ### Phase 5 enhancement-batch findings (F70)
 

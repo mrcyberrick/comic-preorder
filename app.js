@@ -13,16 +13,16 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // TenantContext — resolves the active tenant for the current page load.
 //
 // Resolution order (highest priority first):
-//   1. Authenticated user's user_profiles.tenant_id
-//   2. ?t=<slug> query parameter (persisted to sessionStorage for the tab)
-//   3. Founding tenant fallback (raysandjudys)
+//   1. Authenticated user's user_profiles.tenant_id (RLS-gated SELECT on tenants)
+//   2. Subdomain: <slug>.pulllist.app → resolve_tenant_by_slug RPC (5.2)
+//   3. ?t=<slug> query parameter → RPC (persisted to sessionStorage for the tab)
+//   4. sessionStorage slug → RPC
+//   5. Founding tenant fallback (FOUNDING_TENANT const)
 //
-// Phase 3.1: read-only — does not affect writes. Phase 3.2 will make
-// app.js writes pass tenant_id explicitly using TenantContext.current().
-//
-// The slug→id mapping for unauthenticated lookup is hardcoded here
-// because the tenants table is not readable by anon. Replaced with
-// an RPC in a later sub-deploy once a second tenant exists.
+// The resolve_tenant_by_slug RPC is the sole anon slug→id path (SECURITY DEFINER,
+// returns only id/slug/display_name, anon+authenticated EXECUTE). The hardcoded
+// slug map was removed in 5.2 S6 — the RPC is now the sole source; FOUNDING_TENANT
+// is the only hardcoded fallback.
 // ============================================================================
 
 const FOUNDING_TENANT = {
@@ -31,10 +31,38 @@ const FOUNDING_TENANT = {
   display_name: "Ray & Judy's Book Stop",
 };
 
-const TENANT_SLUG_MAP = {
-  // slug → { id, slug, display_name }
-  raysandjudys: FOUNDING_TENANT,
-};
+// Hostnames that are NOT per-tenant subdomains → resolve to the founding tenant.
+const NON_TENANT_HOSTS = new Set([
+  'pulllist.app', 'www.pulllist.app',
+  'pulllist.pages.dev', 'staging.pulllist.pages.dev',
+  'localhost', '127.0.0.1',
+]);
+const TENANT_APEX = 'pulllist.app';            // <slug>.pulllist.app ⇒ slug
+
+function tenantSlugFromHostname() {
+  try {
+    const host = window.location.hostname.toLowerCase();
+    if (NON_TENANT_HOSTS.has(host)) return null;
+    if (host.endsWith('.pages.dev')) return null;          // all CF previews
+    const suffix = '.' + TENANT_APEX;
+    if (host.endsWith(suffix)) {
+      const label = host.slice(0, -suffix.length);
+      if (label && !label.includes('.') && label !== 'www') return label;
+    }
+    return null;
+  } catch (_) { return null; }
+}
+
+async function lookupTenantBySlug(slug) {
+  try {
+    const { data, error } = await db.rpc('resolve_tenant_by_slug', { p_slug: slug });
+    if (error) { console.warn('resolve_tenant_by_slug failed', error); return null; }
+    return (data && data[0]) || null;
+  } catch (err) {
+    console.warn('resolve_tenant_by_slug threw', err);
+    return null;
+  }
+}
 
 const TenantContext = {
   _current: null,
@@ -71,12 +99,26 @@ const TenantContext = {
       console.warn('TenantContext: profile lookup failed, falling back', err);
     }
 
+    // 1.5 Subdomain (e.g. <slug>.pulllist.app) — anon canonical signal post-5.1
+    try {
+      const subSlug = tenantSlugFromHostname();
+      if (subSlug) {
+        const tenant = await lookupTenantBySlug(subSlug);
+        if (tenant) {
+          sessionStorage.setItem('pulllist.tenant_slug', subSlug);
+          this._current = tenant; this._source = 'subdomain';
+          return this._current;
+        }
+        console.warn('TenantContext: unknown tenant subdomain', subSlug);
+      }
+    } catch (err) { console.warn('TenantContext: subdomain lookup failed', err); }
+
     // 2. Check ?t= query parameter (and persist to sessionStorage)
     try {
       const params = new URLSearchParams(window.location.search);
       const fromQuery = params.get('t');
       if (fromQuery) {
-        const tenant = TENANT_SLUG_MAP[fromQuery];
+        const tenant = await lookupTenantBySlug(fromQuery);
         if (tenant) {
           sessionStorage.setItem('pulllist.tenant_slug', fromQuery);
           this._current = tenant;
@@ -89,10 +131,13 @@ const TenantContext = {
 
       // 3. Check sessionStorage (carries query-resolved tenant across nav)
       const fromStorage = sessionStorage.getItem('pulllist.tenant_slug');
-      if (fromStorage && TENANT_SLUG_MAP[fromStorage]) {
-        this._current = TENANT_SLUG_MAP[fromStorage];
-        this._source = 'session';
-        return this._current;
+      if (fromStorage) {
+        const tenant = await lookupTenantBySlug(fromStorage);
+        if (tenant) {
+          this._current = tenant;
+          this._source = 'session';
+          return this._current;
+        }
       }
     } catch (err) {
       console.warn('TenantContext: query/session lookup failed', err);
