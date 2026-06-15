@@ -81,7 +81,7 @@ const TenantContext = {
         if (profile?.tenant_id) {
           const { data: tenant } = await db
             .from('tenants')
-            .select('id, slug, display_name')
+            .select('id, slug, display_name, branding')
             .eq('id', profile.tenant_id)
             .single();
 
@@ -166,6 +166,41 @@ const TenantContext = {
 // Expose on window for debugging and for HTML pages to await
 window.TenantContext = TenantContext;
 
+// ── Per-Tenant Branding ───────────────────────────────────────
+// Override layer: applies branding keys present in tenant.branding.
+// Absent/empty branding → zero DOM/CSS mutation → founding renders identically to today.
+const Branding = {
+  apply(tenant) {
+    try {
+      const b = (tenant && tenant.branding) || {};
+
+      // Brand color → override --accent (+ derived hover/dim). Absent ⇒ keep default.
+      if (b.primary_color && /^#[0-9a-fA-F]{6}$/.test(b.primary_color)) {
+        const root = document.documentElement;
+        root.style.setProperty('--accent', b.primary_color);
+        root.style.setProperty('--accent-hover', b.primary_color);
+        root.style.setProperty('--accent-dim', this._dim(b.primary_color));
+      }
+
+      // Display name → fill [data-tenant-name] text. Absent ⇒ keep default.
+      const name = (tenant && tenant.display_name) || null;
+      if (name) {
+        document.querySelectorAll('[data-tenant-name]').forEach(el => { el.textContent = name; });
+      }
+
+      // Logo → swap [data-tenant-logo] img src. Absent ⇒ keep default markup.
+      if (b.logo_url) {
+        document.querySelectorAll('img[data-tenant-logo]').forEach(img => { img.src = b.logo_url; });
+      }
+    } catch (err) { console.warn('Branding.apply failed; rendering defaults', err); }
+  },
+  _dim(hex) {                                   // #RRGGBB → rgba(r,g,b,0.15)
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},0.15)`;
+  },
+};
+window.Branding = Branding;
+
 // ── Auth Helpers ─────────────────────────────────────────────
 const Auth = {
   async getSession() {
@@ -230,6 +265,7 @@ async function initNav() {
 
   // Must resolve before any TenantContext.current() calls on this page
   await TenantContext.resolve();
+  Branding.apply(TenantContext.current());
 
   const user = await Auth.getUser();
   if (!user) {

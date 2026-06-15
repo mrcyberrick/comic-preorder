@@ -129,6 +129,7 @@
 
   // Capture ?t= before any redirect so sessionStorage gets the slug
   await TenantContext.resolve();
+  Branding.apply(TenantContext.current());
 
   // ── Parse URL for tokens (query params AND hash fragment) ──
   const qParams     = new URLSearchParams(window.location.search);
