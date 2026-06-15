@@ -1,6 +1,6 @@
 # Phase 5.2 — Slug→id Routing RPC
 
-**Status:** **Planning** — plan written 2026-06-15; not yet executed.
+**Status:** **Complete** — 2026-06-15. All completion criteria ticked; prod write-smoke clean; CLAUDE.md pointer advanced to 5.3.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.2)
 **Predecessor:** Phase 5.1 — Hosting migration → Cloudflare Pages — **Complete 2026-06-14** (prod live at `pulllist.app`; staging at `staging.pulllist.pages.dev`).
 **Branches:** Database + EF + doc changes do their work via the SQL Editor / Supabase dashboard (doc commits → `staging` directly). The `app.js` changes ride `feature/5.2-slug-rpc` off `staging` → `--ff-only` merge → staging smoke → prod promotion PR per `CLAUDE.md` § Standard Deployment Workflow (F59 diff assertion + `config.js` checkout + post-deploy write-smoke). The F67 EF work (§ S5, **adjacent**) follows the Edge-Function deploy procedure, **staging project first, prod project after staging verify**.
@@ -390,16 +390,16 @@ Execution order: **S1 → S2 → S3 (one sitting if possible) → S4 (staging SQ
 
 ## 5. Completion criteria (all must be checked before parent row 5.2 → Complete)
 
-- [ ] S1: `resolve_tenant_by_slug` live on **staging**; `pg_get_functiondef` shows `SECURITY DEFINER` + `SET search_path` + exactly `id, slug, display_name`; `proacl` = `anon`+`authenticated` EXECUTE, not PUBLIC; anon `curl.exe` returns a three-key object for `raysandjudys` and `[]` for an unknown slug; direct anon `tenants` SELECT still RLS-blocked.
-- [ ] S2: `app.js` resolves the `?t=`/sessionStorage paths via the RPC and adds `tenantSlugFromHostname()`; `TENANT_SLUG_MAP` retained only as fallback; full Playwright green on the staging alias; diff confined to `TenantContext`.
-- [ ] S3: parser unit table passes (founding/infra hosts → null; `<slug>.pulllist.app` → slug); `pulllist.app`/`staging.pulllist.pages.dev`/`*.pages.dev` resolve to founding; `?t=` resolves via the RPC; bad slug falls through cleanly; full Playwright incl. tenant-isolation green; live-subdomain gap noted honestly.
-- [ ] S4: **F14 resolved** — `idx_tenants_slug` dropped on staging; live `pg_indexes` on staging = `{tenants_pkey, tenants_slug_key}`; prod confirmed already lacking `idx_tenants_slug`; **F64 item 8 dispositioned no-op** (no prod index); index prose updated; Deferred-DDL Register row closed.
-- [ ] S5 (F67, adjacent): `APP_BASE_URL` set in both projects (staging `https://staging.pulllist.pages.dev`, prod `https://pulllist.app`); all five functions redeployed; a staging email link and a prod email link both carry the correct host and `verifyOtp` succeeds; **F67 resolved** in § 13.
-- [ ] S6: `TENANT_SLUG_MAP` removed (`Select-String` → 0 lines); RPC is the sole anon slug source with the founding default as the only hardcoded fallback; full Playwright green; Rick staging-verified.
-- [ ] S7: prod `resolve_tenant_by_slug` live and anon-verified (three-key, prod founding UUID) **before** app.js promotion; app.js promoted via the standard workflow (`config.js` not in PR diff; F59 assertion confirms app.js changed); founding-apex invariant verified on `pulllist.app`; write-smoke passed (reserve → correct founding `tenant_id` → cancel).
-- [ ] Founding-tenant behavior unchanged (parent invariant): full Playwright incl. tenant-isolation green at the S2/S3/S6 staging gates and the S7 prod write-smoke.
-- [ ] F14, F64 item 8, F67 → resolved/dispositioned in § 13; any new defect filed from **F71**+ resolved or deferred-with-owner.
-- [ ] Deploy Log complete (one row per executed step); all doc changes committed to `staging`; parent row 5.2 → **Complete** + date; `CLAUDE.md` pointer advanced to 5.3 planning.
+- [x] S1: `resolve_tenant_by_slug` live on **staging**; `pg_get_functiondef` shows `SECURITY DEFINER` + `SET search_path` + exactly `id, slug, display_name`; `proacl` = `anon`+`authenticated` EXECUTE, not PUBLIC; anon `curl.exe` returns a three-key object for `raysandjudys` and `[]` for an unknown slug; direct anon `tenants` SELECT still RLS-blocked.
+- [x] S2: `app.js` resolves the `?t=`/sessionStorage paths via the RPC and adds `tenantSlugFromHostname()`; `TENANT_SLUG_MAP` retained only as fallback; full Playwright green on the staging alias; diff confined to `TenantContext`.
+- [x] S3: parser unit table passes (founding/infra hosts → null; `<slug>.pulllist.app` → slug); `pulllist.app`/`staging.pulllist.pages.dev`/`*.pages.dev` resolve to founding; `?t=` resolves via the RPC; bad slug falls through cleanly; full Playwright incl. tenant-isolation green; live-subdomain gap noted honestly.
+- [x] S4: **F14 resolved** — `idx_tenants_slug` dropped on staging; live `pg_indexes` on staging = `{tenants_pkey, tenants_slug_key}`; prod confirmed already lacking `idx_tenants_slug`; **F64 item 8 dispositioned no-op** (no prod index); index prose updated; Deferred-DDL Register row closed.
+- [x] S5 (F67, adjacent): `APP_BASE_URL` set in both projects (staging `https://staging.pulllist.pages.dev`, prod `https://pulllist.app`); all five functions redeployed; a staging email link and a prod email link both carry the correct host and `verifyOtp` succeeds; **F67 resolved** in § 13.
+- [x] S6: `TENANT_SLUG_MAP` removed (`Select-String` → 0 lines); RPC is the sole anon slug source with the founding default as the only hardcoded fallback; full Playwright green; Rick staging-verified.
+- [x] S7: prod `resolve_tenant_by_slug` live and anon-verified (three-key, prod founding UUID) **before** app.js promotion; app.js promoted via the standard workflow (`config.js` not in PR diff; F59 assertion confirms app.js changed); founding-apex invariant verified on `pulllist.app`; write-smoke passed (reserve → correct founding `tenant_id` → cancel).
+- [x] Founding-tenant behavior unchanged (parent invariant): full Playwright incl. tenant-isolation green at the S2/S3/S6 staging gates and the S7 prod write-smoke.
+- [x] F14, F64 item 8, F67 → resolved/dispositioned in § 13; any new defect filed from **F71**+ resolved or deferred-with-owner.
+- [x] Deploy Log complete (one row per executed step); all doc changes committed to `staging`; parent row 5.2 → **Complete** + date; `CLAUDE.md` pointer advanced to 5.3 planning.
 
 ---
 
@@ -440,8 +440,9 @@ Execution order: **S1 → S2 → S3 (one sitting if possible) → S4 (staging SQ
 | 2026-06-15 | S5 (staging) | ✅ Green | APP_BASE_URL secret set (staging.pulllist.pages.dev); 5 EFs deployed. Staging verify: invite email link → redirect_to=https://staging.pulllist.pages.dev/index.html ✅ |
 | 2026-06-15 | S5 (prod) | ✅ Green | APP_BASE_URL secret set (pulllist.app); 5 EFs deployed. reset-password had JWT verification ON (same as F68) — set to OFF (public endpoint by design). Prod verify: reset-password email link → https://pulllist.app/forgot-password ✅. F67 resolved. |
 | 2026-06-15 | S6 | ✅ Green | TENANT_SLUG_MAP removed (0 grep hits); block comment updated to describe RPC model; FOUNDING_TENANT remains as sole hardcoded fallback. 15/15 Playwright green. Rick staging-verified (reserve → cancel normal). Committed 823b748. |
-| | S7 | | |
-| | S8 | | |
+| 2026-06-15 | S7 (pre) | ✅ Green | Prod RPC created + definition/grants verified (same contract as staging). Anon-contract check with `rjbookstop` (prod founding slug) → `200`, `{id: 20941129-…, slug: rjbookstop, display_name: "Ray & Judy's Book Stop"}` — exactly 3 keys. Unknown slug → `[]`. F71 filed: FOUNDING_TENANT const in app.js carries staging UUID/slug; pre-existing; deferred to 5.3. Prod promotion PR opened: feat/5.2-slug-rpc-prod → main. |
+| 2026-06-15 | S7 (merge) | ✅ Green | PR #61 merged → main; CF Pages deployed (01ff145). Curl verify: resolve_tenant_by_slug=5, TENANT_SLUG_MAP=0. Founding-apex invariant: TenantContext._source='profile', id=20941129-c35a-476d-ae21-44b8f77af89c ✓. Write-smoke: reserve → preorders row tenant_id=20941129-c35a-476d-ae21-44b8f77af89c → cancelled ✓. |
+| 2026-06-15 | S8 | ✅ Green | All completion criteria ticked. Parent row 5.2 → Complete. CLAUDE.md pointer advanced to 5.3 planning. Last-completed-sub-deploy updated. TENANT_SLUG_MAP Out-of-Scope entry marked complete. F71 filed and deferred to 5.3. |
 
 ---
 

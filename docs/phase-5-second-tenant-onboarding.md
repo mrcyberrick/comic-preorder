@@ -1,6 +1,6 @@
 # Phase 5 — Second-Tenant Onboarding
 
-**Status:** In progress — 5.0 Complete 2026-06-11; 5.1 Complete 2026-06-14 (hosting → Cloudflare Pages; prod live at `pulllist.app`); 5.2 (slug→id routing RPC) planning next
+**Status:** In progress — 5.0 Complete 2026-06-11; 5.1 Complete 2026-06-14 (hosting → Cloudflare Pages; prod live at `pulllist.app`); 5.2 Complete 2026-06-15 (slug→id routing RPC; TENANT_SLUG_MAP removed; F14/F64-8/F67 resolved; prod write-smoke clean)
 **Predecessor:** Phase 4 — Production Migration (`docs/phase-4-production-migration.md`) — **Complete 2026-06-10**
 **Branch base:** `staging` for all staging-side work; prod promotions per `CLAUDE.md` § Standard Deployment Workflow
 **Customer impact:** None until 5.5 (founding-tenant behavior is a hard invariant for 5.0–5.4); 5.1 hosting cutover is the one customer-visible infrastructure change before tenant 2 exists
@@ -37,7 +37,7 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 |-----|---------------------------------------------------------------------------|-----------------------------------------------|----------|-----------|
 | 5.0 | Pre-Phase-5 housekeeping — F58/F63/F64/F65/F66 + prod `settings` row drop | `phase-5.0-pre-phase-5-housekeeping.md`       | Complete | 2026-06-11 |
 | 5.1 | Hosting migration — GitHub Pages → Cloudflare Pages (staging first, then prod) | `phase-5.1-hosting-migration.md`          | Complete | 2026-06-14 |
-| 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | *(written at 5.1 close)* | Pending | |
+| 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | `phase-5.2-slug-id-routing-rpc.md` | **Complete** | 2026-06-15 |
 | 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | *(written at 5.2 close)*                      | Pending  | |
 | 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | *(written at 5.3 close)* | Pending | |
 | 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | *(written at 5.4 close)*                  | Pending  | |
