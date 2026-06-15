@@ -38,7 +38,7 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 | 5.0 | Pre-Phase-5 housekeeping — F58/F63/F64/F65/F66 + prod `settings` row drop | `phase-5.0-pre-phase-5-housekeeping.md`       | Complete | 2026-06-11 |
 | 5.1 | Hosting migration — GitHub Pages → Cloudflare Pages (staging first, then prod) | `phase-5.1-hosting-migration.md`          | Complete | 2026-06-14 |
 | 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | `phase-5.2-slug-id-routing-rpc.md` | **Complete** | 2026-06-15 |
-| 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | *(written at 5.2 close)*                      | Pending  | |
+| 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | `phase-5.3-per-tenant-branding.md`            | **Complete** | 2026-06-15 |
 | 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | *(written at 5.3 close)* | Pending | |
 | 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | *(written at 5.4 close)*                  | Pending  | |
 

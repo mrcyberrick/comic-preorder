@@ -287,8 +287,12 @@ exists (the founding tenant).
 - ~~`idx_tenants_slug` on `slug`~~ — dropped on staging 2026-06-15 (F14 resolved); never existed on prod (F64 item 8 no-op — `tenants_slug_key` already serves the slug→id RPC)
 
 **Notes:**
-- Per-tenant `branding` and `settings` jsonb columns are reserved for
-  future use; no application code currently reads them.
+- Per-tenant `branding` jsonb is read by `Branding.apply()` (app.js) as of
+  5.3 — an override layer applying `primary_color` / `display_name` / `logo_url`
+  when present (founding `branding={}` ⇒ no-op ⇒ renders identically to today).
+  Delivered to anon via `resolve_tenant_by_slug` (4-col) and to authed users via
+  the `TenantContext` profile branch. `settings` jsonb remains reserved /
+  never exposed (no client render path; never returned by the RPC).
 - No INSERT or DELETE RLS policy: tenant creation is service-role-only.
   Authenticated users can SELECT only their own tenant; admins can UPDATE
   their own tenant.
@@ -2237,10 +2241,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Verified 2026-06-15 (staging, 5.2 S1 — 3-col):** `pg_get_functiondef` shows `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`, exactly three columns. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X` (PUBLIC). Anon `curl.exe` → `raysandjudys` → one object, exactly keys `{id, slug, display_name}`, founding UUID `72e29f67-…`. Unknown slug → `[]`. Direct anon `GET /tenants?select=*` → `permission denied` (RLS holds).
 - **Verified 2026-06-15 (prod, 5.2 S7 — 3-col):** Same 3-col contract confirmed via anon `curl.exe` with `rjbookstop` → `{id: 20941129-…, slug: rjbookstop, display_name: "Ray & Judy's Book Stop"}`.
 - **Verified 2026-06-15 (staging, 5.3 S1 — 4-col):** DROP + CREATE (single-quote body, no dollar-quote); REVOKE re-run after CREATE to clear Postgres default PUBLIC grant. `pg_get_functiondef` → 4 cols (`t.id, t.slug, t.display_name, t.branding`), `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X`. Anon `curl.exe` → `raysandjudys` → `{id, slug, display_name, branding}` (exactly 4 keys), `branding: {}`, founding UUID `72e29f67-…`. Unknown slug → `[]`. Direct anon `GET /tenants?select=*` → `permission denied` (RLS holds).
+- **Verified 2026-06-15 (prod, 5.3 S6 — 4-col):** DROP + CREATE + REVOKE + GRANT on prod; `proacl` clean (no PUBLIC). Anon `curl.exe` → `rjbookstop` → `{id, slug, display_name, branding}` (exactly 4 keys), `branding: {}`, prod founding UUID `20941129-…`. Unknown slug → `[]`. Direct anon `GET /tenants?select=*` → `[]` (RLS row-filtered on prod — `current_tenant_id()` NULL for anon → no rows; vs staging's no-SELECT-grant `permission denied`; both safe, no anon-readable tenant data).
 
 #### F71 — `FOUNDING_TENANT` const in app.js carries staging UUID and slug
 
-- **Status:** Resolved 2026-06-15 (5.3 S2) — `app.js` now reads `const FOUNDING_TENANT = window.FOUNDING_TENANT`; hardcoded staging UUID/slug removed. Staging `config.js` carries staging values (`72e29f67-…` / `raysandjudys`); `main` `config.js` will carry prod values (`20941129-…` / `rjbookstop`) added in 5.3 S6 before promotion. Playwright smoke (15/15) green after staging deploy.
+- **Status:** Resolved 2026-06-15 (5.3 S2 staging; S6 prod). `app.js` reads `const FOUNDING_TENANT = window.FOUNDING_TENANT`; hardcoded staging UUID/slug removed. Staging `config.js` carries staging values (`72e29f67-…` / `raysandjudys`); `main` `config.js` carries prod values (`20941129-…` / `rjbookstop`) — added before the 5.3 S6 promotion and verified live at `pulllist.app/config.js` post-deploy (and `app.js` confirmed free of `72e29f67`). Playwright smoke (15/15) green after staging deploy; prod founding-apex invariant + write-smoke clean.
 - **Decision:** Option B — move const to per-env `config.js` (Rick, 5.3 planning 2026-06-15). Idiomatic: same mechanism as `SUPABASE_ANON_KEY`; fixes both id and slug; per-env branding delivered naturally from each env's own DB via RPC/profile path.
 - **Severity:** Low-dormant — only the unauthenticated fallback (branch 4) ever reads the const; authenticated users resolve via profile lookup (branch 1) and never hit it.
 - **Detail:** `FOUNDING_TENANT = { id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790', slug: 'raysandjudys', … }` in `app.js` contained the **staging** founding tenant's UUID and slug. Prod founding tenant has id `20941129-c35a-476d-ae21-44b8f77af89c`, slug `rjbookstop`. Discovered when S7 anon-contract check initially tested `raysandjudys` against prod and received `[]` (correctly — that slug doesn't exist on prod).

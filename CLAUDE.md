@@ -10,17 +10,17 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.3 — Per-tenant branding** (planning — no plan doc yet)
+**Active sub-deploy:** **5.4 — Tenant signup** (planning — no plan doc yet)
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 5.2 — Slug→id routing RPC (Complete 2026-06-15) — `resolve_tenant_by_slug` RPC live both projects; `TENANT_SLUG_MAP` removed; F14/F64-8/F67 resolved; prod write-smoke clean
+**Last completed sub-deploy:** Phase 5.3 — Per-tenant branding (Complete 2026-06-15) — `resolve_tenant_by_slug` extended to 4-col (returns `branding`) both projects; `Branding.apply()` override layer live (color/name/logo; founding `branding={}` ⇒ no-op ⇒ identical render); `FOUNDING_TENANT` moved to per-env `config.js` (F71 resolved); prod founding-apex invariant + write-smoke clean
 **Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, must land before 5.4). F71 — `FOUNDING_TENANT` const in app.js carries staging UUID/slug; pre-existing; deferred to 5.3 (see `technical-reference.md` § F71 for remediation options). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F69 filed in 5.1; F68 resolved 2026-06-11; F69 (MailerLite webhook secret leak) resolved 2026-06-11 — secret rotated, e2e re-verified. F70 — `import-staging.js` wrong TENANT_ID; resolved 2026-06-14. F14 resolved 2026-06-15 (idx_tenants_slug dropped staging); F64 item 8 dispositioned no-op 2026-06-15; F67 resolved 2026-06-15 (APP_BASE_URL secret + 5 EF deploys; reset-password JWT → OFF on prod). Next free finding ID: **F72**.
+**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, **must land before 5.4** — still no landed owner; re-flagged at 5.3 close). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F69 filed in 5.1; F68 resolved 2026-06-11; F69 (MailerLite webhook secret leak) resolved 2026-06-11 — secret rotated, e2e re-verified. F70 — `import-staging.js` wrong TENANT_ID; resolved 2026-06-14. F14 resolved 2026-06-15 (idx_tenants_slug dropped staging); F64 item 8 dispositioned no-op 2026-06-15; F67 resolved 2026-06-15 (APP_BASE_URL secret + 5 EF deploys; reset-password JWT → OFF on prod). F71 resolved 2026-06-15 (5.3 — `FOUNDING_TENANT` moved to per-env `config.js`; no hardcoded UUID in app.js; prod verified). Next free finding ID: **F72**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -501,8 +501,8 @@ approval.
 ### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
 ### their own sub-deploy session)
 - **Slug→id RPC** — Complete 2026-06-15 (sub-deploy 5.2)
-- **Per-tenant branding rendering** — `tenants.branding` jsonb exists; no UI
-  reads it — sub-deploy 5.3
+- **Per-tenant branding rendering** — Complete 2026-06-15 (sub-deploy 5.3);
+  `Branding.apply()` reads `tenants.branding` (color/name/logo override layer)
 - **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
 
 ### Deferred from sub-deploy 5.0 (Complete 2026-06-11)
