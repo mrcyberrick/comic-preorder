@@ -1,6 +1,6 @@
 # Phase 5.3 — Per-Tenant Branding
 
-**Status:** Planning — plan written 2026-06-15; not yet executed.
+**Status:** In progress — S1 complete 2026-06-15.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.3)
 **Predecessor:** Phase 5.2 — Slug→id routing RPC — **Complete 2026-06-15** (`resolve_tenant_by_slug` live both projects; `TENANT_SLUG_MAP` removed; F14/F64-8/F67 resolved).
 **Branches:** Database (RPC) + doc changes do their work via the SQL Editor / dashboard (doc commits → `staging` directly). The `app.js` + `*.html` changes ride `feature/5.3-branding` off `staging` → `--ff-only` merge → staging smoke → prod promotion PR per `CLAUDE.md` § Standard Deployment Workflow (F59 diff assertion + `config.js` checkout + post-deploy write-smoke). **`config.js` is touched in this sub-deploy** (new `FOUNDING_TENANT` per-branch key, F71) — see § 1.5 and the credential-safety handling in every relevant step.
@@ -447,7 +447,7 @@ Execution order: **S1 → S2 → S3 → S4 → S5 (one or two sittings on stagin
 
 | Date | Step | Result | Notes |
 |---|---|---|---|
-| | S1 | | |
+| 2026-06-15 | S1 | Green | Staging `resolve_tenant_by_slug` extended to 4-col (`id, slug, display_name, branding`). DROP + CREATE (single-quote body); REVOKE re-run after CREATE to clear Postgres default PUBLIC grant. `proacl` clean (no PUBLIC). Anon curl: `raysandjudys` → 4 keys + `branding: {}`; unknown slug → `[]`; direct tenants → permission denied. |
 | | S2 | | |
 | | S3 | | |
 | | S4 | | |
