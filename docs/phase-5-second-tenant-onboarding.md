@@ -64,7 +64,7 @@ DDL whose *decision* is made in one sub-deploy but whose *execution* is delibera
 | Item | Decided | DDL owner | Notes |
 |---|---|---|---|
 | F64 item 5 — `preorders_user_id_fkey` target alignment | 5.0 S3 (2026-06-11) | 5.1-adjacent housekeeping commit — must land before 5.4 | **Decision: Option A (profile-first, NO ACTION canonical).** Prod needs: drop CASCADE FK, re-add → `user_profiles` NO ACTION. Decision + DDL recorded in § 13 F64 item 5. |
-| F64 item 8 — `idx_tenants_slug` → prod | Phase 4 completion audit (2026-06-10) | Sub-deploy 5.2 (slug-routing wants the index) | Additive index, trivially safe |
+| F64 item 8 — `idx_tenants_slug` → prod | Phase 4 completion audit (2026-06-10) | **Closed 2026-06-15 (5.2 S4) — no-op** | `tenants_slug_key` (unique) already serves the slug→id RPC equality lookup optimally. No second index needed on prod. Staging `idx_tenants_slug` dropped (F14 resolved). |
 
 ---
 

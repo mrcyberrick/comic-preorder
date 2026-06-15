@@ -284,7 +284,7 @@ exists (the founding tenant).
 **Indexes:**
 - `tenants_pkey` on `id`
 - `tenants_slug_key` (unique) on `slug`
-- `idx_tenants_slug` on `slug` — redundant with `tenants_slug_key` (F14)
+- ~~`idx_tenants_slug` on `slug`~~ — dropped on staging 2026-06-15 (F14 resolved); never existed on prod (F64 item 8 no-op — `tenants_slug_key` already serves the slug→id RPC)
 
 **Notes:**
 - Per-tenant `branding` and `settings` jsonb columns are reserved for
@@ -1036,9 +1036,7 @@ puts `tenant_id` as the leading column. The exceptions are
 `reservation_history` (F7) and `weekly_shipment` (F9), where the unique
 key omits `tenant_id`.
 
-**Redundant index:** `idx_tenants_slug` and `tenants_slug_key` (unique)
-both index `tenants.slug`. The non-unique one is dead — it cannot serve a
-query better than the unique constraint's backing index. See F14.
+**Redundant index (resolved):** `idx_tenants_slug` was dropped on staging 2026-06-15 (F14). It never existed on prod (F64 item 8 no-op). `tenants_slug_key` (unique) is the sole index on `slug` on both environments and serves the `resolve_tenant_by_slug` RPC equality lookup optimally.
 
 ---
 
@@ -1902,11 +1900,9 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 ### Trivial / info
 
 #### F14 — redundant `idx_tenants_slug` index
-- **Status:** open
-- Both `tenants_slug_key` (unique) and `idx_tenants_slug` (non-unique)
-  index `tenants.slug`. The non-unique one cannot serve a query better
-  than the unique constraint's backing index.
-- **Fix:** `DROP INDEX idx_tenants_slug;`
+- **Status:** **Resolved 2026-06-15** — `DROP INDEX public.idx_tenants_slug` executed on staging (5.2 S4). Prod never had this index (confirmed via `pg_indexes` 2026-06-15 — F64 item 8 no-op). Both environments now have only `tenants_pkey` + `tenants_slug_key` on `tenants`.
+- Both `tenants_slug_key` (unique) and `idx_tenants_slug` (non-unique) indexed `tenants.slug`. The non-unique one could not serve a query better than the unique constraint's backing index.
+- **Fix executed:** `DROP INDEX public.idx_tenants_slug;` on staging. No prod DDL needed.
 
 #### F26 — `admin_preorders` view bypasses RLS but has no caller
 - **Status:** fixed 2026-05-26 (Phase 4.1 C11) — view dropped and recreated with `security_invoker = true`; same column list, JOINs, and ORDER BY preserved. Grants tightened: `authenticated` SELECT only, `service_role` SELECT only, `anon` no grants. See also F49.
@@ -2157,7 +2153,7 @@ Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
   5. `preorders_user_id_fkey` target — **decision recorded 2026-06-11 (5.0 S3); DDL deferred to parent § Deferred-DDL Register (must execute before 5.4).** Decision: **Option A — profile-first, preorder-blocking (staging shape is canonical).** `preorders_user_id_fkey` → `user_profiles` NO ACTION on both envs. Rationale: profile DELETE fails loudly if the customer has open preorders — this is an intentional guard, not a bug. Admin must cancel preorders first, then Decline. Auth.users row cleanup is a separate GoTrue admin API step (can be wired to the Decline button in a later sub-deploy). Aligns with staging. Required prod action: `DROP CONSTRAINT preorders_user_id_fkey; ADD CONSTRAINT preorders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id);` (removes the `auth.users` target and the CASCADE). No DDL executed in 5.0.
   6. `app_settings_updated_by_fkey` — **closed 2026-06-11 (5.0 S2).** FK added to staging; pre-flight confirmed 0 orphaned `updated_by` values; verified via `pg_constraint`.
   7. `user_profiles_id_fkey` → `auth.users` ON DELETE CASCADE — **closed 2026-06-11 (5.0 S2).** Pre-flight found 44 orphaned `user_profiles` rows — all Playwright test fixtures (`pw-*@example.test`, founding tenant, 0 dependent preorders/subscriptions); deleted inline. FK then added; verified `confdeltype = c`. Post-add: future Playwright teardown auth-user deletes will cascade automatically.
-  8. `idx_tenants_slug` — **add to prod during Phase 5** (slug→id routing will want it); additive index, trivially safe.
+  8. `idx_tenants_slug` — **dispositioned no-op 2026-06-15 (5.2 S4).** The `resolve_tenant_by_slug` RPC uses a single-row equality lookup (`WHERE slug = $1`) that `tenants_slug_key` (the unique constraint's backing btree) already serves optimally on both envs. Adding a second index would be redundant. Staging `idx_tenants_slug` dropped (F14 resolved); prod never had it.
 - **Enumerated differences (prod vs staging) from 2026-06-10 pg_dump:**
   1. `catalog.price_usd`: prod `numeric(6,2)` vs staging `numeric` (no precision/scale)
   2. `catalog`: prod has `CONSTRAINT catalog_distributor_check CHECK (distributor = ANY (ARRAY['Lunar', 'PRH']))` — staging does not
