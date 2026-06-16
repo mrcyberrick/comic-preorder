@@ -1364,10 +1364,10 @@ existing row's tenant_id.
 
 ## 11. Edge Functions
 
-Eight Deno-based Edge Functions are deployed to staging. All are written
-in TypeScript, all use Supabase service-role for privileged operations,
-and all that send email use MailerSend with the `noreply@mrcyberrick.us`
-sender.
+Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
+added 5.4 S3). All are written in TypeScript, all use Supabase service-role
+for privileged operations, and all that send email use MailerSend with the
+`noreply@mrcyberrick.us` sender.
 
 ### 11.1 Function inventory
 
@@ -1376,15 +1376,18 @@ sender.
 | `notify-customers` | import script (post-import prompt) | none (admin context implied by service-role caller) | yes (filters by `FOUNDING_TENANT_ID`) |
 | `send-my-list` | mylist.html | session token required (but does not match user_id — F36) | yes (catalog month filter) |
 | `invite-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
-| `register-customer` | MailerLite webhook | webhook secret in URL | partial (writes new profile with FOUNDING_TENANT_ID) |
+| `register-customer` | MailerLite webhook | per-tenant webhook secret in URL (5.4 S2) | yes — `tenant_id` resolved from the matching tenant's `settings->>'mailerlite_webhook_secret'` |
 | `approve-customer` | admin.html | admin check (no tenant component) | no |
 | `create-paper-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
+| `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
 
-The "partial" tenant-awareness in the user-creation functions is what F34
-documents: every new user is created in the founding tenant regardless of
-the inviting admin's tenant. Currently moot.
+The "partial" tenant-awareness in `invite-customer` and
+`create-paper-customer` is what F34's remaining scope documents: new users
+created by an admin still land in the founding tenant regardless of the
+inviting admin's tenant. `register-customer`'s residual was resolved in
+5.4 S2 (see F34 status + per-tenant-secret contract note, § 13).
 
 ### 11.2 Required secrets
 
@@ -1396,8 +1399,9 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
 | `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
-| `MAILERLITE_WEBHOOK_SECRET` | register-customer (URL secret check) |
-| `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer |
+| `MAILERLITE_WEBHOOK_SECRET` | register-customer — retained for diagnostics only (5.4 S2); no longer the auth/tenant-source check (replaced by the per-tenant `tenants.settings->>'mailerlite_webhook_secret'` lookup) |
+| `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
+| `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
 
 `FOUNDING_TENANT_ID` was added during Phase 2 to enable tenant-aware
 filtering and writes from the Edge Functions. The web app reads tenant
@@ -1429,11 +1433,33 @@ MailerSend, and inserts a `user_profiles` row with
 `tenant_id = FOUNDING_TENANT_ID`.
 
 **`register-customer`**: called by MailerLite webhook when a subscriber is
-added to the "Monthly Comics" group. URL parameter `secret` must match
-`MAILERLITE_WEBHOOK_SECRET`. Creates an auth user (no password), inserts
-a `user_profiles` row with `status = 'pending'` and
-`tenant_id = FOUNDING_TENANT_ID`, and sends a "browse while we review"
-email containing a magic link.
+added to the "Monthly Comics" group. URL parameter `secret` is looked up
+against `tenants.settings->>'mailerlite_webhook_secret'` (service-role) —
+the matching tenant's id is used for the insert (5.4 S2; see § 13 F34 and
+the per-tenant-secret contract note). No match or missing `secret` → 401.
+Creates an auth user (no password), inserts a `user_profiles` row with
+`status = 'pending'` and the resolved `tenant_id`, and sends a "browse
+while we review" email containing a magic link. Email branding is still
+founding-only regardless of resolved tenant — tracked as F72.
+
+**`register-tenant`** (new, 5.4 S3): gated operator function, not
+customer-facing. Auth gate is `TENANT_PROVISION_SECRET` via the
+`x-operator-secret` header — checked before any body parsing; mismatch
+or absent → 401. Validates `slug` against a DNS-safe lowercase pattern
+and a function-level reserved-word denylist (`www`, `admin`, both founding
+slugs, etc.) → 400 on either failure. Service-role INSERT into `tenants`
+(`plan = 'free'`, `settings` seeded with a fresh per-tenant
+`mailerlite_webhook_secret`, `branding` from the request body or `{}`);
+unique-slug violation (`23505`) → 409 `slug_taken`; check-constraint
+violation (`23514`) → 400 `invalid_slug`. Creates the first admin via the
+GoTrue admin API (no direct `auth.users` insert) and a matching
+`user_profiles` row (`status = 'active'`, `is_admin = true`). The three
+writes (tenant, auth user, profile) are not transactional; on a failure
+after a partial write the function attempts best-effort compensation
+(delete profile → auth user → tenant, reverse FK order) before returning
+500. Any residue is fully removable via the FK-ordered teardown in
+`docs/phase-4.1-canary-procedure.md` (exercised end-to-end in 5.4 S4).
+Returns `{ tenant_id, admin_user_id, slug, webhook_secret }` on success.
 
 **`approve-customer`**: admin-only state change from pending to active.
 Verifies the caller is admin via service-role profile lookup, updates
