@@ -1732,6 +1732,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   (look up `user_profiles.tenant_id WHERE id = caller's auth.uid()`)
   and use that value instead of FOUNDING_TENANT_ID.
 - **Prod resolution 2026-05-31 (Phase 4.6):** `FOUNDING_TENANT_ID` secret set on prod project (§ 1); all 8 EFs redeployed from staging SHA `cab5dca` (§ 2). F34 fully resolved on production.
+- **`register-customer` per-tenant-secret contract (5.4 S1, 2026-06-16):** the residual founding pin (un-pinned in S2) is replaced by a **per-tenant webhook secret** stored at `tenants.settings->>'mailerlite_webhook_secret'` (jsonb; `settings` is service-role-only, never returned by `resolve_tenant_by_slug`). Lookup: `GET /rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.<secret>&select=id,slug,display_name` via service-role. Empty/absent `?secret=` → `401`; no matching tenant → `401`; exactly one matching tenant → that tenant's id is used for the `user_profiles` insert. **Founding migrated 2026-06-16 (staging):** `tenants.settings->>'mailerlite_webhook_secret' = 'pulllist-staging-2026'` for `72e29f67-…`; lookup verified to return exactly one row (founding). Prod migration is 5.4 S6.
 
 ### Medium
 
@@ -2258,6 +2259,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Severity:** Medium (resolved) — local-only script; FK protection prevented any data corruption.
 - **Detail:** `import-staging.js` line 63 previously read `const TENANT_ID = '20941129-c35a-476d-ae21-44b8f77af89c';` — the production founding tenant, copy-pasted from `import.js` with only `SUPABASE_URL` reverted. The `catalog.tenant_id → tenants(id)` FK silently blocked all staging imports run under that UUID, leaving staging on the May 2026 catalog.
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
+
+#### F73 — Staging `MAILERLITE_WEBHOOK_SECRET` value pasted into a CLI chat transcript (5.4 S1)
+- **Status:** filed 2026-06-16, open — disposition: rotate after 5.4 S2 verification lands (rotating now would invalidate the in-flight S1→S2 per-tenant-secret verification using this value).
+- **Severity:** Low–Medium — staging-only secret; same leak class as F69 (prod webhook secret leak, resolved 2026-06-11 via rotation). Gates only the public `register-customer` webhook; a leaked value lets a caller create a *pending* `user_profiles` row in the founding tenant (no further access until admin-approved) — bounded blast radius, not a platform credential.
+- **Detail:** During 5.4 S1 (founding webhook-secret migration), Rick pasted the literal staging `MAILERLITE_WEBHOOK_SECRET` value into the chat transcript while running the `tenants.settings` UPDATE, despite the runbook's explicit instruction that this value never enter chat/repo.
+- **Where:** 5.4 S1 chat transcript, 2026-06-16.
+- **Fix:** rotate the staging MailerLite webhook secret (generate new value, update the MailerLite webhook URL's `?secret=`, update `tenants.settings->>'mailerlite_webhook_secret'` for the founding tenant) once 5.4 S2's founding-routes-to-founding verification is complete and no longer depends on the current value.
 
 ---
 
