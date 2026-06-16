@@ -380,7 +380,7 @@ Execution order: **S0 (prod FK gate) → S1 (founding secret migration, staging)
 
 | Date | Step | Result | Notes |
 |---|---|---|---|
-| | S0 | | |
+| 2026-06-16 | S0 | Green | Prod `preorders_user_id_fkey` realigned → `user_profiles` NO ACTION. Pre-flight: `blocking_rows=0`, prior shape confirmed `auth.users`/CASCADE. Post-verify: `references=user_profiles`, `confdeltype='a'`. F64 item 5 resolved; Deferred-DDL Register closed. |
 | | S1 | | |
 | | S2 | | |
 | | S3 | | |
