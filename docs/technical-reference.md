@@ -1715,7 +1715,8 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   clause; alternatively switch to `SECURITY INVOKER` and rely on RLS.
 
 #### F34 — user-creation Edge Functions hard-pin to founding tenant
-- **Status:** fixed 2026-05-10 — `invite-customer` and
+- **Status:** fixed 2026-05-10 (`invite-customer`/`create-paper-customer`); **residual resolved 2026-06-16 (5.4 S2)** — `register-customer` no longer pinned to `FOUNDING_TENANT_ID`. See per-tenant-secret contract note above. F34 fully resolved across all user-creation Edge Functions.
+- `invite-customer` and
   `create-paper-customer` now fetch `tenant_id` alongside `is_admin`
   from the caller's profile and use `callerTenantId` (falling back to
   `FOUNDING_TENANT_ID` if lookup fails) for new profile inserts.
@@ -2259,6 +2260,12 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Severity:** Medium (resolved) — local-only script; FK protection prevented any data corruption.
 - **Detail:** `import-staging.js` line 63 previously read `const TENANT_ID = '20941129-c35a-476d-ae21-44b8f77af89c';` — the production founding tenant, copy-pasted from `import.js` with only `SUPABASE_URL` reverted. The `catalog.tenant_id → tenants(id)` FK silently blocked all staging imports run under that UUID, leaving staging on the May 2026 catalog.
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
+
+#### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
+- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist (5.5 may act on it).
+- **Severity:** Low (documented gap, not a defect) — the un-pin (F34 residual) is data-correct: a customer registered via a non-founding tenant's webhook secret lands in that tenant's `user_profiles` with the right `tenant_id`. But `buildPendingEmail()` (register-customer/index.ts ~line 215+) hardcodes "Ray & Judy's Book Stop" / PULLLIST founding copy and the `from` name, regardless of which tenant the customer resolved to.
+- **Where:** `supabase/functions/register-customer/index.ts` — `buildPendingEmail()` and the MailerSend `from`/`subject` fields in the main handler.
+- **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
 
 #### F73 — Staging `MAILERLITE_WEBHOOK_SECRET` value pasted into a CLI chat transcript (5.4 S1)
 - **Status:** filed 2026-06-16, open — disposition: rotate after 5.4 S2 verification lands (rotating now would invalidate the in-flight S1→S2 per-tenant-secret verification using this value).

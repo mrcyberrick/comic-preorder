@@ -382,7 +382,7 @@ Execution order: **S0 (prod FK gate) → S1 (founding secret migration, staging)
 |---|---|---|---|
 | 2026-06-16 | S0 | Green | Prod `preorders_user_id_fkey` realigned → `user_profiles` NO ACTION. Pre-flight: `blocking_rows=0`, prior shape confirmed `auth.users`/CASCADE. Post-verify: `references=user_profiles`, `confdeltype='a'`. F64 item 5 resolved; Deferred-DDL Register closed. |
 | 2026-06-16 | S1 | Green | Founding tenant's `tenants.settings->>'mailerlite_webhook_secret'` already correctly set on staging (`'pulllist-staging-2026'`) — discovered pre-existing rather than freshly written; verified lookup returns exactly one row (founding `72e29f67-…`/`raysandjudys`). An earlier UPDATE attempt with a different value reported 0 rows matched — diagnosed as having run against the wrong (prod) project tab; no staging data affected. **F73 filed:** the attempted value was pasted into the chat transcript (same leak class as F69) — disposition: rotate after S2 verification completes. |
-| | S2 | | |
+| 2026-06-16 | S2 | Green | `register-customer` un-pinned: tenant resolved via service-role lookup on `tenants.settings->>'mailerlite_webhook_secret'`; `tenant_id: FOUNDING_TENANT_ID` removed (grep → 0). Deployed to staging (JWT-verify OFF confirmed). Probes: founding secret → 200, profile `tenant_id = 72e29f67-…` confirmed via service-role SELECT; empty secret → 401; bad secret → 401. Test user (`d193bf1a-…`) deleted via GoTrue admin (cascades to `user_profiles`). Merged `feature/5.4-tenant-signup` → `staging` (ff-only), commit `42989f2`. **F34 fully resolved; F72 filed** (email template stays founding-branded — deferred). |
 | | S3 | | |
 | | S4 | | |
 | | S5 | | |
