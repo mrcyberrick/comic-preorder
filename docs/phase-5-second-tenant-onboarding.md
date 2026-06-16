@@ -103,7 +103,7 @@ Phase 5 is complete when **all** of the following are true:
 - [ ] Hosting fully migrated; GitHub Pages serving retired; deployment workflow in `CLAUDE.md` rewritten for the new host
 - [ ] All carried findings (F58, F63, F64 incl. deferred-DDL items, F65, F66) resolved or explicitly re-dispositioned in § 13
 - [ ] Two-tenant production soak passed (duration set in the 5.5 plan; not less than one full import cycle)
-- [ ] `CLAUDE.md` § Current Migration Phase updated; Phase 6 stub created if a successor phase exists
+- [ ] `CLAUDE.md` § Current Migration Phase updated; Phase 6 stub created if a successor phase exists — **stub created 2026-06-15: `docs/phase-6-self-service-signup.md`** (open self-service tenant signup; gated on a wildcard-DNS/TLS spike; begins only after Phase 5 closes)
 - [ ] All sub-deploy plan files committed to `docs/`
 
 ---

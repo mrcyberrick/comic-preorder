@@ -8,6 +8,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 ## 🚨 Current Migration Phase
 
 **Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
+**Successor phase (stub):** Phase 6 — Open self-service tenant signup — `docs/phase-6-self-service-signup.md` (stub 2026-06-15; not started; begins only after Phase 5 closes; gated on a wildcard-DNS/TLS spike)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
 **Active sub-deploy:** **5.4 — Tenant signup** (Planning — plan written 2026-06-15: `docs/phase-5.4-tenant-signup.md`; F64 item 5 prod FK DDL lands as 5.4 S0)
