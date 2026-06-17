@@ -40,7 +40,7 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 | 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | `phase-5.2-slug-id-routing-rpc.md` | **Complete** | 2026-06-15 |
 | 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | `phase-5.3-per-tenant-branding.md`            | **Complete** | 2026-06-15 |
 | 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | `phase-5.4-tenant-signup.md` | **Complete** | 2026-06-17 |
-| 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | *(written at 5.4 close)*                  | Pending  | |
+| 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | `phase-5.5-second-tenant-onboarding.md`   | Planning | |
 
 ### Status values
 
@@ -148,4 +148,4 @@ Phase 5 is complete when **all** of the following are true:
 
 ---
 
-**Last updated:** 2026-06-17 (5.4 → Complete 2026-06-17; register-customer un-pinned, register-tenant EF live on both envs, F34/F64-item-5 resolved, F72 filed, F73/F74 resolved)
+**Last updated:** 2026-06-17 (5.5 plan written → row 5.5 Planning; `docs/phase-5.5-second-tenant-onboarding.md`. Decisions locked: soak = one full import cycle / no buffer; routing = dedicated `<slug>.pulllist.app` manual custom domain; tenant-2 identity operator-supplied at execution; tenant 2 pilot/seeded through the soak)
