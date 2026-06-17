@@ -2294,11 +2294,16 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
 
 #### F73 — Staging `MAILERLITE_WEBHOOK_SECRET` value pasted into a CLI chat transcript (5.4 S1)
-- **Status:** filed 2026-06-16, open — disposition: rotate after 5.4 S2 verification lands (rotating now would invalidate the in-flight S1→S2 per-tenant-secret verification using this value).
-- **Severity:** Low–Medium — staging-only secret; same leak class as F69 (prod webhook secret leak, resolved 2026-06-11 via rotation). Gates only the public `register-customer` webhook; a leaked value lets a caller create a *pending* `user_profiles` row in the founding tenant (no further access until admin-approved) — bounded blast radius, not a platform credential.
-- **Detail:** During 5.4 S1 (founding webhook-secret migration), Rick pasted the literal staging `MAILERLITE_WEBHOOK_SECRET` value into the chat transcript while running the `tenants.settings` UPDATE, despite the runbook's explicit instruction that this value never enter chat/repo.
-- **Where:** 5.4 S1 chat transcript, 2026-06-16.
-- **Fix:** rotate the staging MailerLite webhook secret (generate new value, update the MailerLite webhook URL's `?secret=`, update `tenants.settings->>'mailerlite_webhook_secret'` for the founding tenant) once 5.4 S2's founding-routes-to-founding verification is complete and no longer depends on the current value.
+- **Status:** **resolved 2026-06-17 (5.4 S6 pre-flight)** — staging founding webhook secret rotated; MailerLite staging webhook URL updated.
+- **Severity:** Low–Medium — staging-only secret; same leak class as F69. Gates only the public `register-customer` webhook; bounded blast radius.
+- **Detail:** During 5.4 S1 (founding webhook-secret migration), Rick pasted the literal staging `MAILERLITE_WEBHOOK_SECRET` value into the chat transcript. Rotation was deferred until S2 verification was complete to avoid breaking the in-flight verification; rotated 2026-06-17 ahead of S6.
+- **Where:** 5.4 S1 chat transcript, 2026-06-16. Fix applied: staging `tenants.settings->>'mailerlite_webhook_secret'` updated + MailerLite staging webhook URL `?secret=` updated 2026-06-17.
+
+#### F74 — Prod founding `mailerlite_webhook_secret` value pasted into a CLI chat transcript (5.4 S6)
+- **Status:** **resolved 2026-06-17 (5.4 S6)** — prod founding webhook secret rotated after S6 founding-routes-to-founding verification passed; MailerLite prod webhook URL updated.
+- **Severity:** Low–Medium — prod founding webhook secret; same leak class as F69 (resolved) and F73 (resolved). Bounded blast radius.
+- **Detail:** During 5.4 S6 step 1 verification, Rick pasted the full SELECT result including the `has_secret` column value. Rotation was deferred until founding-routes-to-founding verification completed; rotated 2026-06-17 after S6 verification green.
+- **Where:** 5.4 S6 chat transcript, 2026-06-17. Fix applied: prod `tenants.settings->>'mailerlite_webhook_secret'` updated + MailerLite prod webhook URL `?secret=` updated 2026-06-17.
 
 ---
 
