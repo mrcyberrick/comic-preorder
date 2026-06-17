@@ -11,17 +11,17 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Successor phase (stub):** Phase 6 — Open self-service tenant signup — `docs/phase-6-self-service-signup.md` (stub 2026-06-15; not started; begins only after Phase 5 closes; gated on a wildcard-DNS/TLS spike)
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.4 — Tenant signup** (Planning — plan written 2026-06-15: `docs/phase-5.4-tenant-signup.md`; F64 item 5 prod FK DDL lands as 5.4 S0)
+**Active sub-deploy:** **5.5 — Second-tenant onboarding + soak** (Pending — plan not yet written; written at 5.4 close by a planning session)
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 5.3 — Per-tenant branding (Complete 2026-06-15) — `resolve_tenant_by_slug` extended to 4-col (returns `branding`) both projects; `Branding.apply()` override layer live (color/name/logo; founding `branding={}` ⇒ no-op ⇒ identical render); `FOUNDING_TENANT` moved to per-env `config.js` (F71 resolved); prod founding-apex invariant + write-smoke clean
+**Last completed sub-deploy:** Phase 5.4 — Tenant signup (Complete 2026-06-17) — `register-customer` un-pinned (F34 fully resolved); `register-tenant` gated operator EF live on both envs (9th EF); per-tenant webhook secrets seeded in `tenants.settings`; F64 item 5 prod FK DDL landed (S0); F72 filed (email branding deferral); F73/F74 filed+resolved (webhook secret chat exposures); founding-tenant invariant held throughout; 19/19 Playwright green; prod write-smoke clean
 **Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F64 item 5 — `preorders_user_id_fkey` FK realignment (decision: Option A, NO ACTION; DDL deferred to register, **must land before 5.4** — still no landed owner; re-flagged at 5.3 close). All F58/F63/F64 items 1–4/F65/F66 resolved in 5.0 (2026-06-11). F67–F69 filed in 5.1; F68 resolved 2026-06-11; F69 (MailerLite webhook secret leak) resolved 2026-06-11 — secret rotated, e2e re-verified. F70 — `import-staging.js` wrong TENANT_ID; resolved 2026-06-14. F14 resolved 2026-06-15 (idx_tenants_slug dropped staging); F64 item 8 dispositioned no-op 2026-06-15; F67 resolved 2026-06-15 (APP_BASE_URL secret + 5 EF deploys; reset-password JWT → OFF on prod). F71 resolved 2026-06-15 (5.3 — `FOUNDING_TENANT` moved to per-env `config.js`; no hardcoded UUID in app.js; prod verified). Next free finding ID: **F72**.
+**Open findings:** F72 — `register-customer` email template stays founding-branded after the F34 un-pin (deferred; multi-tenant email branding out of Phase 5 scope). All other carried findings resolved: F64 item 5 resolved 2026-06-17 (5.4 S0); F73/F74 resolved 2026-06-17 (webhook secret rotation). Next free finding ID: **F75**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
