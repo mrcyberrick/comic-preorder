@@ -316,7 +316,7 @@ Execution order: **S0 (readiness gate) → S1 (staging full-dress rehearsal + te
 
 | Date | Step | Result | Notes |
 |---|---|---|---|
-| | S0 | | |
+| 2026-06-18 | S0 | Green (S2 gated) | `register-tenant` prod gate probe → HTTP 401 (no `x-operator-secret`) ✓. 5.4 S6 Deploy Log confirms both EFs live on prod + prod founding webhook secret in `tenants.settings` ✓. `import.js` founding-pinned: `TENANT_ID = '20941129-c35a-476d-ae21-44b8f77af89c'` at line 64; all upserts + RPC calls use this constant ✓. §4.1 teardown-vs-schema: procedure covers all explicitly-seeded tables; `settings` (legacy) has `ON DELETE CASCADE` from `tenants` and is not populated by `register-tenant` — covered by cascade; no procedure edit needed ✓. `tenantSlugFromHostname()` confirmed from disk: `NON_TENANT_HOSTS` does not swallow `<slug>.pulllist.app`; `.pages.dev` suffix excluded; leading-label parse is correct ✓. Next free finding ID: **F75** ✓. Cloudflare access confirmed ✓. **Tenant-2 operator inputs: deferred — no real tenant ready at execution; S1 staging rehearsal proceeds; will pause at S2 gate until real tenant supplied.** |
 | | S1 | | |
 | | S2 | | |
 | | S3 | | |
