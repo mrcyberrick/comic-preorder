@@ -113,6 +113,17 @@ A **full tenant-2 catalog import** (its own distributor data, its own monthly ru
 ### 1.6 Email-branding boundary (F72) — a go-live prerequisite, not a 5.5 fix
 After the 5.4 un-pin, a customer registered via tenant 2's webhook lands correctly in tenant 2, **but `register-customer`'s email copy is still founding-branded** (F72, deferred; multi-tenant email branding is OUT of Phase 5). Because tenant 2 is **pilot/seeded** during the soak (no real `register-customer` customers), F72 does **not** surface to real tenant-2 customers inside 5.5. **F72 becomes a prerequisite to evaluate at tenant-2's real-customer go-live** (post-close) — the generalized runbook (§ S5) flags it, and Phase 6 / a dedicated email-branding sub-deploy may act on it. 5.5 re-confirms F72's deferred disposition in § 13; it does not fix it.
 
+### 1.7 S2-readiness addendum (planning session, 2026-06-19)
+Decisions made after S0/S1 landed, resolving the S2 pause. **Planning note, not runbook steps** — the S2/S3 runbook is § 4; this records the inputs/window/secrets state the execution session inherits.
+
+- **Tenant 2 is real and ready** (Rick, 2026-06-19) — supersedes the S0/S1 "inputs deferred" pause. The S2 operator inputs (`slug` / `display_name` / `admin_email`, optional `branding`/contact) are **gathered + slug-validated live at the S2 gate** (format `^[a-z0-9][a-z0-9-]*[a-z0-9]$` + reserved denylist § 0.2). Not pre-baked into this plan.
+- **S2 window = next execution session** (Rick, 2026-06-19). S2 → S3 run together, **before** the next monthly prod import, to maximize soak overlap. Tenant 2 stays **pilot/seeded** throughout → §4.1 teardown remains a clean rollback for the whole window (unchanged from § 6 / § 1.1).
+- **Soak anchor = the next monthly prod import, expected early July 2026** (Rick, 2026-06-19, "within ~2 weeks"). S4 close gate is that one import cycle with both tenants present + post-import isolation re-verify = 0 (§ 1.4/§ 1.5). **Earliest Phase 5 close: early–mid July 2026**, immediately after post-import re-verification. No extra buffer (per § 1.4).
+- **Prod operator secret synced + verified** (2026-06-19): prod `register-tenant` `TENANT_PROVISION_SECRET` rotated; mirrored locally as `.env` `TENANT_PROVISION_SECRET_PROD`; verified non-destructively — bare-slug probe with the secret returned `400` (required-fields), i.e. **gate passed, no row written** (note: prod validates required fields *before* the reserved denylist; both are gate-passed `400`s). Earlier `401` was the pre-sync dashboard value.
+- **Prod service-role key sourced** (2026-06-19): added to `.env` as `SUPABASE_SERVICE_KEY_PROD` (distinct from staging `SUPABASE_SERVICE_KEY`) for the GoTrue rollback path. SQL-Editor `DELETE FROM auth.users` remains the no-key teardown fallback used in S1.
+- **Staging GoTrue note carried from S1:** a raw `curl.exe` PowerShell session does **not** auto-load `.env` — the execution session must export the relevant `*_PROD`/staging key into the shell before any GoTrue admin call. `Invoke-RestMethod` mangles JSON with `sb_secret_` keys → use `curl.exe --data-binary`.
+- **Still live-session pre-checks (not yet cleared here):** validated slug at the S2 gate; Cloudflare access to the `pulllist.app` Pages project re-confirmed; admin mailbox confirmed reachable. F72 stays deferred (no real `register-customer` customers during the soak).
+
 ---
 
 ## 2. In scope
@@ -326,6 +337,6 @@ Execution order: **S0 (readiness gate) → S1 (staging full-dress rehearsal + te
 
 ---
 
-**Last updated:** 2026-06-17 (plan written; Planning — not yet executed)
+**Last updated:** 2026-06-19 (§ 1.7 S2-readiness addendum: tenant 2 ready; S2 window = next session; soak anchored to early-July import; prod operator secret synced+verified + prod service-role key sourced. S0/S1 Complete 2026-06-18; S2 pending the next execution session.)
 </content>
 </invoke>
