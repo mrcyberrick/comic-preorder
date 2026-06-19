@@ -2305,6 +2305,10 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Detail:** During 5.4 S6 step 1 verification, Rick pasted the full SELECT result including the `has_secret` column value. Rotation was deferred until founding-routes-to-founding verification completed; rotated 2026-06-17 after S6 verification green.
 - **Where:** 5.4 S6 chat transcript, 2026-06-17. Fix applied: prod `tenants.settings->>'mailerlite_webhook_secret'` updated + MailerLite prod webhook URL `?secret=` updated 2026-06-17.
 
+#### F75 — (reserved; security-sensitive — details held in a local-only note until remediated)
+- **Status:** filed 2026-06-19, open. The full write-up and remediation plan are intentionally kept **out of this public repo** to avoid signaling an exploitable condition; they live in a local-only operator note (outside the repo tree). A sanitized, past-tense entry will replace this placeholder once remediation lands.
+- **Disposition:** remediation is a dedicated follow-on session (out of Phase 5.5 scope). New findings are numbered from **F76**.
+
 ---
 
 *End of document.*

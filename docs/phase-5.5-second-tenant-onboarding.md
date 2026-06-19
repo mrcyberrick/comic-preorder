@@ -123,6 +123,7 @@ Decisions made after S0/S1 landed, resolving the S2 pause. **Planning note, not 
 - **Prod service-role key sourced** (2026-06-19): added to `.env` as `SUPABASE_SERVICE_KEY_PROD` (distinct from staging `SUPABASE_SERVICE_KEY`) for the GoTrue rollback path. SQL-Editor `DELETE FROM auth.users` remains the no-key teardown fallback used in S1.
 - **Staging GoTrue note carried from S1:** a raw `curl.exe` PowerShell session does **not** auto-load `.env` — the execution session must export the relevant `*_PROD`/staging key into the shell before any GoTrue admin call. `Invoke-RestMethod` mangles JSON with `sb_secret_` keys → use `curl.exe --data-binary`.
 - **Still live-session pre-checks (not yet cleared here):** validated slug at the S2 gate; Cloudflare access to the `pulllist.app` Pages project re-confirmed; admin mailbox confirmed reachable. F72 stays deferred (no real `register-customer` customers during the soak).
+- **Finding accounting:** 5.5 filed **F75** (security-sensitive; § 13 neutral placeholder — full details in a local-only operator note, kept out of this public repo). Remediation is a dedicated follow-on session, out of 5.5 scope. **New findings are now numbered from F76.**
 
 ---
 
