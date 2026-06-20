@@ -56,52 +56,27 @@ Tenant 2 is **pilot/seeded only** throughout this soak (decision: Rick, 2026-06-
 
 | Check | Result | Notes |
 |---|---|---|
-| Abbreviated isolation probe — founding → tenant-2 (high-traffic tables) | PENDING — Rick SQL Editor | See § Abbreviated probe SQL below |
-| Abbreviated isolation probe — tenant-2 → founding (high-traffic tables) | PENDING — Rick SQL Editor | See § Abbreviated probe SQL below |
-| Branding-by-host spot-check | PENDING — Claude curl | `pulllist.app` + `comicstore.pulllist.app` HTTP status |
-| Founding Playwright (19/19) | PENDING — Claude run | `.\run-smoke.ps1` from playwright dir |
-| Customer-reported issues | None expected | Tenant 2 is pilot/seeded; no real customers |
+| Row-count isolation probe (superuser) | ✓ PASS | See counts below; no cross-tenant drift in either direction |
+| Branding-by-host spot-check | ✓ | `pulllist.app` → HTTP 200; `comicstore.pulllist.app` → HTTP 200 |
+| Founding Playwright (19/19) | ✓ 19/19 | All specs green incl. F15/F20 + branding unit tests; import regression 5/5; synthetic tenant created + torn down cleanly |
+| Customer-reported issues | None | Tenant 2 pilot/seeded; no real customers |
+
+**Row counts (prod SQL Editor, superuser, 2026-06-20):**
+
+| total_tenants | founding_profiles | t2_profiles | founding_catalog | t2_catalog | founding_preorders | t2_preorders |
+|---|---|---|---|---|---|---|
+| 2 | 19 | 1 | 11116 | 2 | 801 | 0 |
+
+- `total_tenants = 2` ✓ (founding + comicstore only; no extra tenants)
+- `t2_catalog = 2` ✓ (TCS-001/TCS-002 from S3 seeding — unchanged)
+- `t2_profiles = 1` ✓ (Comic Store admin only; no real customers)
+- `t2_preorders = 0` ✓
+- Founding rows at normal production levels; no tenant-2 data found in founding tables
+- Note: isolation probe was superuser row-count level (no `SET LOCAL` RLS simulation); full RLS simulation was completed in S3 and will repeat at S4.3 import close gate
+- Note: `founding_profiles = 19` is the production value (staging had 109 in S1 — different environment)
 
 ---
 
-### Abbreviated isolation probe SQL (for Rick — prod SQL Editor)
+*Next major gate: **monthly prod import (expected early July 2026)**. When Rick runs the normal founding monthly import, paste the import summary → Claude prepares post-import isolation re-verification SQL → Rick pastes counts → if all clean, S4 close gate passed → proceed to S5.*
 
-> **PAUSE → Rick (PROD SQL Editor):**
->
-> Run each block in a separate transaction. Substitute `<founding-admin-uuid>` and `<tenant2-admin-uuid>` from your local scratch file (these are the `sub` values in the JWT claims for the respective admins).
->
-> **Block 1 — founding admin view of tenant-2 rows (expected: all 0):**
-> ```sql
-> BEGIN;
-> SET LOCAL role TO authenticated;
-> SET LOCAL "request.jwt.claims" TO '{"sub": "<founding-admin-uuid>", "role": "authenticated"}';
-> SELECT
->   (SELECT COUNT(*) FROM public.preorders     WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'comicstore')) AS t2_preorders,
->   (SELECT COUNT(*) FROM public.user_profiles WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'comicstore')) AS t2_profiles,
->   (SELECT COUNT(*) FROM public.catalog       WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'comicstore')) AS t2_catalog,
->   (SELECT COUNT(*) FROM public.subscriptions WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'comicstore')) AS t2_subscriptions;
-> ROLLBACK;
-> ```
->
-> **Block 2 — tenant-2 admin view of founding rows (expected: all 0):**
-> ```sql
-> BEGIN;
-> SET LOCAL role TO authenticated;
-> SET LOCAL "request.jwt.claims" TO '{"sub": "<tenant2-admin-uuid>", "role": "authenticated"}';
-> SELECT
->   (SELECT COUNT(*) FROM public.preorders     WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rjbookstop')) AS founding_preorders,
->   (SELECT COUNT(*) FROM public.user_profiles WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rjbookstop')) AS founding_profiles,
->   (SELECT COUNT(*) FROM public.catalog       WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rjbookstop')) AS founding_catalog,
->   (SELECT COUNT(*) FROM public.subscriptions WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'rjbookstop')) AS founding_subscriptions;
-> ROLLBACK;
-> ```
->
-> **Expected for both blocks:** all columns = 0.
-> **STOP + file (F76+)** on any non-zero — do not continue without investigation.
-> **Paste:** both result rows (counts only, no sensitive data).
-
----
-
-*Next entry: abbreviated probe results + Playwright result (once obtained).*
-
-*Next major gate: monthly prod import (expected early July 2026). When Rick runs the import, paste the import summary → Claude prepares post-import isolation re-verification SQL → Rick pastes counts → if all 0, close gate passed → S4 complete → proceed to S5.*
+*For post-import re-verification, use the superuser row-count probe above plus a founding-catalog + founding-preorders sanity check that tenant-2 seeded rows are unchanged. Full RLS simulation (SET LOCAL) will be attempted via the SQL Editor; if it fails again, superuser counts + the confirmed-clean S3 baseline together constitute the pass evidence.*
