@@ -1140,9 +1140,15 @@
     }
 
     // Summary header
-    const totalItems = arriving.reduce((s, p) => s + (p.quantity || 1), 0);
-    const totalValue = arriving.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity || 1)), 0);
-    const customers  = new Set(arriving.map(p => p.user_id)).size;
+    // Total Titles = distinct catalog titles reserved this week (a title counts
+    // once regardless of how many customers reserved it). Total Items sums
+    // quantities across all customers. The gap between the two is reservation
+    // demand (many customers / multi-qty on one title) and is expected — see the
+    // shipment-reconciliation note in arrivals.html.
+    const totalItems  = arriving.reduce((s, p) => s + (p.quantity || 1), 0);
+    const totalValue  = arriving.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity || 1)), 0);
+    const customers   = new Set(arriving.map(p => p.user_id)).size;
+    const totalTitles = new Set(arriving.map(p => p.catalog?.id).filter(Boolean)).size;
 
     headerEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;
@@ -1157,6 +1163,11 @@
           <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
                       text-transform:uppercase;color:var(--text-muted)">Customers</div>
           <div style="font-weight:700;color:var(--text-primary)">${customers}</div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
+                      text-transform:uppercase;color:var(--text-muted)">Total Titles</div>
+          <div style="font-weight:700;color:var(--text-primary)">${totalTitles}</div>
         </div>
         <div>
           <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;
