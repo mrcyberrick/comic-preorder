@@ -332,11 +332,16 @@
     return d && d >= weekStart && d <= weekEnd;
   });
 
-  // Build a set of catalog IDs and UPCs the user has reserved
-  // so we can flag them in the full shipment list
+  // Build sets of catalog IDs, UPCs, and item codes the user has reserved
+  // so we can flag them in the full shipment list. All three keys are needed:
+  // catalog_id alone misses cross-distributor titles whose shipment row arrives
+  // with a null catalog_id but a matching UPC/item_code (F76).
   const myReservedCatalogIds = new Set(myArrivals.map(i => i.catalog_id || i.catalog?.id).filter(Boolean));
   const myReservedUpcs = new Set(
     myArrivals.map(i => i.catalog?.upc).filter(Boolean)
+  );
+  const myReservedItemCodes = new Set(
+    myArrivals.map(i => i.catalog?.item_code).filter(Boolean)
   );
 
   // ── Decide which mode to render ───────────────────────────
@@ -378,8 +383,10 @@
   function isReserved(row) {
     const catId = row.catalog?.id;
     const upc   = row.upc;
+    const code  = row.item_code;
     return (catId && myReservedCatalogIds.has(catId)) ||
-           (upc  && myReservedUpcs.has(upc));
+           (upc  && myReservedUpcs.has(upc))          ||
+           (code && myReservedItemCodes.has(code));
   }
 
   const myRows    = shipment.filter(row => isReserved(row));
@@ -392,11 +399,22 @@
   // title that's still on order). Without this, "full shipment mode" silently
   // dropped these reservations from the page even though they show up in
   // the nav bubble, mylist.html, and the admin "This Week" tab.
-  const shipmentCatalogIds = new Set(
-    shipment.map(s => s.catalog?.id).filter(Boolean)
-  );
+  // A reservation is "covered" by the shipment if any of catalog_id / upc /
+  // item_code matches — the same key isReserved uses, mirroring the import's
+  // conflict keys (F76). Matching on catalog_id alone double-counted cross-
+  // distributor titles (e.g. catalog=Lunar, shipment=PRH, same UPC): the row
+  // landed in otherRows AND was re-added here as a false orphan.
+  const shipmentCatalogIds = new Set(shipment.map(s => s.catalog?.id).filter(Boolean));
+  const shipmentUpcs       = new Set(shipment.map(s => s.upc).filter(Boolean));
+  const shipmentItemCodes  = new Set(shipment.map(s => s.item_code).filter(Boolean));
+  const isCoveredByShipment = (p) => {
+    const c = p.catalog || {};
+    return (c.id        && shipmentCatalogIds.has(c.id)) ||
+           (c.upc       && shipmentUpcs.has(c.upc))      ||
+           (c.item_code && shipmentItemCodes.has(c.item_code));
+  };
   const orphanReserved = myArrivals
-    .filter(p => !shipmentCatalogIds.has(p.catalog?.id))
+    .filter(p => !isCoveredByShipment(p))
     .map(p => ({
       // Shape a preorder to look like a shipment row so makeCard works unchanged
       catalog:     p.catalog,
