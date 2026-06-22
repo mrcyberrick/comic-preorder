@@ -761,7 +761,7 @@ const Preorders = {
         fulfilled,
         fulfilled_at,
         catalog (
-          id, distributor, item_code, title, series_name, publisher,
+          id, distributor, item_code, upc, title, series_name, publisher,
           issue_number, format, price_usd, foc_date, on_sale_date,
           writer, artist, cover_url, variant_type, catalog_month
         )
