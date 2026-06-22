@@ -21,7 +21,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded after the F34 un-pin (deferred; multi-tenant email branding out of Phase 5 scope). All other carried findings resolved: F64 item 5 resolved 2026-06-17 (5.4 S0); F73/F74 resolved 2026-06-17 (webhook secret rotation). F75 — reserved; security-sensitive, details tracked in a local-only note until remediated (see § 13 placeholder). Next free finding ID: **F76**.
+**Open findings:** F72 — `register-customer` email template stays founding-branded after the F34 un-pin (deferred; multi-tenant email branding out of Phase 5 scope). All other carried findings resolved: F64 item 5 resolved 2026-06-17 (5.4 S0); F73/F74 resolved 2026-06-17 (webhook secret rotation). F75 — reserved; security-sensitive, details tracked in a local-only note until remediated (see § 13 placeholder). F76 — shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (fix landed on staging; cross-distributor null-`catalog_id` titles). Next free finding ID: **F77**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list

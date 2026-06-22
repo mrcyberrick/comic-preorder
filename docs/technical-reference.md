@@ -2309,6 +2309,14 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Status:** filed 2026-06-19, open. The full write-up and remediation plan are intentionally kept **out of this public repo** to avoid signaling an exploitable condition; they live in a local-only operator note (outside the repo tree). A sanitized, past-tense entry will replace this placeholder once remediation lands.
 - **Disposition:** remediation is a dedicated follow-on session (out of Phase 5.5 scope). New findings are numbered from **F76**.
 
+#### F76 — Shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (distributor-agnostic)
+- **Status:** filed 2026-06-22, **fix landed on staging** (`feature/f76-arrivals-shipment-match-key`): `Preorders.getMy` now selects `catalog.upc`; `arrivals.html` `isReserved` and the orphan filter both match on `catalog_id OR upc OR item_code`.
+- **Severity:** Medium (customer-facing display) — a reserved title could render twice on the This Week arrivals page (once in the store-shipment split, once as a false orphan), and admin reservation↔shipment reconciliation overcounted "reserved but not shipped."
+- **Root cause:** a title can be **catalogued under one distributor and shipped under another** (real channel split — e.g. CONAN THE BARBARIAN #32: `catalog.distributor = Lunar`, `weekly_shipment.distributor = PRH`, **same UPC**). The import wires `weekly_shipment.catalog_id` via *distributor + upc/item_code*, so cross-distributor titles get a **null `catalog_id`**. Any `catalog_id`-only reconciliation then falsely orphans them. Distributor must **not** be part of the match key (the two tables disagree on it for these titles); `upc` (Lunar) and `item_code` (PRH) mirror the import's own conflict keys (`import.js` §30-31).
+- **Secondary defect (fixed here):** `Preorders.getMy` did not select `catalog.upc`, so `arrivals.html`'s `myReservedUpcs` was always empty — the in-app UPC match was dead, leaving `isReserved` effectively `catalog_id`-only.
+- **Evidence:** naive `catalog_id`-only orphan count for the 2026-06-22 week was 15; correcting the key to `catalog_id OR upc OR item_code` reduced it to 4 genuine non-shipped titles (CONAN #32 CVR D foil var — A/B/C/E arrived, D did not; DICK TRACY #18 CVR A & B — absent from shipment; Starship Godzilla — absent). See also [[consider-rejected-titles-partial-fulfillment]] (memory) — PRH order-time rejections are a distinct, expected source of the residual.
+- **Where:** `app.js` `Preorders.getMy`; `arrivals.html` `isReserved` + `orphanReserved`.
+
 ---
 
 *End of document.*
