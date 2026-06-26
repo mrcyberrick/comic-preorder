@@ -2334,6 +2334,14 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** local-only `import.js` / `import-staging.js` (catalog upsert key; not in any repo — see `CLAUDE.md` § What's tracked vs local-only).
 - **Disposition / home:** best bundled into the **next dedicated `import.js` maintenance session — the same follow-on that carries the F75 import-script remediation** (operator's local-only note). Both are `import.js`-local changes that share the verification cost (one careful end-to-end staging import re-run covers both), so doing them together avoids re-paying that cost twice. Out of Phase 5.5 scope (5.5 is operational + doc-only; `import.js` stays founding-pinned through the soak per phase-5.5 § 1.5).
 
+#### F79 — Asset cache skew: freshly-served HTML pairs with a stale cached `app.js`/`config.js`
+- **Status:** filed 2026-06-25, **resolved** — `_headers` file added (staging → prod via normal promotion).
+- **Severity:** Medium (recurring prod breakage) — surfaced after the F77 deploy as `Uncaught TypeError: Preorders.upsertReservation is not a function` in prod admin; the same class breaks **any** deploy that adds/renames an `app.js` symbol referenced by a freshly-served HTML page.
+- **Root cause:** on Cloudflare Pages, HTML is served `Cf-Cache-Status: DYNAMIC` (always current), but `app.js` was served `Cache-Control: public, max-age=14400, must-revalidate` (**4-hour browser cache**) with **no cache-busting query** on the `<script src="app.js">` tag. After a deploy, a returning admin's browser fetched the **new** `admin.html` (which calls a new `app.js` symbol) while still using its **4-hour-cached old `app.js`** (without that symbol) → runtime `is not a function`. Staging preview deploys serve `app.js` no-cache, so staging never skewed — which is why "prod didn't behave like staging."
+- **Fix:** added a root `_headers` file (Cloudflare Pages) setting `Cache-Control: no-cache` on `/app.js` and `/config.js`. Both already emit `ETag`, so `no-cache` (revalidate-before-use) costs a cheap `304` when unchanged and picks up a new bundle instantly on deploy. HTML pages were already DYNAMIC and need no rule; the Supabase UMD bundle is a versioned jsdelivr URL and is unaffected. `config.js` is included because it is per-branch (prod vs staging keys) and carries the same stale-after-change risk.
+- **Immediate mitigation (pre-promotion):** a hard refresh (Ctrl+Shift+R) on the affected machine forces an `app.js` refetch; all browsers self-heal within the 4-hour revalidation window even without it.
+- **Where:** `_headers` (new, repo/Pages root, alongside `_redirects`). No HTML/JS source change — the cache-busting is handled entirely by the header rule, avoiding a manual per-deploy `?v=` bump across all five HTML files.
+
 ---
 
 *End of document.*
