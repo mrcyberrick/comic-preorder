@@ -2024,15 +2024,15 @@
     btn.textContent = 'Submitting…';
 
     let succeeded = 0;
-    let skipped   = 0;
     let failed    = 0;
 
+    // upsertReservation() is idempotent on (user_id, catalog_id): a customer who
+    // already has the item gets their quantity updated rather than a 23505 conflict.
+    // This records the admin's intended quantities instead of silently skipping them.
     for (const { userId, catalogId, quantity } of pairs) {
-      const { error } = await Preorders.reserve(userId, catalogId, quantity);
+      const { error } = await Preorders.upsertReservation(userId, catalogId, quantity);
       if (!error) {
         succeeded++;
-      } else if (error.code === '23505') {
-        skipped++; // unique constraint — reservation already exists, safe to skip
       } else {
         failed++;
         console.error('Paper reserve failed:', error);
@@ -2043,20 +2043,12 @@
     renderPendingOrders();
     await loadData(); // refresh dashboard stats and By Customer view
 
-    const parts = [
-      succeeded ? `${succeeded} reserved` : '',
-      skipped   ? `${skipped} already existed` : '',
-      failed    ? `${failed} failed` : '',
-    ].filter(Boolean).join(', ');
-
-    const allSkipped = succeeded === 0 && failed === 0 && skipped > 0;
+    const noun = `reservation${succeeded !== 1 ? 's' : ''}`;
     toast(
-      failed     ? `Done with issues: ${parts}` :
-      allSkipped ? `Nothing new — ${skipped} already reserved` :
-                   `✓ ${parts}`,
-      failed     ? 'error' :
-      allSkipped ? 'warn' :
-                   'success'
+      failed
+        ? `Done with issues: ${succeeded} saved, ${failed} failed`
+        : `✓ ${succeeded} ${noun} saved`,
+      failed ? 'error' : 'success'
     );
     btn.disabled = false;
   });

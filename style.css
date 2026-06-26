@@ -970,7 +970,6 @@ button { cursor: pointer; font-family: var(--font-body); }
   max-width: 300px;
 }
 .toast.success { border-left: 3px solid var(--success); }
-.toast.warn    { border-left: 3px solid #f59e0b; }
 .toast.error   { border-left: 3px solid var(--accent); }
 @keyframes slideIn {
   from { transform: translateX(20px); opacity: 0; }

@@ -785,6 +785,25 @@ const Preorders = {
     return { data, error };
   },
 
+  // Insert-or-update a reservation, setting quantity. Unlike reserve(), this is
+  // idempotent on the (user_id, catalog_id) unique key — re-submitting an item a
+  // customer already has updates the quantity instead of failing with 23505.
+  // Used by the admin Paper Orders submit path, where the admin sets explicit
+  // per-customer quantities and expects them to stick. Returns { data, error }.
+  async upsertReservation(userId, catalogId, quantity = 1) {
+    const { data, error } = await db
+      .from('preorders')
+      .upsert({
+        user_id: userId,
+        catalog_id: catalogId,
+        quantity,
+        tenant_id: TenantContext.current().id,
+      }, { onConflict: 'user_id,catalog_id' })
+      .select()
+      .single();
+    return { data, error };
+  },
+
   async updateQuantity(userId, catalogId, quantity) {
     const { error } = await db
       .from('preorders')
