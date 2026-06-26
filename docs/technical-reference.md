@@ -2317,6 +2317,15 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Evidence:** naive `catalog_id`-only orphan count for the 2026-06-22 week was 15; correcting the key to `catalog_id OR upc OR item_code` reduced it to 4 genuine non-shipped titles (CONAN #32 CVR D foil var — A/B/C/E arrived, D did not; DICK TRACY #18 CVR A & B — absent from shipment; Starship Godzilla — absent). See also [[consider-rejected-titles-partial-fulfillment]] (memory) — PRH order-time rejections are a distinct, expected source of the residual.
 - **Where:** `app.js` `Preorders.getMy`; `arrivals.html` `isReserved` + `orphanReserved`.
 
+#### F77 — Paper orders: duplicate typeahead results + silent "already reserved" toast
+- **Status:** filed 2026-06-25, **resolved** — fix landed on staging in the same session.
+- **Severity:** Medium (admin UX) — two symptoms, one root cause.
+- **Symptom A — duplicate typeahead results:** searching for a title in the Paper Orders "Add Title to Order" typeahead returned two visually identical entries for the same comic. Root cause: titles with a null `catalog_id` (cross-distributor, same root as F76) bypass the upsert unique key during import and produce two DB rows with the same `item_code` but different UUIDs. `renderCatalogTypeahead()` rendered both rows without deduplication.
+- **Symptom B — "nothing new" toast indistinguishable from success:** when all submitted reservations already existed (100% `23505` unique-constraint skips), the submit handler showed a green `✓ X already existed` toast — visually identical to a fresh reserve. The admin had no clear signal that no new orders were actually created.
+- **Fix A:** `admin.html` `renderCatalogTypeahead()` — deduplicate items by `item_code || isbn || upc || id` before rendering; reassigns `items` in-place so all downstream references (border logic, click handlers) use the deduped array.
+- **Fix B:** `admin.html` submit handler — when `succeeded === 0 && failed === 0 && skipped > 0` (all-skip), show amber `warn`-style toast "Nothing new — N already reserved" instead of green success. `style.css` gets `.toast.warn { border-left: 3px solid #f59e0b; }`.
+- **Where:** `admin.html` `renderCatalogTypeahead()` + submit handler; `style.css`.
+
 ---
 
 *End of document.*

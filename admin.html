@@ -1728,6 +1728,15 @@
   });
 
   function renderCatalogTypeahead(items) {
+    // Deduplicate by item_code/isbn/upc: null-catalog_id rows bypass the upsert
+    // unique key and can produce two DB rows for the same physical comic.
+    const _seen = new Set();
+    items = items.filter(c => {
+      const key = c.item_code || c.isbn || c.upc || c.id;
+      if (_seen.has(key)) return false;
+      _seen.add(key);
+      return true;
+    });
     const el = document.getElementById('paper-search-results');
     if (!items.length) {
       el.innerHTML = '<div style="padding:10px 12px;color:var(--text-muted);font-size:0.82rem">No results</div>';
@@ -2040,7 +2049,15 @@
       failed    ? `${failed} failed` : '',
     ].filter(Boolean).join(', ');
 
-    toast(failed ? `Done with issues: ${parts}` : `✓ ${parts}`, failed ? 'error' : 'success');
+    const allSkipped = succeeded === 0 && failed === 0 && skipped > 0;
+    toast(
+      failed     ? `Done with issues: ${parts}` :
+      allSkipped ? `Nothing new — ${skipped} already reserved` :
+                   `✓ ${parts}`,
+      failed     ? 'error' :
+      allSkipped ? 'warn' :
+                   'success'
+    );
     btn.disabled = false;
   });
 
