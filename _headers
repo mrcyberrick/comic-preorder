@@ -1,0 +1,16 @@
+# Cloudflare Pages headers.
+#
+# Force the browser/edge to revalidate the local app bundle on every load so a
+# freshly-served HTML page (served DYNAMIC, always current) never pairs with a
+# stale cached app.js/config.js. That version skew is what produced the F79
+# "Preorders.upsertReservation is not a function" error in prod after a deploy:
+# new admin.html + 4-hour-cached old app.js.
+#
+# Both files send ETags, so `no-cache` (revalidate-before-use) is cheap — a 304
+# when unchanged, an immediate fresh copy the moment a deploy changes them.
+# config.js is per-branch (prod vs staging keys); revalidating it avoids serving
+# a stale key set after a config change for the same reason.
+/app.js
+  Cache-Control: no-cache
+/config.js
+  Cache-Control: no-cache
