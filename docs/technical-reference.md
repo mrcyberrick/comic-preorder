@@ -287,8 +287,12 @@ exists (the founding tenant).
 - ~~`idx_tenants_slug` on `slug`~~ — dropped on staging 2026-06-15 (F14 resolved); never existed on prod (F64 item 8 no-op — `tenants_slug_key` already serves the slug→id RPC)
 
 **Notes:**
-- Per-tenant `branding` and `settings` jsonb columns are reserved for
-  future use; no application code currently reads them.
+- Per-tenant `branding` jsonb is read by `Branding.apply()` (app.js) as of
+  5.3 — an override layer applying `primary_color` / `display_name` / `logo_url`
+  when present (founding `branding={}` ⇒ no-op ⇒ renders identically to today).
+  Delivered to anon via `resolve_tenant_by_slug` (4-col) and to authed users via
+  the `TenantContext` profile branch. `settings` jsonb remains reserved /
+  never exposed (no client render path; never returned by the RPC).
 - No INSERT or DELETE RLS policy: tenant creation is service-role-only.
   Authenticated users can SELECT only their own tenant; admins can UPDATE
   their own tenant.
@@ -1360,10 +1364,10 @@ existing row's tenant_id.
 
 ## 11. Edge Functions
 
-Eight Deno-based Edge Functions are deployed to staging. All are written
-in TypeScript, all use Supabase service-role for privileged operations,
-and all that send email use MailerSend with the `noreply@mrcyberrick.us`
-sender.
+Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
+added 5.4 S3). All are written in TypeScript, all use Supabase service-role
+for privileged operations, and all that send email use MailerSend with the
+`noreply@mrcyberrick.us` sender.
 
 ### 11.1 Function inventory
 
@@ -1372,15 +1376,18 @@ sender.
 | `notify-customers` | import script (post-import prompt) | none (admin context implied by service-role caller) | yes (filters by `FOUNDING_TENANT_ID`) |
 | `send-my-list` | mylist.html | session token required (but does not match user_id — F36) | yes (catalog month filter) |
 | `invite-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
-| `register-customer` | MailerLite webhook | webhook secret in URL | partial (writes new profile with FOUNDING_TENANT_ID) |
+| `register-customer` | MailerLite webhook | per-tenant webhook secret in URL (5.4 S2) | yes — `tenant_id` resolved from the matching tenant's `settings->>'mailerlite_webhook_secret'` |
 | `approve-customer` | admin.html | admin check (no tenant component) | no |
 | `create-paper-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
+| `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
 
-The "partial" tenant-awareness in the user-creation functions is what F34
-documents: every new user is created in the founding tenant regardless of
-the inviting admin's tenant. Currently moot.
+The "partial" tenant-awareness in `invite-customer` and
+`create-paper-customer` is what F34's remaining scope documents: new users
+created by an admin still land in the founding tenant regardless of the
+inviting admin's tenant. `register-customer`'s residual was resolved in
+5.4 S2 (see F34 status + per-tenant-secret contract note, § 13).
 
 ### 11.2 Required secrets
 
@@ -1392,8 +1399,9 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
 | `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
-| `MAILERLITE_WEBHOOK_SECRET` | register-customer (URL secret check) |
-| `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer |
+| `MAILERLITE_WEBHOOK_SECRET` | register-customer — retained for diagnostics only (5.4 S2); no longer the auth/tenant-source check (replaced by the per-tenant `tenants.settings->>'mailerlite_webhook_secret'` lookup) |
+| `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
+| `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
 
 `FOUNDING_TENANT_ID` was added during Phase 2 to enable tenant-aware
 filtering and writes from the Edge Functions. The web app reads tenant
@@ -1425,11 +1433,33 @@ MailerSend, and inserts a `user_profiles` row with
 `tenant_id = FOUNDING_TENANT_ID`.
 
 **`register-customer`**: called by MailerLite webhook when a subscriber is
-added to the "Monthly Comics" group. URL parameter `secret` must match
-`MAILERLITE_WEBHOOK_SECRET`. Creates an auth user (no password), inserts
-a `user_profiles` row with `status = 'pending'` and
-`tenant_id = FOUNDING_TENANT_ID`, and sends a "browse while we review"
-email containing a magic link.
+added to the "Monthly Comics" group. URL parameter `secret` is looked up
+against `tenants.settings->>'mailerlite_webhook_secret'` (service-role) —
+the matching tenant's id is used for the insert (5.4 S2; see § 13 F34 and
+the per-tenant-secret contract note). No match or missing `secret` → 401.
+Creates an auth user (no password), inserts a `user_profiles` row with
+`status = 'pending'` and the resolved `tenant_id`, and sends a "browse
+while we review" email containing a magic link. Email branding is still
+founding-only regardless of resolved tenant — tracked as F72.
+
+**`register-tenant`** (new, 5.4 S3): gated operator function, not
+customer-facing. Auth gate is `TENANT_PROVISION_SECRET` via the
+`x-operator-secret` header — checked before any body parsing; mismatch
+or absent → 401. Validates `slug` against a DNS-safe lowercase pattern
+and a function-level reserved-word denylist (`www`, `admin`, both founding
+slugs, etc.) → 400 on either failure. Service-role INSERT into `tenants`
+(`plan = 'free'`, `settings` seeded with a fresh per-tenant
+`mailerlite_webhook_secret`, `branding` from the request body or `{}`);
+unique-slug violation (`23505`) → 409 `slug_taken`; check-constraint
+violation (`23514`) → 400 `invalid_slug`. Creates the first admin via the
+GoTrue admin API (no direct `auth.users` insert) and a matching
+`user_profiles` row (`status = 'active'`, `is_admin = true`). The three
+writes (tenant, auth user, profile) are not transactional; on a failure
+after a partial write the function attempts best-effort compensation
+(delete profile → auth user → tenant, reverse FK order) before returning
+500. Any residue is fully removable via the FK-ordered teardown in
+`docs/phase-4.1-canary-procedure.md` (exercised end-to-end in 5.4 S4).
+Returns `{ tenant_id, admin_user_id, slug, webhook_secret }` on success.
 
 **`approve-customer`**: admin-only state change from pending to active.
 Verifies the caller is admin via service-role profile lookup, updates
@@ -1711,7 +1741,8 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   clause; alternatively switch to `SECURITY INVOKER` and rely on RLS.
 
 #### F34 — user-creation Edge Functions hard-pin to founding tenant
-- **Status:** fixed 2026-05-10 — `invite-customer` and
+- **Status:** fixed 2026-05-10 (`invite-customer`/`create-paper-customer`); **residual resolved 2026-06-16 (5.4 S2)** — `register-customer` no longer pinned to `FOUNDING_TENANT_ID`. See per-tenant-secret contract note above. F34 fully resolved across all user-creation Edge Functions.
+- `invite-customer` and
   `create-paper-customer` now fetch `tenant_id` alongside `is_admin`
   from the caller's profile and use `callerTenantId` (falling back to
   `FOUNDING_TENANT_ID` if lookup fails) for new profile inserts.
@@ -1728,6 +1759,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   (look up `user_profiles.tenant_id WHERE id = caller's auth.uid()`)
   and use that value instead of FOUNDING_TENANT_ID.
 - **Prod resolution 2026-05-31 (Phase 4.6):** `FOUNDING_TENANT_ID` secret set on prod project (§ 1); all 8 EFs redeployed from staging SHA `cab5dca` (§ 2). F34 fully resolved on production.
+- **`register-customer` per-tenant-secret contract (5.4 S1, 2026-06-16):** the residual founding pin (un-pinned in S2) is replaced by a **per-tenant webhook secret** stored at `tenants.settings->>'mailerlite_webhook_secret'` (jsonb; `settings` is service-role-only, never returned by `resolve_tenant_by_slug`). Lookup: `GET /rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.<secret>&select=id,slug,display_name` via service-role. Empty/absent `?secret=` → `401`; no matching tenant → `401`; exactly one matching tenant → that tenant's id is used for the `user_profiles` insert. **Founding migrated 2026-06-16 (staging):** `tenants.settings->>'mailerlite_webhook_secret' = 'pulllist-staging-2026'` for `72e29f67-…`; lookup verified to return exactly one row (founding). Prod migration is 5.4 S6.
 
 ### Medium
 
@@ -2150,7 +2182,7 @@ Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
   2. `catalog_distributor_check` — **closed 2026-06-11 (5.0 S2).** Constraint added to staging; pre-flight confirmed exactly `{Lunar, PRH}`; verified via `pg_constraint`.
   3. `preorders_quantity_check` — **closed 2026-06-11 (5.0 S2).** Constraint added to staging; pre-flight confirmed 0 bad rows; verified via `pg_constraint`.
   4. `preorders_catalog_id_fkey` cascade — **closed 2026-06-11 (5.0 S4).** Prod FK dropped and re-added as `REFERENCES public.catalog(id)` (NO ACTION, matching staging). Pre-flight confirmed 0 orphaned catalog references. Verified `confdeltype = a`. Paired with F66 guard in same sitting — silent-deletion risk eliminated on prod.
-  5. `preorders_user_id_fkey` target — **decision recorded 2026-06-11 (5.0 S3); DDL deferred to parent § Deferred-DDL Register (must execute before 5.4).** Decision: **Option A — profile-first, preorder-blocking (staging shape is canonical).** `preorders_user_id_fkey` → `user_profiles` NO ACTION on both envs. Rationale: profile DELETE fails loudly if the customer has open preorders — this is an intentional guard, not a bug. Admin must cancel preorders first, then Decline. Auth.users row cleanup is a separate GoTrue admin API step (can be wired to the Decline button in a later sub-deploy). Aligns with staging. Required prod action: `DROP CONSTRAINT preorders_user_id_fkey; ADD CONSTRAINT preorders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id);` (removes the `auth.users` target and the CASCADE). No DDL executed in 5.0.
+  5. `preorders_user_id_fkey` target — **resolved 2026-06-16 (5.4 S0).** Decision (5.0 S3, 2026-06-11): **Option A — profile-first, preorder-blocking (staging shape is canonical).** Prod DDL executed 2026-06-16: pre-flight confirmed `blocking_rows = 0` (no preorders with an orphaned `user_id`); `DROP CONSTRAINT preorders_user_id_fkey; ADD CONSTRAINT preorders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id);` executed on prod; verified `confdeltype = 'a'` (NO ACTION), `references = user_profiles`. Both envs now canonical. Rationale: profile DELETE fails loudly if the customer has open preorders — this is an intentional guard, not a bug. Admin must cancel preorders first, then Decline. Auth.users row cleanup remains a separate GoTrue admin API step (can be wired to the Decline button in a later sub-deploy).
   6. `app_settings_updated_by_fkey` — **closed 2026-06-11 (5.0 S2).** FK added to staging; pre-flight confirmed 0 orphaned `updated_by` values; verified via `pg_constraint`.
   7. `user_profiles_id_fkey` → `auth.users` ON DELETE CASCADE — **closed 2026-06-11 (5.0 S2).** Pre-flight found 44 orphaned `user_profiles` rows — all Playwright test fixtures (`pw-*@example.test`, founding tenant, 0 dependent preorders/subscriptions); deleted inline. FK then added; verified `confdeltype = c`. Post-add: future Playwright teardown auth-user deletes will cascade automatically.
   8. `idx_tenants_slug` — **dispositioned no-op 2026-06-15 (5.2 S4).** The `resolve_tenant_by_slug` RPC uses a single-row equality lookup (`WHERE slug = $1`) that `tenants_slug_key` (the unique constraint's backing btree) already serves optimally on both envs. Adding a second index would be redundant. Staging `idx_tenants_slug` dropped (F14 resolved); prod never had it.
@@ -2237,10 +2269,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Verified 2026-06-15 (staging, 5.2 S1 — 3-col):** `pg_get_functiondef` shows `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`, exactly three columns. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X` (PUBLIC). Anon `curl.exe` → `raysandjudys` → one object, exactly keys `{id, slug, display_name}`, founding UUID `72e29f67-…`. Unknown slug → `[]`. Direct anon `GET /tenants?select=*` → `permission denied` (RLS holds).
 - **Verified 2026-06-15 (prod, 5.2 S7 — 3-col):** Same 3-col contract confirmed via anon `curl.exe` with `rjbookstop` → `{id: 20941129-…, slug: rjbookstop, display_name: "Ray & Judy's Book Stop"}`.
 - **Verified 2026-06-15 (staging, 5.3 S1 — 4-col):** DROP + CREATE (single-quote body, no dollar-quote); REVOKE re-run after CREATE to clear Postgres default PUBLIC grant. `pg_get_functiondef` → 4 cols (`t.id, t.slug, t.display_name, t.branding`), `STABLE SECURITY DEFINER`, `SET search_path TO 'public', 'pg_temp'`. `proacl = {postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}` — no bare `=X`. Anon `curl.exe` → `raysandjudys` → `{id, slug, display_name, branding}` (exactly 4 keys), `branding: {}`, founding UUID `72e29f67-…`. Unknown slug → `[]`. Direct anon `GET /tenants?select=*` → `permission denied` (RLS holds).
+- **Verified 2026-06-15 (prod, 5.3 S6 — 4-col):** DROP + CREATE + REVOKE + GRANT on prod; `proacl` clean (no PUBLIC). Anon `curl.exe` → `rjbookstop` → `{id, slug, display_name, branding}` (exactly 4 keys), `branding: {}`, prod founding UUID `20941129-…`. Unknown slug → `[]`. Direct anon `GET /tenants?select=*` → `[]` (RLS row-filtered on prod — `current_tenant_id()` NULL for anon → no rows; vs staging's no-SELECT-grant `permission denied`; both safe, no anon-readable tenant data).
 
 #### F71 — `FOUNDING_TENANT` const in app.js carries staging UUID and slug
 
-- **Status:** Resolved 2026-06-15 (5.3 S2) — `app.js` now reads `const FOUNDING_TENANT = window.FOUNDING_TENANT`; hardcoded staging UUID/slug removed. Staging `config.js` carries staging values (`72e29f67-…` / `raysandjudys`); `main` `config.js` will carry prod values (`20941129-…` / `rjbookstop`) added in 5.3 S6 before promotion. Playwright smoke (15/15) green after staging deploy.
+- **Status:** Resolved 2026-06-15 (5.3 S2 staging; S6 prod). `app.js` reads `const FOUNDING_TENANT = window.FOUNDING_TENANT`; hardcoded staging UUID/slug removed. Staging `config.js` carries staging values (`72e29f67-…` / `raysandjudys`); `main` `config.js` carries prod values (`20941129-…` / `rjbookstop`) — added before the 5.3 S6 promotion and verified live at `pulllist.app/config.js` post-deploy (and `app.js` confirmed free of `72e29f67`). Playwright smoke (15/15) green after staging deploy; prod founding-apex invariant + write-smoke clean.
 - **Decision:** Option B — move const to per-env `config.js` (Rick, 5.3 planning 2026-06-15). Idiomatic: same mechanism as `SUPABASE_ANON_KEY`; fixes both id and slug; per-env branding delivered naturally from each env's own DB via RPC/profile path.
 - **Severity:** Low-dormant — only the unauthenticated fallback (branch 4) ever reads the const; authenticated users resolve via profile lookup (branch 1) and never hit it.
 - **Detail:** `FOUNDING_TENANT = { id: '72e29f67-39f7-42bc-a4d5-d6f992f9d790', slug: 'raysandjudys', … }` in `app.js` contained the **staging** founding tenant's UUID and slug. Prod founding tenant has id `20941129-c35a-476d-ae21-44b8f77af89c`, slug `rjbookstop`. Discovered when S7 anon-contract check initially tested `raysandjudys` against prod and received `[]` (correctly — that slug doesn't exist on prod).
@@ -2253,6 +2286,45 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Severity:** Medium (resolved) — local-only script; FK protection prevented any data corruption.
 - **Detail:** `import-staging.js` line 63 previously read `const TENANT_ID = '20941129-c35a-476d-ae21-44b8f77af89c';` — the production founding tenant, copy-pasted from `import.js` with only `SUPABASE_URL` reverted. The `catalog.tenant_id → tenants(id)` FK silently blocked all staging imports run under that UUID, leaving staging on the May 2026 catalog.
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
+
+#### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
+- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist (5.5 may act on it).
+- **Severity:** Low (documented gap, not a defect) — the un-pin (F34 residual) is data-correct: a customer registered via a non-founding tenant's webhook secret lands in that tenant's `user_profiles` with the right `tenant_id`. But `buildPendingEmail()` (register-customer/index.ts ~line 215+) hardcodes "Ray & Judy's Book Stop" / PULLLIST founding copy and the `from` name, regardless of which tenant the customer resolved to.
+- **Where:** `supabase/functions/register-customer/index.ts` — `buildPendingEmail()` and the MailerSend `from`/`subject` fields in the main handler.
+- **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
+
+#### F73 — Staging `MAILERLITE_WEBHOOK_SECRET` value pasted into a CLI chat transcript (5.4 S1)
+- **Status:** **resolved 2026-06-17 (5.4 S6 pre-flight)** — staging founding webhook secret rotated; MailerLite staging webhook URL updated.
+- **Severity:** Low–Medium — staging-only secret; same leak class as F69. Gates only the public `register-customer` webhook; bounded blast radius.
+- **Detail:** During 5.4 S1 (founding webhook-secret migration), Rick pasted the literal staging `MAILERLITE_WEBHOOK_SECRET` value into the chat transcript. Rotation was deferred until S2 verification was complete to avoid breaking the in-flight verification; rotated 2026-06-17 ahead of S6.
+- **Where:** 5.4 S1 chat transcript, 2026-06-16. Fix applied: staging `tenants.settings->>'mailerlite_webhook_secret'` updated + MailerLite staging webhook URL `?secret=` updated 2026-06-17.
+
+#### F74 — Prod founding `mailerlite_webhook_secret` value pasted into a CLI chat transcript (5.4 S6)
+- **Status:** **resolved 2026-06-17 (5.4 S6)** — prod founding webhook secret rotated after S6 founding-routes-to-founding verification passed; MailerLite prod webhook URL updated.
+- **Severity:** Low–Medium — prod founding webhook secret; same leak class as F69 (resolved) and F73 (resolved). Bounded blast radius.
+- **Detail:** During 5.4 S6 step 1 verification, Rick pasted the full SELECT result including the `has_secret` column value. Rotation was deferred until founding-routes-to-founding verification completed; rotated 2026-06-17 after S6 verification green.
+- **Where:** 5.4 S6 chat transcript, 2026-06-17. Fix applied: prod `tenants.settings->>'mailerlite_webhook_secret'` updated + MailerLite prod webhook URL `?secret=` updated 2026-06-17.
+
+#### F75 — (reserved; security-sensitive — details held in a local-only note until remediated)
+- **Status:** filed 2026-06-19, open. The full write-up and remediation plan are intentionally kept **out of this public repo** to avoid signaling an exploitable condition; they live in a local-only operator note (outside the repo tree). A sanitized, past-tense entry will replace this placeholder once remediation lands.
+- **Disposition:** remediation is a dedicated follow-on session (out of Phase 5.5 scope). New findings are numbered from **F76**.
+
+#### F76 — Shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (distributor-agnostic)
+- **Status:** filed 2026-06-22, **fix landed on staging** (`feature/f76-arrivals-shipment-match-key`): `Preorders.getMy` now selects `catalog.upc`; `arrivals.html` `isReserved` and the orphan filter both match on `catalog_id OR upc OR item_code`.
+- **Severity:** Medium (customer-facing display) — a reserved title could render twice on the This Week arrivals page (once in the store-shipment split, once as a false orphan), and admin reservation↔shipment reconciliation overcounted "reserved but not shipped."
+- **Root cause:** a title can be **catalogued under one distributor and shipped under another** (real channel split — e.g. CONAN THE BARBARIAN #32: `catalog.distributor = Lunar`, `weekly_shipment.distributor = PRH`, **same UPC**). The import wires `weekly_shipment.catalog_id` via *distributor + upc/item_code*, so cross-distributor titles get a **null `catalog_id`**. Any `catalog_id`-only reconciliation then falsely orphans them. Distributor must **not** be part of the match key (the two tables disagree on it for these titles); `upc` (Lunar) and `item_code` (PRH) mirror the import's own conflict keys (`import.js` §30-31).
+- **Secondary defect (fixed here):** `Preorders.getMy` did not select `catalog.upc`, so `arrivals.html`'s `myReservedUpcs` was always empty — the in-app UPC match was dead, leaving `isReserved` effectively `catalog_id`-only.
+- **Evidence:** naive `catalog_id`-only orphan count for the 2026-06-22 week was 15; correcting the key to `catalog_id OR upc OR item_code` reduced it to 4 genuine non-shipped titles (CONAN #32 CVR D foil var — A/B/C/E arrived, D did not; DICK TRACY #18 CVR A & B — absent from shipment; Starship Godzilla — absent). See also [[consider-rejected-titles-partial-fulfillment]] (memory) — PRH order-time rejections are a distinct, expected source of the residual.
+- **Where:** `app.js` `Preorders.getMy`; `arrivals.html` `isReserved` + `orphanReserved`.
+
+#### F77 — Paper orders: duplicate typeahead results + silent "already reserved" toast
+- **Status:** filed 2026-06-25, **resolved** — fix landed on staging in the same session.
+- **Severity:** Medium (admin UX) — two symptoms, one root cause.
+- **Symptom A — duplicate typeahead results:** searching for a title in the Paper Orders "Add Title to Order" typeahead returned two visually identical entries for the same comic. Root cause: titles with a null `catalog_id` (cross-distributor, same root as F76) bypass the upsert unique key during import and produce two DB rows with the same `item_code` but different UUIDs. `renderCatalogTypeahead()` rendered both rows without deduplication.
+- **Symptom B — "nothing new" toast indistinguishable from success:** when all submitted reservations already existed (100% `23505` unique-constraint skips), the submit handler showed a green `✓ X already existed` toast — visually identical to a fresh reserve. The admin had no clear signal that no new orders were actually created.
+- **Fix A:** `admin.html` `renderCatalogTypeahead()` — deduplicate items by `item_code || isbn || upc || id` before rendering; reassigns `items` in-place so all downstream references (border logic, click handlers) use the deduped array.
+- **Fix B:** `admin.html` submit handler — when `succeeded === 0 && failed === 0 && skipped > 0` (all-skip), show amber `warn`-style toast "Nothing new — N already reserved" instead of green success. `style.css` gets `.toast.warn { border-left: 3px solid #f59e0b; }`.
+- **Where:** `admin.html` `renderCatalogTypeahead()` + submit handler; `style.css`.
 
 ---
 

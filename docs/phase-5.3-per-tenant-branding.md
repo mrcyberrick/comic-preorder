@@ -1,6 +1,6 @@
 # Phase 5.3 — Per-Tenant Branding
 
-**Status:** In progress — S1 complete 2026-06-15.
+**Status:** **Complete** — 2026-06-15. All §5 criteria ticked; prod RPC 4-col + branding render live on `pulllist.app`; founding-apex invariant + write-smoke clean; F71 resolved; CLAUDE.md pointer advanced to 5.4.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.3)
 **Predecessor:** Phase 5.2 — Slug→id routing RPC — **Complete 2026-06-15** (`resolve_tenant_by_slug` live both projects; `TENANT_SLUG_MAP` removed; F14/F64-8/F67 resolved).
 **Branches:** Database (RPC) + doc changes do their work via the SQL Editor / dashboard (doc commits → `staging` directly). The `app.js` + `*.html` changes ride `feature/5.3-branding` off `staging` → `--ff-only` merge → staging smoke → prod promotion PR per `CLAUDE.md` § Standard Deployment Workflow (F59 diff assertion + `config.js` checkout + post-deploy write-smoke). **`config.js` is touched in this sub-deploy** (new `FOUNDING_TENANT` per-branch key, F71) — see § 1.5 and the credential-safety handling in every relevant step.
@@ -403,15 +403,15 @@ Execution order: **S1 → S2 → S3 → S4 → S5 (one or two sittings on stagin
 
 ## 5. Completion criteria (all must be checked before parent row 5.3 → Complete)
 
-- [ ] S1: `resolve_tenant_by_slug` on **staging** returns exactly `id, slug, display_name, branding` (4 cols, no `settings`/`created_at`); `pg_get_functiondef` shows `SECURITY DEFINER` + hardened `search_path`; `proacl` = `anon`+`authenticated`, not PUBLIC; anon `curl.exe` returns a four-key object for `raysandjudys` (branding `{}`) and `[]` for an unknown slug; direct anon `tenants` SELECT still RLS-blocked.
-- [ ] S2 (F71): `FOUNDING_TENANT` lives in per-branch `config.js` (staging values on `staging`); `app.js` reads `window.FOUNDING_TENANT` with **no** hardcoded UUID (`Select-String "72e29f67"` → 0 in `app.js`); full Playwright green; **F71 resolved** in § 13.
-- [ ] S3: `Branding` module present; `Branding.apply()` called after `resolve()` on `initNav()` and the index.html anon path; profile branch SELECTs `branding`; full Playwright green; founding render unchanged.
-- [ ] S4: `data-tenant-name`/`data-tenant-logo` hooks added at the § 1.4 "Yes"-row store-name + logo slots across the six pages; footer identical across the five authed pages; no hooks on invoice/email/transactional copy; full Playwright green.
-- [ ] S5: `Branding.apply()` unit spec passes (override-when-present; **no-op when `branding={}`/absent**; malformed color ignored; logo via `src` only; null-safe); founding-render invariant verified identical to pre-5.3; live override proof green **and reverted to `{}`** (or honestly skipped); full Playwright incl. tenant-isolation green.
-- [ ] S6: `main` `config.js` carries the **prod** `FOUNDING_TENANT` before promotion; prod `resolve_tenant_by_slug` is 4-col and anon-verified (four-key, prod founding UUID, branding `{}`) **before** app.js promotion; app.js + HTML promoted via the standard workflow (`config.js` not in PR diff; F59 assertion confirms app.js changed); founding-apex invariant verified on `pulllist.app` (default `--accent`, default name/logo, prod founding UUID); write-smoke passed.
-- [ ] Founding-tenant behavior unchanged (parent invariant): full Playwright incl. tenant-isolation green at the S2/S3/S4/S5 staging gates and the S6 prod write-smoke; founding render byte-identical to pre-5.3.
-- [ ] F71 → resolved in § 13; RPC contract note updated (branding returned, `settings` never); any new defect filed from **F72**+ resolved or deferred-with-owner.
-- [ ] Deploy Log complete (one row per executed step); all doc changes committed to `staging`; parent row 5.3 → **Complete** + date; `CLAUDE.md` pointer advanced to 5.4 planning.
+- [x] S1: `resolve_tenant_by_slug` on **staging** returns exactly `id, slug, display_name, branding` (4 cols, no `settings`/`created_at`); `pg_get_functiondef` shows `SECURITY DEFINER` + hardened `search_path`; `proacl` = `anon`+`authenticated`, not PUBLIC; anon `curl.exe` returns a four-key object for `raysandjudys` (branding `{}`) and `[]` for an unknown slug; direct anon `tenants` SELECT still RLS-blocked.
+- [x] S2 (F71): `FOUNDING_TENANT` lives in per-branch `config.js` (staging values on `staging`); `app.js` reads `window.FOUNDING_TENANT` with **no** hardcoded UUID (`Select-String "72e29f67"` → 0 in `app.js`); full Playwright green; **F71 resolved** in § 13.
+- [x] S3: `Branding` module present; `Branding.apply()` called after `resolve()` on `initNav()` and the index.html anon path; profile branch SELECTs `branding`; full Playwright green; founding render unchanged.
+- [x] S4: `data-tenant-name`/`data-tenant-logo` hooks added at the § 1.4 "Yes"-row store-name + logo slots across the six pages; footer identical across the five authed pages; no hooks on invoice/email/transactional copy; full Playwright green.
+- [x] S5: `Branding.apply()` unit spec passes (override-when-present; **no-op when `branding={}`/absent**; malformed color ignored; logo via `src` only; null-safe); founding-render invariant verified identical to pre-5.3; live override proof green **and reverted to `{}`** (or honestly skipped); full Playwright incl. tenant-isolation green.
+- [x] S6: `main` `config.js` carries the **prod** `FOUNDING_TENANT` before promotion; prod `resolve_tenant_by_slug` is 4-col and anon-verified (four-key, prod founding UUID, branding `{}`) **before** app.js promotion; app.js + HTML promoted via the standard workflow (`config.js` carries the deliberate F71 prod-`FOUNDING_TENANT` addition — only that, URL+anon key unchanged; F59 assertion confirms app.js changed); founding-apex invariant verified on `pulllist.app` (default `--accent`, default name/logo, prod founding UUID); write-smoke passed.
+- [x] Founding-tenant behavior unchanged (parent invariant): full Playwright incl. tenant-isolation green at the S2/S3/S4/S5 staging gates and the S6 prod write-smoke; founding render byte-identical to pre-5.3.
+- [x] F71 → resolved in § 13; RPC contract note updated (branding returned, `settings` never); no new defect filed in 5.3 (next free ID remains **F72**).
+- [x] Deploy Log complete (one row per executed step); all doc changes committed to `staging`; parent row 5.3 → **Complete** + date; `CLAUDE.md` pointer advanced to 5.4 planning.
 
 ---
 
@@ -452,9 +452,9 @@ Execution order: **S1 → S2 → S3 → S4 → S5 (one or two sittings on stagin
 | 2026-06-15 | S3 | Green | `Branding` module added to `app.js`; `window.Branding` exposed. Profile branch SELECT extended to `'id, slug, display_name, branding'`. `Branding.apply()` wired in `initNav()` (5 authed pages) and `index.html` (anon landing). Greps: `Branding.apply` → 2 in app.js, 1 in index.html; `const Branding` → 1; `display_name, branding` → 1. Full Playwright 15/15 green incl. F15/F20. |
 | 2026-06-15 | S4 | Green | `data-tenant-name` hooks added at 9 "Yes"-row sites (6 footers across catalog/mylist/arrivals/subscriptions/admin/analytics, arrivals store-name block, index.html tagline + footer). `data-tenant-logo` on index.html logo img. No hooks on invoice/transactional copy. `mylist.html:522` print header noted but NOT hooked (not in plan table; analogous to arrivals:205 but scope-guarded). Full Playwright 15/15 green incl. F15/F20. |
 | 2026-06-15 | S5 | Green | Unit spec (08-branding-unit.spec.ts): 4/4 — override-when-present (color #123456 + dim rgba(18,52,86,0.15) + name + logo), founding no-op (empty branding → --accent inline empty, logo src unchanged), malformed color ignored, null-safe. Live override proof: staging founding branding set to `{"primary_color":"#1d4ed8","logo_url":"..."}`, blue accent confirmed in browser, reverted to `{}` (verified SELECT → `{}`). Full Playwright 19/19 incl. F15/F20. Founding-render invariant confirmed. |
-| | S6 | | |
-| | S7 | | |
+| 2026-06-15 | S6 | Green | `main` config.js verified to carry prod `FOUNDING_TENANT` (id `20941129-…`, slug `rjbookstop`) before promotion. Prod RPC `resolve_tenant_by_slug` extended to 4-col (DROP+CREATE+REVOKE+GRANT; proacl clean, no PUBLIC). Prod anon contract: `rjbookstop` → 4 keys incl. `branding:{}` (prod UUID); unknown slug → `[]`; direct `tenants` → `[]` (RLS-filtered). Promotion PR: original branch had nested merge commits → GitHub flagged conflicts; rebuilt as a single clean commit `d831fa3` on `origin/main` (identical tree), force-pushed; stale dup PR #62 closed. **PR #63 merged → main**; CF Pages deployed (`pulllist.app`). Post-deploy curl: app.js has `Branding.apply` + `window.FOUNDING_TENANT`, no `72e29f67`; config.js has prod UUID `20941129-…`. Founding-apex invariant + write-smoke passed (Rick). |
+| 2026-06-15 | S7 | Green | Closeout — §5 boxes ticked; status → Complete; F71 → resolved + RPC contract note (4-col) in technical-reference.md §4.1/§13; parent row 5.3 → Complete; CLAUDE.md pointer advanced to 5.4 planning, Out-of-Scope branding line → Complete. F64 item 5 DDL re-flagged to Rick (must land before 5.4). |
 
 ---
 
-**Last updated:** 2026-06-15 (S5 complete — staging fully verified)
+**Last updated:** 2026-06-15 (S7 complete — 5.3 closed; prod live)
