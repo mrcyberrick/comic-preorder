@@ -1715,7 +1715,12 @@
     const resultsEl = document.getElementById('paper-search-results');
     if (q.length < 2) { resultsEl.innerHTML = ''; return; }
     _paperSearchTimer = setTimeout(async () => {
-      const { items } = await Catalog.fetch({ search: q, pageSize: 8 });
+      // Scope to the current catalog month (matches the rest of the Paper Orders
+      // tab). A title solicited in consecutive months has one catalog row per
+      // month; without this filter the typeahead could surface a prior-month row
+      // and the reservation would land in a month the admin isn't viewing —
+      // recorded in the DB but invisible in the current-month order (F80).
+      const { items } = await Catalog.fetch({ month: currentCatalogMonth, search: q, pageSize: 8 });
       renderCatalogTypeahead(items);
     }, 280);
   });
