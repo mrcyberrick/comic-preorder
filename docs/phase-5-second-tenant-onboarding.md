@@ -38,9 +38,9 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 | 5.0 | Pre-Phase-5 housekeeping — F58/F63/F64/F65/F66 + prod `settings` row drop | `phase-5.0-pre-phase-5-housekeeping.md`       | Complete | 2026-06-11 |
 | 5.1 | Hosting migration — GitHub Pages → Cloudflare Pages (staging first, then prod) | `phase-5.1-hosting-migration.md`          | Complete | 2026-06-14 |
 | 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | `phase-5.2-slug-id-routing-rpc.md` | **Complete** | 2026-06-15 |
-| 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | *(written at 5.2 close)*                      | Pending  | |
-| 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | *(written at 5.3 close)* | Pending | |
-| 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | *(written at 5.4 close)*                  | Pending  | |
+| 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | `phase-5.3-per-tenant-branding.md`            | **Complete** | 2026-06-15 |
+| 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | `phase-5.4-tenant-signup.md` | **Complete** | 2026-06-17 |
+| 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | `phase-5.5-second-tenant-onboarding.md`   | Planning | |
 
 ### Status values
 
@@ -63,7 +63,7 @@ DDL whose *decision* is made in one sub-deploy but whose *execution* is delibera
 
 | Item | Decided | DDL owner | Notes |
 |---|---|---|---|
-| F64 item 5 — `preorders_user_id_fkey` target alignment | 5.0 S3 (2026-06-11) | 5.1-adjacent housekeeping commit — must land before 5.4 | **Decision: Option A (profile-first, NO ACTION canonical).** Prod needs: drop CASCADE FK, re-add → `user_profiles` NO ACTION. Decision + DDL recorded in § 13 F64 item 5. |
+| F64 item 5 — `preorders_user_id_fkey` target alignment | 5.0 S3 (2026-06-11) | **Closed 2026-06-16 (5.4 S0)** | **Decision: Option A (profile-first, NO ACTION canonical).** Prod DDL landed 2026-06-16: dropped CASCADE FK, re-added → `user_profiles` NO ACTION; `confdeltype='a'` verified. Both envs canonical. Decision + DDL recorded in § 13 F64 item 5. |
 | F64 item 8 — `idx_tenants_slug` → prod | Phase 4 completion audit (2026-06-10) | **Closed 2026-06-15 (5.2 S4) — no-op** | `tenants_slug_key` (unique) already serves the slug→id RPC equality lookup optimally. No second index needed on prod. Staging `idx_tenants_slug` dropped (F14 resolved). |
 
 ---
@@ -103,7 +103,7 @@ Phase 5 is complete when **all** of the following are true:
 - [ ] Hosting fully migrated; GitHub Pages serving retired; deployment workflow in `CLAUDE.md` rewritten for the new host
 - [ ] All carried findings (F58, F63, F64 incl. deferred-DDL items, F65, F66) resolved or explicitly re-dispositioned in § 13
 - [ ] Two-tenant production soak passed (duration set in the 5.5 plan; not less than one full import cycle)
-- [ ] `CLAUDE.md` § Current Migration Phase updated; Phase 6 stub created if a successor phase exists
+- [ ] `CLAUDE.md` § Current Migration Phase updated; Phase 6 stub created if a successor phase exists — **stub created 2026-06-15: `docs/phase-6-self-service-signup.md`** (open self-service tenant signup; gated on a wildcard-DNS/TLS spike; begins only after Phase 5 closes)
 - [ ] All sub-deploy plan files committed to `docs/`
 
 ---
@@ -148,4 +148,4 @@ Phase 5 is complete when **all** of the following are true:
 
 ---
 
-**Last updated:** 2026-06-14 (row 5.1 → Complete — hosting migrated to Cloudflare Pages, 3-day soak clean; 5.2 plan to be written next session)
+**Last updated:** 2026-06-17 (5.5 plan written → row 5.5 Planning; `docs/phase-5.5-second-tenant-onboarding.md`. Decisions locked: soak = one full import cycle / no buffer; routing = dedicated `<slug>.pulllist.app` manual custom domain; tenant-2 identity operator-supplied at execution; tenant 2 pilot/seeded through the soak)

@@ -1,29 +1,31 @@
 /**
  * register-customer — Public Edge Function
  *
- * Called by MailerLite webhook when a new subscriber is confirmed.
+ * Called by a tenant's MailerLite webhook when a new subscriber is confirmed.
  * Creates a pending Supabase account, stores the profile, generates
  * a magic link, and sends a branded "browse while we review" email.
  *
- * Webhook URL to configure in MailerLite:
- *   https://<project>.supabase.co/functions/v1/register-customer?secret=<MAILERLITE_WEBHOOK_SECRET>
+ * Webhook URL to configure in MailerLite (per tenant — each tenant has its own
+ * generated secret, issued by register-tenant and stored in tenants.settings):
+ *   https://<project>.supabase.co/functions/v1/register-customer?secret=<tenant's webhook secret>
  *
  * Required env vars (set in Supabase → Edge Functions → Secrets):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
  *   MAILERSEND_API_KEY
- *   MAILERLITE_WEBHOOK_SECRET   ← shared secret, paste into MailerLite webhook URL
- *   FOUNDING_TENANT_ID          ← UUID of the tenant new users are assigned to
+ *   FOUNDING_TENANT_ID          ← retained for diagnostics; no longer the tenant source (see F34 note)
  *
  * MailerLite webhook event: subscriber.created (or subscriber.updated)
  *
- * F34 note: This function intentionally keeps tenant_id = FOUNDING_TENANT_ID.
- * It is webhook-driven (called by MailerLite, not by an admin), so there is no
- * caller context from which to resolve a tenant. All MailerLite subscribers are
- * assumed to belong to the founding tenant. This assumption must be revisited
- * before a second tenant onboards — options include per-tenant webhook URLs,
- * per-tenant MailerLite groups, or a tenant lookup by domain. Until then,
- * this function only works correctly for the founding tenant's MailerLite group.
+ * F34 note (resolved 5.4 S2, 2026-06-16): tenant_id is now resolved from the
+ * incoming `?secret=` query param via a service-role lookup against
+ * tenants.settings->>'mailerlite_webhook_secret' — the secret both authenticates
+ * the caller and selects the tenant. The founding tenant's existing secret was
+ * migrated into tenants.settings (5.4 S1) before this un-pin deployed, so the
+ * founding MailerLite webhook keeps working with zero config change. A caller
+ * can only create a pending customer in the tenant whose secret they hold.
+ * Email branding (below) remains founding-branded for all tenants — tracked
+ * separately as F72 (multi-tenant email branding is out of scope for Phase 5).
  */
 
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
@@ -42,18 +44,38 @@ Deno.serve(async (req) => {
     const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
     const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
-    const WEBHOOK_SECRET     = Deno.env.get('MAILERLITE_WEBHOOK_SECRET')
     const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
 
     if (!FOUNDING_TENANT_ID) {
       console.warn('register-customer: FOUNDING_TENANT_ID secret not set')
     }
 
-    // ── Validate webhook secret ─────────────────────────────────
+    // ── Resolve tenant from per-tenant webhook secret ────────────
+    // F34 residual (resolved 5.4 S2): the incoming `?secret=` both authenticates
+    // the request and selects the tenant. A caller can only create a pending
+    // customer in the tenant whose secret they hold — no cross-tenant injection.
     const url    = new URL(req.url)
     const secret = url.searchParams.get('secret')
-    if (WEBHOOK_SECRET && secret !== WEBHOOK_SECRET) {
-      console.warn('register-customer: invalid webhook secret')
+    if (!secret) {
+      console.warn('register-customer: missing webhook secret')
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+    }
+
+    const tenantLookupRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.${encodeURIComponent(secret)}&select=id,slug,display_name`,
+      {
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE}`,
+          'apikey':        SUPABASE_SERVICE!,
+          'Accept':        'application/json',
+        },
+      }
+    )
+    const matchedTenants = await tenantLookupRes.json()
+    const tenantId = Array.isArray(matchedTenants) ? matchedTenants[0]?.id as string | undefined : undefined
+
+    if (!tenantLookupRes.ok || !tenantId) {
+      console.warn('register-customer: no tenant matched the provided webhook secret')
       return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
     }
 
@@ -134,8 +156,8 @@ Deno.serve(async (req) => {
     }
 
     // ── Insert user_profiles row (status = 'pending') ────────────
-    // tenant_id is FOUNDING_TENANT_ID: this webhook has no caller context from which
-    // to resolve the admin's tenant. See F34 note at the top of this file.
+    // tenant_id resolved above from the per-tenant webhook secret (F34 residual,
+    // resolved 5.4 S2) — no longer pinned to FOUNDING_TENANT_ID.
     const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/user_profiles`, {
       method: 'POST',
       headers: {
@@ -150,7 +172,7 @@ Deno.serve(async (req) => {
         email,
         status:    'pending',
         is_admin:  false,
-        tenant_id: FOUNDING_TENANT_ID,
+        tenant_id: tenantId,
       }),
     })
     if (!profileRes.ok) {
