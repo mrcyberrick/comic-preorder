@@ -180,6 +180,16 @@
 
   <!-- Tab: By Distributor -->
   <div class="admin-section" id="tab-by-distributor">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-secondary btn-sm" id="btn-print-reserved"
+              style="display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print / Save Report
+      </button>
+    </div>
     <div style="margin-bottom:24px">
       <h3 style="font-family:var(--font-display);font-size:1.4rem;letter-spacing:0.04em;margin-bottom:16px;color:var(--lunar)">
         LUNAR DISTRIBUTION
@@ -2368,6 +2378,227 @@
 
   document.getElementById('btn-print-lunar-order').addEventListener('click', () => printOrderSheet('Lunar'));
   document.getElementById('btn-print-prh-order').addEventListener('click',   () => printOrderSheet('PRH'));
+
+  // ── Print / Save Reserved-Titles Report (By Distributor tab) ──
+  // Compact, print-optimized report of active titles reserved for the current
+  // catalog month — one row per title (grouped across reservations), both
+  // distributors combined and sorted Distributor → FOC date → title.
+  // Mirrors the By Distributor tab data; columns tuned to avoid word-wrap and
+  // titles truncated to keep the page count down.
+  // Columns: Title | Distributor | UPC/ISBN | Price | Total Qty | Customers | FOC | Status
+
+  function buildReservedReportHtml(grouped, monthLabel, customerCount) {
+    const TITLE_MAX = 42; // truncate titles to keep rows on one line
+    const trunc = (s, n) => (s && s.length > n) ? s.slice(0, n - 1) + '…' : (s || '');
+    const totalCopies = grouped.reduce((s, g) => s + g.totalQty, 0);
+
+    const printDate = new Date().toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric'
+    });
+
+    const rows = grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
+      const scanCode = c.distributor === 'Lunar'
+        ? (c.upc || c.item_code || '—')
+        : (c.isbn || c.upc || c.item_code || '—');
+
+      const price = c.price_usd ? `$${parseFloat(c.price_usd).toFixed(2)}` : '—';
+      const foc   = c.foc_date ? (() => {
+        const [y, m, d] = c.foc_date.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      })() : '—';
+
+      const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
+      const someFulfilled = fulfilledCount > 0 && !allFulfilled;
+      const status = allFulfilled
+        ? 'Fulfilled'
+        : someFulfilled
+          ? `Partial ${fulfilledCount}/${customers.length}`
+          : 'Open';
+      const statusClass = allFulfilled ? 'st-done' : someFulfilled ? 'st-partial' : 'st-open';
+
+      const custList = customers
+        .map(cust => escapeHtml(cust.name) + (cust.qty > 1 ? ` (x${cust.qty})` : ''))
+        .join(', ');
+
+      const variantNote = (c.variant_type && c.variant_type !== 'Standard' && c.variant_type !== 'Primary Title')
+        ? `<span class="variant">${escapeHtml(c.variant_type)}</span>` : '';
+
+      return `
+        <tr${allFulfilled ? ' class="row-done"' : ''}>
+          <td class="col-title">${escapeHtml(trunc(c.title, TITLE_MAX))}${variantNote}</td>
+          <td class="col-dist">${escapeHtml(c.distributor || '—')}</td>
+          <td class="col-code">${escapeHtml(scanCode)}</td>
+          <td class="col-price">${price}</td>
+          <td class="col-qty">${totalQty}</td>
+          <td class="col-cust">${custList}</td>
+          <td class="col-foc">${foc}</td>
+          <td class="col-status ${statusClass}">${status}</td>
+        </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reserved Titles — ${monthLabel}</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* Landscape letter: 11in − 0.7in margins = 10.3in usable width */
+    @page {
+      size: letter landscape;
+      margin: 0.4in 0.35in 0.5in 0.35in;
+      @bottom-left   { content: "Printed ${printDate}"; font-family: Arial, sans-serif; font-size: 6.5pt; color: #999; }
+      @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, sans-serif; font-size: 6.5pt; color: #444; font-weight: 700; }
+      @bottom-right  { content: "rjbookstop.com"; font-family: Arial, sans-serif; font-size: 6.5pt; color: #999; }
+    }
+
+    body { font-family: Arial, sans-serif; font-size: 7.5pt; color: #111; background: #fff; line-height: 1.2; }
+
+    /* ── Report header ── */
+    .page-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      border-bottom: 1.5px solid #111; padding-bottom: 4px; margin-bottom: 5px;
+    }
+    .ph-left { display: flex; align-items: baseline; gap: 8px; }
+    .ph-logo { font-size: 11pt; font-weight: 700; letter-spacing: 0.04em; line-height: 1; }
+    .ph-logo span { color: #c0392b; }
+    .ph-title { font-size: 8pt; font-weight: 600; color: #333; }
+    .ph-right { font-size: 7pt; color: #444; text-align: right; line-height: 1.5; }
+    .ph-right strong { color: #111; }
+
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    thead { display: table-header-group; } /* repeats on every page */
+    tbody { display: table-row-group; }
+
+    thead th {
+      font-size: 6pt; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+      color: #444; text-align: left; padding: 3px 3px 3px 2px;
+      background: #efefef; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb;
+    }
+
+    /* ── Column widths — total ≤ 10.3in ── */
+    /* Title:3.0 + Dist:0.7 + Code:1.2 + Price:0.55 + Qty:0.55 + Cust:2.95 + FOC:0.6 + Status:0.75 = 10.3in */
+    .col-title  { width: 3.0in; }
+    .col-dist   { width: 0.7in; }
+    .col-code   { width: 1.2in; }
+    .col-price  { width: 0.55in; }
+    .col-qty    { width: 0.55in; }
+    .col-cust   { width: 2.95in; }
+    .col-foc    { width: 0.6in; }
+    .col-status { width: 0.75in; }
+
+    tbody tr { border-bottom: 1px solid #e8e8e8; }
+    tbody tr:nth-child(even) { background: #f7f7f7; }
+    tbody tr.row-done { color: #888; }
+
+    td { padding: 2px 3px 2px 2px; vertical-align: top; font-size: 7.5pt; overflow: hidden; }
+
+    .col-title { font-weight: 600; line-height: 1.2; white-space: nowrap; text-overflow: ellipsis; }
+    .col-title .variant { font-weight: 400; font-size: 6.5pt; color: #888; font-style: italic; margin-left: 4px; }
+    .col-dist  { font-size: 7pt; color: #333; white-space: nowrap; }
+    .col-code  { font-family: 'Courier New', monospace; font-size: 6.5pt; color: #444; letter-spacing: -0.01em; white-space: nowrap; }
+    .col-price { text-align: right; font-weight: 600; white-space: nowrap; }
+    .col-qty   { text-align: center; font-weight: 700; }
+    .col-cust  { font-size: 6.8pt; color: #333; line-height: 1.25; }
+    .col-foc   { text-align: center; font-size: 7pt; color: #555; white-space: nowrap; }
+    .col-status { text-align: center; font-size: 6.5pt; font-weight: 700; white-space: nowrap; }
+    .st-done    { color: #2e7d32; }
+    .st-partial { color: #b7791f; }
+    .st-open    { color: #555; }
+
+    .sheet-footer { margin-top: 6px; font-size: 6.5pt; color: #aaa; text-align: right; }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div class="ph-left">
+      <div class="ph-logo">PULL<span>LIST</span></div>
+      <div class="ph-title">Reserved Titles &mdash; ${escapeHtml(monthLabel)}</div>
+    </div>
+    <div class="ph-right">
+      <strong>${grouped.length.toLocaleString()}</strong> titles &middot;
+      <strong>${totalCopies.toLocaleString()}</strong> copies &middot;
+      <strong>${customerCount.toLocaleString()}</strong> customers
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="col-title">Title</th>
+        <th class="col-dist">Dist.</th>
+        <th class="col-code">UPC / ISBN</th>
+        <th class="col-price" style="text-align:right">Price</th>
+        <th class="col-qty" style="text-align:center">Total Qty</th>
+        <th class="col-cust">Customers</th>
+        <th class="col-foc" style="text-align:center">FOC</th>
+        <th class="col-status" style="text-align:center">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+
+  <div class="sheet-footer">Order Month ${escapeHtml(monthLabel)} &middot; ${grouped.length.toLocaleString()} titles &middot; ${customerCount.toLocaleString()} customers</div>
+
+</body>
+</html>`;
+  }
+
+  function printReservedReport() {
+    const btn = document.getElementById('btn-print-reserved');
+    const origHtml = btn.innerHTML;
+
+    // Group current-month reservations by catalog item (one row per title)
+    const map = {};
+    const grouped = [];
+    allPreorders.forEach(p => {
+      const c = p.catalog;
+      if (!c?.id) return;
+      if (!map[c.id]) {
+        map[c.id] = { catalog: c, customers: [], totalQty: 0, fulfilledCount: 0 };
+        grouped.push(map[c.id]);
+      }
+      const g = map[c.id];
+      g.customers.push({ name: p.customer_name, qty: p.quantity || 1, fulfilled: !!p.fulfilled });
+      g.totalQty += (p.quantity || 1);
+      if (p.fulfilled) g.fulfilledCount++;
+    });
+
+    if (!grouped.length) {
+      toast('No reserved titles for the current month', 'error');
+      return;
+    }
+
+    // Sort by title (A→Z)
+    grouped.sort((a, b) =>
+      (a.catalog.title || '').localeCompare(b.catalog.title || '')
+    );
+
+    const customerCount = new Set(allPreorders.map(p => p.user_id)).size;
+
+    const [y, m] = (currentCatalogMonth || '').split('-');
+    const monthLabel = currentCatalogMonth
+      ? new Date(parseInt(y), parseInt(m) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : '';
+
+    btn.disabled = true;
+    const html     = buildReservedReportHtml(grouped, monthLabel, customerCount);
+    const printWin = window.open('', '_blank', 'width=1100,height=800');
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => { printWin.print(); }, 400);
+
+    btn.disabled  = false;
+    btn.innerHTML = origHtml;
+  }
+
+  document.getElementById('btn-print-reserved').addEventListener('click', printReservedReport);
 
   // ── Load tab on first click ──────────────────────────────
   document.querySelector('[data-tab="paper-orders"]').addEventListener('click', () => {
