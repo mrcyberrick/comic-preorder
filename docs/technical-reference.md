@@ -2342,6 +2342,14 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Immediate mitigation (pre-promotion):** a hard refresh (Ctrl+Shift+R) on the affected machine forces an `app.js` refetch; all browsers self-heal within the 4-hour revalidation window even without it.
 - **Where:** `_headers` (new, repo/Pages root, alongside `_redirects`). No HTML/JS source change — the cache-busting is handled entirely by the header rule, avoiding a manual per-deploy `?v=` bump across all five HTML files.
 
+#### F80 — Paper Orders typeahead not scoped to current catalog month → reservation lands in a stale month, invisible in the admin view ("silent failure")
+- **Status:** filed 2026-06-26, **resolved** — typeahead scoped to `currentCatalogMonth`.
+- **Severity:** Medium (admin data/UX) — the paper-order submit **succeeded** (rows written) but against a prior-month catalog row, so the reservation was absent from the current-month admin views (By Customer / order sheets / stats), presenting as a "submitting clears but is not recorded" silent failure. This is what was misdiagnosed as caching/RLS during the F77 prod follow-up; prod was in fact running the correct upsert code.
+- **Root cause:** a title solicited in consecutive months has **one `catalog` row per `catalog_month`** (monthly snapshots — expected, distinct from the F78 null-`catalog_id` duplicates). The Paper Orders typeahead called `Catalog.fetch({ search, pageSize: 8 })` with **no `month` filter**, so it searched across all months and could surface a prior-month row (e.g. ABSOLUTE FLASH #18 existed as both `afac6068…`/`2026-05` and `de0461e4…`/`2026-06`, same `item_code`/`upc`). The F77 `item_code` dedup then collapsed the two to whichever the query returned first — sometimes the stale 2026-05 row. Reserving against it wrote a valid preorder in a month the admin (scoped to the latest month) never sees. Staging lacked the cross-month rows, so it never reproduced — the "works on staging, not prod" signal.
+- **Fix:** pass `month: currentCatalogMonth` to the typeahead's `Catalog.fetch` (`Catalog.fetch` already supported the `month` filter — `app.js` line ~445). This matches the rest of the Paper Orders tab (print order sheets already `.eq('catalog_month', currentCatalogMonth)`), guarantees reservations land in the viewed month, and excludes cross-month duplicates; the F77 `item_code` dedup still handles any same-month duplicates.
+- **Data cleanup (prod, Rick-in-the-loop):** the misfired reservations written against the 2026-05 row (`preorders` `9671effe…` qty 2 and `3668775e…` qty 1, both `catalog_id = afac6068…`) are duplicates of the correct 2026-06 rows (`d2d89ec6…`, `a12493fc…`) and should be deleted so they don't linger as invisible stale-month reservations. Verify there are no other prior-month paper rows from before the fix.
+- **Where:** `admin.html` Paper Orders catalog-search typeahead handler.
+
 ---
 
 *End of document.*
