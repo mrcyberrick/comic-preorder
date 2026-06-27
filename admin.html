@@ -2145,7 +2145,16 @@
     // Keep only titles whose publisher has appeared in the all-time reserve
     // history (archived + current reservations) — publishers the store pulls for.
     const reserved = await getReservedPublishers();
-    return items.filter(c => c.publisher && reserved.has(c.publisher.trim().toLowerCase()));
+
+    // Also hide rows whose FOC falls in the current catalog month or earlier —
+    // that order cutoff has passed for this cycle, so the sheet only lists titles
+    // still open to order (FOC in a later month). foc_date is "YYYY-MM-DD" and
+    // currentCatalogMonth is "YYYY-MM", so comparing the month prefix as strings
+    // is sufficient. Rows with no FOC are kept (they have no cutoff to be past).
+    return items.filter(c =>
+      c.publisher && reserved.has(c.publisher.trim().toLowerCase()) &&
+      (!c.foc_date || c.foc_date.slice(0, 7) > currentCatalogMonth)
+    );
   }
 
   function buildOrderSheetHtml(distributor, items, monthLabel) {
