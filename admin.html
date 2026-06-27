@@ -2069,11 +2069,46 @@
   });
 
   // ── Print Order Sheets (Paper Orders tab) ─────────────────
-  // Fetches all catalog items for the current month + distributor,
-  // then opens a focused print window with the formatted order sheet.
+  // Fetches all catalog items for the current month + distributor, filtered to
+  // publishers that appear in the all-time reserve history, then opens a focused
+  // print window with the formatted order sheet.
   // Columns: UPC/ISBN | Order Qty (blank write-in) | Title | Publisher | Price | FOC Date
   // Header: Distributor, catalog month, rjbookstop.com
   // Footer margin box: Page X of Y  ·  print date  (via CSS @page)
+
+  // Set of publishers (trimmed, lower-cased) that appear anywhere in the all-time
+  // reserve history — archived reservation_history rows plus current live
+  // preorders (across every month). Memoized for the page session so the Lunar
+  // and PRH prints share one fetch. Both sources are paged because PostgREST caps
+  // a single response at 1000 rows, so no publisher is missed in a long history.
+  let _reservedPublishers = null;
+  async function getReservedPublishers() {
+    if (_reservedPublishers) return _reservedPublishers;
+    const set = new Set();
+
+    async function collect(table, selectExpr, extract) {
+      const countRes = await db.from(table).select('*', { count: 'exact', head: true });
+      const total = countRes.count ?? 0;
+      if (!total) return;
+      const batches = [];
+      for (let from = 0; from < total; from += 1000) {
+        batches.push(db.from(table).select(selectExpr).range(from, Math.min(from + 999, total - 1)));
+      }
+      const results = await Promise.all(batches);
+      results.flatMap(r => r.data || []).forEach(row => {
+        const pub = extract(row);
+        if (pub) set.add(pub.trim().toLowerCase());
+      });
+    }
+
+    await Promise.all([
+      collect('reservation_history', 'publisher', r => r.publisher),
+      collect('preorders', 'catalog(publisher)', r => r.catalog?.publisher),
+    ]);
+
+    _reservedPublishers = set;
+    return set;
+  }
 
   async function fetchAllCatalogForDistributor(distributor) {
     if (!currentCatalogMonth) {
@@ -2106,7 +2141,11 @@
 
     const results = await Promise.all(batches);
     const items = results.flatMap(r => r.data || []);
-    return items;
+
+    // Keep only titles whose publisher has appeared in the all-time reserve
+    // history (archived + current reservations) — publishers the store pulls for.
+    const reserved = await getReservedPublishers();
+    return items.filter(c => c.publisher && reserved.has(c.publisher.trim().toLowerCase()));
   }
 
   function buildOrderSheetHtml(distributor, items, monthLabel) {
@@ -2126,18 +2165,16 @@
         return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
       })() : '—';
 
-      // Variant label (shown in grey under title when present)
+      // Variant label — inline grey suffix on the title line so it never forces
+      // a second line; trimmed by the cell ellipsis if the row runs long.
       const variantNote = (c.variant_type && c.variant_type !== 'Standard' && c.variant_type !== 'Primary Title')
-        ? `<div class="variant">${escapeHtml(c.variant_type)}</div>` : '';
+        ? ` <span class="variant">&middot; ${escapeHtml(c.variant_type)}</span>` : '';
 
       return `
         <tr>
           <td class="col-code">${escapeHtml(scanCode)}</td>
           <td class="col-qty"><div class="qty-box"></div></td>
-          <td class="col-title">
-            ${escapeHtml(c.title || '—')}
-            ${variantNote}
-          </td>
+          <td class="col-title">${escapeHtml(c.title || '—')}${variantNote}</td>
           <td class="col-pub">${escapeHtml(c.publisher || '—')}</td>
           <td class="col-price">${price}</td>
           <td class="col-foc">${foc}</td>
@@ -2154,9 +2191,9 @@
 
     /* ── Portrait letter, tight margins, footer margin boxes ── */
     /* Content width: 8.5in − 0.7in = 7.8in                     */
-    /* Content height: 11in − 0.75in = 10.25in usable           */
-    /* At 7.5pt rows (~12px) + 4px padding = ~18px/row           */
-    /* ≈ 55–60 data rows per page depending on title wrap         */
+    /* Content height: 11in − 0.9in = 10.1in usable             */
+    /* Single-line 7.5pt rows + 3px padding = ~15px/row          */
+    /* ≈ 65–68 data rows per page (consistent — titles truncate) */
     @page {
       size: letter portrait;
       margin: 0.4in 0.35in 0.5in 0.35in;
@@ -2241,13 +2278,16 @@
       border-bottom: 1px solid #bbb;
     }
 
-    /* ── Column widths — total must ≤ 7.8in ── */
-    /* UPC:0.95 + Qty:0.5 + Title:2.9 + Pub:1.75 + Price:0.55 + FOC:0.6 = 7.25in */
-    .col-code  { width: 0.95in; }
-    .col-qty   { width: 0.5in;  }
-    .col-title { width: 2.9in;  }
-    .col-pub   { width: 1.75in; }
-    .col-price { width: 0.55in; }
+    /* ── Column widths — sum to the full 7.8in content width so the table  */
+    /* fills the page edge-to-edge (fixed layout no longer stretches the    */
+    /* under-filled columns into big gaps) and the title gets the reclaimed */
+    /* space. Title + Publisher truncate with an ellipsis; codes never do.  */
+    /* UPC:1.05 + Qty:0.45 + Title:4.0 + Pub:1.2 + Price:0.5 + FOC:0.6 = 7.8in */
+    .col-code  { width: 1.05in; }
+    .col-qty   { width: 0.45in; }
+    .col-title { width: 4.0in;  }
+    .col-pub   { width: 1.2in;  }
+    .col-price { width: 0.5in;  }
     .col-foc   { width: 0.6in;  }
 
     /* ── Data rows — no page-break-inside so rows pack tightly ── */
@@ -2255,19 +2295,23 @@
     tbody tr:nth-child(even) { background: #f7f7f7; }
 
     td {
-      padding: 2px 3px 2px 2px;
+      padding: 1.5px 4px 1.5px 2px;
       vertical-align: middle;
       font-size: 7.5pt;
+      /* Single-line rows — truncate with an ellipsis instead of wrapping, so   */
+      /* every row is exactly one line tall (fewer pages, no ragged whitespace). */
+      white-space: nowrap;
       overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* UPC/ISBN */
+    /* Scan codes never truncate — 1.05in fits an 18-digit UPC at 6.5pt. */
     .col-code {
       font-family: 'Courier New', monospace;
       font-size: 6.5pt;
       color: #444;
-      letter-spacing: -0.01em;
-      word-break: break-all;
+      letter-spacing: -0.02em;
     }
 
     /* Qty write-in box */
