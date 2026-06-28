@@ -2084,7 +2084,7 @@
   // for the page session so the Lunar and PRH prints share one fetch. Both
   // sources are paged because PostgREST caps a single response at 1000 rows, so
   // no record is missed in a long history.
-  const MIN_RESERVED = 5;
+  const MIN_RESERVED = 7;
   let _reservedPublishers = null;
   async function getReservedPublishers() {
     if (_reservedPublishers) return _reservedPublishers;
