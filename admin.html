@@ -2076,15 +2076,19 @@
   // Header: Distributor, catalog month, rjbookstop.com
   // Footer margin box: Page X of Y  ·  print date  (via CSS @page)
 
-  // Set of publishers (trimmed, lower-cased) that appear anywhere in the all-time
-  // reserve history — archived reservation_history rows plus current live
-  // preorders (across every month). Memoized for the page session so the Lunar
-  // and PRH prints share one fetch. Both sources are paged because PostgREST caps
-  // a single response at 1000 rows, so no publisher is missed in a long history.
+  // Set of publishers (trimmed, lower-cased) with a meaningful all-time reserve
+  // history — at least MIN_RESERVED reservation records across archived
+  // reservation_history rows plus current live preorders (every month). Each row
+  // in either source is one reserved-title record (one customer/title/month), so
+  // this counts total reservations per publisher, not distinct titles. Memoized
+  // for the page session so the Lunar and PRH prints share one fetch. Both
+  // sources are paged because PostgREST caps a single response at 1000 rows, so
+  // no record is missed in a long history.
+  const MIN_RESERVED = 5;
   let _reservedPublishers = null;
   async function getReservedPublishers() {
     if (_reservedPublishers) return _reservedPublishers;
-    const set = new Set();
+    const counts = new Map();
 
     async function collect(table, selectExpr, extract) {
       const countRes = await db.from(table).select('*', { count: 'exact', head: true });
@@ -2097,7 +2101,10 @@
       const results = await Promise.all(batches);
       results.flatMap(r => r.data || []).forEach(row => {
         const pub = extract(row);
-        if (pub) set.add(pub.trim().toLowerCase());
+        if (pub) {
+          const key = pub.trim().toLowerCase();
+          counts.set(key, (counts.get(key) || 0) + 1);
+        }
       });
     }
 
@@ -2105,6 +2112,10 @@
       collect('reservation_history', 'publisher', r => r.publisher),
       collect('preorders', 'catalog(publisher)', r => r.catalog?.publisher),
     ]);
+
+    // Keep only publishers whose total all-time reservation count meets the bar.
+    const set = new Set();
+    counts.forEach((n, key) => { if (n >= MIN_RESERVED) set.add(key); });
 
     _reservedPublishers = set;
     return set;
@@ -2143,8 +2154,8 @@
     const results = await Promise.all(batches);
     const items = results.flatMap(r => r.data || []);
 
-    // Keep only titles whose publisher has appeared in the all-time reserve
-    // history (archived + current reservations) — publishers the store pulls for.
+    // Keep only titles whose publisher has a meaningful all-time reserve history
+    // (>= 5 total reservations across archived + current) — see getReservedPublishers.
     const reserved = await getReservedPublishers();
 
     // Also hide rows whose FOC falls in the current catalog month or earlier —
