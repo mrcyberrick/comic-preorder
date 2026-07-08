@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     }
 
     const profileRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${userData.id}&select=is_admin`,
+      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${userData.id}&select=is_admin,tenant_id`,
       {
         headers: {
           Authorization: `Bearer ${SUPABASE_SERVICE}`,
@@ -73,10 +73,11 @@ Deno.serve(async (req) => {
     if (!Array.isArray(profiles) || !profiles[0]?.is_admin) {
       return Response.json({ error: 'Forbidden' }, { status: 403, headers: corsHeaders })
     }
+    const callerTenantId = profiles[0]?.tenant_id ?? null
 
     // ── Fetch target user's profile (need name + email) ─────────
     const targetRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${user_id}&select=id,full_name,email,status`,
+      `${SUPABASE_URL}/rest/v1/user_profiles?id=eq.${user_id}&select=id,full_name,email,status,tenant_id`,
       {
         headers: {
           Authorization: `Bearer ${SUPABASE_SERVICE}`,
@@ -88,6 +89,13 @@ Deno.serve(async (req) => {
     const targets = await targetRes.json()
     const target  = targets?.[0]
     if (!target) {
+      return Response.json({ error: 'User not found' }, { status: 404, headers: corsHeaders })
+    }
+    // Cross-tenant guard: an admin may only approve pending users in their own
+    // tenant. Respond 404 (not 403) so a cross-tenant probe cannot distinguish
+    // "exists in another tenant" from "does not exist".
+    if (!callerTenantId || target.tenant_id !== callerTenantId) {
+      console.warn(`approve-customer: tenant mismatch — caller ${userData.id} vs target ${user_id}`)
       return Response.json({ error: 'User not found' }, { status: 404, headers: corsHeaders })
     }
     if (target.status === 'active') {

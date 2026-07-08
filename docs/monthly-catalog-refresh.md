@@ -1,49 +1,45 @@
 # Monthly Catalog Refresh — Step-by-Step Guide
 
+**Last updated:** 2026-07-08 (F81 rewrite — see warning below)
+**Applies to:** production (`import.js` → `pulllist.app`). The staging variant
+(`import-staging.js` → staging Supabase) follows the identical sequence.
+
+> ⚠️ **F81 warning — do not follow older copies of this document.**
+> Versions of this guide before 2026-07-08 instructed a manual
+> `DELETE FROM preorders` / `DELETE FROM catalog` clear-out before importing.
+> That is now **destructive and wrong**: the import script's new-month sequence
+> archives reservation history and purges stale catalog rows itself, in the
+> correct order. Running the old manual DELETEs first would permanently destroy
+> the month's reservation-history archive and fulfillment audit trail.
+> **There is no manual SQL step in the monthly refresh.**
+
+---
+
 ## Overview
 
 Each month you receive new CSV files from Lunar and PRH. You run one Node.js
-script that normalizes both files, pushes everything to Supabase, and sends
-customer notification emails. The entire refresh takes about 5 minutes.
+script that normalizes both files and pushes everything to Supabase. When the
+script detects a **new catalog month**, it automatically runs the full
+transition sequence:
+
+1. `archive_stale_reservations` — copies past reservations into
+   `reservation_history` (feeds customer recommendations)
+2. `purge_stale_catalog` — removes past-month catalog rows that are past
+   on-sale and not referenced by any preorder
+3. Catalog upsert — UUIDs preserved across re-runs (critical: preorders
+   reference catalog rows by UUID)
+4. `delete_dropped_catalog_items` — removes items the distributor dropped
+5. Auto-reserve — inserts preorders for subscribers' standard covers
+6. Optional weekly-shipment import (invoice files)
+7. Prompt to send the customer notification email
+
+If the import month **equals** the latest month already in the database, only
+the upsert runs ("mid-month refresh") — safe to re-run any time.
 
 **Files you need each month:**
 - `Lunar_Product_Data_MMYY.csv` — from Lunar Distribution
 - `YYYY_MM_PRH_metadata_full_active.csv` — from PRH
-- `import.js` — lives permanently in your `scripts` folder, never changes
-
-**Folder structure:**
-```
-BookStop\
-  catalogs\
-    scripts\
-      import.js          ← run this each month
-      package.json
-      node_modules\
-    Lunar_Product_Data_0326.csv    ← drop new CSV files here
-    2026_03_PRH_metadata_full_active.csv
-    normalized_catalog.json        ← generated automatically, replaced monthly
-    import-catalog.ps1             ← backup only, not needed for normal workflow
-  docs\
-    schema.sql
-    monthly-catalog-refresh.md
-```
-
----
-
-## One-Time Setup (Do This Once)
-
-**1. Install dependencies** — open PowerShell in the `scripts` folder and run:
-
-```powershell
-npm install csv-parse
-```
-
-**2. Verify Node.js is working:**
-
-```powershell
-node --version
-# Should return v20.x.x or higher
-```
+- `import.js` — lives in the local `scripts` folder (never committed to this repo)
 
 ---
 
@@ -51,232 +47,144 @@ node --version
 
 ### Step 1 — Lock the Site (Maintenance Mode)
 
-1. Go to `https://mrcyberrick.us/comic-preorder/admin.html`
+1. Go to `https://pulllist.app/admin.html`
 2. Switch the **Maintenance Mode** toggle **ON**
-3. Customers now see a "site under maintenance" message
+3. Customers now see a holding page; admins can still browse
 
----
+### Step 2 — Confirm Last Month Is Closed Out
 
-### Step 2 — Export Last Month's Order Sheets
+The order sheets for the closing month should already have been exported and
+placed with the distributors at FOC time (admin → **By Distributor** /
+**Paper Orders** print buttons). If not, export them now — the new-month
+sequence purges unreserved stale catalog rows.
 
-Before clearing anything, save your order records.
+### Step 3 — Drop the New CSV Files
 
-1. In the admin panel, go to the **By Distributor** tab
-2. Click **↓ Lunar Order Sheet** — save as `YYYY-MM-Lunar.csv`
-3. Click **↓ PRH Order Sheet** — save as `YYYY-MM-PRH.csv`
+Place the new Lunar and PRH CSVs in the `catalogs` folder (the parent of
+`scripts`). Filenames don't matter — you pass them as arguments.
 
-Keep these — they are your order sheets for calling in to the distributors.
-
----
-
-### Step 3 — Clear Last Month's Preorders
-
-Go to **Supabase → SQL Editor** and run:
-
-```sql
--- Replace '2026-02' with the month you are clearing
-DELETE FROM preorders
-WHERE catalog_id IN (
-  SELECT id FROM catalog WHERE catalog_month = '2026-02'
-);
-```
-
-Verify it's clear:
-```sql
-SELECT COUNT(*) FROM preorders
-WHERE catalog_id IN (
-  SELECT id FROM catalog WHERE catalog_month = '2026-02'
-);
--- Should return 0
-```
-
----
-
-### Step 4 — Remove Last Month's Catalog
-
-```sql
--- Replace '2026-02' with the month to remove
-DELETE FROM catalog WHERE catalog_month = '2026-02';
-```
-
-Verify:
-```sql
-SELECT catalog_month, COUNT(*) FROM catalog GROUP BY catalog_month;
--- Should show no rows for the deleted month
-```
-
----
-
-### Step 5 — Drop the New CSV Files
-
-Place the new Lunar and PRH CSV files in your `catalogs` folder alongside the
-`scripts` folder. You can overwrite the old files or rename them — the script
-reads whatever filenames you pass it.
-
----
-
-### Step 6 — Run the Import Script
-
-Open PowerShell in the `scripts` folder and run:
+### Step 4 — Run the Import Script
 
 ```powershell
 cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts
-node .\import.js "..\Lunar_Product_Data_0426.csv" "..\2026_04_PRH_metadata_full_active.csv"
+node .\import.js "..\Lunar_Product_Data_MMYY.csv" "..\YYYY_MM_PRH_metadata_full_active.csv"
 ```
 
-Adjust the filenames to match what you received from the distributors.
+Optional: append shipment invoice paths as third/fourth arguments, or answer
+the interactive prompt. Answer "n" to skip shipment import early in the month.
 
-The script will walk you through the rest:
+**Confirm the catalog month at the prompt.** This matters most when importing
+a new month's files before the calendar month starts — type the correct
+`YYYY-MM` if the detected value is wrong. A mislabeled month is the root of
+the F80 "stale month" defect family.
 
-```
-📂 Reading CSV files...
-   Lunar: 1099 rows
-   PRH:   813 rows
+Flags:
+- `--skip-autoreserve` — use on older-month backfills so subscribers aren't
+  re-reserved into a past month (the script also skips auto-reserve on
+  older-month imports automatically)
 
-🗓️  Catalog month detected: 2026-04
-   Press Enter to confirm, or type correct month (YYYY-MM):
-   Confirmed: 2026-04
+### Step 5 — Verify the Import
 
-⚙️  Normalizing records...
-   Lunar normalized: 1099 records
-   PRH normalized:   813 records
-   Total:            1912 records
-
-💾 Saved: ..\normalized_catalog.json
-📡 Pushing 1912 records to Supabase...
-   ✅ Cleared existing records for 2026-04
-   Inserted 1912/1912
-   ✅ Import complete! 1912 records inserted.
-
-📧 Send catalog notification email to all customers? (y/n): y
-   Sending notifications...
-   ✅ Notifications sent: 12  Failed: 0
-
-✅ Done! Remember to turn Maintenance Mode OFF in the admin panel.
-```
-
-> **Note on catalog month:** The script detects the month from the filename.
-> If it shows the wrong month, just type the correct one (e.g. `2026-04`)
-> at the confirmation prompt instead of pressing Enter.
-
----
-
-### Step 7 — Verify the Import
-
-In **Supabase → SQL Editor** run:
+In **Supabase → SQL Editor**:
 
 ```sql
-SELECT
-  catalog_month,
-  distributor,
-  COUNT(*) as items,
-  MIN(foc_date) as earliest_foc,
-  MAX(on_sale_date) as latest_on_sale
+SELECT catalog_month, distributor, COUNT(*) AS items,
+       MIN(foc_date) AS earliest_foc, MAX(on_sale_date) AS latest_on_sale
 FROM catalog
-WHERE catalog_month = '2026-04'
+WHERE catalog_month = 'YYYY-MM'
 GROUP BY catalog_month, distributor
 ORDER BY distributor;
 ```
 
-You should see two rows — one for Lunar, one for PRH — with item counts
-matching what the script reported.
+Two rows (Lunar, PRH) with counts matching the script's output. Also confirm
+no duplicate rows for cross-distributor titles (F78 watch):
+
+```sql
+SELECT title, COUNT(*) FROM catalog
+WHERE catalog_month = 'YYYY-MM'
+GROUP BY title, distributor, item_code HAVING COUNT(*) > 1;
+```
+
+### Step 6 — Set the Order Deadline
+
+Admin → Settings → **Order Deadline**. Choose a date that falls before the
+bulk of the new month's FOC dates while leaving customers the longest possible
+reservation window. (Candidate for automation — see the 2026-07 review.)
+
+### Step 7 — Turn Maintenance Mode OFF
+
+Admin → toggle **Maintenance Mode OFF**. The catalog is live.
 
 ---
 
-### Step 8 — Turn Maintenance Mode OFF
+## Re-Run Safety
 
-1. Go back to `https://mrcyberrick.us/comic-preorder/admin.html`
-2. Switch the **Maintenance Mode** toggle **OFF**
-3. The catalog is now live — customers can browse and reserve immediately
-
----
-
-## Monthly Timeline
-
-| When | Task |
-|---|---|
-| Receive distributor CSVs | Run Steps 5-6 immediately to generate `normalized_catalog.json` |
-| ~1 week before FOC | Run full refresh (Steps 1–8) if not already done |
-| FOC date | Export order CSVs (Step 2), place orders with distributors |
-| After ordering | Clear preorders + catalog (Steps 3–4), ready for next month |
+- Catalog upsert: in-place merge on `(tenant_id, item_code, distributor,
+  catalog_month)` — UUIDs preserved
+- Auto-reserve: detects existing reservations and skips
+- New-month sequence: fires only when the import month is **greater** than the
+  latest in the database — mid-month re-runs skip archive/purge entirely
+- Shipment import: upsert (Lunar path) / delete-then-insert (PRH path), safe
+  to re-run for the same week
 
 ---
 
 ## Troubleshooting
 
-**`node` is not recognized**
-Close and reopen PowerShell. If still not working:
-```powershell
-$env:PATH += ";C:\Program Files\nodejs"
-```
+**`node` is not recognized** — close and reopen PowerShell; if still broken:
+`$env:PATH += ";C:\Program Files\nodejs"`
 
-**`Cannot find module 'csv-parse'`**
-Run `npm install csv-parse` from inside the `scripts` folder.
+**`Cannot find module 'csv-parse'`** — run `npm install` inside the `scripts`
+folder.
 
-**Catalog month shows wrong value**
-Type the correct month at the confirmation prompt (e.g. `2026-04`).
-The script accepts any `YYYY-MM` format.
+**Catalog month shows wrong value** — type the correct `YYYY-MM` at the
+confirmation prompt.
 
-**Notification error after import**
-The catalog was still imported successfully. You can trigger notifications
-manually by re-running the script with the same files — it will upsert
-(not duplicate) the catalog and prompt for notifications again.
-
-**400 Bad Request / encoding errors**
-Make sure you are using the latest `import.js`. The script reads CSV files
-as UTF-8 which handles special characters in descriptions correctly.
+**Notification error after import** — the catalog import still succeeded.
+Re-run the script with the same files (safe upsert) and answer the
+notification prompt again.
 
 ---
 
 ## Useful SQL Queries
 
-**Check what months are currently in the catalog:**
+**Months currently in the catalog:**
 ```sql
 SELECT catalog_month, distributor, COUNT(*)
-FROM catalog
-GROUP BY catalog_month, distributor
+FROM catalog GROUP BY catalog_month, distributor
 ORDER BY catalog_month DESC;
 ```
 
-**See all reservations for a given month:**
+**All reservations for a month:**
 ```sql
-SELECT
-  up.full_name,
-  c.distributor,
-  c.item_code,
-  c.title,
-  p.quantity,
-  (c.price_usd * p.quantity) as line_total
+SELECT up.full_name, c.distributor, c.item_code, c.title, p.quantity,
+       (c.price_usd * p.quantity) AS line_total
 FROM preorders p
 JOIN catalog c ON c.id = p.catalog_id
 JOIN user_profiles up ON up.id = p.user_id
-WHERE c.catalog_month = '2026-04'
+WHERE c.catalog_month = 'YYYY-MM'
 ORDER BY up.full_name, c.distributor, c.title;
 ```
 
-**Total units per distributor for a given month:**
+**Units and value per distributor:**
 ```sql
-SELECT
-  c.distributor,
-  SUM(p.quantity)               as total_units,
-  SUM(c.price_usd * p.quantity) as total_value
-FROM preorders p
-JOIN catalog c ON c.id = p.catalog_id
-WHERE c.catalog_month = '2026-04'
+SELECT c.distributor, SUM(p.quantity) AS total_units,
+       SUM(c.price_usd * p.quantity) AS total_value
+FROM preorders p JOIN catalog c ON c.id = p.catalog_id
+WHERE c.catalog_month = 'YYYY-MM'
 GROUP BY c.distributor;
 ```
 
-**Find customers who haven't reserved anything yet this month:**
+**Customers with no reservations yet this month:**
 ```sql
 SELECT up.full_name, u.email
 FROM user_profiles up
 JOIN auth.users u ON u.id = up.id
 WHERE up.is_admin = false
   AND up.id NOT IN (
-    SELECT DISTINCT p.user_id
-    FROM preorders p
+    SELECT DISTINCT p.user_id FROM preorders p
     JOIN catalog c ON c.id = p.catalog_id
-    WHERE c.catalog_month = '2026-04'
+    WHERE c.catalog_month = 'YYYY-MM'
   )
 ORDER BY up.full_name;
 ```
