@@ -115,12 +115,15 @@ plan still has unchecked completion boxes. Merges to `staging` use `--ff-only`
 | File / location | Tracked? | How edits happen | How edits verify |
 |---|---|---|---|
 | `app.js`, `*.html`, `style.css`, `config.js`, `docs/**`, `supabase/functions/**`, `CLAUDE.md`, `README.md` | Tracked per branch | `str_replace` + commit | `git diff` + smoke test |
-| `import.js`, `import-staging.js` | **Local-only** (`scripts/` folder, not any repo) | `str_replace` against absolute path | `Select-String` + script run |
-| `test-magic-link.ps1`, `test-this-week.ps1`, playwright suite, `.env`, canary scratch files, `phase-4-prod-tenant-uuid.txt` | Local-only | Direct edit | Run-test |
+| `import.js`, `import-staging.js` | **Private scripts repo** (`github.com/mrcyberrick/comic-preorder-scripts`; the `scripts/` folder is its working tree — since 2026-07-08) | `str_replace` + commit | `node --check` + `--no-write` dry run + `git diff` |
+| `test-magic-link.ps1`, `test-this-week.ps1`, playwright suite, `.env`, canary scratch files, `phase-4-prod-tenant-uuid.txt`, `security-findings-local.md` | Local-only (allowlist `.gitignore` in the scripts repo enforces this) | Direct edit | Run-test |
 
-The local-only scripts contain service-role keys. They are never committed and
-not edited by `git add`. Verification of changes uses `Select-String` and a
-successful script run — never a git diff (the file isn't in any repo).
+The import scripts are credential-free as of 2026-07-08: service keys and
+tenant UUIDs load from the scripts folder's gitignored `.env`
+(`IMPORT_SERVICE_KEY[_PROD]`, `IMPORT_TENANT_ID[_PROD]`, `SUPABASE_URL[_PROD]`
+— see `.env.example`), and each script hard-fails on a missing var or a URL
+pointing at the wrong project. The `.env` and all scratch/schema/test files
+remain local-only and must never be committed to any repo.
 
 ### Supabase platform facts
 - **Anon key is public by design.** RLS is the security boundary. A committed
