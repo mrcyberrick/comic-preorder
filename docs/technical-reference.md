@@ -1764,7 +1764,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 ### Medium
 
 #### F6 — `app_settings` and `settings` PK on `key` alone
-- **Status:** open — **DDL prepared 2026-07-08** at `docs/sql/f6-app-settings-pk-rekey.sql` (staging run pending, Rick; must land before tenant 2 / 5.5 onboarding — a second tenant cannot hold its own `maintenance_mode`/`order_deadline` row under the current PK). The runbook also carries the optional legacy-`settings` table drop (F4 remnant) as a separate decision.
+- **Status:** **resolved on staging 2026-07-08** — `app_settings` PK re-keyed to `(tenant_id, key)` via `docs/sql/f6-app-settings-pk-rekey.sql` (Rick, SQL Editor). Verified post-DDL: `pg_constraint` shows `PRIMARY KEY (tenant_id, key)`; admin maintenance-mode toggle ON→OFF + order-deadline banner read passed (exercises `Settings.set()` upsert and `Settings.get()` through the new key). **Prod run pending** — same runbook against the prod project as part of 5.5 pre-flight; must land before tenant 2 onboards. The legacy `settings` table (empty, dead) intentionally left as-is; its drop and the redundant `idx_app_settings_tenant` drop remain separate decisions carried in the runbook.
 - Both tables use `key` as the primary key, not `(tenant_id, key)`. Means
   one tenant can hold the value `'maintenance_mode'` and a second tenant
   cannot independently hold a different value for the same key.
