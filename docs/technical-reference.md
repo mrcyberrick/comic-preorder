@@ -2357,6 +2357,14 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Fix:** `monthly-catalog-refresh.md` rewritten around the automated sequence with an explicit F81 warning banner against older copies; manual DELETE steps removed; verification queries retained; F80 month-confirmation and F78 duplicate-watch checks added. `README.md` corrected (URLs, Cloudflare Pages, per-branch `config.js` section, current repo structure, deployment summary deferring to `CLAUDE.md`).
 - **Where:** `README.md`; `docs/monthly-catalog-refresh.md`.
 
+#### F82 — fixed two-batch fetches cap at 2,000 rows; July 2026 (2,776 rows) crossed the ceiling
+- **Status:** filed 2026-07-08; **app-side fixed same session** (staging commit `6e126dd`) — `Catalog.getPublishers()` and `Recommendations.getCatalogIds()` now paginate in 1,000-row batches until a short read. **Import-side open** — `import.js`'s auto-reserve catalog fetch has the same fixed two-batch cap; bundle with the F75/F78 `import.js` maintenance session.
+- **Severity:** Medium (customer-visible UI gap + latent auto-reserve data risk).
+- **Evidence (prod, 2026-07-08, read-only queries):** the 2026-07 catalog month is **2,776 rows** — past the 2,000-row ceiling of the fixed two-batch pattern. Confirmed live effects: publishers sorted past row 2,000 (Vault Comics, Viz Media, Wake Entertainment, Wattpad WEBTOON Book Group, Yen Press) were absent from the catalog filter dropdown; recommendations were blind to 776 rows; the `--no-write` import dry run logged its auto-reserve catalog fetch at exactly 2,000 rows. All 3 live subscriptions were individually verified — **no auto-reserve was actually missed in July** (both matchable titles sat under the cap and were already reserved; the third series has no July standard cover).
+- **Root cause:** the Supabase 1,000-row page limit was worked around with fetches hard-sized to a ~1,900-row month (`range(0,999)` + `range(1000,1999)`). Predicted as observation A3 in the 2026-07-07 architecture review; first month over 2,000 rows activated it silently — no error, rows simply absent.
+- **Where:** `app.js` `Catalog.getPublishers()`, `Recommendations.getCatalogIds()` (fixed); local `import.js`/`import-staging.js` subscription catalog fetch (open).
+- **Longer-term:** replace `getPublishers`' paging with a `SELECT DISTINCT publisher` RPC (~80 rows returned instead of the whole month); same option for the recommendations id list.
+
 ---
 
 *End of document.*
