@@ -469,15 +469,21 @@ const Catalog = {
   },
 
   async getPublishers(month) {
-    // Fetch in two batches to get all publishers across both distributors
-    // Supabase default page limit is 1000, catalog has ~1900 rows
-    const [batch1, batch2] = await Promise.all([
-      db.from('catalog').select('publisher').eq('catalog_month', month)
-        .not('publisher', 'is', null).order('publisher').range(0, 999),
-      db.from('catalog').select('publisher').eq('catalog_month', month)
-        .not('publisher', 'is', null).order('publisher').range(1000, 1999),
-    ]);
-    const allRows = [...(batch1.data || []), ...(batch2.data || [])];
+    // Page through the month in 1000-row batches until a short read.
+    // The previous fixed two-batch fetch (rows 0-1999) silently dropped
+    // late-alphabet publishers once a month exceeded 2,000 rows — F82
+    // (July 2026 hit 2,776 rows and Vault/Viz/Yen Press et al. vanished
+    // from the catalog filter dropdown).
+    const allRows = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await db
+        .from('catalog').select('publisher').eq('catalog_month', month)
+        .not('publisher', 'is', null).order('publisher')
+        .range(from, from + 999);
+      if (error || !data || data.length === 0) break;
+      allRows.push(...data);
+      if (data.length < 1000) break;
+    }
     const seen = new Set();
     return allRows
       .map(r => r.publisher?.trim())
@@ -1164,21 +1170,20 @@ const Recommendations = {
 
     if (!total) return { items: [], hasPersonal: false };
 
-    const [b1, b2] = await Promise.all([
-      db.from('catalog')
+    // Page until the known total is covered — the previous fixed two-batch
+    // fetch capped at 2,000 rows and went blind past that (F82).
+    const seriesRows = [];
+    for (let from = 0; from < total; from += 1000) {
+      const { data } = await db
+        .from('catalog')
         .select('id, series_name, distributor, variant_type')
         .eq('catalog_month', month)
         .not('series_name', 'is', null)
-        .range(0, 999),
-      total > 1000
-        ? db.from('catalog')
-            .select('id, series_name, distributor, variant_type')
-            .eq('catalog_month', month)
-            .not('series_name', 'is', null)
-            .range(1000, 1999)
-        : Promise.resolve({ data: [] }),
-    ]);
-    const seriesRows = [...(b1.data || []), ...(b2.data || [])];
+        .range(from, Math.min(from + 999, total - 1));
+      if (!data || data.length === 0) break;
+      seriesRows.push(...data);
+      if (data.length < 1000) break;
+    }
 
     // Build series key → [{id, variant_type}] lookup
     const byKey = new Map();
