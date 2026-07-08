@@ -1764,7 +1764,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 ### Medium
 
 #### F6 — `app_settings` and `settings` PK on `key` alone
-- **Status:** open
+- **Status:** **resolved on staging 2026-07-08** — `app_settings` PK re-keyed to `(tenant_id, key)` via `docs/sql/f6-app-settings-pk-rekey.sql` (Rick, SQL Editor). Verified post-DDL: `pg_constraint` shows `PRIMARY KEY (tenant_id, key)`; admin maintenance-mode toggle ON→OFF + order-deadline banner read passed (exercises `Settings.set()` upsert and `Settings.get()` through the new key). **Prod run pending** — same runbook against the prod project as part of 5.5 pre-flight; must land before tenant 2 onboards. The legacy `settings` table (empty, dead) intentionally left as-is; its drop and the redundant `idx_app_settings_tenant` drop remain separate decisions carried in the runbook.
 - Both tables use `key` as the primary key, not `(tenant_id, key)`. Means
   one tenant can hold the value `'maintenance_mode'` and a second tenant
   cannot independently hold a different value for the same key.
@@ -2349,6 +2349,21 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Fix:** pass `month: currentCatalogMonth` to the typeahead's `Catalog.fetch` (`Catalog.fetch` already supported the `month` filter — `app.js` line ~445). This matches the rest of the Paper Orders tab (print order sheets already `.eq('catalog_month', currentCatalogMonth)`), guarantees reservations land in the viewed month, and excludes cross-month duplicates; the F77 `item_code` dedup still handles any same-month duplicates.
 - **Data cleanup (prod, Rick-in-the-loop):** the misfired reservations written against the 2026-05 row (`preorders` `9671effe…` qty 2 and `3668775e…` qty 1, both `catalog_id = afac6068…`) are duplicates of the correct 2026-06 rows (`d2d89ec6…`, `a12493fc…`) and should be deleted so they don't linger as invisible stale-month reservations. Verify there are no other prior-month paper rows from before the fix.
 - **Where:** `admin.html` Paper Orders catalog-search typeahead handler.
+
+#### F81 — README + `monthly-catalog-refresh.md` described the pre-migration system, including destructive manual clear-out SQL
+- **Status:** filed 2026-07-08, **resolved** — both documents rewritten in the same session (surfaced by the 2026-07-07 full architecture review, observation A17).
+- **Severity:** High (operational hazard, documentation) — `docs/monthly-catalog-refresh.md` still instructed a manual `DELETE FROM preorders` / `DELETE FROM catalog` before each monthly import (its Steps 3–4), predating the automated new-month sequence (`archive_stale_reservations` → `purge_stale_catalog` → upsert → `delete_dropped_catalog_items`). Following the stale doc would have destroyed the month's `reservation_history` archive (recommendation signal) and the fulfillment audit trail, from a document that looked authoritative. `README.md` compounded the drift: retired GitHub Pages URLs, "Hosting: GitHub Pages", and — directly contradicting the actual per-branch policy in `CLAUDE.md` — "`config.js` (gitignored — never commit)".
+- **Root cause:** both docs were written pre-Phase-1 and never re-audited as the import script absorbed the manual steps (Phase 4.0/4.5) and hosting migrated (5.1). Neither carried a "last verified against live" line, so nothing flagged them as snapshots.
+- **Fix:** `monthly-catalog-refresh.md` rewritten around the automated sequence with an explicit F81 warning banner against older copies; manual DELETE steps removed; verification queries retained; F80 month-confirmation and F78 duplicate-watch checks added. `README.md` corrected (URLs, Cloudflare Pages, per-branch `config.js` section, current repo structure, deployment summary deferring to `CLAUDE.md`).
+- **Where:** `README.md`; `docs/monthly-catalog-refresh.md`.
+
+#### F82 — fixed two-batch fetches cap at 2,000 rows; July 2026 (2,776 rows) crossed the ceiling
+- **Status:** filed 2026-07-08; **app-side fixed same session** (staging commit `6e126dd`) — `Catalog.getPublishers()` and `Recommendations.getCatalogIds()` now paginate in 1,000-row batches until a short read. **Import-side open** — `import.js`'s auto-reserve catalog fetch has the same fixed two-batch cap; bundle with the F75/F78 `import.js` maintenance session.
+- **Severity:** Medium (customer-visible UI gap + latent auto-reserve data risk).
+- **Evidence (prod, 2026-07-08, read-only queries):** the 2026-07 catalog month is **2,776 rows** — past the 2,000-row ceiling of the fixed two-batch pattern. Confirmed live effects: publishers sorted past row 2,000 (Vault Comics, Viz Media, Wake Entertainment, Wattpad WEBTOON Book Group, Yen Press) were absent from the catalog filter dropdown; recommendations were blind to 776 rows; the `--no-write` import dry run logged its auto-reserve catalog fetch at exactly 2,000 rows. All 3 live subscriptions were individually verified — **no auto-reserve was actually missed in July** (both matchable titles sat under the cap and were already reserved; the third series has no July standard cover).
+- **Root cause:** the Supabase 1,000-row page limit was worked around with fetches hard-sized to a ~1,900-row month (`range(0,999)` + `range(1000,1999)`). Predicted as observation A3 in the 2026-07-07 architecture review; first month over 2,000 rows activated it silently — no error, rows simply absent.
+- **Where:** `app.js` `Catalog.getPublishers()`, `Recommendations.getCatalogIds()` (fixed); local `import.js`/`import-staging.js` subscription catalog fetch (open).
+- **Longer-term:** replace `getPublishers`' paging with a `SELECT DISTINCT publisher` RPC (~80 rows returned instead of the whole month); same option for the recommendations id list.
 
 ---
 

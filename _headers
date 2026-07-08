@@ -10,7 +10,31 @@
 # when unchanged, an immediate fresh copy the moment a deploy changes them.
 # config.js is per-branch (prod vs staging keys); revalidating it avoids serving
 # a stale key set after a config change for the same reason.
+#
+# vendor/supabase.min.js is the self-hosted Supabase UMD bundle (pinned
+# 2.110.1, replaces the floating jsdelivr @2 tag — 2026-07 review, A11). Same
+# no-cache posture so an upgraded bundle can never skew against fresh HTML.
 /app.js
   Cache-Control: no-cache
 /config.js
   Cache-Control: no-cache
+/vendor/supabase.min.js
+  Cache-Control: no-cache
+
+# Security headers (2026-07 review, A11).
+#
+# CSP notes — scoped to what the pages actually use:
+# - script-src 'unsafe-inline' is required by the per-page inline <script>
+#   blocks and inline onerror handlers (no-build architecture). The value of
+#   this policy is blocking *external* script origins — with the Supabase
+#   bundle self-hosted, no third-party script host is allowed at all.
+# - style-src/font-src allow the Google Fonts import in style.css.
+# - connect-src lists BOTH Supabase projects so this file merges cleanly
+#   between the staging and main branches (config.js picks the live one).
+# - img-src https: covers distributor cover CDNs (PRH, Lunar, misc);
+#   data: covers the inline SVG cover placeholder.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://plgegklqtdjxeglvyjte.supabase.co https://puoaiyezsreowpwxzxhj.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
