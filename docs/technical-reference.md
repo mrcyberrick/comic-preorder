@@ -2350,6 +2350,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Data cleanup (prod, Rick-in-the-loop):** the misfired reservations written against the 2026-05 row (`preorders` `9671effe…` qty 2 and `3668775e…` qty 1, both `catalog_id = afac6068…`) are duplicates of the correct 2026-06 rows (`d2d89ec6…`, `a12493fc…`) and should be deleted so they don't linger as invisible stale-month reservations. Verify there are no other prior-month paper rows from before the fix.
 - **Where:** `admin.html` Paper Orders catalog-search typeahead handler.
 
+#### F81 — README + `monthly-catalog-refresh.md` described the pre-migration system, including destructive manual clear-out SQL
+- **Status:** filed 2026-07-08, **resolved** — both documents rewritten in the same session (surfaced by the 2026-07-07 full architecture review, observation A17).
+- **Severity:** High (operational hazard, documentation) — `docs/monthly-catalog-refresh.md` still instructed a manual `DELETE FROM preorders` / `DELETE FROM catalog` before each monthly import (its Steps 3–4), predating the automated new-month sequence (`archive_stale_reservations` → `purge_stale_catalog` → upsert → `delete_dropped_catalog_items`). Following the stale doc would have destroyed the month's `reservation_history` archive (recommendation signal) and the fulfillment audit trail, from a document that looked authoritative. `README.md` compounded the drift: retired GitHub Pages URLs, "Hosting: GitHub Pages", and — directly contradicting the actual per-branch policy in `CLAUDE.md` — "`config.js` (gitignored — never commit)".
+- **Root cause:** both docs were written pre-Phase-1 and never re-audited as the import script absorbed the manual steps (Phase 4.0/4.5) and hosting migrated (5.1). Neither carried a "last verified against live" line, so nothing flagged them as snapshots.
+- **Fix:** `monthly-catalog-refresh.md` rewritten around the automated sequence with an explicit F81 warning banner against older copies; manual DELETE steps removed; verification queries retained; F80 month-confirmation and F78 duplicate-watch checks added. `README.md` corrected (URLs, Cloudflare Pages, per-branch `config.js` section, current repo structure, deployment summary deferring to `CLAUDE.md`).
+- **Where:** `README.md`; `docs/monthly-catalog-refresh.md`.
+
 ---
 
 *End of document.*
