@@ -46,6 +46,17 @@
       body.print-store .print-footer { display: none !important; }
       body.print-store .print-store-wrap { display: block !important; }
 
+      /* Poster header (Rick 2026-07-09 round 2): drop the PULLLIST logo,
+         promote THIS WEEK'S ARRIVALS into its slot, and suppress the
+         on-screen page heading that printed as a mid-page whitespace band. */
+      body.print-store #print-logo { display: none; }
+      body.print-store .page-header { display: none !important; }
+      body.print-store #print-title {
+        font-size: 1.5rem; font-weight: 800;
+        letter-spacing: 0.02em; text-transform: uppercase;
+        margin-top: 0;
+      }
+
       .print-store-cta {
         border: 2.5px solid #000; border-radius: 4px;
         padding: 10px 14px; margin: 8px 0 14px;
@@ -236,7 +247,7 @@
   <div class="print-header">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div>
-        <div style="font-size:1.4rem;font-weight:700;letter-spacing:0.05em">PULL<span>LIST</span></div>
+        <div id="print-logo" style="font-size:1.4rem;font-weight:700;letter-spacing:0.05em">PULL<span>LIST</span></div>
         <div id="print-title" style="font-size:1.1rem;font-weight:600;margin-top:4px"></div>
         <div id="print-subtitle" style="font-size:0.8rem;color:#666;margin-top:2px"></div>
       </div>
@@ -675,11 +686,10 @@
       const items = (groups.get(dist) || []).slice()
         .sort((a, b) => (a.catalog?.title || a.title || '').localeCompare(b.catalog?.title || b.title || ''));
       if (!items.length) continue;
-      const units = items.reduce((s, r) => s + (r.quantity || 1), 0);
 
       html += `
         <div class="print-store-group-head">
-          ${escapeHtml(dist)} &mdash; ${items.length} title${items.length !== 1 ? 's' : ''} &middot; ${units} unit${units !== 1 ? 's' : ''}
+          ${escapeHtml(dist)} &mdash; ${items.length} title${items.length !== 1 ? 's' : ''}
         </div>
         <div class="print-store-cols">
           ${items.map(r => {
@@ -694,9 +704,10 @@
 
   function setupStorePrintButton(displayDate) {
     document.getElementById('btn-print-store').addEventListener('click', () => {
-      // Poster header: no report-type subtitle (the page's THIS WEEK'S
-      // ARRIVALS heading carries the message); week range + print date stay.
-      document.getElementById('print-title').textContent    = '';
+      // Poster header: THIS WEEK'S ARRIVALS sits in the logo's slot
+      // (print-store CSS hides #print-logo and upsizes #print-title);
+      // week range + print date stay.
+      document.getElementById('print-title').textContent    = "This Week's Arrivals";
       document.getElementById('print-subtitle').textContent = displayDate;
       document.getElementById('print-date').textContent =
         'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
