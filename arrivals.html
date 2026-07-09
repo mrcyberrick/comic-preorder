@@ -52,10 +52,9 @@
 
       .print-store-wrap { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; }
 
-      /* § 1 Header block */
+      /* § 1 Header block (rule above the CTA removed — Rick 2026-07-09) */
       .ps-header { display: flex; justify-content: space-between; align-items: flex-start;
-                   gap: 24px; border-bottom: 2px solid #1a1a1a;
-                   padding-bottom: 8px; margin-bottom: 12px; }
+                   gap: 24px; padding-bottom: 8px; margin-bottom: 12px; }
       .ps-title { margin: 0; font-size: 24px; font-weight: 900;
                   letter-spacing: -0.01em; color: #1a1a1a; }
       .ps-week  { margin-top: 2px; font-size: 12.5px; color: #3a3a3a; }
@@ -642,12 +641,17 @@
     document.getElementById('arrivals-toolbar').style.display = 'flex';
   }
 
-  // ── Admin: store shipment report (receiving checklist) ────
+  // ── Admin: store display poster ───────────────────────────
   // Full week's shipment — replaces the printed Google Sheet the store
-  // used for receiving. Admin-only; independent of impersonation state.
+  // posted. Admin-only; independent of impersonation state.
+  // Poster date line: the Wednesday inside the current Mon-Sun week
+  // (new-comics day), not the week range — Rick 2026-07-09.
   if (profile?.is_admin) {
+    const storeWednesday = new Date(sy, sm - 1, sd + 2).toLocaleDateString('en-US', {
+      weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
+    });
     renderStoreReport(shipment);
-    setupStorePrintButton(weekDisplay);
+    setupStorePrintButton('New Comics - ' + storeWednesday);
     document.getElementById('btn-print-store').style.display = '';
     document.getElementById('arrivals-toolbar').style.display = 'flex';
   }
@@ -755,10 +759,11 @@
     document.getElementById('print-store-body').innerHTML = html;
   }
 
-  function setupStorePrintButton(displayDate) {
+  function setupStorePrintButton(dateLabel) {
     // The poster owns its header — the shared .print-header is hidden in
     // this mode, so the personal-print title fields are left untouched.
-    document.getElementById('ps-week').textContent = displayDate;
+    // dateLabel: "New Comics - <Wednesday of this week>".
+    document.getElementById('ps-week').textContent = dateLabel;
     document.getElementById('btn-print-store').addEventListener('click', () => {
       // Printed-date line is spec-default hidden (showPrintedDate: false);
       // filled anyway so enabling it is a one-line CSS/style flip.
