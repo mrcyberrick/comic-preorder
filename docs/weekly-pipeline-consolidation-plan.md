@@ -64,13 +64,35 @@ cutover risk. What changes is who writes those files:
 | Brevo send | **Unchanged** — GitHub Action `send-newsletter.yml` (cron Tue 22:00 UTC) runs `scripts/send-brevo-campaign.js`: reads committed `newsletter-email.html`, fail-closed stale guard (`pull-feed-generated: YYYY-MM-DD` stamp, `STALE_MAX_DAYS=6`), `workflow_dispatch` dry-run creates a Brevo draft. New producer must commit the same file + stamp before Tuesday evening — the weekend/Monday weekly import satisfies this naturally | |
 | Printed store sheet (Google Sheet printout) | **Replaced in-app (Rick, 2026-07-09):** an admin-only tailored printable report surfaced on `arrivals.html` (This Week) — full week's `weekly_shipment` (title, qty, cover), print-CSS like the existing admin bagging list. Receiving works from this instead of the Sheet printout | Pairs with § 9 #5 store-packet email later; admin gating via existing `is_admin` profile check |
 
-## 3. Migration strategy — parallel run
+## 3. Migration strategy — revised 2026-07-09 (build complete)
 
-1. Build the four replacement outputs while the Google path keeps running.
-2. Run both for 2–4 consecutive weeks; diff outputs each week (feed items,
-   newsletter contents, sheet rows) until byte-level trust is established.
-3. Cut rjbookstop.com over to the new feed URL; retire the Drive upload and
-   the App Script; keep the Sheet read-only for one further month as rollback.
+The original 2–4-week parallel run assumed two publish surfaces; there is
+only one (`weekly-pull-feed`), so byte-level trust was established **up
+front** instead: `build-pull-feed.js --local` output was diffed against the
+live Apps-Script-generated artifacts for the same week —
+
+- `rss.xml` (the rjbookstop.com contract): **zero non-date differences**
+- both newsletters: differ only in build-date stamps and pre-existing
+  comment-encoding mojibake in the live files (the Apps Script upload was
+  mangling non-ASCII inside HTML comments; the Node port renders them
+  correctly — the new output is strictly better)
+- one data-level discrepancy found and shimmed: `import.js` writes PRH
+  covers as `…/cover/{id}` vs the pipeline's `…/cover/d/{id}`; both serve
+  identical images (verified); the builder normalizes to `/d/` so feed GUIDs
+  and cached thumbnail hashes stay stable.
+
+**Cutover model:** the new producer takes the surface at the next weekly
+import (auto-publish hook). Rick stops running `processNewShipments()`;
+CODE.GS + the Sheet + the Drive folder stay dormant-but-runnable as rollback
+for one month, then retire. No real publish was run at build time — deliberately:
+refreshing the freshness stamp mid-week would weaken the Brevo stale guard
+for the following Tuesday if a weekend import were ever skipped. The first
+real publish is the next shipment import.
+
+**Post-cutover checks (first two weeks):** after each import, eyeball
+`https://mrcyberrick.github.io/weekly-pull-feed/newsletter.html`, confirm
+rjbookstop.com renders the feed, and confirm Tuesday's Brevo send goes out
+(or correctly aborts if no shipment ran).
 
 Nothing in this plan touches `weekly_shipment` writes, the import script, or
 any customer-facing page — additive outputs only, so the risk profile is low.
@@ -114,16 +136,20 @@ any customer-facing page — additive outputs only, so the risk profile is low.
    feed shape from the same generator logic, so the consumer never sees a
    format change. (Live-feed diffing in the parallel run covers the rest.)
 
-## 6. Build session checklist (ready to execute)
+## 6. Build session checklist
 
-1. `build-pull-feed.js` in the private scripts repo: query `weekly_shipment`
-   for the target week (title, cover_url; promo rows already filtered) →
-   port the three template builders + thumbnail cache/purge from CODE.GS →
-   commit artifacts to `weekly-pull-feed` via GitHub Contents API
-   (`GITHUB_TOKEN_PULL_FEED` in `.env`, contents:write scoped).
-2. **Auto-publish, no prompt (Rick, 2026-07-09):** `import.js` publishes the
+1. ✅ **Done 2026-07-09** (scripts repo `31fd4f7`): `build-pull-feed.js` —
+   `weekly_shipment` week query (paginated), template builders extracted
+   verbatim from CODE.GS, thumbnail cache/purge ported, `--local` /
+   `--publish` modes, `/d/` cover-URL parity shim, `publishPullFeed()`
+   export. Token verified (fine-grained, contents:write on
+   `weekly-pull-feed` only).
+2. ✅ **Done 2026-07-09** (same commit) — auto-publish, no prompt (Rick's
+   decision): `import.js` publishes the
    feed automatically whenever shipment files were part of the run and the
-   shipment upsert succeeded; no shipment files → no publish. Duplication
+   shipment upsert succeeded; no shipment files → no publish. Fail-soft
+   (publish failure warns, never fails the import; skips with a warning if
+   the token is absent; `[no-write]` aware). Duplication
    protection is inherent: fixed-path artifacts updated via SHA-based GitHub
    Contents API upsert, MD5-keyed thumbnails skipped when cached, orphan
    purge reconciles — a same-week re-run rewrites identical outputs. The
