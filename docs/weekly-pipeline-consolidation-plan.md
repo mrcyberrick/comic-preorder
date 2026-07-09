@@ -160,9 +160,12 @@ any customer-facing page — additive outputs only, so the risk profile is low.
    scoped to contents:write on `weekly-pull-feed` only (same scoping rule as
    the Apps Script token) and add it to the scripts `.env` as
    `GITHUB_TOKEN_PULL_FEED`.
-3. In-app printable store report: admin-gated print view on `arrivals.html`
-   (This Week) rendering the full week's shipment — replaces the Google
-   Sheet printout (normal staging → smoke → promote flow).
+3. ✅ **Done on staging 2026-07-09** (commit `f900247`; 19/19 smoke green
+   against the deploy): admin-gated "Print Store Report" on `arrivals.html`
+   — full week's shipment grouped by distributor, A-Z titles, check-off box,
+   qty, code/UPC, price, per-group + grand unit totals, received-by line.
+   Customer print path unchanged. **Prod promotion pending** (rides the next
+   staging → main).
 4. Parallel run 2–4 weeks: diff `rss.xml` / `newsletter.html` /
    `newsletter-email.html` against the Apps Script outputs weekly.
 5. Cutover: stop running `processNewShipments()`; Sheet/Drive/Apps Script
