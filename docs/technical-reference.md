@@ -2365,6 +2365,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `app.js` `Catalog.getPublishers()`, `Recommendations.getCatalogIds()` (fixed); local `import.js`/`import-staging.js` subscription catalog fetch (open).
 - **Longer-term:** replace `getPublishers`' paging with a `SELECT DISTINCT publisher` RPC (~80 rows returned instead of the whole month); same option for the recommendations id list.
 
+#### F83 — Format B (PRH) shipment path fails wholesale on split invoice lines
+- **Status:** filed 2026-07-09, **resolved same session** — scripts repo commit `dc92b91`; prod data restored by the operator's re-run.
+- **Severity:** Medium-high (weekly operational) — one duplicate line in a Format B invoice rejected the **entire** PRH shipment batch, and because that path is delete-then-insert, the failed run left **zero** PRH rows for the on-sale date (2026-07-08): the This Week page and bagging list were missing all 16 PRH-shipped items until the re-run.
+- **Root cause:** Format B invoices can list the same item on multiple lines (shipment 846349 listed `0526DE0666` and `0526MA0928` twice). `buildLunarShipmentRows` has pre-summed duplicate (upc, date) lines since the Format A split-line fix, but `buildPrhShipmentRows` did not — and the 16 rows go to PostgREST as one atomic POST, so the intra-batch duplicate on `weekly_shipment_unique (distributor, upc, on_sale_date)` (UPC `72513036535402011`) aborted all 16. Not catchable by a `--no-write` dry run (the constraint only evaluates on a real insert).
+- **Fix:** `buildPrhShipmentRows` now collapses rows on `(upc || item_code, on_sale_date)` and sums quantities — mirroring the Lunar builder. Two regression specs added to the local node-test suite (shared-UPC merge; null-upc fallback key). Verified: 7/7 unit tests; `--no-write` dry run shows 16 raw lines → 14 rows, single batch.
+- **Where:** local scripts repo (`comic-preorder-scripts`) — `import.js` / `import-staging.js` `buildPrhShipmentRows()`; tests in local `playwright/node-tests/`.
+
 ---
 
 *End of document.*
