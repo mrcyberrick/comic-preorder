@@ -106,11 +106,10 @@ any customer-facing page — additive outputs only, so the risk profile is low.
    (zero-dep Node 18+, Brevo API v3, `BREVO_API_KEY`/`BREVO_LIST_ID`/
    `SENDER_EMAIL` secrets, `EMAIL_HTML_PATH=newsletter-email.html`,
    stale guard `STALE_MAX_DAYS=6`, min-length guard). Untouched by this plan.
-4. **The manual promo-removal rule** — ⏳ one confirm left (Rick): is the
-   hand-strip only `Retail = 0.00` lines on the Lunar (Format B) invoice, or
-   are promo items also removed from the PRH (Format A) delivery file (which
-   has no price column to filter on)? `weekly_shipment` inherits `import.js`'s
-   `Retail = 0.00` filter, so parity holds if the answer is "Lunar only."
+4. **The manual promo-removal rule** — ✅ confirmed by Rick 2026-07-09:
+   promo items appear on the **Lunar (Format B) invoice only**. The import's
+   automatic `Retail = 0.00` filter fully covers the manual strip; parity
+   between `weekly_shipment` and the hand-prepared sheet is exact.
 5. **rjbookstop.com consumption** — bounded: the producer swap reproduces the
    feed shape from the same generator logic, so the consumer never sees a
    format change. (Live-feed diffing in the parallel run covers the rest.)
@@ -122,8 +121,19 @@ any customer-facing page — additive outputs only, so the risk profile is low.
    port the three template builders + thumbnail cache/purge from CODE.GS →
    commit artifacts to `weekly-pull-feed` via GitHub Contents API
    (`GITHUB_TOKEN_PULL_FEED` in `.env`, contents:write scoped).
-2. Wire an optional "Publish weekly feed? (y/n)" prompt at the end of
-   `import.js`'s shipment step (or keep standalone invocation).
+2. **Auto-publish, no prompt (Rick, 2026-07-09):** `import.js` publishes the
+   feed automatically whenever shipment files were part of the run and the
+   shipment upsert succeeded; no shipment files → no publish. Duplication
+   protection is inherent: fixed-path artifacts updated via SHA-based GitHub
+   Contents API upsert, MD5-keyed thumbnails skipped when cached, orphan
+   purge reconciles — a same-week re-run rewrites identical outputs. The
+   refreshed `pull-feed-generated` stamp is harmless (the Brevo guard checks
+   staleness only). Standalone `node build-pull-feed.js` retained for manual
+   re-publish.
+   **Setup prerequisite (Rick, one-time):** mint a fine-grained GitHub PAT
+   scoped to contents:write on `weekly-pull-feed` only (same scoping rule as
+   the Apps Script token) and add it to the scripts `.env` as
+   `GITHUB_TOKEN_PULL_FEED`.
 3. In-app printable store report: admin-gated print view on `arrivals.html`
    (This Week) rendering the full week's shipment — replaces the Google
    Sheet printout (normal staging → smoke → promote flow).
