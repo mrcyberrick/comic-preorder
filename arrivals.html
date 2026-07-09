@@ -37,10 +37,23 @@
       table { page-break-inside: auto; }
       tr { page-break-inside: avoid; }
       .print-arrivals-table thead { display: table-row-group; }
+
+      /* Store report mode (admin) — body.print-store swaps which print
+         table renders: the customer's reserved-items table hides and the
+         full-shipment receiving checklist shows instead. */
+      body.print-store .print-table-wrap,
+      body.print-store .print-footer { display: none !important; }
+      body.print-store .print-store-wrap { display: block !important; }
+      body.print-store .print-store-footer {
+        display: block !important; margin-top: 12px;
+        border-top: 2px solid #ccc; padding-top: 8px;
+        font-weight: bold; font-size: 0.9rem;
+      }
     }
 
     /* Hide print-only elements on screen */
-    .print-header, .print-footer, .print-table-wrap { display: none; }
+    .print-header, .print-footer, .print-table-wrap,
+    .print-store-wrap, .print-store-footer { display: none; }
 
     /* ── Empty state ───────────────────────────────────────── */
     .arrivals-empty {
@@ -220,6 +233,9 @@
     <button class="btn btn-secondary btn-sm" id="btn-print">
       ⎙ Print / Save PDF
     </button>
+    <button class="btn btn-secondary btn-sm" id="btn-print-store" style="display:none">
+      ⎙ Print Store Report
+    </button>
   </div>
 
   <div id="arrivals-container">
@@ -256,6 +272,30 @@
     <div style="display:flex;justify-content:space-between">
       <span id="print-footer-count"></span>
       <span id="print-footer-total"></span>
+    </div>
+  </div>
+
+  <!-- Print-only: admin store shipment report (receiving checklist).
+       Replaces the printed Google Sheet the store used for receiving.
+       Rendered only for admins; shown in print via body.print-store. -->
+  <div class="print-store-wrap" id="print-store-wrap">
+    <table class="print-arrivals-table">
+      <thead>
+        <tr>
+          <th style="width:28px">&#10003;</th>
+          <th style="width:44px;text-align:center">Qty</th>
+          <th>Title</th>
+          <th>Code / UPC</th>
+          <th style="width:70px">Price</th>
+        </tr>
+      </thead>
+      <tbody id="print-store-body"></tbody>
+    </table>
+  </div>
+  <div class="print-store-footer">
+    <div style="display:flex;justify-content:space-between">
+      <span id="print-store-count"></span>
+      <span style="font-weight:400">Received by: ____________________</span>
     </div>
   </div>
 
@@ -523,6 +563,16 @@
     document.getElementById('arrivals-toolbar').style.display = 'flex';
   }
 
+  // ── Admin: store shipment report (receiving checklist) ────
+  // Full week's shipment — replaces the printed Google Sheet the store
+  // used for receiving. Admin-only; independent of impersonation state.
+  if (profile?.is_admin) {
+    renderStoreReport(shipment);
+    setupStorePrintButton(weekDisplay);
+    document.getElementById('btn-print-store').style.display = '';
+    document.getElementById('arrivals-toolbar').style.display = 'flex';
+  }
+
   // ── Helpers ───────────────────────────────────────────────
   function renderArrivalsGrid(el, items) {
     el.innerHTML = `<div class="arrivals-grid">${items.map(c => {
@@ -579,6 +629,7 @@
 
   function setupPrintButton(displayDate, arrivals) {
     document.getElementById('btn-print').addEventListener('click', () => {
+      document.body.classList.remove('print-store'); // defensive: personal mode
       const listOwner = AdminContext.isActive()
         ? AdminContext.activeUserName
         : document.getElementById('nav-username').textContent;
@@ -588,6 +639,72 @@
         'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       window.print();
     });
+  }
+
+  // Fill the store-report table: full shipment grouped by distributor,
+  // A-Z by title within each group, with a check-off box per row and
+  // per-group + grand unit totals.
+  function renderStoreReport(rows) {
+    const groups = new Map();
+    rows.forEach(r => {
+      const dist = r.distributor || 'Other';
+      if (!groups.has(dist)) groups.set(dist, []);
+      groups.get(dist).push(r);
+    });
+
+    const distOrder = ['Lunar', 'PRH', ...[...groups.keys()].filter(d => d !== 'Lunar' && d !== 'PRH')];
+    let html = '';
+    let grandTitles = 0, grandUnits = 0;
+
+    for (const dist of distOrder) {
+      const items = (groups.get(dist) || []).slice()
+        .sort((a, b) => (a.catalog?.title || a.title || '').localeCompare(b.catalog?.title || b.title || ''));
+      if (!items.length) continue;
+      const units = items.reduce((s, r) => s + (r.quantity || 1), 0);
+      grandTitles += items.length;
+      grandUnits  += units;
+
+      html += `
+        <tr>
+          <td colspan="5" style="background:#e8e8e8;font-weight:700;border-top:2px solid #bbb;padding:6px 8px">
+            ${escapeHtml(dist)} &mdash; ${items.length} title${items.length !== 1 ? 's' : ''} &middot; ${units} unit${units !== 1 ? 's' : ''}
+          </td>
+        </tr>`;
+
+      html += items.map(r => {
+        const c     = r.catalog || {};
+        const title = c.title || r.title || '';
+        const code  = r.item_code || r.upc || '—';
+        return `
+          <tr>
+            <td><span style="display:inline-block;width:12px;height:12px;border:1.5px solid #999;vertical-align:middle"></span></td>
+            <td style="text-align:center;font-weight:600">${r.quantity || 1}</td>
+            <td>
+              <div style="font-weight:600">${escapeHtml(title)}</div>
+              ${c.series_name ? `<div style="font-size:0.72rem;color:#666">${escapeHtml(c.series_name)}</div>` : ''}
+            </td>
+            <td style="font-family:monospace;font-size:0.75rem">${escapeHtml(code)}</td>
+            <td>${formatPrice(c.price_usd ?? r.price_usd)}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    document.getElementById('print-store-body').innerHTML = html;
+    document.getElementById('print-store-count').textContent =
+      `${grandTitles} title${grandTitles !== 1 ? 's' : ''} · ${grandUnits} unit${grandUnits !== 1 ? 's' : ''} in this week's shipment`;
+  }
+
+  function setupStorePrintButton(displayDate) {
+    document.getElementById('btn-print-store').addEventListener('click', () => {
+      document.getElementById('print-title').textContent    = 'Store Shipment Report — Receiving';
+      document.getElementById('print-subtitle').textContent = displayDate;
+      document.getElementById('print-date').textContent =
+        'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      document.body.classList.add('print-store');
+      window.print();
+    });
+    // Restore personal print mode once the dialog closes
+    window.addEventListener('afterprint', () => document.body.classList.remove('print-store'));
   }
 
   // Log page view — real customer sessions only, includes which Wednesday was viewed
