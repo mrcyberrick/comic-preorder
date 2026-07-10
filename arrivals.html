@@ -634,19 +634,30 @@
     else img.addEventListener('load', () => img.classList.add('loaded'));
   });
 
-  // ── Print table (reserved items only) ────────────────────
-  renderPrintTable(myArrivals);
-  setupPrintButton(weekDisplay, myArrivals);
-  if (myRowsCombined.length || myArrivals.length) {
-    document.getElementById('arrivals-toolbar').style.display = 'flex';
-  }
+  // ── Print buttons ─────────────────────────────────────────
+  // Two mutually-exclusive roles:
+  //   • Personal "Print / Save PDF" — for viewing ONE person's list:
+  //     a customer printing their own, or an admin impersonating a
+  //     customer to print theirs.
+  //   • "Print Store Report" — for an admin managing the store (own view,
+  //     not impersonating): the full-shipment display poster.
+  // An admin in their own view sees only the store report (Rick 2026-07-09).
+  const isManagingStore = profile?.is_admin && !AdminContext.isActive();
 
-  // ── Admin: store display poster ───────────────────────────
-  // Full week's shipment — replaces the printed Google Sheet the store
-  // posted. Admin-only; independent of impersonation state.
-  // Poster date line: the Wednesday inside the current Mon-Sun week
-  // (new-comics day), not the week range — Rick 2026-07-09.
-  if (profile?.is_admin) {
+  if (!isManagingStore) {
+    // Personal print (customer, or impersonated-customer view)
+    renderPrintTable(myArrivals);
+    setupPrintButton(weekDisplay, myArrivals);
+    if (myRowsCombined.length || myArrivals.length) {
+      document.getElementById('arrivals-toolbar').style.display = 'flex';
+    }
+  } else {
+    // Store-managing admin — hide the personal print button entirely.
+    document.getElementById('btn-print').style.display = 'none';
+
+    // Store display poster — full week's shipment, replaces the printed
+    // Google Sheet. Date line = the Wednesday inside the current Mon-Sun
+    // week (new-comics day), not the week range.
     const storeWednesday = new Date(sy, sm - 1, sd + 2).toLocaleDateString('en-US', {
       weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
     });
