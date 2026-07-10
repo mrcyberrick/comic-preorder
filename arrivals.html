@@ -37,10 +37,73 @@
       table { page-break-inside: auto; }
       tr { page-break-inside: avoid; }
       .print-arrivals-table thead { display: table-row-group; }
+
+      /* Store display poster (admin) — body.print-store swaps what prints.
+         Design source: Claude Design project "Pull List CTA redesign"
+         (This Week - Pull List.dc.html + Pull List Print - Style Spec.md,
+         2026-07-09). Strictly grayscale for reliable in-store printing.
+         The poster carries its own header; the shared .print-header and
+         the on-screen page heading are hidden in this mode. */
+      body.print-store .print-table-wrap,
+      body.print-store .print-footer,
+      body.print-store .print-header,
+      body.print-store .page-header { display: none !important; }
+      body.print-store .print-store-wrap { display: block !important; }
+
+      .print-store-wrap { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; }
+
+      /* § 1 Header block (rule above the CTA removed — Rick 2026-07-09) */
+      .ps-header { display: flex; justify-content: space-between; align-items: flex-start;
+                   gap: 24px; padding-bottom: 8px; margin-bottom: 12px; }
+      .ps-title { margin: 0; font-size: 24px; font-weight: 900;
+                  letter-spacing: -0.01em; color: #1a1a1a; }
+      .ps-week  { margin-top: 2px; font-size: 12.5px; color: #3a3a3a; }
+      .ps-store { text-align: right; font-size: 12px; color: #3a3a3a;
+                  line-height: 1.4; white-space: nowrap; }
+      .ps-store-name { font-weight: 700; font-size: 13.5px; color: #1a1a1a; }
+      .ps-printed { color: #777; }
+
+      /* § 2 CTA callout box */
+      .ps-cta { background: #f2f2f2; border: 1.5px solid #1a1a1a; border-radius: 5px;
+                padding: 9px 14px; margin-bottom: 14px; page-break-inside: avoid;
+                -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ps-cta-top { display: flex; align-items: baseline; justify-content: space-between;
+                    flex-wrap: wrap; gap: 4px 14px; margin-bottom: 6px; }
+      .ps-cta-hook { font-size: 13.5px; font-weight: 800;
+                     letter-spacing: -0.01em; color: #1a1a1a; }
+      .ps-cta-line { font-size: 11.5px; color: #3a3a3a; }
+      .ps-cta-line strong { color: #1a1a1a; }
+      .ps-features { display: grid; grid-template-columns: repeat(4, 1fr);
+                     gap: 6px 12px; margin-bottom: 6px; }
+      .ps-feature { display: flex; gap: 6px; }
+      .ps-feature-num { flex: none; width: 14px; height: 14px; border-radius: 50%;
+                        background: #1a1a1a; color: #fff; font-size: 9px; font-weight: 800;
+                        display: flex; align-items: center; justify-content: center;
+                        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ps-feature-text { font-size: 11px; line-height: 1.3; color: #222; }
+      .ps-cta-foot { padding-top: 6px; border-top: 1px solid #ccc; font-size: 11px;
+                     font-weight: 700; display: flex; align-items: center; gap: 8px; }
+      .ps-cta-pill { background: #1a1a1a; color: #fff; padding: 3px 10px; border-radius: 4px;
+                     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ps-cta-alt { color: #555; font-weight: 400; font-size: 11px; }
+
+      /* § 3 Arrivals list — one distributor group per column */
+      .ps-cols { columns: 2; column-gap: 32px; }
+      .ps-group { break-inside: avoid; margin-bottom: 18px; }
+      .ps-group:last-child { margin-bottom: 0; }
+      .ps-group-head { font-size: 13px; font-weight: 800; text-transform: uppercase;
+                       letter-spacing: 0.03em; color: #1a1a1a;
+                       border-bottom: 1.5px solid #1a1a1a;
+                       padding-bottom: 4px; margin: 0 0 8px 0; }
+      .ps-list { list-style: none; margin: 0; padding: 0;
+                 font-size: 13px; line-height: 1.4; color: #222; }
+      .ps-list li { padding-left: 0.9em; text-indent: -0.9em; margin-bottom: 7px; }
+      .ps-list li:last-child { margin-bottom: 0; }
     }
 
     /* Hide print-only elements on screen */
-    .print-header, .print-footer, .print-table-wrap { display: none; }
+    .print-header, .print-footer, .print-table-wrap,
+    .print-store-wrap { display: none; }
 
     /* ── Empty state ───────────────────────────────────────── */
     .arrivals-empty {
@@ -197,7 +260,7 @@
   <div class="print-header">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div>
-        <div style="font-size:1.4rem;font-weight:700;letter-spacing:0.05em">PULL<span>LIST</span></div>
+        <div id="print-logo" style="font-size:1.4rem;font-weight:700;letter-spacing:0.05em">PULL<span>LIST</span></div>
         <div id="print-title" style="font-size:1.1rem;font-weight:600;margin-top:4px"></div>
         <div id="print-subtitle" style="font-size:0.8rem;color:#666;margin-top:2px"></div>
       </div>
@@ -219,6 +282,9 @@
   <div class="toolbar" id="arrivals-toolbar" style="margin-bottom:16px;display:none">
     <button class="btn btn-secondary btn-sm" id="btn-print">
       ⎙ Print / Save PDF
+    </button>
+    <button class="btn btn-secondary btn-sm" id="btn-print-store" style="display:none">
+      ⎙ Print Store Report
     </button>
   </div>
 
@@ -257,6 +323,58 @@
       <span id="print-footer-count"></span>
       <span id="print-footer-total"></span>
     </div>
+  </div>
+
+  <!-- Print-only: admin store display poster — this week's full shipment
+       with a PULLLIST signup CTA. Implemented from the Claude Design
+       project "Pull List CTA redesign" (Pull List Print - Style Spec.md).
+       Shown in print via body.print-store. -->
+  <div class="print-store-wrap" id="print-store-wrap">
+
+    <div class="ps-header">
+      <div>
+        <h1 class="ps-title">THIS WEEK'S ARRIVALS</h1>
+        <div class="ps-week" id="ps-week"></div>
+      </div>
+      <div class="ps-store">
+        <div class="ps-store-name"><span data-tenant-name>Ray &amp; Judy's Book Stop</span></div>
+        <div>973-586-9182</div>
+        <!-- Spec toggle showPrintedDate (default false) — set display:block to show -->
+        <div class="ps-printed" id="ps-printed" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="ps-cta">
+      <div class="ps-cta-top">
+        <div class="ps-cta-hook">Never miss an issue again.</div>
+        <div class="ps-cta-line">Reserve online at <strong>pulllist.app</strong> &mdash; we'll have them waiting.</div>
+      </div>
+      <div class="ps-features">
+        <div class="ps-feature">
+          <div class="ps-feature-num">1</div>
+          <div class="ps-feature-text"><strong>Browse &amp; reserve</strong> anytime, any device.</div>
+        </div>
+        <div class="ps-feature">
+          <div class="ps-feature-num">2</div>
+          <div class="ps-feature-text"><strong>Auto-reserve</strong> your series monthly.</div>
+        </div>
+        <div class="ps-feature">
+          <div class="ps-feature-num">3</div>
+          <div class="ps-feature-text"><strong>Know what's arriving</strong>, by date.</div>
+        </div>
+        <div class="ps-feature">
+          <div class="ps-feature-num">4</div>
+          <div class="ps-feature-text"><strong>Confirmation email</strong>, always handy.</div>
+        </div>
+      </div>
+      <div class="ps-cta-foot">
+        <span class="ps-cta-pill">Start now &rarr; pulllist.app</span>
+        <span class="ps-cta-alt">or ask a staff member &middot; 973-586-9182</span>
+      </div>
+    </div>
+
+    <div class="ps-cols" id="print-store-body"></div>
+
   </div>
 
 </div>
@@ -523,6 +641,21 @@
     document.getElementById('arrivals-toolbar').style.display = 'flex';
   }
 
+  // ── Admin: store display poster ───────────────────────────
+  // Full week's shipment — replaces the printed Google Sheet the store
+  // posted. Admin-only; independent of impersonation state.
+  // Poster date line: the Wednesday inside the current Mon-Sun week
+  // (new-comics day), not the week range — Rick 2026-07-09.
+  if (profile?.is_admin) {
+    const storeWednesday = new Date(sy, sm - 1, sd + 2).toLocaleDateString('en-US', {
+      weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
+    });
+    renderStoreReport(shipment);
+    setupStorePrintButton('New Comics - ' + storeWednesday);
+    document.getElementById('btn-print-store').style.display = '';
+    document.getElementById('arrivals-toolbar').style.display = 'flex';
+  }
+
   // ── Helpers ───────────────────────────────────────────────
   function renderArrivalsGrid(el, items) {
     el.innerHTML = `<div class="arrivals-grid">${items.map(c => {
@@ -579,6 +712,7 @@
 
   function setupPrintButton(displayDate, arrivals) {
     document.getElementById('btn-print').addEventListener('click', () => {
+      document.body.classList.remove('print-store'); // defensive: personal mode
       const listOwner = AdminContext.isActive()
         ? AdminContext.activeUserName
         : document.getElementById('nav-username').textContent;
@@ -588,6 +722,58 @@
         'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       window.print();
     });
+  }
+
+  // Fill the store display poster: one distributor group per column,
+  // titles A-Z with a ‣ hanging-indent list — per the Claude Design
+  // "Pull List CTA redesign" style spec (2026-07-09). Titles render
+  // exactly as the distributor feed cased them.
+  function renderStoreReport(rows) {
+    const groups = new Map();
+    rows.forEach(r => {
+      const dist = r.distributor || 'Other';
+      if (!groups.has(dist)) groups.set(dist, []);
+      groups.get(dist).push(r);
+    });
+
+    const distOrder = ['Lunar', 'PRH', ...[...groups.keys()].filter(d => d !== 'Lunar' && d !== 'PRH')];
+    let html = '';
+
+    for (const dist of distOrder) {
+      const items = (groups.get(dist) || []).slice()
+        .sort((a, b) => (a.catalog?.title || a.title || '').localeCompare(b.catalog?.title || b.title || ''));
+      if (!items.length) continue;
+
+      html += `
+        <div class="ps-group">
+          <div class="ps-group-head">${escapeHtml(dist)} &mdash; ${items.length} title${items.length !== 1 ? 's' : ''}</div>
+          <ul class="ps-list">
+            ${items.map(r => {
+              const title = r.catalog?.title || r.title || '';
+              return `<li>&#8227;&nbsp; ${escapeHtml(title)}</li>`;
+            }).join('')}
+          </ul>
+        </div>`;
+    }
+
+    document.getElementById('print-store-body').innerHTML = html;
+  }
+
+  function setupStorePrintButton(dateLabel) {
+    // The poster owns its header — the shared .print-header is hidden in
+    // this mode, so the personal-print title fields are left untouched.
+    // dateLabel: "New Comics - <Wednesday of this week>".
+    document.getElementById('ps-week').textContent = dateLabel;
+    document.getElementById('btn-print-store').addEventListener('click', () => {
+      // Printed-date line is spec-default hidden (showPrintedDate: false);
+      // filled anyway so enabling it is a one-line CSS/style flip.
+      document.getElementById('ps-printed').textContent =
+        'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      document.body.classList.add('print-store');
+      window.print();
+    });
+    // Restore personal print mode once the dialog closes
+    window.addEventListener('afterprint', () => document.body.classList.remove('print-store'));
   }
 
   // Log page view — real customer sessions only, includes which Wednesday was viewed
