@@ -288,6 +288,16 @@
     </button>
   </div>
 
+  <!-- Store-manager week navigation (admin, own view only) — lets an admin
+       preview/print the poster for any Mon-Sun week, e.g. print next week's
+       ahead of Wednesday. Hidden by default; shown by runStoreManagerView(). -->
+  <div id="store-week-nav" style="display:none;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn btn-secondary btn-sm" id="btn-store-prev" title="Previous week">&larr; Prev</button>
+    <button class="btn btn-secondary btn-sm" id="btn-store-today">This week</button>
+    <button class="btn btn-secondary btn-sm" id="btn-store-next" title="Next week">Next &rarr;</button>
+    <span id="store-week-label" style="font-size:0.85rem;color:var(--text-secondary);margin-left:4px"></span>
+  </div>
+
   <div id="arrivals-container">
     <div class="empty-state">
       <p style="color:var(--text-muted)">Loading…</p>
@@ -424,6 +434,16 @@
       AdminContext.activeUserName + "'s Arrivals This Week";
     document.getElementById('page-subtitle').textContent =
       'Reserved titles arriving at the store this week';
+  }
+
+  // ── Store-managing admin (own view, not impersonating) ────
+  // Dedicated store view with week navigation + printable poster.
+  // Self-contained — returns before the customer/impersonation
+  // rendering below, and works even when the current week has no
+  // shipment (so the admin can jump to next week and print ahead).
+  if (profile?.is_admin && !AdminContext.isActive()) {
+    await runStoreManagerView();
+    return;
   }
 
   // ── Query 1: weekly_shipment for this Wednesday ───────────
@@ -634,36 +654,13 @@
     else img.addEventListener('load', () => img.classList.add('loaded'));
   });
 
-  // ── Print buttons ─────────────────────────────────────────
-  // Two mutually-exclusive roles:
-  //   • Personal "Print / Save PDF" — for viewing ONE person's list:
-  //     a customer printing their own, or an admin impersonating a
-  //     customer to print theirs.
-  //   • "Print Store Report" — for an admin managing the store (own view,
-  //     not impersonating): the full-shipment display poster.
-  // An admin in their own view sees only the store report (Rick 2026-07-09).
-  const isManagingStore = profile?.is_admin && !AdminContext.isActive();
-
-  if (!isManagingStore) {
-    // Personal print (customer, or impersonated-customer view)
-    renderPrintTable(myArrivals);
-    setupPrintButton(weekDisplay, myArrivals);
-    if (myRowsCombined.length || myArrivals.length) {
-      document.getElementById('arrivals-toolbar').style.display = 'flex';
-    }
-  } else {
-    // Store-managing admin — hide the personal print button entirely.
-    document.getElementById('btn-print').style.display = 'none';
-
-    // Store display poster — full week's shipment, replaces the printed
-    // Google Sheet. Date line = the Wednesday inside the current Mon-Sun
-    // week (new-comics day), not the week range.
-    const storeWednesday = new Date(sy, sm - 1, sd + 2).toLocaleDateString('en-US', {
-      weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
-    });
-    renderStoreReport(shipment);
-    setupStorePrintButton('New Comics - ' + storeWednesday);
-    document.getElementById('btn-print-store').style.display = '';
+  // ── Personal print button ─────────────────────────────────
+  // This path only runs for a customer or an admin impersonating a
+  // customer (the store-managing admin returned early above). The
+  // personal "Print / Save PDF" prints that one person's reserved list.
+  renderPrintTable(myArrivals);
+  setupPrintButton(weekDisplay, myArrivals);
+  if (myRowsCombined.length || myArrivals.length) {
     document.getElementById('arrivals-toolbar').style.display = 'flex';
   }
 
@@ -770,21 +767,124 @@
     document.getElementById('print-store-body').innerHTML = html;
   }
 
-  function setupStorePrintButton(dateLabel) {
-    // The poster owns its header — the shared .print-header is hidden in
-    // this mode, so the personal-print title fields are left untouched.
-    // dateLabel: "New Comics - <Wednesday of this week>".
-    document.getElementById('ps-week').textContent = dateLabel;
-    document.getElementById('btn-print-store').addEventListener('click', () => {
-      // Printed-date line is spec-default hidden (showPrintedDate: false);
-      // filled anyway so enabling it is a one-line CSS/style flip.
+  // ── Store-manager view (admin, own view) ──────────────────
+  // A self-contained store view with Prev/This/Next week navigation.
+  // Each week re-queries weekly_shipment and re-renders both the on-screen
+  // shipment grid and the printable poster, so an admin can print any
+  // week's poster (e.g. next week's, ahead of Wednesday). loadStoreWeek is
+  // nested so it shares the selectedMonday week-cursor with the nav buttons.
+  async function runStoreManagerView() {
+    const btnStore = document.getElementById('btn-print-store');
+    document.getElementById('btn-print').style.display = 'none';        // no personal print here
+    btnStore.style.display = '';
+    document.getElementById('arrivals-toolbar').style.display = 'flex';
+    document.getElementById('store-week-nav').style.display = 'flex';
+
+    // Monday (local Date) of the week currently shown. Updated by loadStoreWeek.
+    let selectedMonday = null;
+
+    // Wire the poster print button once. The poster owns its own header,
+    // so the shared personal-print title fields are left untouched.
+    btnStore.addEventListener('click', () => {
+      if (btnStore.disabled) return;
       document.getElementById('ps-printed').textContent =
         'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       document.body.classList.add('print-store');
       window.print();
     });
-    // Restore personal print mode once the dialog closes
     window.addEventListener('afterprint', () => document.body.classList.remove('print-store'));
+
+    // Week navigation — shift ±7 days from the selected Monday.
+    const shiftWeek = (days) => {
+      const base = selectedMonday ? new Date(selectedMonday) : new Date();
+      base.setDate(base.getDate() + days);
+      return loadStoreWeek(base);
+    };
+    document.getElementById('btn-store-prev').addEventListener('click', () => shiftWeek(-7));
+    document.getElementById('btn-store-next').addEventListener('click', () => shiftWeek(7));
+    document.getElementById('btn-store-today').addEventListener('click', () => loadStoreWeek(new Date()));
+
+    // Load + render one Mon-Sun week. refDate is a Date within the target
+    // week (a Date object, never a 'YYYY-MM-DD' string, to avoid the
+    // UTC-parse shift F28 warns about).
+    async function loadStoreWeek(refDate) {
+      const { start, end } = DateUtils.weekRange(refDate);
+      const [wy, wm, wd] = start.split('-').map(Number);
+      selectedMonday = new Date(wy, wm - 1, wd);
+
+      container.innerHTML = '<div class="empty-state"><p style="color:var(--text-muted)">Loading…</p></div>';
+
+      const { data, error } = await db
+        .from('weekly_shipment')
+        .select(`
+          id, distributor, upc, item_code, title, price_usd, quantity, cover_url, on_sale_date,
+          catalog:catalog_id (
+            id, title, series_name, publisher, cover_url, price_usd, distributor, variant_type
+          )
+        `)
+        .gte('on_sale_date', start)
+        .lte('on_sale_date', end)
+        .order('on_sale_date')
+        .order('title');
+
+      const shipment = error ? [] : (data || []);
+
+      const monLabel = new Date(wy, wm - 1, wd).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const sunLabel = new Date(wy, wm - 1, wd + 6).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      const wedLabel = new Date(wy, wm - 1, wd + 2).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+
+      document.getElementById('store-week-label').textContent = `${monLabel} – ${sunLabel}`;
+      document.getElementById('ps-week').textContent = 'New Comics - ' + wedLabel;
+      document.getElementById('page-subtitle').textContent = shipment.length
+        ? `Store shipment · ${shipment.length} title${shipment.length !== 1 ? 's' : ''} · New Comics ${wedLabel}`
+        : 'No shipment imported for this week yet';
+
+      if (shipment.length) {
+        container.innerHTML =
+          `<div class="shipment-divider"><span>Store shipment</span>` +
+          `<span class="shipment-divider-count">${shipment.length} title${shipment.length !== 1 ? 's' : ''}</span></div>` +
+          `<div class="arrivals-grid">${shipment.map(r => makeStoreCard(r)).join('')}</div>`;
+        container.querySelectorAll('img').forEach(img => {
+          if (img.complete) img.classList.add('loaded');
+          else img.addEventListener('load', () => img.classList.add('loaded'));
+        });
+      } else {
+        container.innerHTML =
+          `<div class="arrivals-empty"><h2>No shipment for this week</h2>` +
+          `<p>Nothing has been imported for this week yet. Use the week controls above to check another week.</p></div>`;
+      }
+
+      renderStoreReport(shipment);
+      btnStore.disabled = shipment.length === 0;
+      btnStore.style.opacity = shipment.length === 0 ? '0.5' : '';
+      btnStore.title = shipment.length === 0 ? 'No shipment to print for this week' : '';
+    }
+
+    await loadStoreWeek(new Date());
+  }
+
+  // Simple shipment card for the store-manager grid — no reserved/qty styling.
+  function makeStoreCard(row) {
+    const c        = row.catalog || {};
+    const title    = c.title || row.title;
+    const price    = c.price_usd ?? row.price_usd;
+    const dist     = c.distributor || row.distributor;
+    const coverSrc = row.cover_url || c.cover_url;
+    const cover    = coverSrc
+      ? `<img src="${escapeHtml(coverSrc)}" alt="${escapeHtml(title)}" loading="lazy"
+             onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;this.classList.add('loaded');">`
+      : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
+    return `
+      <div class="arrival-card not-reserved">
+        <div class="arrival-cover">
+          <span class="arrival-dist-badge badge-${(dist||'').toLowerCase()}">${escapeHtml(dist||'')}</span>
+          ${cover}
+        </div>
+        <div class="arrival-info">
+          <div class="arrival-title">${escapeHtml(title)}</div>
+          <div class="arrival-price">${formatPrice(price)}</div>
+        </div>
+      </div>`;
   }
 
   // Log page view — real customer sessions only, includes which Wednesday was viewed
