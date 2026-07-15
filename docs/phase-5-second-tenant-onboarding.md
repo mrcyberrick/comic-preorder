@@ -1,6 +1,6 @@
 # Phase 5 — Second-Tenant Onboarding
 
-**Status:** In progress — 5.0 Complete 2026-06-11; 5.1 Complete 2026-06-14 (hosting → Cloudflare Pages; prod live at `pulllist.app`); 5.2 Complete 2026-06-15 (slug→id routing RPC; TENANT_SLUG_MAP removed; F14/F64-8/F67 resolved; prod write-smoke clean)
+**Status:** **Phase 5 Complete — 2026-07-15.** 5.0 Complete 2026-06-11; 5.1 Complete 2026-06-14 (hosting → Cloudflare Pages; prod live at `pulllist.app`); 5.2 Complete 2026-06-15 (slug→id routing RPC; TENANT_SLUG_MAP removed; F14/F64-8/F67 resolved; prod write-smoke clean); 5.3 Complete 2026-06-15; 5.4 Complete 2026-06-17; 5.5 Complete 2026-07-15 (second tenant `comicstore` live on prod; two-tenant soak passed; onboarding generalized). Successor: Phase 6 (stub, not started, gated on wildcard-DNS/TLS spike).
 **Predecessor:** Phase 4 — Production Migration (`docs/phase-4-production-migration.md`) — **Complete 2026-06-10**
 **Branch base:** `staging` for all staging-side work; prod promotions per `CLAUDE.md` § Standard Deployment Workflow
 **Customer impact:** None until 5.5 (founding-tenant behavior is a hard invariant for 5.0–5.4); 5.1 hosting cutover is the one customer-visible infrastructure change before tenant 2 exists
@@ -40,7 +40,7 @@ Phase 5 is broken into **six sub-deploys**. Each plan file is written **after** 
 | 5.2 | Slug→id routing RPC — replace `TENANT_SLUG_MAP`; subdomain resolution; F64 item 8 (`idx_tenants_slug` → prod) | `phase-5.2-slug-id-routing-rpc.md` | **Complete** | 2026-06-15 |
 | 5.3 | Per-tenant branding rendering — UI reads `tenants.branding` jsonb         | `phase-5.3-per-tenant-branding.md`            | **Complete** | 2026-06-15 |
 | 5.4 | Tenant signup — `register-customer` un-pinning (F34 residual) + self-service tenant registration | `phase-5.4-tenant-signup.md` | **Complete** | 2026-06-17 |
-| 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | `phase-5.5-second-tenant-onboarding.md`   | Planning | |
+| 5.5 | Second-tenant onboarding — tenant 2 live on prod + two-tenant production soak | `phase-5.5-second-tenant-onboarding.md`   | **Complete** | 2026-07-15 |
 
 ### Status values
 
@@ -94,17 +94,17 @@ If something seems related but isn't on the IN scope list above, **stop and ask*
 
 Phase 5 is complete when **all** of the following are true:
 
-- [ ] All sub-deploys 5.0–5.5 in the Sub-Deploys table marked Complete
-- [ ] Second tenant live on production: own slug, branding, admin account, customer flows — verified end-to-end
-- [ ] Zero cross-tenant leakage across every customer-facing surface, admin surface, analytics view, and Edge Function path, verified with the 4.1-style canary checklist against the *real* second tenant
-- [ ] Founding-tenant behavior unchanged: full Playwright suite green against prod; no customer-reported regressions during the 5.5 soak
-- [ ] `TENANT_SLUG_MAP` removed from `app.js`; tenant resolution is data-driven (RPC + subdomain)
-- [ ] `register-customer` no longer hard-pinned to `FOUNDING_TENANT_ID`
-- [ ] Hosting fully migrated; GitHub Pages serving retired; deployment workflow in `CLAUDE.md` rewritten for the new host
-- [ ] All carried findings (F58, F63, F64 incl. deferred-DDL items, F65, F66) resolved or explicitly re-dispositioned in § 13
-- [ ] Two-tenant production soak passed (duration set in the 5.5 plan; not less than one full import cycle)
-- [ ] `CLAUDE.md` § Current Migration Phase updated; Phase 6 stub created if a successor phase exists — **stub created 2026-06-15: `docs/phase-6-self-service-signup.md`** (open self-service tenant signup; gated on a wildcard-DNS/TLS spike; begins only after Phase 5 closes)
-- [ ] All sub-deploy plan files committed to `docs/`
+- [x] All sub-deploys 5.0–5.5 in the Sub-Deploys table marked Complete
+- [x] Second tenant live on production: own slug (`comicstore.pulllist.app`), branding, admin account, customer flows — verified end-to-end (5.5 S2/S3; `create-paper-customer`/`invite-customer` tenant-scoping re-verified 2026-07-15 S6 against a stale doc claim — see F34 correction, `technical-reference.md` § 13)
+- [x] Zero cross-tenant leakage across every customer-facing surface, admin surface, analytics view, and Edge Function path, verified with the 4.1-style canary checklist against the *real* second tenant (5.5 S3; re-confirmed post-import at S4 close 2026-07-15)
+- [x] Founding-tenant behavior unchanged: full Playwright suite green against prod-equivalent staging; no customer-reported regressions during the 5.5 soak (2026-06-20 → 2026-07-15)
+- [x] `TENANT_SLUG_MAP` removed from `app.js`; tenant resolution is data-driven (RPC + subdomain) (5.2 S6)
+- [x] `register-customer` no longer hard-pinned to `FOUNDING_TENANT_ID` (5.4 S2)
+- [x] Hosting fully migrated; GitHub Pages serving retired; deployment workflow in `CLAUDE.md` rewritten for the new host — active serving moved to Cloudflare Pages at 5.1 (2026-06-14); this criterion is about *serving*, satisfied since 5.1. Separately: the legacy `mrcyberrick.github.io`/`mrcyberrick.us` GH Pages copies were kept **warm as a rollback surface "until 5.5 closes"** (`CLAUDE.md`) — neither this plan nor the 5.5 plan states an explicit retirement disposition for that surface now that 5.5 has closed; this is not itself a completion-criterion blocker but is flagged for Rick in this session's status update rather than retired unilaterally
+- [x] All carried findings (F58, F63, F64 incl. deferred-DDL items, F65, F66) resolved or explicitly re-dispositioned in § 13
+- [x] Two-tenant production soak passed (duration set in the 5.5 plan; not less than one full import cycle) — 2026-06-20 → 2026-07-15, one full monthly import cycle (2026-07-08→10) elapsed
+- [x] `CLAUDE.md` § Current Migration Phase updated; Phase 6 stub created if a successor phase exists — **stub created 2026-06-15: `docs/phase-6-self-service-signup.md`** (open self-service tenant signup; gated on a wildcard-DNS/TLS spike; begins only after Phase 5 closes)
+- [x] All sub-deploy plan files committed to `docs/`
 
 ---
 
@@ -148,4 +148,4 @@ Phase 5 is complete when **all** of the following are true:
 
 ---
 
-**Last updated:** 2026-06-17 (5.5 plan written → row 5.5 Planning; `docs/phase-5.5-second-tenant-onboarding.md`. Decisions locked: soak = one full import cycle / no buffer; routing = dedicated `<slug>.pulllist.app` manual custom domain; tenant-2 identity operator-supplied at execution; tenant 2 pilot/seeded through the soak)
+**Last updated:** 2026-07-15 (5.5 S6 closeout — row 5.5 → Complete; **Status → Phase 5 Complete**; all Phase Completion Criteria ticked; see `docs/phase-5.5-second-tenant-onboarding.md` Deploy Log and `docs/phase-5.5-soak-log.md` § S4 close for evidence)

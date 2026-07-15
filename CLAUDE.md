@@ -7,21 +7,22 @@ comic pre-order system. **Read this file in full at the start of every session.*
 
 ## 🚨 Current Migration Phase
 
-**Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
-**Successor phase (stub):** Phase 6 — Open self-service tenant signup — `docs/phase-6-self-service-signup.md` (stub 2026-06-15; not started; begins only after Phase 5 closes; gated on a wildcard-DNS/TLS spike)
+**Active phase:** **Phase 5 Complete** (closed 2026-07-15). Successor Phase 6 has not started — see below.
+**Successor phase (stub):** Phase 6 — Open self-service tenant signup — `docs/phase-6-self-service-signup.md` (stub 2026-06-15; not started; gated on a wildcard-DNS/TLS spike). Phase 5's close (2026-07-15) satisfies the "begins only after Phase 5 closes" precondition; the wildcard-DNS/TLS spike gate remains open.
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.5 — Second-tenant onboarding + soak** (**In progress — S0–S5 complete; S4 soak close-out + S6 Phase 5 closeout remain**) — `docs/phase-5.5-second-tenant-onboarding.md`. S0–S1 complete 2026-06-18 (readiness gate; staging full-dress rehearsal with verified teardown). S2–S3 complete 2026-06-19 (tenant 2 `comicstore` live on prod; two-tenant isolation verified, zero cross-tenant leakage). S4 two-tenant prod soak opened 2026-06-20 — close gate is one full monthly import cycle + post-import isolation re-verification; the July 2026 import ran 2026-07-08→10, so the cycle has elapsed and **the post-import isolation re-verification is the remaining S4 step**. S5 complete 2026-06-20 (generalized tenant-onboarding runbook). S6 pending S4 close. *(Pointer corrected 2026-07-15 — it had sat at "Planning" through the S0–S5 execution sessions.)*
+**Phase 5 status:** **Complete — 2026-07-15.** All sub-deploys 5.0–5.5 closed; second tenant (`comicstore`, `comicstore.pulllist.app`) live on production, pilot/seeded; two-tenant soak passed (2026-06-20 → 2026-07-15, one full monthly import cycle 2026-07-08→10 elapsed, post-import isolation re-verification = 0 cross-tenant in both directions); onboarding generalized into `docs/tenant-onboarding-runbook.md`. Full completion evidence: `docs/phase-5-second-tenant-onboarding.md` § Phase Completion Criteria; `docs/phase-5.5-second-tenant-onboarding.md` § 5 / Deploy Log; `docs/phase-5.5-soak-log.md` § S4 close.
+**Active sub-deploy:** none. Phase 6 not started (stub only, gated on the wildcard-DNS/TLS spike).
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 5.4 — Tenant signup (Complete 2026-06-17) — `register-customer` un-pinned (F34 fully resolved); `register-tenant` gated operator EF live on both envs (9th EF); per-tenant webhook secrets seeded in `tenants.settings`; F64 item 5 prod FK DDL landed (S0); F72 filed (email branding deferral); F73/F74 filed+resolved (webhook secret chat exposures); founding-tenant invariant held throughout; 19/19 Playwright green; prod write-smoke clean
-**Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
+**Last completed sub-deploy:** Phase 5.5 — Second-tenant onboarding + soak (Complete 2026-07-15) — `docs/phase-5.5-second-tenant-onboarding.md`. Tenant 2 (`comicstore`) live on prod via `register-tenant`; dedicated `comicstore.pulllist.app` custom domain + TLS; branding set; zero cross-tenant leakage verified (S3, re-confirmed post-import at S4 close); two-tenant soak passed across one full import cycle; onboarding runbook generalized (S5). Also corrected a stale F34-residual doc claim discovered during S6 verification (see `technical-reference.md` § 13 F34) — `create-paper-customer`/`invite-customer` were never actually hard-pinned post-2026-05-10; three docs (technical-reference.md, soak log, runbook) had carried the stale pre-fix description forward.
+**Last completed phase:** Phase 5 — second tenant live on production with a verified two-tenant soak; onboarding is now operational, not an engineering phase
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
-**Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope). F75 — reserved; security-sensitive, details in a local-only operator note until remediated (§ 13 placeholder). F78 — import can mint duplicate `catalog` rows for cross-distributor null-`catalog_id` titles (root cause F84 fixed 2026-07-09; upsert-key hardening + historical duplicate-row reconciliation remain). F85 — cross-month duplicate preorders from re-listed `item_code`s (prod data cleaned 2026-07-10, 0 pairs remain; root fix still open — carry the reservation forward to the newest catalog row and retain the original reserved date; without it, re-listed items duplicate again next month). **F75 + F78 + F85 are bundled into the next `import.js` maintenance session — target: before the early-August 2026 import.** All other findings through F84 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F86**.
+**Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. All Complete. Sequencing rationale and completion criteria in the parent plan.
+**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F75 — reserved; security-sensitive, details in a local-only operator note until remediated (§ 13 placeholder). F78 — import can mint duplicate `catalog` rows for cross-distributor null-`catalog_id` titles (root cause F84 fixed 2026-07-09; upsert-key hardening + historical duplicate-row reconciliation remain). F85 — cross-month duplicate preorders from re-listed `item_code`s (prod data cleaned 2026-07-10, 0 pairs remain; root fix still open — carry the reservation forward to the newest catalog row and retain the original reserved date; without it, re-listed items duplicate again next month). **F75 + F78 + F85 are bundled into the next `import.js` maintenance session — target: before the early-August 2026 import.** All other findings through F85 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F86**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -260,7 +261,7 @@ At the end of each session:
 **Location:** Rockaway, NJ
 **Production URL:** https://pulllist.app/
 **Staging URL:** https://staging.pulllist.pages.dev/
-**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — warm until 5.5; redirects to `/` via `_redirects`)
+**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — kept warm as a rollback surface past the original "until 5.5 closes" gate; Rick's call 2026-07-15 at 5.5 S6 was to keep it warm and revisit retirement in a future session, not tied to any phase boundary; redirects to `/` via `_redirects`)
 
 ---
 
@@ -288,7 +289,7 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
 
 **Git remotes:**
 - `origin` → production repo (`github.com/mrcyberrick/comic-preorder`)
-- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback until 5.5 closes
+- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback past the original "until 5.5 closes" gate — Rick's call 2026-07-15 at 5.5 S6 was to keep it warm and revisit retirement in a future session
 
 **Local scripts folder** (working tree of the **private scripts repo**
 `github.com/mrcyberrick/comic-preorder-scripts` since 2026-07-08 — only the
@@ -527,16 +528,11 @@ approval.
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
-### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
-### their own sub-deploy session)
-- **Slug→id RPC** — Complete 2026-06-15 (sub-deploy 5.2)
-- **Per-tenant branding rendering** — Complete 2026-06-15 (sub-deploy 5.3);
-  `Branding.apply()` reads `tenants.branding` (color/name/logo override layer)
-- **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
-
-### Deferred from sub-deploy 5.0 (Complete 2026-06-11)
-- **F64 item 5 DDL** — `preorders_user_id_fkey` → `user_profiles` NO ACTION; decision recorded (Option A); in parent § Deferred-DDL Register; must land before 5.4
-- **F64 item 8** — `idx_tenants_slug` → prod; belongs to sub-deploy 5.2
+Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
+self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
+no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
+full closed scope and `docs/technical-reference.md` § 13 for any findings
+carried forward.
 
 If a session needs to touch any of the above, **stop and confirm**.
 

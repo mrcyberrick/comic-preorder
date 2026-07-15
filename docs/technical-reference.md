@@ -1389,6 +1389,12 @@ a tenant-2 admin land in tenant 2, not the founding tenant.
 `register-customer`'s residual was resolved in 5.4 S2 (see F34 status +
 per-tenant-secret contract note, § 13).
 
+**Post-Phase-5 (5.5 close, 2026-07-15):** the inventory stays at 9 EFs — no
+new function added. Tenant 2 (`comicstore`) now exercises `register-customer`'s
+per-tenant-secret resolution and the `register-tenant` operator EF in
+production (not just staging), confirming both work against a *second* real
+tenant, not just the founding one.
+
 ### 11.2 Required secrets
 
 Set in Supabase → Edge Functions → Secrets:
@@ -2296,7 +2302,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
 
 #### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
-- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist (5.5 may act on it).
+- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist. **Re-confirmed deferred at Phase 5 close (5.5 S6, 2026-07-15)** — tenant 2 (`comicstore`) stayed pilot/seeded through the soak with no real `register-customer` customers, so F72 never surfaced live; it becomes a **prerequisite to evaluate at tenant-2's real-customer go-live** (post-Phase-5 operational step) per `docs/tenant-onboarding-runbook.md`.
 - **Severity:** Low (documented gap, not a defect) — the un-pin (F34 residual) is data-correct: a customer registered via a non-founding tenant's webhook secret lands in that tenant's `user_profiles` with the right `tenant_id`. But `buildPendingEmail()` (register-customer/index.ts ~line 215+) hardcodes "Ray & Judy's Book Stop" / PULLLIST founding copy and the `from` name, regardless of which tenant the customer resolved to.
 - **Where:** `supabase/functions/register-customer/index.ts` — `buildPendingEmail()` and the MailerSend `from`/`subject` fields in the main handler.
 - **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
