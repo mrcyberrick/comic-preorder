@@ -1,7 +1,8 @@
 # F86 — Prod Legacy API Key Retirement (config.js anon-key migration)
 
-**Status:** Planned — not started
+**Status:** In progress — Step 1 staging rehearsal underway (soak open)
 **Plan written:** 2026-07-15 (planning session; no code, config, or dashboard changes made)
+**Execution session opened:** 2026-07-15
 **Not a phase sub-deploy** — standalone maintenance session, successor to the `import.js` maintenance session (F75/F78/F85, closed 2026-07-15). Closes F86 and the last F75 residual.
 **Target:** no hard deadline; schedule the prod toggle flip on a quiet day — NOT a Tuesday/Wednesday (weekly shipment + bagging) and NOT during the early-August monthly import week.
 **Authoritative inputs read during planning (2026-07-15):** `CLAUDE.md` (incl. § Credential Safety), `docs/technical-reference.md` § 13 F75/F86, `docs/import-js-maintenance-f75-f78-f85.md`, `config.js` on both branches (key **format** inspected only), `vendor/supabase.min.js` (both branches), all 8 `supabase/functions/*/index.ts`, `_headers`, Supabase official migration guide + GitHub issue supabase/supabase#37648.
@@ -109,6 +110,20 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - [ ] V7: legacy `service_role` JWT (F75's exposed credential) and legacy `anon` key confirmed dead
 - [ ] F86 resolved + F75 residual annotated in `technical-reference.md` § 13; `CLAUDE.md` § Open findings and § Known Out-of-Scope Items updated
 - [ ] All doc changes committed (doc-only → `staging`); plan status set to Complete
+
+## 6a. Execution log
+
+**Session 1 — 2026-07-15:**
+- **Step 0 complete.** Re-verified live: `staging:config.js` → `sb_publishable_1jCe5…`; `main:config.js` → `eyJhbGciOiJIUzI1NiIs…`; `git grep 'eyJhbGciOi'` on both trees — main tree's only hit is `config.js` (as predicted), staging tree's only hit is this plan doc's own prose (not a credential); `vendor/supabase.min.js` blob hash `df4539ad…` identical on both branches. Rick confirmed via dashboard: legacy keys enabled on both envs, no new-gen keys created yet (matches plan assumption). Rick confirmed neither local PS test script (`test-magic-link.ps1`, `test-this-week.ps1`) references a prod legacy key.
+- **Step 1.1 done.** Rick flipped staging's "Disable legacy API keys" toggle (project `puoaiyezsreowpwxzxhj`).
+- **V1 green.** Full Playwright suite (19/19) passed against staging post-toggle. Synthetic test tenant created + torn down cleanly by the suite's own fixtures.
+- **V2 green.** Throwaway-fixture script (ephemeral admin test user → session token → real deployed-function calls; full teardown; scratch-only, never committed) confirmed **both** Edge Functions work post-toggle using the platform-injected env vars:
+  - `create-paper-customer` → HTTP 200 (exercises both `SUPABASE_ANON_KEY` for the in-body `/auth/v1/user` check and `SUPABASE_SERVICE_ROLE_KEY` for the writes)
+  - `register-customer` → HTTP 200 (service-role-only path, secret-gated)
+  - All 3 synthetic test emails confirmed at 0 rows post-teardown (live SELECT).
+  - **Conclusion: the platform-injected env vars are NOT stuck on legacy JWTs after the toggle flip.** supabase/supabase#37648's failure mode did not reproduce here.
+- **Step 1-C skipped** — Step 1.3 passed outright, no Edge Function code migration needed.
+- **Step 1.5 (soak) open, not yet elapsed.** Staging's toggle was flipped 2026-07-15; needs ≥48h elapsed before V3 (Playwright suite re-run) can run. **Next session:** confirm ≥48h has passed since the Step 1.1 toggle flip, re-run `.\run-smoke.ps1` for V3, then proceed to Step 2 (Rick creates the prod publishable key).
 
 ## 7. Rollback
 
