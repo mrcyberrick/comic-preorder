@@ -1375,19 +1375,19 @@ for privileged operations, and all that send email use MailerSend with the
 |---|---|---|---|
 | `notify-customers` | import script (post-import prompt) | none (admin context implied by service-role caller) | yes (filters by `FOUNDING_TENANT_ID`) |
 | `send-my-list` | mylist.html | session token required (but does not match user_id — F36) | yes (catalog month filter) |
-| `invite-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
+| `invite-customer` | admin.html | admin check | yes — `tenant_id` resolved from the caller's own profile (fixed 2026-05-10; falls back to FOUNDING_TENANT_ID only if the lookup fails) |
 | `register-customer` | MailerLite webhook | per-tenant webhook secret in URL (5.4 S2) | yes — `tenant_id` resolved from the matching tenant's `settings->>'mailerlite_webhook_secret'` |
 | `approve-customer` | admin.html | admin check (no tenant component) | no |
-| `create-paper-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
+| `create-paper-customer` | admin.html | admin check | yes — `tenant_id` resolved from the caller's own profile (fixed 2026-05-10; falls back to FOUNDING_TENANT_ID only if the lookup fails) |
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
 | `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
 
-The "partial" tenant-awareness in `invite-customer` and
-`create-paper-customer` is what F34's remaining scope documents: new users
-created by an admin still land in the founding tenant regardless of the
-inviting admin's tenant. `register-customer`'s residual was resolved in
-5.4 S2 (see F34 status + per-tenant-secret contract note, § 13).
+`invite-customer` and `create-paper-customer` resolve `tenant_id` from the
+calling admin's own profile (fixed 2026-05-10; F34) — new users created by
+a tenant-2 admin land in tenant 2, not the founding tenant.
+`register-customer`'s residual was resolved in 5.4 S2 (see F34 status +
+per-tenant-secret contract note, § 13).
 
 ### 11.2 Required secrets
 
@@ -1429,8 +1429,9 @@ trigger an email to any other user. F36.
 **`invite-customer`**: admin-only new-account creation. Generates an
 invite link via the Supabase Admin API, sends a branded email via
 MailerSend, and inserts a `user_profiles` row with
-`status = 'active'`, `created_by_admin = true`,
-`tenant_id = FOUNDING_TENANT_ID`.
+`status = 'active'`, `created_by_admin = true`, and `tenant_id` resolved
+from the calling admin's own profile (`callerTenantId`, fixed 2026-05-10;
+F34) — falls back to `FOUNDING_TENANT_ID` only if that lookup fails.
 
 **`register-customer`**: called by MailerLite webhook when a subscriber is
 added to the "Monthly Comics" group. URL parameter `secret` is looked up
@@ -1471,7 +1472,10 @@ Currently moot.
 **`create-paper-customer`**: admin-only walk-in placeholder creation.
 Creates an auth user with a random password and the placeholder email
 provided by the caller (`name.timestamp@paper.pulllist.local`), inserts
-a `user_profiles` row with `is_paper = true, status = 'active', tenant_id = FOUNDING_TENANT_ID`.
+a `user_profiles` row with `is_paper = true, status = 'active'`, and
+`tenant_id` resolved from the calling admin's own profile
+(`callerTenantId`, fixed 2026-05-10; F34) — falls back to
+`FOUNDING_TENANT_ID` only if that lookup fails.
 
 **`claim-paper-customer`**: merges a paper account into a real account.
 Verifies the source is `is_paper = true` for safety. Re-points
@@ -1742,22 +1746,26 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 
 #### F34 — user-creation Edge Functions hard-pin to founding tenant
 - **Status:** fixed 2026-05-10 (`invite-customer`/`create-paper-customer`); **residual resolved 2026-06-16 (5.4 S2)** — `register-customer` no longer pinned to `FOUNDING_TENANT_ID`. See per-tenant-secret contract note above. F34 fully resolved across all user-creation Edge Functions.
-- `invite-customer` and
-  `create-paper-customer` now fetch `tenant_id` alongside `is_admin`
-  from the caller's profile and use `callerTenantId` (falling back to
-  `FOUNDING_TENANT_ID` if lookup fails) for new profile inserts.
-  `register-customer` intentionally keeps `FOUNDING_TENANT_ID` (webhook,
-  no admin context); header comment documents this as a known limitation
-  to revisit before tenant 2 onboards.
-- `create-paper-customer`, `invite-customer`, and `register-customer` all
-  insert new `user_profiles` rows with
-  `tenant_id = FOUNDING_TENANT_ID` from env. New customers in any future
-  tenant would be assigned to the founding tenant.
-- **Where:** all three Edge Functions read `FOUNDING_TENANT_ID` from
-  Deno.env and use it directly in the profile insert body.
-- **Fix:** resolve the inviting admin's tenant_id from their own profile
-  (look up `user_profiles.tenant_id WHERE id = caller's auth.uid()`)
-  and use that value instead of FOUNDING_TENANT_ID.
+- `invite-customer` and `create-paper-customer` fetch `tenant_id` alongside
+  `is_admin` from the caller's own profile
+  (`user_profiles.tenant_id WHERE id = caller's auth.uid()`) and use
+  `callerTenantId` for new profile inserts, falling back to
+  `FOUNDING_TENANT_ID` only if that lookup fails. A tenant-2 admin's paper
+  and invited customers land correctly in tenant 2 —
+  **re-verified against deployed source 2026-07-15** (5.5 S6 closeout
+  session). This supersedes an incorrect "do not use from tenant 2"
+  caution that had propagated into the 5.5 S3 deploy log, the soak log,
+  and `docs/tenant-onboarding-runbook.md`: those notes described
+  pre-2026-05-10 behavior and were stale by the time 5.5 S3 ran; they are
+  corrected in the same commit as this entry.
+- `register-customer` (webhook, no admin context) resolves `tenant_id`
+  from the per-tenant `tenants.settings->>'mailerlite_webhook_secret'`
+  (5.4 S2) — see contract note below. `FOUNDING_TENANT_ID` is retained
+  only as the last-resort fallback in `invite-customer`/
+  `create-paper-customer`, and for diagnostics in `register-customer`.
+- **Where:** `supabase/functions/invite-customer/index.ts`,
+  `supabase/functions/create-paper-customer/index.ts`,
+  `supabase/functions/register-customer/index.ts`.
 - **Prod resolution 2026-05-31 (Phase 4.6):** `FOUNDING_TENANT_ID` secret set on prod project (§ 1); all 8 EFs redeployed from staging SHA `cab5dca` (§ 2). F34 fully resolved on production.
 - **`register-customer` per-tenant-secret contract (5.4 S1, 2026-06-16):** the residual founding pin (un-pinned in S2) is replaced by a **per-tenant webhook secret** stored at `tenants.settings->>'mailerlite_webhook_secret'` (jsonb; `settings` is service-role-only, never returned by `resolve_tenant_by_slug`). Lookup: `GET /rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.<secret>&select=id,slug,display_name` via service-role. Empty/absent `?secret=` → `401`; no matching tenant → `401`; exactly one matching tenant → that tenant's id is used for the `user_profiles` insert. **Founding migrated 2026-06-16 (staging):** `tenants.settings->>'mailerlite_webhook_secret' = 'pulllist-staging-2026'` for `72e29f67-…`; lookup verified to return exactly one row (founding). Prod migration is 5.4 S6.
 

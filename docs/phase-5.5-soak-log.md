@@ -23,9 +23,11 @@ Tenant 2 is **pilot/seeded only** throughout this soak (decision: Rick, 2026-06-
 
 ---
 
-## Operational note (from S3 Deploy Log)
+## Operational note (from S3 Deploy Log) — corrected 2026-07-15 (S6 closeout)
 
-`create-paper-customer` and `invite-customer` Edge Functions retain the F34 residual partial tenant-awareness: they write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. **Do NOT use these EFs from the Comic Store admin dashboard during the pilot** — customers would land in the founding tenant, not tenant 2. If pilot customers must be added, use a service-role INSERT directly into `user_profiles` scoped to tenant 2's id, or wait for a dedicated fix (post-Phase 5).
+**Correction:** the original S3 note below claimed `create-paper-customer` and `invite-customer` write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. That description matched pre-2026-05-10 behavior; the F34 fix (commit `7ea592c`, 2026-05-10) resolves `tenant_id` from the caller's own profile (`callerTenantId`, falling back to `FOUNDING_TENANT_ID` only if the profile lookup fails) and was live on both envs well before S3 ran. Re-verified against deployed source at S6 closeout (2026-07-15) — see `docs/technical-reference.md` § 13 F34. **Both EFs are safe to use from the Comic Store admin dashboard.** Original (incorrect) note preserved below for the record:
+
+> `create-paper-customer` and `invite-customer` Edge Functions retain the F34 residual partial tenant-awareness: they write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. **Do NOT use these EFs from the Comic Store admin dashboard during the pilot** — customers would land in the founding tenant, not tenant 2. If pilot customers must be added, use a service-role INSERT directly into `user_profiles` scoped to tenant 2's id, or wait for a dedicated fix (post-Phase 5).
 
 ---
 
