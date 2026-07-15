@@ -22,7 +22,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. All Complete. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F75 — service-role key hardcoding: code-level fix landed 2026-07-08; key rotation done on both envs 2026-07-15 (staging old key deleted; prod new `sb_secret_` key live and verified) — **the prod legacy `service_role` JWT itself could not be disabled without also breaking the live `anon` key** (Supabase only offers one combined legacy-key toggle), so it stays live/unused; tracked as **F86**. F78 — historical duplicate `catalog` rows from before the F84 distributor-label fix (2026-07-09); the row-creation mechanism is already fixed, this is one-time cleanup of pre-existing rows. F85 — cross-month duplicate preorders from re-listed `item_code`s (prod data cleaned 2026-07-10, 0 pairs remain; root fix still open — carry the reservation forward to the newest catalog row and retain the original reserved date; without it, re-listed items duplicate again next month). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). **F78 + F85 remain bundled into the `import.js` maintenance session — plan: `docs/import-js-maintenance-f75-f78-f85.md` — target: before the early-August 2026 import.** All other findings through F85 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F87**.
+**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). **The `import.js` maintenance session (F75 key rotation + F78 historical dedup + F85 cross-month root fix) closed 2026-07-15 — plan: `docs/import-js-maintenance-f75-f78-f85.md`.** All other findings through F86 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F87**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -516,25 +516,25 @@ Secrets for tenant-aware functions to work.
 Pending or deferred work — do NOT touch in agentic sessions without explicit
 approval.
 
-### Pending — addressed in scheduled sessions
-- **`import.js` maintenance session** — plan: `docs/import-js-maintenance-f75-f78-f85.md`
-  (written 2026-07-15). F75 key rotation (the code-level hardcoding fix already
-  landed 2026-07-08 — only rotation remains) + F78 historical duplicate-`catalog`-row
-  reconciliation (F84 already fixed the row-creation mechanism — this is cleanup
-  of pre-2026-07-09 data) + F85 root fix (carry reservations forward to the
-  newest catalog row on re-listed `item_code`s). Target: **before the
-  early-August 2026 import.** Do NOT touch the import scripts outside that
-  session (adding tests in `test/` is allowed — they don't modify script behavior)
-
 ### Deferred — feature not in active use
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
+
+### Deferred — separate future session
+- **Prod legacy API key retirement (F86)** — a coordinated `config.js`
+  anon-key migration (new publishable key, both branches, deploy, verify live
+  app) is required before the prod legacy `service_role`/`anon` toggle can be
+  disabled. See `docs/technical-reference.md` § 13 F86.
 
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
 no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
 full closed scope and `docs/technical-reference.md` § 13 for any findings
 carried forward.
+
+The `import.js` maintenance session (F75 key rotation, F78 historical dedup,
+F85 cross-month root fix) closed 2026-07-15 — no longer listed here. See
+`docs/import-js-maintenance-f75-f78-f85.md` for the full closed scope.
 
 If a session needs to touch any of the above, **stop and confirm**.
 

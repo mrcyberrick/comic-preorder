@@ -1,6 +1,6 @@
 # Import.js Maintenance Session — F75 (key rotation) + F78 (historical dedup) + F85 (cross-month carry-forward root fix)
 
-**Status:** Planning
+**Status:** Complete — closed 2026-07-15
 **Plan written:** 2026-07-15
 **Not a phase sub-deploy** — standalone maintenance session. Touches only the **private scripts repo** (`comic-preorder-scripts`, working tree `catalogs\scripts\`) plus one-time prod/staging data cleanup. No `app.js`/`*.html`/`config.js`/Edge-Function changes in this repo.
 **Target:** land before the early-August 2026 monthly import (the same import cycle that would otherwise reproduce F85).
@@ -108,13 +108,13 @@ Two of the three findings turned out to be **partially resolved already** by unr
 
 ## 7. Completion criteria
 
-- [ ] F75: staging + prod keys rotated; old values confirmed dead; both scripts verified against new keys
-- [ ] F78: 0 duplicate `catalog`-row groups on both envs (detection query re-run); consolidation preserved all referencing rows
-- [ ] F85: root fix landed in both scripts; unit tests added and green; staging import re-run verifies carry-forward behavior
-- [ ] All three findings updated in `docs/technical-reference.md` § 13 (resolved or accurately re-dispositioned)
-- [ ] `CLAUDE.md` § Open findings line updated
-- [ ] Scripts-repo changes committed (own repo, own commit); main-repo doc changes committed to `staging`
-- [ ] Landed before the early-August 2026 monthly import
+- [x] F75: staging + prod keys rotated; **staging** old key confirmed dead (deleted); both scripts verified against new keys. **Prod legacy JWT could not be disabled** (platform-level combined toggle would also break the live `anon` key) — re-dispositioned as a residual, tracked separately as F86, not blocking F75's closure.
+- [x] F78: 0 duplicate `catalog`-row groups on both envs (detection query run on both) — nothing existed to consolidate
+- [x] F85: root fix landed in both scripts; unit tests added and green (8 new, 37/37 total); staging import re-run verifies carry-forward behavior
+- [x] All three findings updated in `docs/technical-reference.md` § 13 (resolved or accurately re-dispositioned)
+- [x] `CLAUDE.md` § Open findings line updated
+- [x] Scripts-repo changes committed (own repo, own commit); main-repo doc changes committed to `staging`
+- [x] Landed before the early-August 2026 monthly import
 
 ## 8. Rollback
 
