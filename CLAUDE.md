@@ -22,7 +22,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. All Complete. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F75 — reserved; security-sensitive, details in a local-only operator note until remediated (§ 13 placeholder). F78 — import can mint duplicate `catalog` rows for cross-distributor null-`catalog_id` titles (root cause F84 fixed 2026-07-09; upsert-key hardening + historical duplicate-row reconciliation remain). F85 — cross-month duplicate preorders from re-listed `item_code`s (prod data cleaned 2026-07-10, 0 pairs remain; root fix still open — carry the reservation forward to the newest catalog row and retain the original reserved date; without it, re-listed items duplicate again next month). **F75 + F78 + F85 are bundled into the next `import.js` maintenance session — target: before the early-August 2026 import.** All other findings through F85 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F86**.
+**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F75 — service-role key hardcoding: the code-level fix landed 2026-07-08, **only key rotation remains open** (security-sensitive detail in a local-only operator note; § 13 placeholder). F78 — historical duplicate `catalog` rows from before the F84 distributor-label fix (2026-07-09); the row-creation mechanism is already fixed, this is one-time cleanup of pre-existing rows. F85 — cross-month duplicate preorders from re-listed `item_code`s (prod data cleaned 2026-07-10, 0 pairs remain; root fix still open — carry the reservation forward to the newest catalog row and retain the original reserved date; without it, re-listed items duplicate again next month). **F75 + F78 + F85 are bundled into the `import.js` maintenance session — plan: `docs/import-js-maintenance-f75-f78-f85.md` — target: before the early-August 2026 import.** All other findings through F85 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F86**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -517,12 +517,14 @@ Pending or deferred work — do NOT touch in agentic sessions without explicit
 approval.
 
 ### Pending — addressed in scheduled sessions
-- **`import.js` maintenance session** — F75 remediation + F78 upsert-key
-  hardening/duplicate-row reconciliation + F85 root fix (carry reservations
-  forward to the newest catalog row on re-listed `item_code`s). Target:
-  **before the early-August 2026 import.** Do NOT touch the import scripts
-  outside that session (adding tests in `test/` is allowed — they don't modify
-  script behavior)
+- **`import.js` maintenance session** — plan: `docs/import-js-maintenance-f75-f78-f85.md`
+  (written 2026-07-15). F75 key rotation (the code-level hardcoding fix already
+  landed 2026-07-08 — only rotation remains) + F78 historical duplicate-`catalog`-row
+  reconciliation (F84 already fixed the row-creation mechanism — this is cleanup
+  of pre-2026-07-09 data) + F85 root fix (carry reservations forward to the
+  newest catalog row on re-listed `item_code`s). Target: **before the
+  early-August 2026 import.** Do NOT touch the import scripts outside that
+  session (adding tests in `test/` is allowed — they don't modify script behavior)
 
 ### Deferred — feature not in active use
 - **Partial fulfillment not representable** — product decision, deferred until
