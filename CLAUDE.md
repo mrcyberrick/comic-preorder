@@ -525,6 +525,11 @@ approval.
   anon-key migration (new publishable key, both branches, deploy, verify live
   app) is required before the prod legacy `service_role`/`anon` toggle can be
   disabled. See `docs/technical-reference.md` § 13 F86.
+- **Analytics v2 engagement dashboard** — planned 2026-07-16 (Rick-approved
+  scope: full redesign of `analytics.html`, ungated; premium gating deferred
+  to Phase 6). Plan: `docs/analytics-v2-engagement-dashboard.md`; visual
+  target: `docs/analytics-v2-mockup.html`. Execution via CLI handoff — not
+  started.
 
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
