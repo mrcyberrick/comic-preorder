@@ -421,10 +421,16 @@
   }
 
   async function fetchRanged(table, selectStr, applyFilters, total) {
+    // range() pagination is only stable across calls with an explicit,
+    // deterministic ORDER BY (same fix as F82 in Catalog.getPublishers) —
+    // without one, rows inserted between paginated calls (e.g. your own
+    // admin clicks while testing this page) can shift offsets and cause
+    // silent gaps or duplicates.
     const out = [];
     for (let from = 0; from < total; from += 1000) {
       let q = db.from(table).select(selectStr);
       if (applyFilters) q = applyFilters(q);
+      q = q.order('created_at', { ascending: true }).order('id', { ascending: true });
       q = q.range(from, Math.min(from + 999, total - 1));
       const { data, error } = await q;
       if (error) { console.error(`${table} range fetch failed`, error); break; }
@@ -437,8 +443,14 @@
   // ── Load all data (one pass) ────────────────────────────────
   async function loadData() {
     NOW = Date.now();
+    const nowIso = new Date(NOW).toISOString();
     const ninetyDaysAgoIso = new Date(NOW - 90 * 86400000).toISOString();
-    const ueFilter = q => q.gte('created_at', ninetyDaysAgoIso);
+    // Upper-bound every usage_events read at the same instant the count is
+    // taken, so the count and the paginated range fetches describe the exact
+    // same row set — otherwise a row inserted between the count and a later
+    // range() page (e.g. your own admin clicks while this page is loading)
+    // shifts offsets and the fetch silently drops or duplicates rows.
+    const ueFilter = q => q.gte('created_at', ninetyDaysAgoIso).lte('created_at', nowIso);
 
     const [{ data: profiles }, ueTotal, currentMonth] = await Promise.all([
       db.from('user_profiles').select('id, full_name, email, is_admin, is_paper, status'),
