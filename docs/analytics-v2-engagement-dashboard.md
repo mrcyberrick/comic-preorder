@@ -6,7 +6,28 @@ the `usage_events` ranged fetch was found by Rick's first V4 pass and fixed
 (`7e4d327`); a computed total was added to the Event Breakdown card to make
 the V4 total-events cross-check a direct read (`7098270`). All re-verified
 after the fixes. V1–V5 all green — see § 5. Rick confirmed the full V3
-checklist and all V4 SQL cross-checks match, 2026-07-16.
+checklist and all V4 SQL cross-checks match, 2026-07-16. Promoted to
+production via PR [#81](https://github.com/mrcyberrick/comic-preorder/pull/81)
+(`bf85c08`/`495a7ff`), same day.
+
+**Post-promotion follow-ups (prod, 2026-07-16):**
+- Rick reported a live formatting bug from a prod screenshot: `.v2-grid.cols-3`
+  used bare `1fr` columns (≡ `minmax(auto, 1fr)`), so a card with a long
+  unbreakable (`white-space:nowrap`) bar-label title forced its column wide,
+  squeezing "Most Subscribed Series" into an unreadable word-wrapped sliver.
+  Reproduced with a standalone Playwright harness (687/265/687px), fixed with
+  `minmax(0, 1fr)` (verified 546/546/546px), shipped staging → prod via PR
+  [#82](https://github.com/mrcyberrick/comic-preorder/pull/82) (`ce468c3`/`f9fcac8`).
+  A second symptom in the same screenshot (an empty bordered box next to the
+  Logins KPI tile) could not be reproduced from the shipped code in isolation;
+  Rick confirmed on 2026-07-16 it no longer appears after the grid fix, so no
+  separate finding was filed for it.
+- Rick requested the Recent Events card default to collapsed with an expand
+  toggle. Implemented by reusing the existing `details.data-view` pattern
+  already on this page (the DAU trend's "View as table" toggle) — no new CSS,
+  no JS change. Shipped staging → prod via PR
+  [#83](https://github.com/mrcyberrick/comic-preorder/pull/83) (`bd21eef`/`cfa658d`).
+  Confirmed working on prod by Rick, 2026-07-16.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Design reference:** `docs/analytics-v2-mockup.html` (committed copy of the approved
 mockup, v3 layout — SAMPLE DATA ONLY) · artifact: https://claude.ai/code/artifact/ad0cfbd8-ef28-42ca-8d88-0b22ff039297
