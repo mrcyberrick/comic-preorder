@@ -1,6 +1,11 @@
 # Analytics v2 — Engagement Dashboard (full redesign, ungated)
 
-**Status:** Planned — 2026-07-16. Not started.
+**Status:** In progress — 2026-07-16. Steps 0–4 done: implemented on
+`feature/analytics-v2`, merged to staging ff-only (commit `b3f942b`), pushed —
+V1 (syntax) and V2 (Playwright smoke regression, 19/19) green. **Step 5 (V3
+manual checklist, V4 SQL cross-check, V5 isolation spot check) is open —
+Rick-in-the-loop, not yet run.** Do not flip to Complete until V3–V5 are green
+per § 8.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Design reference:** `docs/analytics-v2-mockup.html` (committed copy of the approved
 mockup, v3 layout — SAMPLE DATA ONLY) · artifact: https://claude.ai/code/artifact/ad0cfbd8-ef28-42ca-8d88-0b22ff039297
@@ -139,13 +144,13 @@ On https://staging.pulllist.pages.dev/analytics.html as admin:
 
 ## 5. Verification gates
 
-| Gate | What | Pass condition |
-|---|---|---|
-| V1 | Page-script syntax check | parses clean |
-| V2 | Playwright smoke suite | all existing specs green |
-| V3 | Manual staging checklist (Step 5) | every box ticked |
-| V4 | SQL cross-check | 3/3 numbers match superuser counts |
-| V5 | Isolation spot check | 0 cross-tenant rows visible |
+| Gate | What | Pass condition | Result |
+|---|---|---|---|
+| V1 | Page-script syntax check | parses clean | ✅ green 2026-07-16 |
+| V2 | Playwright smoke suite | all existing specs green | ✅ green 2026-07-16 (30 unit + 19 Playwright, 0 fail) |
+| V3 | Manual staging checklist (Step 5) | every box ticked | ⬜ open — Rick-in-the-loop |
+| V4 | SQL cross-check | 3/3 numbers match superuser counts | ⬜ open — Rick-in-the-loop |
+| V5 | Isolation spot check | 0 cross-tenant rows visible | ⬜ open — Rick-in-the-loop |
 
 ## 6. Chart palette (validated 2026-07-16, dataviz validator, surface #181818)
 
