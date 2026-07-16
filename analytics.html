@@ -6,252 +6,152 @@
   <title>Analytics — Pull List</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Analytics-specific styles ─────────────────────────── */
-    .analytics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 24px;
-      margin-bottom: 32px;
+    /* ── Analytics v2 — chart-only palette ────────────────────
+       --viz-lunar/--viz-prh replace --lunar/--prh for charts only:
+       the global token pair fails CVD separation (deutan ΔE 0.9).
+       Do not use these for anything outside chart/bar fills. */
+    :root {
+      --viz-blue:  #3987e5;
+      --viz-lunar: #1d5cd6;
+      --viz-prh:   #9878eb;
+      --viz-seq-1: #86b6ef;
+      --viz-seq-2: #3987e5;
+      --viz-seq-3: #184f95;
     }
 
-    .analytics-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 24px;
-    }
-
-    .analytics-card h3 {
-      font-family: var(--font-display);
-      font-size: 0.72rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin: 0 0 16px;
-    }
-
-    .analytics-card.full-width {
-      grid-column: 1 / -1;
-    }
-
-    /* Summary stat pills */
-    .summary-pills {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 32px;
-    }
-
-    .pill {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 16px 24px;
-      min-width: 120px;
-      flex: 1;
-    }
-
-    .pill-value {
-      font-family: var(--font-display);
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-
-    .pill-label {
-      font-size: 0.72rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
-
-    /* Mini bar chart */
-    .bar-chart {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .bar-row {
-      display: grid;
-      grid-template-columns: 1fr 60px;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .bar-track {
-      height: 22px;
-      background: var(--bg-elevated);
-      border-radius: 3px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .bar-fill {
-      height: 100%;
-      border-radius: 3px;
-      display: flex;
-      align-items: center;
-      padding-left: 8px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: white;
-      white-space: nowrap;
-      overflow: hidden;
-      transition: width 0.5s ease;
-    }
-
-    .bar-fill.lunar  { background: var(--lunar, #3b82f6); }
-    .bar-fill.prh    { background: var(--prh, #a855f7); }
-    .bar-fill.mixed  { background: var(--accent, #e63946); }
-    .bar-fill.sub    { background: var(--success, #22c55e); }
-
-    .bar-count {
-      font-size: 0.82rem;
-      font-weight: 700;
-      color: var(--text-secondary);
-      text-align: right;
-    }
-
-    .bar-label {
-      font-size: 0.78rem;
-      color: var(--text-secondary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-bottom: 2px;
-    }
-
-    /* Activity timeline */
-    .timeline-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .timeline-table th {
-      font-size: 0.7rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      font-weight: 600;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-    }
-
-    .timeline-table td {
-      padding: 7px 8px;
-      font-size: 0.82rem;
-      color: var(--text-secondary);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .timeline-table tr:last-child td { border-bottom: none; }
-
-    .event-badge {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 10px;
-      font-size: 0.68rem;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-    }
-
-    .badge-reserve     { background: rgba(34,197,94,0.15);  color: #4ade80; }
-    .badge-cancel      { background: rgba(230,57,70,0.15);  color: #e63946; }
-    .badge-subscribe   { background: rgba(59,130,246,0.15); color: #60a5fa; }
-    .badge-unsubscribe { background: rgba(168,85,247,0.15); color: #c084fc; }
-    .badge-catalog_view { background: rgba(234,179,8,0.12); color: #facc15; }
-    .badge-page_view    { background: rgba(20,184,166,0.12); color: #2dd4bf; }
-    .badge-login       { background: rgba(255,255,255,0.08); color: var(--text-muted); }
-    .badge-logout      { background: rgba(255,255,255,0.05); color: var(--text-muted); }
-
-    /* User activity table */
-    .user-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .user-table th {
-      font-size: 0.7rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      font-weight: 600;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-    }
-
-    .user-table th.right { text-align: right; }
-
-    .user-table td {
-      padding: 8px 8px;
-      font-size: 0.82rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .user-table tr:last-child td { border-bottom: none; }
-
-    .user-table td.right {
-      text-align: right;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .user-table td.muted {
-      color: var(--text-muted);
-      font-size: 0.75rem;
-    }
-
-    /* Date range selector */
-    .analytics-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 28px;
-    }
-
-    .analytics-toolbar label {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
+    /* ── Toolbar ──────────────────────────────────────────── */
+    .toolbar-label { font-size: 0.76rem; color: var(--text-muted); font-weight: 500; }
+    .toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 6px; }
     .range-btn {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      color: var(--text-secondary);
-      padding: 5px 14px;
-      border-radius: var(--radius);
-      font-size: 0.78rem;
-      cursor: pointer;
-      font-family: var(--font-body);
-      transition: border-color 0.15s, color 0.15s;
+      background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary);
+      padding: 5px 14px; border-radius: var(--radius); font-size: 0.78rem;
+      font-family: var(--font-body); cursor: pointer; transition: border-color 0.15s, color 0.15s;
     }
+    .range-btn.active { border-color: var(--viz-blue); color: var(--text-primary); }
+    .range-btn:hover { color: var(--text-primary); }
 
-    .range-btn.active, .range-btn:hover {
-      border-color: var(--accent);
-      color: var(--text-primary);
-    }
+    .admin-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; user-select: none; }
+    .admin-toggle input { position: absolute; opacity: 0; width: 40px; height: 22px; margin: 0; cursor: pointer; }
+    .switch { width: 38px; height: 21px; border-radius: 11px; background: var(--bg-elevated); border: 1px solid var(--border); position: relative; transition: background 0.15s; flex: none; }
+    .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--text-muted); transition: transform 0.15s, background 0.15s; }
+    .admin-toggle input:checked + .switch { background: rgba(57,135,229,0.35); border-color: var(--viz-blue); }
+    .admin-toggle input:checked + .switch::after { transform: translateX(17px); background: var(--viz-blue); }
+    .admin-toggle input:focus-visible + .switch { outline: 2px solid var(--viz-blue); outline-offset: 2px; }
+    .filter-note { font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 24px; }
+    .filter-note.warn { color: var(--warning); }
 
-    .loading-row {
-      color: var(--text-muted);
-      font-size: 0.82rem;
-      font-style: italic;
-      padding: 20px 8px;
-    }
+    /* ── Section dividers ─────────────────────────────────── */
+    .section-head { display: flex; align-items: center; gap: 12px; margin: 34px 0 16px; }
+    .section-head h2 { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: 0.08em; margin: 0; color: var(--text-primary); }
+    .section-head .rule { flex: 1; height: 1px; background: var(--border); }
+    .section-sub { font-size: 0.78rem; color: var(--text-muted); margin: -10px 0 18px; }
 
-    .no-data {
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      padding: 24px;
+    /* ── KPI tiles ────────────────────────────────────────── */
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 26px; }
+    .kpi { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px 14px; }
+    .kpi-label { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .kpi-value { font-family: var(--font-display); font-size: 2.1rem; line-height: 1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .kpi-value small { font-size: 1.1rem; color: var(--text-secondary); }
+    .kpi-delta { font-size: 0.72rem; margin-top: 7px; font-variant-numeric: tabular-nums; }
+    .kpi-delta.up   { color: var(--success); }
+    .kpi-delta.down { color: #ff6a55; }
+    .kpi-delta.flat { color: var(--text-muted); }
+    .kpi-delta .vs { color: var(--text-muted); }
+    .kpi-note { font-size: 0.7rem; color: var(--text-muted); margin-top: 7px; }
+
+    /* ── Card grid ────────────────────────────────────────── */
+    .v2-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-bottom: 18px; }
+    @media (min-width: 700px) { .v2-card.span-2 { grid-column: span 2; } }
+    @media (min-width: 980px) {
+      .v2-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+      .v2-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
     }
+    .v2-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 22px; }
+    .v2-card.full { grid-column: 1 / -1; }
+    .v2-card h3 { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 4px; font-weight: 600; }
+    .v2-card .h3-sub { font-size: 0.72rem; color: var(--text-muted); margin: 0 0 14px; font-weight: 400; }
+
+    /* ── Horizontal bars ──────────────────────────────────── */
+    .bars { display: flex; flex-direction: column; gap: 9px; }
+    .bar-item .bar-label { font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar-item .bar-label .dist { color: var(--text-muted); font-size: 0.68rem; margin-left: 6px; }
+    .v2-bar-row { display: grid; grid-template-columns: 1fr 52px; gap: 10px; align-items: center; }
+    .v2-bar-track { height: 16px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
+    .v2-bar-fill { height: 100%; border-radius: 0 3px 3px 0; }
+    .v2-bar-fill.lunar { background: var(--viz-lunar); }
+    .v2-bar-fill.prh   { background: var(--viz-prh); }
+    .v2-bar-fill.blue  { background: var(--viz-blue); }
+    .v2-bar-count { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+    .v2-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 0.72rem; color: var(--text-secondary); }
+    .v2-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+    /* ── Tables ───────────────────────────────────────────── */
+    .v2-tbl-wrap { overflow-x: auto; }
+    table.v2-tbl { width: 100%; border-collapse: collapse; }
+    .v2-tbl th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    .v2-tbl th.r { text-align: right; }
+    .v2-tbl td { padding: 8px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+    .v2-tbl tr:last-child td { border-bottom: none; }
+    .v2-tbl td.r { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 600; }
+    .v2-tbl td.dim { color: var(--text-muted); font-size: 0.75rem; }
+    .v2-tbl td.name { font-weight: 600; color: var(--text-primary); }
+    .v2-tbl tr.admin-row { background: rgba(245,158,11,0.05); }
+    .admin-badge { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; padding: 1px 6px; border-radius: 8px; background: rgba(245,158,11,0.15); color: var(--warning); margin-left: 7px; vertical-align: 1px; }
+
+    .event-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+    .badge-reserve      { background: rgba(34,197,94,0.14);  color: #4ade80; }
+    .badge-cancel       { background: rgba(232,50,28,0.14);  color: #ff6a55; }
+    .badge-subscribe    { background: rgba(29,92,214,0.2);   color: #7aa9f0; }
+    .badge-unsubscribe  { background: rgba(168,85,247,0.15); color: #c084fc; }
+    .badge-catalog_view { background: rgba(234,179,8,0.12);  color: #facc15; }
+    .badge-page_view    { background: rgba(20,184,166,0.12); color: #2dd4bf; }
+    .badge-login        { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+    .badge-logout       { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+    /* ── Trend chart ──────────────────────────────────────── */
+    .trend-wrap { position: relative; }
+    .trend-svg { width: 100%; height: auto; display: block; }
+    .viz-tip { position: fixed; z-index: 40; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-size: 0.74rem; color: var(--text-primary); pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.5); white-space: nowrap; }
+    .viz-tip .tl { color: var(--text-muted); }
+    details.data-view { margin-top: 12px; }
+    details.data-view summary { font-size: 0.74rem; color: var(--text-muted); cursor: pointer; }
+    details.data-view summary:hover { color: var(--text-secondary); }
+    details.data-view table { margin-top: 10px; }
+
+    /* ── Histogram ────────────────────────────────────────── */
+    .hist { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding-top: 18px; }
+    .hist .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+    .hist .col .bar { width: 100%; max-width: 46px; background: var(--viz-blue); border-radius: 3px 3px 0 0; }
+    .hist .col .n { font-size: 0.7rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .hist-x { display: flex; gap: 10px; margin-top: 8px; }
+    .hist-x span { flex: 1; text-align: center; font-size: 0.68rem; color: var(--text-muted); }
+
+    /* ── Segmented (ordinal) bar ──────────────────────────── */
+    .seg-bar { display: flex; gap: 2px; height: 26px; border-radius: 4px; overflow: hidden; margin: 14px 0 12px; }
+    .seg-bar .seg { height: 100%; }
+
+    /* ── AOV comparison ───────────────────────────────────── */
+    .aov-flex { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
+    .aov-bars { flex: 1 1 260px; }
+    .aov-stat { flex: 0 0 auto; text-align: center; padding: 10px 22px; border-left: 1px solid var(--border); }
+    .aov-stat .v { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; color: var(--success); }
+    .aov-stat .l { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+
+    .cohort { display: flex; flex-direction: column; gap: 9px; }
+
+    /* ── Metric definitions ───────────────────────────────── */
+    .defs { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 22px; margin: 26px 0; }
+    .defs summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 12px 0; }
+    .defs dl { margin: 4px 0 16px; }
+    .defs dt { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); margin-top: 12px; }
+    .defs dd { font-size: 0.78rem; color: var(--text-secondary); margin: 3px 0 0; max-width: 72ch; }
+    .defs dd .src { color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 2px; }
+
+    .win-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .win-actions .hint { font-size: 0.72rem; color: var(--text-muted); }
+
+    .no-data { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 24px; }
+    .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; }
   </style>
 </head>
 <body>
@@ -288,72 +188,178 @@
     </button>
   </div>
 
-  <!-- Date Range Selector -->
-  <div class="analytics-toolbar">
-    <label>Time window:</label>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <span class="toolbar-label">Time window:</span>
     <button class="range-btn" data-days="7">7 days</button>
     <button class="range-btn active" data-days="30">30 days</button>
     <button class="range-btn" data-days="90">90 days</button>
-    <button class="range-btn" data-days="0">All time</button>
+    <div class="toolbar-sep"></div>
+    <label class="admin-toggle">
+      <input type="checkbox" id="admin-filter" checked>
+      <span class="switch"></span>
+      Hide admin activity
+    </label>
   </div>
+  <p class="filter-note" id="filter-note">—</p>
 
-  <!-- Summary Pills -->
-  <div class="summary-pills" id="summary-pills">
-    <div class="pill"><div class="pill-value" id="pill-reserves">—</div><div class="pill-label">Reserves</div></div>
-    <div class="pill"><div class="pill-value" id="pill-cancels">—</div><div class="pill-label">Cancels</div></div>
-    <div class="pill"><div class="pill-value" id="pill-subscribes">—</div><div class="pill-label">New Subscriptions</div></div>
-    <div class="pill"><div class="pill-value" id="pill-logins">—</div><div class="pill-label">Logins</div></div>
-    <div class="pill"><div class="pill-value" id="pill-views">—</div><div class="pill-label">Catalog Views</div></div>
-    <div class="pill"><div class="pill-value" id="pill-page-views">—</div><div class="pill-label">Other Page Views</div></div>
-    <div class="pill"><div class="pill-value" id="pill-active-users">—</div><div class="pill-label">Active Users</div></div>
+  <!-- ═══════════════ CORE ═══════════════ -->
+  <div class="section-head">
+    <h2>Core Dashboard</h2>
+    <div class="rule"></div>
   </div>
+  <p class="section-sub">Raw activity counts for the selected window — what happened, and who did it.</p>
 
-  <!-- Charts Grid -->
-  <div class="analytics-grid">
+  <div class="kpi-row" id="kpi-core"></div>
 
-    <!-- Top Reserved Titles -->
-    <div class="analytics-card">
+  <div class="v2-grid cols-3">
+    <div class="v2-card">
       <h3>Most Reserved Titles</h3>
-      <div id="chart-top-reserved"><p class="loading-row">Loading…</p></div>
+      <p class="h3-sub">Reserve events · color = distributor</p>
+      <div class="bars" id="bars-reserved"></div>
+      <div class="v2-legend">
+        <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+        <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+      </div>
     </div>
 
-    <!-- Top Subscribed Series -->
-    <div class="analytics-card">
+    <div class="v2-card">
       <h3>Most Subscribed Series</h3>
-      <div id="chart-top-subscribed"><p class="loading-row">Loading…</p></div>
+      <p class="h3-sub">Net subscribers · color = distributor</p>
+      <div class="bars" id="bars-subscribed"></div>
+      <div class="v2-legend">
+        <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+        <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+      </div>
     </div>
 
-    <!-- Most Cancelled -->
-    <div class="analytics-card">
+    <div class="v2-card">
       <h3>Most Cancelled Titles</h3>
-      <div id="chart-top-cancelled"><p class="loading-row">Loading…</p></div>
+      <p class="h3-sub">Cancel events · color = distributor</p>
+      <div class="bars" id="bars-cancelled"></div>
+      <div class="v2-legend">
+        <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+        <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+      </div>
     </div>
 
-    <!-- Event type breakdown -->
-    <div class="analytics-card">
+    <div class="v2-card">
       <h3>Event Breakdown</h3>
-      <div id="chart-event-breakdown"><p class="loading-row">Loading…</p></div>
+      <p class="h3-sub">All events in window, by type</p>
+      <div class="bars" id="bars-events"></div>
     </div>
 
-    <!-- User Activity Table -->
-    <div class="analytics-card full-width">
+    <div class="v2-card span-2">
       <h3>Customer Activity</h3>
-      <div id="chart-user-activity" style="overflow-x:auto"><p class="loading-row">Loading…</p></div>
+      <p class="h3-sub">Per-customer event counts in window · sorted by last seen</p>
+      <div class="v2-tbl-wrap" id="customer-activity"><p class="loading-row">Loading…</p></div>
     </div>
 
-    <!-- Recent Events Feed -->
-    <div class="analytics-card full-width">
+    <div class="v2-card full">
       <h3>Recent Events</h3>
-      <div id="chart-recent-events" style="overflow-x:auto"><p class="loading-row">Loading…</p></div>
+      <p class="h3-sub">Latest 50 events, live feed (ignores time window)</p>
+      <div class="v2-tbl-wrap" id="recent-events"><p class="loading-row">Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ ADVANCED ═══════════════ -->
+  <div class="section-head">
+    <h2>Advanced Insights</h2>
+    <div class="rule"></div>
+  </div>
+  <p class="section-sub">Stickiness, habit, and basket-value metrics — the "is usage growing?" layer.</p>
+
+  <div class="kpi-row" id="kpi-advanced"></div>
+
+  <div class="v2-grid cols-2">
+    <div class="v2-card full">
+      <h3>Daily Active Customers</h3>
+      <p class="h3-sub" id="trend-sub">Hover for values</p>
+      <div class="trend-wrap" id="trend-wrap">
+        <svg class="trend-svg" id="trend-svg" viewBox="0 0 760 230" role="img" aria-label="Daily active customers over the selected window"></svg>
+      </div>
+      <details class="data-view">
+        <summary>View as table</summary>
+        <div class="v2-tbl-wrap" id="trend-table"></div>
+      </details>
     </div>
 
+    <div class="v2-card">
+      <h3>AOV Uplift — Subscribers vs À-la-carte</h3>
+      <p class="h3-sub">Avg reserved value per customer this catalog month</p>
+      <div id="aov-body"><p class="loading-row">Loading…</p></div>
+    </div>
+
+    <div class="v2-card">
+      <h3>Return Rate by Weekly Cohort</h3>
+      <p class="h3-sub">% of each week's active customers who returned within 30 days</p>
+      <div class="cohort bars" id="cohort-body"></div>
+    </div>
+
+    <div class="v2-card">
+      <h3>Session Frequency Distribution</h3>
+      <p class="h3-sub">Customers by avg sessions per week · session = events with &lt;30 min gaps</p>
+      <div class="hist" id="hist-sessions"></div>
+      <div class="hist-x"><span>&lt;1</span><span>1–2</span><span>2–3</span><span>3–4</span><span>5+</span></div>
+    </div>
+
+    <div class="v2-card">
+      <h3>Feature Depth per Session</h3>
+      <p class="h3-sub">Share of sessions by distinct core actions taken (browse, reserve, my-list, subscriptions, arrivals)</p>
+      <div class="seg-bar" id="seg-depth"></div>
+      <div class="v2-legend" id="seg-depth-legend"></div>
+    </div>
+
+    <div class="v2-card full">
+      <h3>Win-back List — Inactive Customers</h3>
+      <p class="h3-sub" id="winback-sub">Active accounts with no activity in 30+ days</p>
+      <div class="v2-tbl-wrap" id="winback-body"><p class="loading-row">Loading…</p></div>
+      <div class="win-actions">
+        <button class="btn btn-secondary btn-sm" id="btn-copy-emails">✉ Copy emails</button>
+        <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ Export CSV</button>
+        <span class="hint">Paper customers never log in — they're invite-to-app candidates, not lapses.</span>
+      </div>
+    </div>
   </div>
+
+  <details class="defs">
+    <summary>Metric definitions &amp; data sources</summary>
+    <dl>
+      <dt>Weekly / Monthly Active Users (WAU / MAU)</dt>
+      <dd>Distinct filtered <code>user_id</code>s with ≥1 event in the trailing 7 / 30 days.
+        <span class="src">Source: usage_events.</span></dd>
+      <dt>WAU/MAU Stickiness</dt>
+      <dd>WAU ÷ MAU. The share of monthly customers who came back this week.
+        <span class="src">Source: usage_events.</span></dd>
+      <dt>Return Rate (within 30 days)</dt>
+      <dd>Of customers active in the 30-day window ending 30 days ago, the % with any event in the following 30 days.
+        <span class="src">Source: usage_events.</span></dd>
+      <dt>Session Frequency</dt>
+      <dd>Sessions per active customer per week, for the selected window. A session is a burst of one user's events with no gap &gt;30 minutes.
+        <span class="src">Source: usage_events, derived client-side.</span></dd>
+      <dt>Feature Depth</dt>
+      <dd>Distinct core actions per session, where core = catalog browse, reserve/cancel, my-list view, subscriptions view, arrivals view.
+        <span class="src">Source: usage_events, derived from the same session clustering.</span></dd>
+      <dt>AOV &amp; AOV Uplift</dt>
+      <dd>Average reserved basket value per customer for the current catalog month, split subscribers vs à-la-carte. Uplift = subscriber AOV ÷ à-la-carte AOV − 1.
+        <span class="src">Source: preorders × catalog.price_usd.</span></dd>
+      <dt>Win-back List (Inactive Customers)</dt>
+      <dd>Profiles with status = active and is_admin false, whose newest usage event is older than 30 days (or absent within the 90-day retention). Paper profiles never log in and are listed as invite-to-app candidates, not lapses.
+        <span class="src">Source: user_profiles + usage_events.</span></dd>
+      <dt>Admin filter</dt>
+      <dd>Excludes events whose user_id belongs to a profile with is_admin = true. Client-side set-filter — no schema change. Default ON.
+        <span class="src">Note: admin self-actions ARE logged (only impersonated sessions are skipped).</span></dd>
+      <dt>Retention</dt>
+      <dd>usage_events are purged after 90 days by the monthly import. There is no "all time" view — every metric on this page is bounded by that window.</dd>
+    </dl>
+  </details>
 </div>
 
 <footer class="site-footer">
   Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
 </footer>
 <div id="toast-container"></div>
+<div class="viz-tip" id="viz-tip"></div>
 
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -364,305 +370,325 @@
   if (!navData) return;
   await initNav();
 
-  // Show analytics nav link for admins
   const navAnalytics = document.getElementById('nav-analytics');
   if (navAnalytics) navAnalytics.style.display = 'block';
 
-  let activeDays = 30; // default window
-
-  // ── Date range helpers ───────────────────────────────────
-  function cutoffTs(days) {
-    if (!days) return null; // "all time"
-    const d = new Date();
-    d.setDate(d.getDate() - days);
-    return d.toISOString();
+  const tip = document.getElementById('viz-tip');
+  function showTip(html, x, y) {
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    const pad = 14;
+    const r = tip.getBoundingClientRect();
+    let left = x + pad, top = y - r.height - pad;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
+    if (top < 8) top = y + pad;
+    tip.style.left = left + 'px';
+    tip.style.top  = top + 'px';
   }
-
-  function applyWindow(query, days) {
-    const ts = cutoffTs(days);
-    return ts ? query.gte('created_at', ts) : query;
-  }
-
-  // ── Range buttons ────────────────────────────────────────
-  document.querySelectorAll('.range-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeDays = parseInt(btn.dataset.days) || 0;
-      loadAll();
-    });
+  function hideTip() { tip.style.display = 'none'; }
+  document.addEventListener('mousemove', e => {
+    if (e.target.closest('#trend-svg')) return;
+    const t = e.target.closest('[data-tip]');
+    if (t) showTip(t.dataset.tip, e.clientX, e.clientY);
+    else hideTip();
   });
 
-  document.getElementById('btn-refresh').addEventListener('click', loadAll);
+  // ── State ────────────────────────────────────────────────
+  // All panels derive from these cached arrays; window/admin-filter
+  // changes re-render from memory — never a refetch (only Refresh refetches).
+  const state = {
+    profiles: new Map(),
+    adminIds: new Set(),
+    events: [],          // trailing 90 days, unfiltered
+    preorderRows: [],     // current catalog month, {user_id, catalog:{price_usd}}
+    subscriberIds: new Set(),
+    currentMonth: null,
+    selectedDays: 30,
+    hideAdmin: true,
+  };
+  let NOW = Date.now();
+  let winbackRows = [];
 
-  // ── Summary pills ────────────────────────────────────────
-  async function loadSummary() {
-    let q = db.from('usage_events').select('event_type, user_id');
-    q = applyWindow(q, activeDays);
-    const { data, error } = await q;
-    if (error || !data) return;
-
-    const counts = { reserve: 0, cancel: 0, subscribe: 0, login: 0, catalog_view: 0, page_view: 0 };
-    const activeUsers = new Set();
-    data.forEach(e => {
-      if (counts[e.event_type] !== undefined) counts[e.event_type]++;
-      if (e.user_id) activeUsers.add(e.user_id);
-    });
-
-    document.getElementById('pill-reserves').textContent    = counts.reserve;
-    document.getElementById('pill-cancels').textContent     = counts.cancel;
-    document.getElementById('pill-subscribes').textContent  = counts.subscribe;
-    document.getElementById('pill-logins').textContent      = counts.login;
-    document.getElementById('pill-views').textContent       = counts.catalog_view;
-    document.getElementById('pill-page-views').textContent  = counts.page_view;
-    document.getElementById('pill-active-users').textContent = activeUsers.size;
+  // ── Ranged fetch helper (F82 pattern) ───────────────────────
+  // Count first so an empty result never issues a range() call
+  // (Supabase range() 416s on empty sets).
+  async function countRows(table, applyFilters) {
+    let q = db.from(table).select('*', { count: 'exact', head: true });
+    if (applyFilters) q = applyFilters(q);
+    const { count, error } = await q;
+    if (error) { console.error(`${table} count failed`, error); return 0; }
+    return count || 0;
   }
 
-  // ── Bar chart renderer ────────────────────────────────────
-  function renderBarChart(containerId, rows, labelKey, countKey, colorClass = 'mixed', limit = 10) {
-    const el = document.getElementById(containerId);
-    const top = rows.slice(0, limit);
-    if (!top.length) { el.innerHTML = '<p class="no-data">No data yet for this period.</p>'; return; }
-    const max = top[0][countKey] || 1;
-    el.innerHTML = `<div class="bar-chart">` + top.map(r => {
-      const pct   = Math.max(4, Math.round((r[countKey] / max) * 100));
-      const label = escapeHtml(r[labelKey] || '—');
-      const sub   = r.distributor ? ` <span style="color:var(--text-muted);font-size:0.7rem">${escapeHtml(r.distributor)}</span>` : '';
-      const cls   = r.distributor === 'Lunar' ? 'lunar' : r.distributor === 'PRH' ? 'prh' : colorClass;
-      return `
-        <div>
-          <div class="bar-label">${label}${sub}</div>
-          <div class="bar-row">
-            <div class="bar-track">
-              <div class="bar-fill ${cls}" style="width:${pct}%">${pct > 20 ? label : ''}</div>
-            </div>
-            <div class="bar-count">${r[countKey]}</div>
-          </div>
-        </div>`;
-    }).join('') + `</div>`;
+  async function fetchRanged(table, selectStr, applyFilters, total) {
+    const out = [];
+    for (let from = 0; from < total; from += 1000) {
+      let q = db.from(table).select(selectStr);
+      if (applyFilters) q = applyFilters(q);
+      q = q.range(from, Math.min(from + 999, total - 1));
+      const { data, error } = await q;
+      if (error) { console.error(`${table} range fetch failed`, error); break; }
+      if (!data || data.length === 0) break;
+      out.push(...data);
+    }
+    return out;
   }
 
-  // ── Top Reserved ─────────────────────────────────────────
-  async function loadTopReserved() {
-    let q = db.from('usage_events')
-      .select('metadata')
-      .eq('event_type', 'reserve')
-      .not('metadata->>title', 'is', null);
-    q = applyWindow(q, activeDays);
-    const { data, error } = await q;
-    if (error) { document.getElementById('chart-top-reserved').innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+  // ── Load all data (one pass) ────────────────────────────────
+  async function loadData() {
+    NOW = Date.now();
+    const ninetyDaysAgoIso = new Date(NOW - 90 * 86400000).toISOString();
+    const ueFilter = q => q.gte('created_at', ninetyDaysAgoIso);
 
-    // Aggregate client-side (view isn't window-aware)
-    const map = {};
-    (data || []).forEach(e => {
-      const key = e.metadata?.title;
-      if (!key) return;
-      if (!map[key]) map[key] = { title: key, distributor: e.metadata?.distributor, reserve_count: 0 };
-      map[key].reserve_count++;
+    const [{ data: profiles }, ueTotal, currentMonth] = await Promise.all([
+      db.from('user_profiles').select('id, full_name, email, is_admin, is_paper, status'),
+      countRows('usage_events', ueFilter),
+      Catalog.getLatestMonth(),
+    ]);
+
+    state.profiles = new Map();
+    state.adminIds = new Set();
+    (profiles || []).forEach(p => {
+      state.profiles.set(p.id, p);
+      if (p.is_admin) state.adminIds.add(p.id);
     });
-    const rows = Object.values(map).sort((a, b) => b.reserve_count - a.reserve_count);
-    renderBarChart('chart-top-reserved', rows, 'title', 'reserve_count', 'mixed');
+
+    state.events = await fetchRanged(
+      'usage_events', 'event_type, user_id, catalog_id, metadata, created_at', ueFilter, ueTotal
+    );
+
+    state.currentMonth = currentMonth;
+    if (currentMonth) {
+      const [{ data: preorderRows }, { data: subRows }] = await Promise.all([
+        db.from('preorders')
+          .select('user_id, catalog!inner(price_usd, catalog_month)')
+          .eq('catalog.catalog_month', currentMonth),
+        db.from('subscriptions').select('user_id'),
+      ]);
+      state.preorderRows = preorderRows || [];
+      state.subscriberIds = new Set((subRows || []).map(r => r.user_id));
+    } else {
+      state.preorderRows = [];
+      state.subscriberIds = new Set();
+    }
   }
 
-  // ── Top Cancelled ─────────────────────────────────────────
-  async function loadTopCancelled() {
-    let q = db.from('usage_events')
-      .select('metadata')
-      .eq('event_type', 'cancel')
-      .not('metadata->>title', 'is', null);
-    q = applyWindow(q, activeDays);
-    const { data, error } = await q;
-    if (error) { document.getElementById('chart-top-cancelled').innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
-
-    const map = {};
-    (data || []).forEach(e => {
-      const key = e.metadata?.title;
-      if (!key) return;
-      if (!map[key]) map[key] = { title: key, distributor: e.metadata?.distributor, cancel_count: 0 };
-      map[key].cancel_count++;
-    });
-    const rows = Object.values(map).sort((a, b) => b.cancel_count - a.cancel_count);
-    renderBarChart('chart-top-cancelled', rows, 'title', 'cancel_count', 'mixed');
+  // ── Shared aggregation helpers ───────────────────────────────
+  function filteredEvents() {
+    return state.hideAdmin ? state.events.filter(e => !state.adminIds.has(e.user_id)) : state.events;
   }
-
-  // ── Top Subscribed Series ─────────────────────────────────
-  async function loadTopSubscribed() {
-    let q = db.from('usage_events')
-      .select('event_type, metadata')
-      .in('event_type', ['subscribe', 'unsubscribe'])
-      .not('metadata->>series_name', 'is', null);
-    q = applyWindow(q, activeDays);
-    const { data, error } = await q;
-    if (error) { document.getElementById('chart-top-subscribed').innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
-
-    const map = {};
-    (data || []).forEach(e => {
-      const key = e.metadata?.series_name;
-      if (!key) return;
-      if (!map[key]) map[key] = { series_name: key, distributor: e.metadata?.distributor, net_subscribers: 0 };
-      map[key].net_subscribers += e.event_type === 'subscribe' ? 1 : -1;
-    });
-    const rows = Object.values(map).sort((a, b) => b.net_subscribers - a.net_subscribers);
-    renderBarChart('chart-top-subscribed', rows, 'series_name', 'net_subscribers', 'sub');
+  function ageDaysOf(e) { return (NOW - new Date(e.created_at).getTime()) / 86400000; }
+  function eventsInAge(events, fromDays, toDays) {
+    return events.filter(e => { const a = ageDaysOf(e); return a >= fromDays && a < toDays; });
   }
+  function distinctUserCount(events) { return new Set(events.map(e => e.user_id)).size; }
+  function countByType(events) {
+    const c = { reserve: 0, cancel: 0, subscribe: 0, unsubscribe: 0, login: 0, logout: 0, catalog_view: 0, page_view: 0 };
+    events.forEach(e => { if (c[e.event_type] !== undefined) c[e.event_type]++; });
+    return c;
+  }
+  function fmtUsd(n) { return '$' + (n || 0).toFixed(2); }
 
-  // ── Event Type Breakdown ──────────────────────────────────
-  async function loadEventBreakdown() {
-    let q = db.from('usage_events').select('event_type');
-    q = applyWindow(q, activeDays);
-    const { data, error } = await q;
-    const el = document.getElementById('chart-event-breakdown');
-    if (error) { el.innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
-
-    const counts = {};
-    (data || []).forEach(e => {
-      counts[e.event_type] = (counts[e.event_type] || 0) + 1;
-    });
-    const rows = Object.entries(counts)
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count);
-
-    const colorMap = {
-      reserve: 'sub', cancel: 'mixed', subscribe: 'lunar',
-      unsubscribe: 'prh', catalog_view: 'mixed', login: 'mixed', logout: 'mixed'
+  function computeWauMau(fAll) {
+    return {
+      wauNow: distinctUserCount(eventsInAge(fAll, 0, 7)),
+      wauPrior: distinctUserCount(eventsInAge(fAll, 7, 14)),
+      mauNow: distinctUserCount(eventsInAge(fAll, 0, 30)),
+      mauPrior: distinctUserCount(eventsInAge(fAll, 30, 60)),
     };
-
-    if (!rows.length) { el.innerHTML = '<p class="no-data">No events yet.</p>'; return; }
-    const max = rows[0].count || 1;
-    el.innerHTML = `<div class="bar-chart">` + rows.map(r => {
-      const pct = Math.max(4, Math.round((r.count / max) * 100));
-      const cls = colorMap[r.type] || 'mixed';
-      const label = r.type.replace('_', ' ');
-      return `
-        <div>
-          <div class="bar-label">${escapeHtml(label)}</div>
-          <div class="bar-row">
-            <div class="bar-track">
-              <div class="bar-fill ${cls}" style="width:${pct}%"></div>
-            </div>
-            <div class="bar-count">${r.count}</div>
-          </div>
-        </div>`;
-    }).join('') + `</div>`;
   }
 
-  // ── User Activity Table ───────────────────────────────────
-  async function loadUserActivity() {
-    const el = document.getElementById('chart-user-activity');
-    let q = db.from('usage_events').select('event_type, user_id, created_at');
-    q = applyWindow(q, activeDays);
-    const { data: events, error: evErr } = await q;
-    if (evErr) { el.innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
+  function kpiDeltaHtml(current, prior, vsLabel, { suffix = '', decimals = 0, noPrior = false } = {}) {
+    if (noPrior || prior == null) {
+      return `<div class="kpi-delta flat">— <span class="vs">${vsLabel}</span></div>`;
+    }
+    const diff = Number((current - prior).toFixed(decimals));
+    const dir = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
+    const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '—';
+    const body = dir === 'flat' ? 'flat' : `${arrow} ${Math.abs(diff)}${suffix}`;
+    return `<div class="kpi-delta ${dir}">${body} <span class="vs">${vsLabel}</span></div>`;
+  }
 
-    // Also pull user names
-    const { data: profiles } = await db.from('user_profiles').select('id, full_name');
-    const nameMap = {};
-    (profiles || []).forEach(p => nameMap[p.id] = p.full_name);
+  function kpiTile(label, valueHtml, deltaHtml, note) {
+    return `<div class="kpi">
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value">${valueHtml}</div>
+      ${deltaHtml}
+      ${note ? `<div class="kpi-note">${note}</div>` : ''}
+    </div>`;
+  }
 
-    // Aggregate per user
-    const map = {};
-    (events || []).forEach(e => {
+  // ── Session clustering (shared by Session Frequency + Feature Depth) ──
+  const CORE_BUCKETS = {
+    catalog:  e => e.event_type === 'catalog_view',
+    reserve:  e => e.event_type === 'reserve' || e.event_type === 'cancel',
+    mylist:   e => e.event_type === 'page_view' && e.metadata?.page === 'mylist',
+    subs:     e => e.event_type === 'subscribe' || e.event_type === 'unsubscribe' || (e.event_type === 'page_view' && e.metadata?.page === 'subscriptions'),
+    arrivals: e => e.event_type === 'page_view' && e.metadata?.page === 'arrivals',
+  };
+
+  function buildSessions(events) {
+    const byUser = new Map();
+    events.forEach(e => {
+      if (!byUser.has(e.user_id)) byUser.set(e.user_id, []);
+      byUser.get(e.user_id).push(e);
+    });
+    const sessions = [];
+    byUser.forEach((evs, userId) => {
+      evs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      let current = null, lastTs = null;
+      evs.forEach(e => {
+        const t = new Date(e.created_at).getTime();
+        if (!current || (t - lastTs) > 30 * 60000) {
+          current = { user_id: userId, events: [] };
+          sessions.push(current);
+        }
+        current.events.push(e);
+        lastTs = t;
+      });
+    });
+    return sessions;
+  }
+
+  function sessionDepth(session) {
+    const buckets = new Set();
+    session.events.forEach(e => {
+      for (const name in CORE_BUCKETS) if (CORE_BUCKETS[name](e)) buckets.add(name);
+    });
+    return buckets.size;
+  }
+
+  function sessionMetrics(events, windowDays) {
+    const sessions = buildSessions(events);
+    const users = distinctUserCount(events);
+    const weeks = windowDays / 7;
+    const freq = users > 0 ? sessions.length / users / weeks : 0;
+    const depths = sessions.map(sessionDepth);
+    const mean = depths.length ? depths.reduce((a, b) => a + b, 0) / depths.length : 0;
+    const share = { 1: 0, 2: 0, 3: 0 };
+    depths.forEach(d => { share[d >= 3 ? 3 : d]++; });
+    return { sessionCount: sessions.length, freq, meanDepth: mean, share, total: depths.length };
+  }
+
+  // ── Render: Core KPIs ────────────────────────────────────────
+  function renderCoreKpis() {
+    const fAll = filteredEvents();
+    const days = state.selectedDays;
+    const noPrior90 = days === 90;
+
+    const { wauNow, wauPrior, mauNow, mauPrior } = computeWauMau(fAll);
+
+    const countsNow = countByType(eventsInAge(fAll, 0, days));
+    const countsPrior = noPrior90 ? null : countByType(eventsInAge(fAll, days, days * 2));
+
+    const windowLabel = `vs prior ${days} days`;
+    const tiles = [
+      kpiTile('Weekly Active Users', wauNow, kpiDeltaHtml(wauNow, wauPrior, 'vs prior week')),
+      kpiTile('Monthly Active Users', mauNow, kpiDeltaHtml(mauNow, mauPrior, 'vs prior 30 days')),
+      kpiTile('Reserves', countsNow.reserve, kpiDeltaHtml(countsNow.reserve, countsPrior?.reserve, windowLabel, { noPrior: noPrior90 })),
+      kpiTile('Cancels', countsNow.cancel, kpiDeltaHtml(countsNow.cancel, countsPrior?.cancel, windowLabel, { noPrior: noPrior90 })),
+      kpiTile('New Subscriptions', countsNow.subscribe, kpiDeltaHtml(countsNow.subscribe, countsPrior?.subscribe, windowLabel, { noPrior: noPrior90 })),
+      kpiTile('Logins', countsNow.login, kpiDeltaHtml(countsNow.login, countsPrior?.login, windowLabel, { noPrior: noPrior90 })),
+    ];
+    document.getElementById('kpi-core').innerHTML = tiles.join('');
+  }
+
+  // ── Render: bar charts (reserved/subscribed/cancelled/events) ─
+  function renderBars(containerId, rows, unit) {
+    const el = document.getElementById(containerId);
+    if (!rows.length) { el.innerHTML = '<p class="no-data">No data yet for this period.</p>'; return; }
+    const max = Math.max(...rows.map(r => Math.abs(r.n))) || 1;
+    el.innerHTML = rows.map(r => {
+      const pct = Math.max(4, Math.round(Math.abs(r.n) / max * 100));
+      const cls = r.d === 'Lunar' ? 'lunar' : r.d === 'PRH' ? 'prh' : 'blue';
+      const dist = r.d ? `<span class="dist">${escapeHtml(r.pub || '')} · ${escapeHtml(r.d)}</span>` : '';
+      return `<div class="bar-item">
+        <div class="bar-label">${escapeHtml(r.t)}${dist}</div>
+        <div class="v2-bar-row">
+          <div class="v2-bar-track"><div class="v2-bar-fill ${cls}" style="width:${pct}%" data-tip="${escapeHtml(r.t)}: ${r.n} ${unit}"></div></div>
+          <div class="v2-bar-count">${r.n}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderCoreCharts() {
+    const fAll = filteredEvents();
+    const windowed = eventsInAge(fAll, 0, state.selectedDays);
+
+    const reservedMap = {};
+    windowed.filter(e => e.event_type === 'reserve').forEach(e => {
+      const key = e.metadata?.title; if (!key) return;
+      if (!reservedMap[key]) reservedMap[key] = { t: key, pub: e.metadata?.publisher, d: e.metadata?.distributor, n: 0 };
+      reservedMap[key].n++;
+    });
+    renderBars('bars-reserved', Object.values(reservedMap).sort((a, b) => b.n - a.n).slice(0, 6), 'reserves');
+
+    const cancelMap = {};
+    windowed.filter(e => e.event_type === 'cancel').forEach(e => {
+      const key = e.metadata?.title; if (!key) return;
+      if (!cancelMap[key]) cancelMap[key] = { t: key, pub: e.metadata?.publisher, d: e.metadata?.distributor, n: 0 };
+      cancelMap[key].n++;
+    });
+    renderBars('bars-cancelled', Object.values(cancelMap).sort((a, b) => b.n - a.n).slice(0, 6), 'cancels');
+
+    const subMap = {};
+    windowed.filter(e => e.event_type === 'subscribe' || e.event_type === 'unsubscribe').forEach(e => {
+      const key = e.metadata?.series_name; if (!key) return;
+      if (!subMap[key]) subMap[key] = { t: key, pub: null, d: e.metadata?.distributor, n: 0 };
+      subMap[key].n += e.event_type === 'subscribe' ? 1 : -1;
+    });
+    renderBars('bars-subscribed', Object.values(subMap).sort((a, b) => b.n - a.n).slice(0, 6), 'net subscribers');
+
+    const counts = countByType(windowed);
+    const rows = Object.entries(counts).filter(([, n]) => n > 0).map(([type, n]) => ({ t: type.replace('_', ' '), d: null, n })).sort((a, b) => b.n - a.n);
+    renderBars('bars-events', rows, 'events');
+  }
+
+  // ── Render: Customer Activity table ──────────────────────────
+  function renderCustomerActivity() {
+    const el = document.getElementById('customer-activity');
+    const windowed = eventsInAge(state.hideAdmin ? filteredEvents() : state.events, 0, state.selectedDays);
+
+    const perUser = new Map();
+    windowed.forEach(e => {
       if (!e.user_id) return;
-      if (!map[e.user_id]) map[e.user_id] = {
-        user_id: e.user_id, name: nameMap[e.user_id] || 'Unknown',
-        reserves: 0, cancels: 0, subscribes: 0, logins: 0, catalog_views: 0, page_views: 0, last_seen: null
-      };
-      const u = map[e.user_id];
-      if (e.event_type === 'reserve')       u.reserves++;
-      if (e.event_type === 'cancel')        u.cancels++;
-      if (e.event_type === 'subscribe')     u.subscribes++;
-      if (e.event_type === 'login')         u.logins++;
-      if (e.event_type === 'catalog_view')  u.catalog_views++;
-      if (e.event_type === 'page_view')     u.page_views++;
+      if (!perUser.has(e.user_id)) perUser.set(e.user_id, {
+        reserves: 0, cancels: 0, subscribes: 0, logins: 0, catalog_views: 0, page_views: 0, last_seen: null,
+      });
+      const u = perUser.get(e.user_id);
+      if (e.event_type === 'reserve') u.reserves++;
+      if (e.event_type === 'cancel') u.cancels++;
+      if (e.event_type === 'subscribe') u.subscribes++;
+      if (e.event_type === 'login') u.logins++;
+      if (e.event_type === 'catalog_view') u.catalog_views++;
+      if (e.event_type === 'page_view') u.page_views++;
       if (!u.last_seen || e.created_at > u.last_seen) u.last_seen = e.created_at;
     });
 
-    const rows = Object.values(map).sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || ''));
+    const rows = Array.from(perUser.entries())
+      .map(([uid, u]) => ({ uid, ...u, isAdmin: state.adminIds.has(uid) }))
+      .sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || ''));
 
     if (!rows.length) { el.innerHTML = '<p class="no-data">No activity yet for this period.</p>'; return; }
 
-    el.innerHTML = `
-      <table class="user-table">
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th class="right">Reserves</th>
-            <th class="right">Cancels</th>
-            <th class="right">Subscribes</th>
-            <th class="right">Logins</th>
-            <th class="right">Catalog Views</th>
-            <th class="right">Page Views</th>
-            <th>Last Seen</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map(u => `
-            <tr>
-              <td style="font-weight:600">${escapeHtml(u.name)}</td>
-              <td class="right" style="color:var(--success,#22c55e)">${u.reserves}</td>
-              <td class="right" style="color:${u.cancels > 0 ? 'var(--accent)' : 'var(--text-muted)'}">${u.cancels}</td>
-              <td class="right" style="color:var(--lunar,#3b82f6)">${u.subscribes}</td>
-              <td class="right">${u.logins}</td>
-              <td class="right">${u.catalog_views}</td>
-              <td class="right">${u.page_views}</td>
-              <td class="muted">${u.last_seen ? formatDate(u.last_seen.split('T')[0]) : '—'}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
+    el.innerHTML = `<table class="v2-tbl">
+      <thead><tr><th>Customer</th><th class="r">Reserves</th><th class="r">Cancels</th><th class="r">Subscribes</th><th class="r">Logins</th><th class="r">Catalog Views</th><th class="r">Page Views</th><th>Last Seen</th></tr></thead>
+      <tbody>${rows.map(u => {
+        const p = state.profiles.get(u.uid);
+        const name = escapeHtml(p?.full_name || 'Unknown');
+        const badge = u.isAdmin ? '<span class="admin-badge">Admin</span>' : '';
+        return `<tr${u.isAdmin ? ' class="admin-row"' : ''}>
+          <td class="name">${name}${badge}</td>
+          <td class="r">${u.reserves}</td><td class="r">${u.cancels}</td><td class="r">${u.subscribes}</td>
+          <td class="r">${u.logins}</td><td class="r">${u.catalog_views}</td><td class="r">${u.page_views}</td>
+          <td class="dim">${u.last_seen ? formatDate(DateUtils.fmtLocal(new Date(u.last_seen))) : '—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
   }
 
-  // ── Recent Events Feed ────────────────────────────────────
-  async function loadRecentEvents() {
-    const el = document.getElementById('chart-recent-events');
-
-    const { data: events, error } = await db
-      .from('usage_events')
-      .select('event_type, user_id, metadata, created_at')
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) { el.innerHTML = '<p class="no-data">Failed to load.</p>'; return; }
-
-    const { data: profiles } = await db.from('user_profiles').select('id, full_name');
-    const nameMap = {};
-    (profiles || []).forEach(p => nameMap[p.id] = p.full_name);
-
-    if (!events?.length) { el.innerHTML = '<p class="no-data">No events recorded yet.</p>'; return; }
-
-    el.innerHTML = `
-      <table class="timeline-table">
-        <thead>
-          <tr>
-            <th>When</th>
-            <th>Customer</th>
-            <th>Event</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${events.map(e => {
-            const name   = escapeHtml(nameMap[e.user_id] || 'Unknown');
-            const badge  = `<span class="event-badge badge-${e.event_type}">${e.event_type.replace('_',' ')}</span>`;
-            const detail = eventDetail(e);
-            const when   = e.created_at
-              ? new Date(e.created_at).toLocaleString('en-US', {
-                  month: 'short', day: 'numeric',
-                  hour: 'numeric', minute: '2-digit'
-                })
-              : '—';
-            return `
-              <tr>
-                <td style="white-space:nowrap;color:var(--text-muted)">${when}</td>
-                <td style="font-weight:600">${name}</td>
-                <td>${badge}</td>
-                <td style="color:var(--text-secondary)">${detail}</td>
-              </tr>`;
-          }).join('')}
-        </tbody>
-      </table>`;
-  }
-
+  // ── Render: Recent Events feed (ignores window) ──────────────
   function eventDetail(e) {
     const m = e.metadata || {};
     switch (e.event_type) {
@@ -675,45 +701,459 @@
       case 'catalog_view':
         return escapeHtml([
           m.catalog_month ? `month: ${m.catalog_month}` : null,
-          m.publisher     ? `publisher: ${m.publisher}` : null,
-          m.search        ? `search: "${m.search}"`     : null,
-          m.page > 1      ? `page ${m.page}`            : null,
+          m.publisher ? `publisher: ${m.publisher}` : null,
+          m.search ? `search: "${m.search}"` : null,
+          m.page > 1 ? `page ${m.page}` : null,
         ].filter(Boolean).join(', ') || 'catalog');
       case 'page_view':
-        return escapeHtml([
-          m.page                ? m.page          : null,
-          m.on_sale_date        ? m.on_sale_date   : null,
-        ].filter(Boolean).join(' · ') || '—');
+        return escapeHtml([m.page || null].filter(Boolean).join(' · ') || '—');
       default:
         return '—';
     }
   }
 
-  // ── Load all panels ───────────────────────────────────────
-  async function loadAll() {
-    // Reset to loading state
-    ['chart-top-reserved','chart-top-cancelled','chart-top-subscribed',
-     'chart-event-breakdown','chart-user-activity'].forEach(id => {
-      document.getElementById(id).innerHTML = '<p class="loading-row">Loading…</p>';
-    });
+  function renderRecentEvents() {
+    const el = document.getElementById('recent-events');
+    const pool = state.hideAdmin ? filteredEvents() : state.events;
+    const rows = [...pool].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 50);
+    if (!rows.length) { el.innerHTML = '<p class="no-data">No events recorded yet.</p>'; return; }
 
-    // Update subtitle
-    const label = activeDays ? `Last ${activeDays} days` : 'All time';
-    document.getElementById('analytics-subtitle').textContent = `Customer activity · ${label}`;
-
-    await Promise.all([
-      loadSummary(),
-      loadTopReserved(),
-      loadTopCancelled(),
-      loadTopSubscribed(),
-      loadEventBreakdown(),
-      loadUserActivity(),
-      loadRecentEvents(),  // always shows last 50 regardless of window
-    ]);
+    el.innerHTML = `<table class="v2-tbl">
+      <thead><tr><th>When</th><th>Customer</th><th>Event</th><th>Detail</th></tr></thead>
+      <tbody>${rows.map(e => {
+        const p = state.profiles.get(e.user_id);
+        const isAdmin = state.adminIds.has(e.user_id);
+        const name = escapeHtml(p?.full_name || 'Unknown');
+        const badge = isAdmin ? '<span class="admin-badge">Admin</span>' : '';
+        const when = new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        return `<tr${isAdmin ? ' class="admin-row"' : ''}>
+          <td class="dim">${when}</td>
+          <td class="name">${name}${badge}</td>
+          <td><span class="event-badge badge-${e.event_type}">${e.event_type.replace('_', ' ')}</span></td>
+          <td>${eventDetail(e)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
   }
 
-  await loadAll();
+  // ── Render: Advanced KPIs ────────────────────────────────────
+  function renderAdvancedKpis() {
+    const fAll = filteredEvents();
+    const days = state.selectedDays;
+    const noPrior90 = days === 90;
 
+    const { wauNow, wauPrior, mauNow, mauPrior } = computeWauMau(fAll);
+    const stickNow = mauNow > 0 ? wauNow / mauNow * 100 : 0;
+    const stickPrior = mauPrior > 0 ? wauPrior / mauPrior * 100 : null;
+
+    // Return rate: cohort active 30-60d ago; returned = subset active in last 30d.
+    const cohortNow = new Set(eventsInAge(fAll, 30, 60).map(e => e.user_id));
+    const activeLast30 = new Set(eventsInAge(fAll, 0, 30).map(e => e.user_id));
+    let returnedNow = 0;
+    cohortNow.forEach(u => { if (activeLast30.has(u)) returnedNow++; });
+    const rateNow = cohortNow.size ? returnedNow / cohortNow.size * 100 : 0;
+
+    // Prior cohort: active 60-90d ago; returned = subset active 30-60d ago.
+    const cohortPrior = new Set(eventsInAge(fAll, 60, 90).map(e => e.user_id));
+    const active30to60 = new Set(eventsInAge(fAll, 30, 60).map(e => e.user_id));
+    let returnedPrior = 0;
+    cohortPrior.forEach(u => { if (active30to60.has(u)) returnedPrior++; });
+    const ratePrior = cohortPrior.size ? returnedPrior / cohortPrior.size * 100 : null;
+
+    const windowNow = eventsInAge(fAll, 0, days);
+    const windowPrior = noPrior90 ? null : eventsInAge(fAll, days, days * 2);
+    const smNow = sessionMetrics(windowNow, days);
+    const smPrior = windowPrior ? sessionMetrics(windowPrior, days) : null;
+
+    const tiles = [
+      kpiTile('WAU / MAU Stickiness', `${stickNow.toFixed(0)}<small>%</small>`,
+        kpiDeltaHtml(stickNow, stickPrior, 'vs prior 30 days', { suffix: ' pts', decimals: 1 }),
+        `${wauNow} of ${mauNow} monthly users came back this week`),
+      kpiTile('Return Rate (30 d)', `${rateNow.toFixed(0)}<small>%</small>`,
+        kpiDeltaHtml(rateNow, ratePrior, 'vs prior cohort', { suffix: ' pts', decimals: 1 }),
+        `${returnedNow} of ${cohortNow.size} prior-window customers returned within 30 days`),
+      kpiTile('Session Frequency', `${smNow.freq.toFixed(1)}<small>/wk</small>`,
+        kpiDeltaHtml(smNow.freq, smPrior?.freq, `vs prior ${days} days`, { decimals: 1, suffix: '', noPrior: noPrior90 }),
+        'Avg visits per active customer per week'),
+      kpiTile('Feature Depth', smNow.meanDepth.toFixed(1),
+        kpiDeltaHtml(smNow.meanDepth, smPrior?.meanDepth, `vs prior ${days} days`, { decimals: 1, noPrior: noPrior90 }),
+        'Avg distinct core actions per session'),
+    ];
+    document.getElementById('kpi-advanced').innerHTML = tiles.join('');
+
+    return { smNow };
+  }
+
+  // ── Render: Session Frequency histogram ──────────────────────
+  function renderSessionHistogram() {
+    const fAll = filteredEvents();
+    const windowed = eventsInAge(fAll, 0, state.selectedDays);
+    const sessions = buildSessions(windowed);
+    const perUser = new Map();
+    sessions.forEach(s => perUser.set(s.user_id, (perUser.get(s.user_id) || 0) + 1));
+    const weeks = state.selectedDays / 7;
+    const freqs = Array.from(perUser.values()).map(n => n / weeks);
+
+    const buckets = [
+      { label: '<1 per wk', test: f => f < 1, n: 0 },
+      { label: '1–2 per wk', test: f => f >= 1 && f < 2, n: 0 },
+      { label: '2–3 per wk', test: f => f >= 2 && f < 3, n: 0 },
+      { label: '3–4 per wk', test: f => f >= 3 && f < 4, n: 0 },
+      { label: '5+ per wk', test: f => f >= 4, n: 0 },
+    ];
+    freqs.forEach(f => { const b = buckets.find(b => b.test(f)); if (b) b.n++; });
+
+    const el = document.getElementById('hist-sessions');
+    const max = Math.max(...buckets.map(b => b.n), 1);
+    el.innerHTML = buckets.map(b => `
+      <div class="col">
+        <span class="n">${b.n}</span>
+        <div class="bar" style="height:${Math.round(b.n / max * 100)}%" data-tip="${b.label}: ${b.n} customers"></div>
+      </div>`).join('');
+  }
+
+  // ── Render: Feature Depth segmented bar ──────────────────────
+  function renderFeatureDepth(smNow) {
+    const total = smNow.total || 0;
+    const seg = document.getElementById('seg-depth');
+    const legend = document.getElementById('seg-depth-legend');
+    if (!total) {
+      seg.innerHTML = '';
+      legend.innerHTML = '<span class="dim">No sessions in this window yet.</span>';
+      return;
+    }
+    const pct1 = Math.round(smNow.share[1] / total * 100);
+    const pct2 = Math.round(smNow.share[2] / total * 100);
+    const pct3 = 100 - pct1 - pct2;
+    seg.innerHTML = `
+      <div class="seg" style="width:${pct1}%;background:var(--viz-seq-1)" data-tip="1 core action — ${pct1}% of sessions (${smNow.share[1]} sessions)"></div>
+      <div class="seg" style="width:${pct2}%;background:var(--viz-seq-2)" data-tip="2 core actions — ${pct2}% of sessions (${smNow.share[2]} sessions)"></div>
+      <div class="seg" style="width:${pct3}%;background:var(--viz-seq-3)" data-tip="3+ core actions — ${pct3}% of sessions (${smNow.share[3]} sessions)"></div>`;
+    legend.innerHTML = `
+      <span><span class="sw" style="background:var(--viz-seq-1)"></span>1 action — ${pct1}%</span>
+      <span><span class="sw" style="background:var(--viz-seq-2)"></span>2 actions — ${pct2}%</span>
+      <span><span class="sw" style="background:var(--viz-seq-3)"></span>3+ actions — ${pct3}%</span>`;
+  }
+
+  // ── Render: AOV uplift ────────────────────────────────────────
+  function renderAov() {
+    const el = document.getElementById('aov-body');
+    if (!state.currentMonth) { el.innerHTML = '<p class="no-data">No current catalog month yet.</p>'; return; }
+
+    const perUser = new Map();
+    state.preorderRows.forEach(r => {
+      if (state.hideAdmin && state.adminIds.has(r.user_id)) return;
+      const price = r.catalog?.price_usd || 0;
+      perUser.set(r.user_id, (perUser.get(r.user_id) || 0) + price);
+    });
+    const subTotals = [], nonSubTotals = [];
+    perUser.forEach((total, uid) => (state.subscriberIds.has(uid) ? subTotals : nonSubTotals).push(total));
+    const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const subAvg = avg(subTotals), nonSubAvg = avg(nonSubTotals);
+    const upliftPct = nonSubAvg > 0 ? (subAvg / nonSubAvg - 1) * 100 : null;
+
+    if (!subTotals.length && !nonSubTotals.length) { el.innerHTML = '<p class="no-data">No reservations yet this catalog month.</p>'; return; }
+
+    const maxAvg = Math.max(subAvg, nonSubAvg) || 1;
+    el.innerHTML = `<div class="aov-flex">
+      <div class="aov-bars bars">
+        <div class="bar-item">
+          <div class="bar-label">Subscribers <span class="dist">${subTotals.length} customers</span></div>
+          <div class="v2-bar-row"><div class="v2-bar-track"><div class="v2-bar-fill blue" style="width:${Math.max(4, Math.round(subAvg / maxAvg * 100))}%" data-tip="Subscribers: ${fmtUsd(subAvg)} avg reserved value"></div></div><div class="v2-bar-count">${fmtUsd(subAvg)}</div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label">À-la-carte <span class="dist">${nonSubTotals.length} customers</span></div>
+          <div class="v2-bar-row"><div class="v2-bar-track"><div class="v2-bar-fill blue" style="width:${Math.max(4, Math.round(nonSubAvg / maxAvg * 100))}%" data-tip="À-la-carte: ${fmtUsd(nonSubAvg)} avg reserved value"></div></div><div class="v2-bar-count">${fmtUsd(nonSubAvg)}</div></div>
+        </div>
+      </div>
+      <div class="aov-stat">
+        <div class="v">${upliftPct == null ? '—' : (upliftPct >= 0 ? '+' : '') + upliftPct.toFixed(0) + '%'}</div>
+        <div class="l">Subscriber uplift</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Render: Return Rate by Weekly Cohort ─────────────────────
+  function renderCohort() {
+    const fAll = filteredEvents();
+    const el = document.getElementById('cohort-body');
+    const weeks = [];
+    for (let i = 3; i >= 0; i--) {
+      const d = new Date(NOW);
+      d.setDate(d.getDate() - i * 7);
+      weeks.push(DateUtils.weekRange(DateUtils.fmtLocal(d)));
+    }
+    const rows = weeks.map(w => {
+      const startTs = new Date(w.start + 'T00:00:00').getTime();
+      const endTs = new Date(w.end + 'T23:59:59.999').getTime();
+      const cohort = new Set(fAll.filter(e => { const t = new Date(e.created_at).getTime(); return t >= startTs && t <= endTs; }).map(e => e.user_id));
+      const followEndTs = endTs + 30 * 86400000;
+      const isOpen = followEndTs > NOW;
+      let returned = 0;
+      cohort.forEach(uid => {
+        const has = fAll.some(e => e.user_id === uid && new Date(e.created_at).getTime() > endTs && new Date(e.created_at).getTime() <= followEndTs);
+        if (has) returned++;
+      });
+      const rate = cohort.size ? returned / cohort.size * 100 : 0;
+      return { start: w.start, rate, isOpen, cohortSize: cohort.size };
+    });
+
+    if (!rows.some(r => r.cohortSize > 0)) {
+      el.innerHTML = '<p class="no-data">Not enough history yet.</p>';
+      return;
+    }
+    const max = Math.max(...rows.map(r => r.rate), 1);
+    el.innerHTML = rows.map(r => `
+      <div class="bar-item">
+        <div class="bar-label">Week of ${formatDate(r.start)}</div>
+        <div class="v2-bar-row"><div class="v2-bar-track"><div class="v2-bar-fill blue" style="width:${Math.max(4, Math.round(r.rate / max * 100))}%" data-tip="${formatDate(r.start)} cohort: ${r.rate.toFixed(0)}% returned${r.isOpen ? ' so far (window still open)' : ' within 30 days'}"></div></div><div class="v2-bar-count">${r.rate.toFixed(0)}%${r.isOpen ? '*' : ''}</div></div>
+      </div>`).join('') + (rows.some(r => r.isOpen) ? '<p class="h3-sub" style="margin:10px 0 0">*window still open — will keep rising</p>' : '');
+  }
+
+  // ── Render: DAU trend (SVG) ───────────────────────────────────
+  function dauBuckets(fEvents, days) {
+    const buckets = new Map();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(NOW);
+      d.setDate(d.getDate() - i);
+      buckets.set(DateUtils.fmtLocal(d), new Set());
+    }
+    fEvents.forEach(e => {
+      const key = DateUtils.fmtLocal(new Date(e.created_at));
+      if (buckets.has(key)) buckets.get(key).add(e.user_id);
+    });
+    return buckets;
+  }
+
+  function weeklyRollup(buckets) {
+    const weeks = new Map();
+    buckets.forEach((set, date) => {
+      const { start, end } = DateUtils.weekRange(date);
+      if (!weeks.has(start)) weeks.set(start, { start, end, users: new Set(), peakDate: date, peakCount: 0 });
+      const w = weeks.get(start);
+      set.forEach(u => w.users.add(u));
+      if (set.size > w.peakCount) { w.peakCount = set.size; w.peakDate = date; }
+    });
+    return Array.from(weeks.values()).sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  function renderTrend() {
+    const fAll = filteredEvents();
+    const days = state.selectedDays;
+    const buckets = dauBuckets(fAll, days);
+    const series = Array.from(buckets, ([date, set]) => ({ date, count: set.size }));
+
+    document.getElementById('trend-sub').textContent =
+      `${formatDate(series[0].date)} – ${formatDate(series[series.length - 1].date)} · hover for values`;
+
+    const svg = document.getElementById('trend-svg');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const NS = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs) {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      return n;
+    }
+
+    const W = 760, H = 230, M = { t: 16, r: 46, b: 28, l: 34 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const maxVal = Math.max(...series.map(d => d.count), 1);
+    const yMax = Math.max(5, Math.ceil((maxVal * 1.15) / 5) * 5);
+    const xAt = i => M.l + (series.length > 1 ? i / (series.length - 1) : 0) * iw;
+    const yAt = v => M.t + (1 - v / yMax) * ih;
+
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+      const v = Math.round(yMax * f);
+      svg.appendChild(el('line', { x1: M.l, x2: W - M.r, y1: yAt(v), y2: yAt(v), stroke: '#2e2e2e', 'stroke-width': f === 0 ? 1.25 : 0.75 }));
+      const t = el('text', { x: M.l - 8, y: yAt(v) + 4, 'text-anchor': 'end', fill: '#737069', 'font-size': '11', 'font-family': 'inherit' });
+      t.textContent = v; svg.appendChild(t);
+    });
+
+    const tickIdx = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (series.length - 1)));
+    [...new Set(tickIdx)].forEach(i => {
+      const t = el('text', { x: xAt(i), y: H - 8, 'text-anchor': 'middle', fill: '#737069', 'font-size': '11', 'font-family': 'inherit' });
+      t.textContent = new Date(series[i].date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      svg.appendChild(t);
+    });
+
+    const pts = series.map((d, i) => [xAt(i), yAt(d.count)]);
+    const lineD = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('');
+    svg.appendChild(el('path', { d: lineD + `L${xAt(series.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`, fill: 'rgba(57,135,229,0.13)', stroke: 'none' }));
+    svg.appendChild(el('path', { d: lineD, fill: 'none', stroke: '#3987e5', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+
+    const last = pts[pts.length - 1];
+    svg.appendChild(el('circle', { cx: last[0], cy: last[1], r: 4, fill: '#3987e5', stroke: '#181818', 'stroke-width': 2 }));
+    const endLbl = el('text', { x: last[0] + 8, y: last[1] + 4, fill: '#f0ece4', 'font-size': '12', 'font-weight': '600', 'font-family': 'inherit' });
+    endLbl.textContent = String(series[series.length - 1].count);
+    svg.appendChild(endLbl);
+
+    const cross = el('line', { y1: M.t, y2: M.t + ih, stroke: '#5a5755', 'stroke-width': 1, 'stroke-dasharray': '3,3', visibility: 'hidden' });
+    const dot = el('circle', { r: 4, fill: '#3987e5', stroke: '#181818', 'stroke-width': 2, visibility: 'hidden' });
+    svg.appendChild(cross); svg.appendChild(dot);
+    svg.addEventListener('mousemove', e => {
+      const r = svg.getBoundingClientRect();
+      const fx = (e.clientX - r.left) / r.width * W;
+      const i = Math.max(0, Math.min(series.length - 1, Math.round((fx - M.l) / iw * (series.length - 1))));
+      const [x, y] = pts[i];
+      cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('visibility', 'visible');
+      const label = new Date(series[i].date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      showTip(`<span class="tl">${label}</span> · <strong>${series[i].count}</strong> active customers`, e.clientX, e.clientY);
+    });
+    svg.addEventListener('mouseleave', () => {
+      cross.setAttribute('visibility', 'hidden');
+      dot.setAttribute('visibility', 'hidden');
+      hideTip();
+    });
+
+    const rollup = weeklyRollup(buckets);
+    const tblEl = document.getElementById('trend-table');
+    tblEl.innerHTML = `<table class="v2-tbl">
+      <thead><tr><th>Week</th><th class="r">Weekly Active Users</th><th class="r">Peak day</th><th class="r">Peak DAU</th></tr></thead>
+      <tbody>${rollup.map(w => `<tr><td>${formatDate(w.start)} – ${formatDate(w.end)}</td><td class="r">${w.users.size}</td><td class="r dim">${formatDate(w.peakDate)}</td><td class="r">${w.peakCount}</td></tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  // ── Render: Win-back list ─────────────────────────────────────
+  function renderWinback() {
+    const lastSeenByUser = new Map();
+    state.events.forEach(e => {
+      const t = new Date(e.created_at).getTime();
+      if (!lastSeenByUser.has(e.user_id) || t > lastSeenByUser.get(e.user_id)) lastSeenByUser.set(e.user_id, t);
+    });
+
+    const rows = [];
+    let totalActive = 0;
+    state.profiles.forEach((p, id) => {
+      if (p.is_admin || p.status !== 'active') return;
+      totalActive++;
+      if (p.is_paper) {
+        rows.push({ id, name: p.full_name, type: 'paper', lastSeenLabel: 'never logged in', inactiveDays: 9999, email: p.email, play: 'Invite to app (claim flow)' });
+        return;
+      }
+      const lastSeen = lastSeenByUser.get(id) || null;
+      if (lastSeen === null) {
+        rows.push({ id, name: p.full_name, type: 'app', lastSeenLabel: 'none in retention', inactiveDays: 91, email: p.email, play: 'Personal call — long lapse' });
+        return;
+      }
+      const inactiveDays = Math.floor((NOW - lastSeen) / 86400000);
+      if (inactiveDays >= 30) {
+        const play = inactiveDays > 45 ? 'Personal call — long lapse' : '"Your pulls are waiting" nudge';
+        rows.push({ id, name: p.full_name, type: 'app', lastSeenLabel: formatDate(DateUtils.fmtLocal(new Date(lastSeen))), inactiveDays, email: p.email, play });
+      }
+    });
+    rows.sort((a, b) => a.inactiveDays - b.inactiveDays);
+    winbackRows = rows;
+
+    document.getElementById('winback-sub').textContent =
+      `Active accounts with no activity in 30+ days · ${rows.length} of ${totalActive} customers · most-recently-lapsed first`;
+
+    const el = document.getElementById('winback-body');
+    if (!rows.length) { el.innerHTML = '<p class="no-data">No lapsed customers right now.</p>'; return; }
+
+    el.innerHTML = `<table class="v2-tbl">
+      <thead><tr><th>Customer</th><th>Type</th><th>Last Seen</th><th class="r">Inactive</th><th>Email</th><th>Suggested Play</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td class="name">${escapeHtml(r.name)}</td>
+        <td class="dim">${r.type}</td>
+        <td class="dim">${escapeHtml(r.lastSeenLabel)}</td>
+        <td class="r">${r.inactiveDays >= 9999 ? '—' : r.inactiveDays >= 91 ? '90+ d' : r.inactiveDays + ' d'}</td>
+        <td class="dim">${escapeHtml(r.email || '—')}</td>
+        <td class="dim">${escapeHtml(r.play)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  // ── Filter note ────────────────────────────────────────────
+  function renderFilterNote() {
+    const windowed = eventsInAge(state.events, 0, state.selectedDays);
+    const adminEvents = windowed.filter(e => state.adminIds.has(e.user_id)).length;
+    const noteEl = document.getElementById('filter-note');
+    if (state.hideAdmin) {
+      noteEl.classList.remove('warn');
+      noteEl.textContent = `${state.adminIds.size} admin account${state.adminIds.size === 1 ? '' : 's'} excluded (${adminEvents} events) · events retained 90 days — no "all time" view`;
+    } else {
+      noteEl.classList.add('warn');
+      noteEl.textContent = '⚠ Admin activity shown — highlighted rows are admin accounts · events retained 90 days';
+    }
+  }
+
+  // ── Render everything from cached state (no refetch) ─────────
+  function renderAll() {
+    document.getElementById('analytics-subtitle').textContent = `Customer activity & engagement · Last ${state.selectedDays} days`;
+    renderFilterNote();
+    renderCoreKpis();
+    renderCoreCharts();
+    renderCustomerActivity();
+    renderRecentEvents();
+    const { smNow } = renderAdvancedKpis();
+    renderSessionHistogram();
+    renderFeatureDepth(smNow);
+    renderAov();
+    renderCohort();
+    renderTrend();
+    renderWinback();
+  }
+
+  async function loadAll() {
+    try {
+      await loadData();
+      renderAll();
+    } catch (err) {
+      console.error('Analytics load failed', err);
+      document.querySelector('.container').insertAdjacentHTML('afterbegin',
+        '<div class="alert alert-error">Failed to load analytics data. Try refreshing.</div>');
+    }
+  }
+
+  // ── Controls ──────────────────────────────────────────────
+  document.querySelectorAll('.range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.selectedDays = parseInt(btn.dataset.days, 10);
+      renderAll();
+    });
+  });
+
+  document.getElementById('admin-filter').addEventListener('change', e => {
+    state.hideAdmin = e.target.checked;
+    renderAll();
+  });
+
+  document.getElementById('btn-refresh').addEventListener('click', loadAll);
+
+  document.getElementById('btn-copy-emails').addEventListener('click', async () => {
+    const emails = winbackRows.map(r => r.email).filter(Boolean);
+    if (!emails.length) { toast('No emails to copy', 'error'); return; }
+    try {
+      await navigator.clipboard.writeText(emails.join(', '));
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = emails.join(', ');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    }
+    toast(`Copied ${emails.length} email${emails.length === 1 ? '' : 's'} to clipboard`);
+  });
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => {
+    if (!winbackRows.length) { toast('No rows to export', 'error'); return; }
+    const header = ['Customer', 'Type', 'Last Seen', 'Inactive Days', 'Email', 'Suggested Play'];
+    const csvRows = winbackRows.map(r => [
+      r.name, r.type, r.lastSeenLabel, r.inactiveDays >= 9999 ? '' : r.inactiveDays, r.email || '', r.play,
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const csv = [header.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `winback-${DateUtils.todayLocal()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('CSV downloaded');
+  });
+
+  await loadAll();
 })();
 </script>
 </body>
