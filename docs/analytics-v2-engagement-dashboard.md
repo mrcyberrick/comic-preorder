@@ -1,17 +1,12 @@
 # Analytics v2 — Engagement Dashboard (full redesign, ungated)
 
-**Status:** In progress — 2026-07-16. Steps 0–4 done: implemented on
-`feature/analytics-v2`, merged to staging ff-only (commit `b3f942b`), pushed —
-V1 (syntax) and V2 (Playwright smoke regression, 19/19) green. V5 resolved
-(see § 5 note). Rick's first V4 pass found the MAU cross-check only matched
-with the admin-activity toggle in the opposite state from what § 7 expected —
-root cause was a real bug (`fetchRanged` paginated `usage_events` with no
-explicit `ORDER BY`, and the count/range calls weren't snapshot-consistent,
-so rows inserted mid-fetch — e.g. Rick's own admin clicks while testing —
-could be silently dropped); fixed and redeployed, commit `7e4d327`, V2
-re-verified green (19/19). **V3 (manual checklist) and V4 (SQL cross-check)
-need a fresh pass against `7e4d327` — not yet re-run.** Do not flip to
-Complete until V3–V4 are green per § 8.
+**Status:** Complete — 2026-07-16. Implemented on `feature/analytics-v2`,
+merged to staging ff-only (`b3f942b`); a snapshot-consistency/ordering bug in
+the `usage_events` ranged fetch was found by Rick's first V4 pass and fixed
+(`7e4d327`); a computed total was added to the Event Breakdown card to make
+the V4 total-events cross-check a direct read (`7098270`). All re-verified
+after the fixes. V1–V5 all green — see § 5. Rick confirmed the full V3
+checklist and all V4 SQL cross-checks match, 2026-07-16.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Design reference:** `docs/analytics-v2-mockup.html` (committed copy of the approved
 mockup, v3 layout — SAMPLE DATA ONLY) · artifact: https://claude.ai/code/artifact/ad0cfbd8-ef28-42ca-8d88-0b22ff039297
@@ -139,12 +134,13 @@ must stay green), push `origin staging`.
 
 ### Step 5 — Manual staging checklist (V3)
 On https://staging.pulllist.pages.dev/analytics.html as admin:
-- [ ] All panels render with real staging data; no console errors
-- [ ] Admin toggle ON→OFF visibly changes KPI numbers and reveals badged rows
-- [ ] Non-admin account is blocked from the page (requireAdmin unchanged)
-- [ ] Spot-check 3 numbers against SQL Editor superuser counts (staging):
+- [x] All panels render with real staging data; no console errors
+- [x] Admin toggle ON→OFF visibly changes KPI numbers and reveals badged rows
+- [x] Non-admin account is blocked from the page (requireAdmin unchanged)
+- [x] Spot-check 3 numbers against SQL Editor superuser counts (staging):
       total events in window, distinct MAU users, win-back row count —
       queries in § 7. Client numbers (admin filter OFF) must match exactly.
+      Confirmed match by Rick 2026-07-16 (against `7098270`, post-fix).
 - [x] Second-tenant isolation (V5) — satisfied via inherited RLS coverage, not
       a comicstore click-through (no standing staging second tenant exists;
       see § 5 V5 note). Rick's call 2026-07-16.
@@ -155,8 +151,8 @@ On https://staging.pulllist.pages.dev/analytics.html as admin:
 |---|---|---|---|
 | V1 | Page-script syntax check | parses clean | ✅ green 2026-07-16 |
 | V2 | Playwright smoke suite | all existing specs green | ✅ green 2026-07-16 (30 unit + 19 Playwright, 0 fail) |
-| V3 | Manual staging checklist (Step 5) | every box ticked | ⬜ open — Rick-in-the-loop |
-| V4 | SQL cross-check | 3/3 numbers match superuser counts | ⬜ open — Rick-in-the-loop |
+| V3 | Manual staging checklist (Step 5) | every box ticked | ✅ green 2026-07-16 (confirmed by Rick) |
+| V4 | SQL cross-check | 3/3 numbers match superuser counts | ✅ green 2026-07-16 (3/3 match, confirmed by Rick against `7098270`) |
 | V5 | Isolation spot check | 0 cross-tenant rows visible | ✅ satisfied 2026-07-16 (see note) |
 
 **V5 note:** the checklist's original wording ("comicstore admin sees only
@@ -205,13 +201,14 @@ where up.tenant_id = '72e29f67-39f7-42bc-a4d5-d6f992f9d790'
 
 ## 8. Completion criteria
 
-- [ ] `analytics.html` rewritten; V1–V5 all green
-- [ ] Admin filter defaults ON and covers every panel
-- [ ] No "All time" window; retention note visible
-- [ ] Ranged fetches (no silent 1000-row truncation)
-- [ ] No schema/RLS/Edge Function/`_log()` changes in the diff
-- [ ] Merged to staging ff-only; smoke suite green; pushed
-- [ ] This doc's Status line flipped to Complete + date; CLAUDE.md
+- [x] `analytics.html` rewritten; V1–V5 all green
+- [x] Admin filter defaults ON and covers every panel
+- [x] No "All time" window; retention note visible
+- [x] Ranged fetches (no silent 1000-row truncation) — plus deterministic
+      order + snapshot-consistent count/range bound (`7e4d327`)
+- [x] No schema/RLS/Edge Function/`_log()` changes in the diff
+- [x] Merged to staging ff-only; smoke suite green; pushed
+- [x] This doc's Status line flipped to Complete + date; CLAUDE.md
       out-of-scope pointer line removed/updated
 
 ## 9. Rollback
