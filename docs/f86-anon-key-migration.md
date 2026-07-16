@@ -1,6 +1,6 @@
 # F86 — Prod Legacy API Key Retirement (config.js anon-key migration)
 
-**Status:** In progress — Step 1 staging rehearsal underway (soak open)
+**Status:** In progress — Step 1 staging rehearsal complete (V1–V3 green); Step 2 (prod publishable key creation) next
 **Plan written:** 2026-07-15 (planning session; no code, config, or dashboard changes made)
 **Execution session opened:** 2026-07-15
 **Not a phase sub-deploy** — standalone maintenance session, successor to the `import.js` maintenance session (F75/F78/F85, closed 2026-07-15). Closes F86 and the last F75 residual.
@@ -54,7 +54,7 @@ Staging's `config.js` is already publishable, so flipping staging's toggle tests
 2. Web-app verification: full Playwright suite (`.\run-smoke.ps1`) against staging — must be green.
 3. Edge Function verification (the injected-env-var question): exercise **`create-paper-customer`** on staging with a throwaway test customer — it uses BOTH injected vars (`SUPABASE_ANON_KEY` for the in-body auth check, `SUPABASE_SERVICE_ROLE_KEY` for the write), so one call answers the question for the whole fleet. Then tear the test customer down (live SELECT returning zero rows). Also exercise `register-customer` (public, service-role-only path) with a throwaway signup, torn down the same way.
 4. **If step 3 fails with a legacy-keys error → Step 1-C.** If it passes, record the evidence (functions keep working post-toggle) and skip 1-C.
-5. Soak: leave staging's toggle disabled **≥ 48 hours** of normal staging use, then re-run the Playwright suite once. Green → proceed.
+5. Soak: leave staging's toggle disabled **≥ 24 hours** (amended from the original ≥48h — see § 6a Session 2, Rick's call) of normal staging use, then re-run the Playwright suite once. Green → proceed.
 
 ### Step 1-C — Contingency: Edge Function key-loading migration (only if Step 1.3 failed)
 1. **Stop and confirm with Rick before starting** — this widens the session to tracked Edge Function code.
@@ -94,7 +94,7 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 
 - **V1** — Staging: full Playwright suite green with staging legacy keys disabled.
 - **V2** — Staging: `create-paper-customer` (both injected vars) + `register-customer` (service-only) succeed post-toggle; test fixtures torn down (live SELECT = 0 rows). If 1-C ran: same result with the migrated functions, both envs.
-- **V3** — Staging soak ≥ 48h post-toggle, suite re-run green.
+- **V3** — Staging soak ≥ 24h post-toggle (amended from ≥48h, § 6a Session 2), suite re-run green.
 - **V4** — Prod deploy diff: `config.js` only, one constant's value, `eyJ` → `sb_publishable_` (shape verified by agent, value never read).
 - **V5** — Prod live on publishable key: page load + login + reserve/cancel write-smoke green, both tenant domains, BEFORE the toggle.
 - **V6** — Prod post-toggle: page load + write-smoke + one Edge Function exercise green, both tenant domains.
@@ -102,8 +102,8 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 
 ## 6. Completion criteria
 
-- [ ] Staging rehearsal complete: toggle flipped, V1–V3 green (staging toggle stays disabled permanently — it's the desired end state there too)
-- [ ] Edge Function injected-env-var question answered with recorded evidence; 1-C either skipped-with-evidence or landed on both envs
+- [x] Staging rehearsal complete: toggle flipped, V1–V3 green (staging toggle stays disabled permanently — it's the desired end state there too)
+- [x] Edge Function injected-env-var question answered with recorded evidence; 1-C either skipped-with-evidence or landed on both envs
 - [ ] Prod `config.js` on publishable key, deployed, V4–V5 green
 - [ ] One weekly shipment cycle elapsed on the new key before the prod toggle (Step 4)
 - [ ] Prod "Disable legacy API keys" flipped; V6 green
@@ -124,6 +124,11 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
   - **Conclusion: the platform-injected env vars are NOT stuck on legacy JWTs after the toggle flip.** supabase/supabase#37648's failure mode did not reproduce here.
 - **Step 1-C skipped** — Step 1.3 passed outright, no Edge Function code migration needed.
 - **Step 1.5 (soak) open, not yet elapsed.** Staging's toggle was flipped 2026-07-15; needs ≥48h elapsed before V3 (Playwright suite re-run) can run. **Next session:** confirm ≥48h has passed since the Step 1.1 toggle flip, re-run `.\run-smoke.ps1` for V3, then proceed to Step 2 (Rick creates the prod publishable key).
+
+**Session 2:**
+- **Soak window amended: ≥48h → ≥24h, Rick's explicit call.** Rick confirmed ≥24h had genuinely elapsed in real time since the Step 1.1 toggle flip (asked directly before treating any run as the V3 gate — see CLAUDE.md Definition of Done: a soak must be fully elapsed, never "checks green so far"). Runbook Step 1.5 and gate V3 updated above from 48h → 24h to match. Staging's toggle has remained disabled continuously since Session 1 with no intervening re-enable.
+- **V3 green.** Full Playwright suite re-run post-soak: 19/19 passed. Synthetic test tenant created + torn down cleanly.
+- **Step 1 (staging rehearsal) fully complete** — toggle flipped, V1/V2/V3 all green, staging's legacy-key toggle stays disabled permanently (desired end state). **Next: Step 2** — PAUSE → Rick creates the prod publishable key (dashboard, project `plgegklqtdjxeglvyjte`).
 
 ## 7. Rollback
 
