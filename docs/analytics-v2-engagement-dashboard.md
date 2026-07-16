@@ -3,9 +3,15 @@
 **Status:** In progress — 2026-07-16. Steps 0–4 done: implemented on
 `feature/analytics-v2`, merged to staging ff-only (commit `b3f942b`), pushed —
 V1 (syntax) and V2 (Playwright smoke regression, 19/19) green. V5 resolved
-(see § 5 note). **V3 (manual checklist) and V4 (SQL cross-check) are open —
-Rick-in-the-loop, not yet run.** Do not flip to Complete until V3–V4 are green
-per § 8.
+(see § 5 note). Rick's first V4 pass found the MAU cross-check only matched
+with the admin-activity toggle in the opposite state from what § 7 expected —
+root cause was a real bug (`fetchRanged` paginated `usage_events` with no
+explicit `ORDER BY`, and the count/range calls weren't snapshot-consistent,
+so rows inserted mid-fetch — e.g. Rick's own admin clicks while testing —
+could be silently dropped); fixed and redeployed, commit `7e4d327`, V2
+re-verified green (19/19). **V3 (manual checklist) and V4 (SQL cross-check)
+need a fresh pass against `7e4d327` — not yet re-run.** Do not flip to
+Complete until V3–V4 are green per § 8.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Design reference:** `docs/analytics-v2-mockup.html` (committed copy of the approved
 mockup, v3 layout — SAMPLE DATA ONLY) · artifact: https://claude.ai/code/artifact/ad0cfbd8-ef28-42ca-8d88-0b22ff039297
