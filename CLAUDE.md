@@ -7,21 +7,22 @@ comic pre-order system. **Read this file in full at the start of every session.*
 
 ## 🚨 Current Migration Phase
 
-**Active phase:** Phase 5 — Second-tenant onboarding (parent plan written 2026-06-10)
-**Successor phase (stub):** Phase 6 — Open self-service tenant signup — `docs/phase-6-self-service-signup.md` (stub 2026-06-15; not started; begins only after Phase 5 closes; gated on a wildcard-DNS/TLS spike)
+**Active phase:** **Phase 5 Complete** (closed 2026-07-15). Successor Phase 6 has not started — see below.
+**Successor phase (stub):** Phase 6 — Open self-service tenant signup — `docs/phase-6-self-service-signup.md` (stub 2026-06-15; not started; gated on a wildcard-DNS/TLS spike). Phase 5's close (2026-07-15) satisfies the "begins only after Phase 5 closes" precondition; the wildcard-DNS/TLS spike gate remains open.
 **Phase 3 status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Phase 4 status:** **Complete** — 4.0–4.8 closed 2026-05-26 → 2026-06-10; completion audit closed 2026-06-10 (all Phase Completion Criteria ticked; recovery anchors verified — see `pre-multitenancy-state.md` § Phase 4 Completion)
-**Active sub-deploy:** **5.5 — Second-tenant onboarding + soak** (Planning — plan written 2026-06-17, not yet executed) — `docs/phase-5.5-second-tenant-onboarding.md`
+**Phase 5 status:** **Complete — 2026-07-15.** All sub-deploys 5.0–5.5 closed; second tenant (`comicstore`, `comicstore.pulllist.app`) live on production, pilot/seeded; two-tenant soak passed (2026-06-20 → 2026-07-15, one full monthly import cycle 2026-07-08→10 elapsed, post-import isolation re-verification = 0 cross-tenant in both directions); onboarding generalized into `docs/tenant-onboarding-runbook.md`. Full completion evidence: `docs/phase-5-second-tenant-onboarding.md` § Phase Completion Criteria; `docs/phase-5.5-second-tenant-onboarding.md` § 5 / Deploy Log; `docs/phase-5.5-soak-log.md` § S4 close.
+**Active sub-deploy:** none. Phase 6 not started (stub only, gated on the wildcard-DNS/TLS spike).
 **Plan (Phase 5 parent):** `docs/phase-5-second-tenant-onboarding.md`
 **Plan (Phase 4 parent):** `docs/phase-4-production-migration.md`
 **Plan (Phase 3 parent):** `docs/phase-3-tenant-resolution.md`
-**Last completed sub-deploy:** Phase 5.4 — Tenant signup (Complete 2026-06-17) — `register-customer` un-pinned (F34 fully resolved); `register-tenant` gated operator EF live on both envs (9th EF); per-tenant webhook secrets seeded in `tenants.settings`; F64 item 5 prod FK DDL landed (S0); F72 filed (email branding deferral); F73/F74 filed+resolved (webhook secret chat exposures); founding-tenant invariant held throughout; 19/19 Playwright green; prod write-smoke clean
-**Last completed phase:** Phase 4 — production at post-Phase-3 staging parity; all sub-deploys 4.0–4.8 complete
+**Last completed sub-deploy:** Phase 5.5 — Second-tenant onboarding + soak (Complete 2026-07-15) — `docs/phase-5.5-second-tenant-onboarding.md`. Tenant 2 (`comicstore`) live on prod via `register-tenant`; dedicated `comicstore.pulllist.app` custom domain + TLS; branding set; zero cross-tenant leakage verified (S3, re-confirmed post-import at S4 close); two-tenant soak passed across one full import cycle; onboarding runbook generalized (S5). Also corrected a stale F34-residual doc claim discovered during S6 verification (see `technical-reference.md` § 13 F34) — `create-paper-customer`/`invite-customer` were never actually hard-pinned post-2026-05-10; three docs (technical-reference.md, soak log, runbook) had carried the stale pre-fix description forward.
+**Last completed phase:** Phase 5 — second tenant live on production with a verified two-tenant soak; onboarding is now operational, not an engineering phase
 **Phase 2 reference:** `docs/phase-2-completion.md`
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
-**Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded after the F34 un-pin (deferred; multi-tenant email branding out of Phase 5 scope). All other carried findings resolved: F64 item 5 resolved 2026-06-17 (5.4 S0); F73/F74 resolved 2026-06-17 (webhook secret rotation). F75 — reserved; security-sensitive, details tracked in a local-only note until remediated (see § 13 placeholder). F76 — shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (fix landed on staging; cross-distributor null-`catalog_id` titles). F77 — paper orders duplicate typeahead + silent already-reserved toast (resolved 2026-06-25). F78 — import script produces duplicate `catalog` rows for cross-distributor null-`catalog_id` titles (open; deferred — root cause of the F76/F77 symptom family; bundle into the next `import.js` maintenance session alongside the F75 import-script remediation). F79 — asset cache skew: freshly-served HTML paired with a stale 4h-cached `app.js` broke prod after the F77 deploy (resolved 2026-06-25 — root `_headers` sets `no-cache` on `app.js`/`config.js`). F80 — paper-orders typeahead not scoped to current catalog month → reservations landed in a stale month, invisible in the admin view ("silent failure"); resolved 2026-06-26 (typeahead passes `month: currentCatalogMonth`); prod data cleanup done 2026-07-09 (F80 fully closed). F81 — README + monthly-catalog-refresh.md described the pre-migration system incl. destructive manual clear-out SQL (resolved 2026-07-08 — both docs rewritten; surfaced by the 2026-07-07 architecture review). F82 — fixed two-batch fetches cap at 2,000 rows; July 2026 hit 2,776 (fully resolved: app-side 2026-07-08 `6e126dd`; import-side 2026-07-09 scripts repo `17378e2` — auto-reserve fetch now paginates). F83 — Format B (PRH) shipment path failed wholesale on split invoice lines, wiping the date's PRH rows via delete-then-insert (resolved 2026-07-09 — `buildPrhShipmentRows` now pre-sums on `(upc||item_code, date)` like the Lunar path; scripts repo `dc92b91`). F84 — shipment distributor labels inverted at the source (Format A tagged Lunar / Format B tagged PRH — backwards vs catalog + reality), which also left every direct-market comic with a null `catalog_id`; **root cause of F76 and F78** (not a "channel split" — a label inversion). Resolved 2026-07-09 (scripts repo `01a90b6`: labels swapped, streams routed by identifier, code-stream catalog match → `distributor=eq.Lunar`; staging real-import verified 9/9 match + catalog_id resolved). Next free finding ID: **F85**.
+**Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. All Complete. Sequencing rationale and completion criteria in the parent plan.
+**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). **The `import.js` maintenance session (F75 key rotation + F78 historical dedup + F85 cross-month root fix) closed 2026-07-15 — plan: `docs/import-js-maintenance-f75-f78-f85.md`.** All other findings through F86 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F87**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -104,8 +105,12 @@ plan still has unchecked completion boxes. Merges to `staging` use `--ff-only`
 ## 🚨 Environment Facts (stated once, never rediscovered)
 
 ### Shell
-- **PowerShell on Windows.** Not bash.
-- Use `Select-String` (not `grep`), `Measure-Object` (not `wc`),
+- **PowerShell is the primary shell; Claude Code also provides a separate Bash
+  tool.** Use each tool with its own native syntax — never run PowerShell
+  cmdlets through the Bash tool, and never invoke `powershell -Command` from
+  Bash. Prefer PowerShell for Windows/git/deploy mechanics; Bash only for
+  genuinely POSIX one-liners.
+- In PowerShell use `Select-String` (not `grep`), `Measure-Object` (not `wc`),
   `Get-Content | Select-Object -Skip N -First M` (not `sed`)
 - Quote paths containing parentheses: `cd "C:\Users\richa\OneDrive\Documents\(Work)\BookStop\..."`
 - PowerShell does not support `&&` — run git commands on separate lines
@@ -148,6 +153,15 @@ remain local-only and must never be committed to any repo.
 **Founding tenant UUID (staging):** `72e29f67-39f7-42bc-a4d5-d6f992f9d790`
 **Production founding tenant UUID:** generated during 4.2; lives in scratch file
 `scripts/phase-4-prod-tenant-uuid.txt` (gitignored).
+
+### SQL authoring rules (added 2026-07-15 after repeated schema-guess errors)
+Before writing ANY SQL or PostgREST query, read `docs/technical-reference.md`
+for every table touched — never write column names from memory. Traps that have
+each cost a failed iteration: `catalog` uses `price_usd` (not `price`) and
+requires `catalog_month`; the distributor enum is exact-case `Lunar` / `PRH`;
+admin views match titles on `item_code` (`upc` is null for some titles); every
+INSERT passes `tenant_id` explicitly. For multi-row seeds, dry-fit ONE row and
+verify it before running the rest. (Local skill: `/sql-check`.)
 
 ---
 
@@ -247,7 +261,7 @@ At the end of each session:
 **Location:** Rockaway, NJ
 **Production URL:** https://pulllist.app/
 **Staging URL:** https://staging.pulllist.pages.dev/
-**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — warm until 5.5; redirects to `/` via `_redirects`)
+**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — kept warm as a rollback surface past the original "until 5.5 closes" gate; Rick's call 2026-07-15 at 5.5 S6 was to keep it warm and revisit retirement in a future session, not tied to any phase boundary; redirects to `/` via `_redirects`)
 
 ---
 
@@ -275,13 +289,18 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
 
 **Git remotes:**
 - `origin` → production repo (`github.com/mrcyberrick/comic-preorder`)
-- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback until 5.5 closes
+- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback past the original "until 5.5 closes" gate — Rick's call 2026-07-15 at 5.5 S6 was to keep it warm and revisit retirement in a future session
 
-**Local scripts folder** (outside any repo, never committed):
+**Local scripts folder** (working tree of the **private scripts repo**
+`github.com/mrcyberrick/comic-preorder-scripts` since 2026-07-08 — only the
+import scripts, credential-free tests, and repo metadata are tracked; `.env`,
+scratch state, and the Playwright suite stay local-only via the allowlist
+`.gitignore`):
 ```
 C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\
-  import.js                       ← production import script
-  import-staging.js               ← staging import script
+  import.js                       ← production import script (tracked)
+  import-staging.js               ← staging import script (tracked)
+  test/                           ← credential-free unit suite (tracked; run: npm test)
   test-magic-link.ps1
   test-this-week.ps1
   phase-4-prod-tenant-uuid.txt    ← generated at 4.2 pre-flight
@@ -316,6 +335,10 @@ JS calling Supabase directly.
 ---
 
 ## Standard Deployment Workflow
+
+Local skills `/deploy-staging` and `/promote-prod` encode this section's gates
+step-by-step (plus `/preflight` for session-start checks) — prefer invoking
+them over re-typing the flow.
 
 ```powershell
 # Start a new feature
@@ -457,14 +480,14 @@ The import script (`import.js` / `import-staging.js`) runs locally each month:
 8. Optionally imports weekly shipment invoices into `weekly_shipment`
 9. Prompts to send customer notification emails
 
-**Staging post-Phase-2:** passes `tenant_id` everywhere (upsert key, normalized
-records, auto-reserve inserts, `p_tenant_id` to all RPC calls).
+**Both scripts pass `tenant_id` everywhere** (upsert key, normalized records,
+auto-reserve inserts, `p_tenant_id` to all RPC calls) and are tenant-aware and
+credential-free (`.env`-driven since 2026-07-08; production was patched in
+sub-deploy 4.5). Both are versioned in the private scripts repo, which carries
+a credential-free unit suite (`npm test` in the scripts folder — shipment row
+builders + prod↔staging parity; see `test/README.md` there).
 
-**Production `import.js` is not yet patched.** Do not run it until production
-gets the Phase 1 schema migration, or it will fail with "function does not exist."
-Patches land in sub-deploy 4.5.
-
-Re-running the staging script on the same month is safe — upsert in place;
+Re-running either script on the same month is safe — upsert in place;
 auto-reserve detects existing reservations and skips.
 
 ---
@@ -493,25 +516,30 @@ Secrets for tenant-aware functions to work.
 Pending or deferred work — do NOT touch in agentic sessions without explicit
 approval.
 
-### Pending — addressed in scheduled sub-deploys
-- **Production migration** — Phase 4 sub-deploys 4.2–4.7
-- **`import.js` (production) patches** — Sub-deploy 4.5 (bidirectional merge
-  per parent plan). Do NOT modify until production gets Phase 1 schema
-
 ### Deferred — feature not in active use
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
-### Scheduled — Phase 5 sub-deploys (active phase; still out of scope outside
-### their own sub-deploy session)
-- **Slug→id RPC** — Complete 2026-06-15 (sub-deploy 5.2)
-- **Per-tenant branding rendering** — Complete 2026-06-15 (sub-deploy 5.3);
-  `Branding.apply()` reads `tenants.branding` (color/name/logo override layer)
-- **Self-service tenant signup** (incl. `register-customer` un-pin) — sub-deploy 5.4
+### Deferred — separate future session
+- **Prod legacy API key retirement (F86)** — a coordinated `config.js`
+  anon-key migration (new publishable key, both branches, deploy, verify live
+  app) is required before the prod legacy `service_role`/`anon` toggle can be
+  disabled. See `docs/technical-reference.md` § 13 F86.
+Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
+self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
+no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
+full closed scope and `docs/technical-reference.md` § 13 for any findings
+carried forward.
 
-### Deferred from sub-deploy 5.0 (Complete 2026-06-11)
-- **F64 item 5 DDL** — `preorders_user_id_fkey` → `user_profiles` NO ACTION; decision recorded (Option A); in parent § Deferred-DDL Register; must land before 5.4
-- **F64 item 8** — `idx_tenants_slug` → prod; belongs to sub-deploy 5.2
+The `import.js` maintenance session (F75 key rotation, F78 historical dedup,
+F85 cross-month root fix) closed 2026-07-15 — no longer listed here. See
+`docs/import-js-maintenance-f75-f78-f85.md` for the full closed scope.
+
+The Analytics v2 engagement dashboard (full redesign of `analytics.html`,
+ungated) closed 2026-07-16 — no longer listed here. See
+`docs/analytics-v2-engagement-dashboard.md` for the full closed scope; F87
+candidate (admin-logging doc/code contradiction) remains a separate open
+filing decision, not part of this closure.
 
 If a session needs to touch any of the above, **stop and confirm**.
 
@@ -526,6 +554,14 @@ If a session needs to touch any of the above, **stop and confirm**.
 - **OneDrive + PowerShell scripts:** OneDrive flags synced `.ps1` files as
   "downloaded from internet," blocking execution. Run `Unblock-File .\<script>.ps1`
   after each sync
+- **Agent edits strip the UTF-8 BOM from `.ps1` files** — PowerShell 5.1 then
+  reads the file as CP1252, and an em dash inside a double-quoted string decodes
+  to `â€”` whose trailing `”` is a legal PS quote char: string boundaries silently
+  shift and later code is swallowed into string literals with NO parse error
+  (run-smoke.ps1 skipped its entire Playwright stage and exited 0, 2026-07-16).
+  After ANY agent edit to a `.ps1`, restore the BOM and verify the script still
+  reaches its last stage:
+  `[IO.File]::WriteAllText($p, [IO.File]::ReadAllText($p, [Text.Encoding]::UTF8), [Text.UTF8Encoding]::new($true))`
 - **Supabase `range()`:** returns 416 on empty result sets — use count-first approach
 - **UTC timezone shift:** never use `toISOString()` for date display — use local parts
 - **Import script service key:** must be `service_role` (or `sb_secret_`), NOT
@@ -571,7 +607,9 @@ npx playwright test 04-arrivals-this-week     # single spec
 
 **Coverage:** magic-link auth, catalog reserve → mylist, cancel guards, arrivals
 orphan-reserved rendering, subscriptions, admin bagging + week nav, tenant
-isolation (F15, F20), import-script row-builder unit test.
+isolation (F15, F20), per-tenant branding unit spec. `run-smoke.ps1` runs the
+scripts repo's committed unit suite (`npm test`, step [1/2]) before Playwright;
+the old local `node-tests/` copy was retired 2026-07-16.
 
 **Rules:**
 - Local-only. Never committed. Never runs against production.

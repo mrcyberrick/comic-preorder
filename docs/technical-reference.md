@@ -1375,19 +1375,25 @@ for privileged operations, and all that send email use MailerSend with the
 |---|---|---|---|
 | `notify-customers` | import script (post-import prompt) | none (admin context implied by service-role caller) | yes (filters by `FOUNDING_TENANT_ID`) |
 | `send-my-list` | mylist.html | session token required (but does not match user_id — F36) | yes (catalog month filter) |
-| `invite-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
+| `invite-customer` | admin.html | admin check | yes — `tenant_id` resolved from the caller's own profile (fixed 2026-05-10; falls back to FOUNDING_TENANT_ID only if the lookup fails) |
 | `register-customer` | MailerLite webhook | per-tenant webhook secret in URL (5.4 S2) | yes — `tenant_id` resolved from the matching tenant's `settings->>'mailerlite_webhook_secret'` |
 | `approve-customer` | admin.html | admin check (no tenant component) | no |
-| `create-paper-customer` | admin.html | admin check | partial (writes new profile with FOUNDING_TENANT_ID) |
+| `create-paper-customer` | admin.html | admin check | yes — `tenant_id` resolved from the caller's own profile (fixed 2026-05-10; falls back to FOUNDING_TENANT_ID only if the lookup fails) |
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
 | `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
 
-The "partial" tenant-awareness in `invite-customer` and
-`create-paper-customer` is what F34's remaining scope documents: new users
-created by an admin still land in the founding tenant regardless of the
-inviting admin's tenant. `register-customer`'s residual was resolved in
-5.4 S2 (see F34 status + per-tenant-secret contract note, § 13).
+`invite-customer` and `create-paper-customer` resolve `tenant_id` from the
+calling admin's own profile (fixed 2026-05-10; F34) — new users created by
+a tenant-2 admin land in tenant 2, not the founding tenant.
+`register-customer`'s residual was resolved in 5.4 S2 (see F34 status +
+per-tenant-secret contract note, § 13).
+
+**Post-Phase-5 (5.5 close, 2026-07-15):** the inventory stays at 9 EFs — no
+new function added. Tenant 2 (`comicstore`) now exercises `register-customer`'s
+per-tenant-secret resolution and the `register-tenant` operator EF in
+production (not just staging), confirming both work against a *second* real
+tenant, not just the founding one.
 
 ### 11.2 Required secrets
 
@@ -1429,8 +1435,9 @@ trigger an email to any other user. F36.
 **`invite-customer`**: admin-only new-account creation. Generates an
 invite link via the Supabase Admin API, sends a branded email via
 MailerSend, and inserts a `user_profiles` row with
-`status = 'active'`, `created_by_admin = true`,
-`tenant_id = FOUNDING_TENANT_ID`.
+`status = 'active'`, `created_by_admin = true`, and `tenant_id` resolved
+from the calling admin's own profile (`callerTenantId`, fixed 2026-05-10;
+F34) — falls back to `FOUNDING_TENANT_ID` only if that lookup fails.
 
 **`register-customer`**: called by MailerLite webhook when a subscriber is
 added to the "Monthly Comics" group. URL parameter `secret` is looked up
@@ -1471,7 +1478,10 @@ Currently moot.
 **`create-paper-customer`**: admin-only walk-in placeholder creation.
 Creates an auth user with a random password and the placeholder email
 provided by the caller (`name.timestamp@paper.pulllist.local`), inserts
-a `user_profiles` row with `is_paper = true, status = 'active', tenant_id = FOUNDING_TENANT_ID`.
+a `user_profiles` row with `is_paper = true, status = 'active'`, and
+`tenant_id` resolved from the calling admin's own profile
+(`callerTenantId`, fixed 2026-05-10; F34) — falls back to
+`FOUNDING_TENANT_ID` only if that lookup fails.
 
 **`claim-paper-customer`**: merges a paper account into a real account.
 Verifies the source is `is_paper = true` for safety. Re-points
@@ -1742,22 +1752,26 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 
 #### F34 — user-creation Edge Functions hard-pin to founding tenant
 - **Status:** fixed 2026-05-10 (`invite-customer`/`create-paper-customer`); **residual resolved 2026-06-16 (5.4 S2)** — `register-customer` no longer pinned to `FOUNDING_TENANT_ID`. See per-tenant-secret contract note above. F34 fully resolved across all user-creation Edge Functions.
-- `invite-customer` and
-  `create-paper-customer` now fetch `tenant_id` alongside `is_admin`
-  from the caller's profile and use `callerTenantId` (falling back to
-  `FOUNDING_TENANT_ID` if lookup fails) for new profile inserts.
-  `register-customer` intentionally keeps `FOUNDING_TENANT_ID` (webhook,
-  no admin context); header comment documents this as a known limitation
-  to revisit before tenant 2 onboards.
-- `create-paper-customer`, `invite-customer`, and `register-customer` all
-  insert new `user_profiles` rows with
-  `tenant_id = FOUNDING_TENANT_ID` from env. New customers in any future
-  tenant would be assigned to the founding tenant.
-- **Where:** all three Edge Functions read `FOUNDING_TENANT_ID` from
-  Deno.env and use it directly in the profile insert body.
-- **Fix:** resolve the inviting admin's tenant_id from their own profile
-  (look up `user_profiles.tenant_id WHERE id = caller's auth.uid()`)
-  and use that value instead of FOUNDING_TENANT_ID.
+- `invite-customer` and `create-paper-customer` fetch `tenant_id` alongside
+  `is_admin` from the caller's own profile
+  (`user_profiles.tenant_id WHERE id = caller's auth.uid()`) and use
+  `callerTenantId` for new profile inserts, falling back to
+  `FOUNDING_TENANT_ID` only if that lookup fails. A tenant-2 admin's paper
+  and invited customers land correctly in tenant 2 —
+  **re-verified against deployed source 2026-07-15** (5.5 S6 closeout
+  session). This supersedes an incorrect "do not use from tenant 2"
+  caution that had propagated into the 5.5 S3 deploy log, the soak log,
+  and `docs/tenant-onboarding-runbook.md`: those notes described
+  pre-2026-05-10 behavior and were stale by the time 5.5 S3 ran; they are
+  corrected in the same commit as this entry.
+- `register-customer` (webhook, no admin context) resolves `tenant_id`
+  from the per-tenant `tenants.settings->>'mailerlite_webhook_secret'`
+  (5.4 S2) — see contract note below. `FOUNDING_TENANT_ID` is retained
+  only as the last-resort fallback in `invite-customer`/
+  `create-paper-customer`, and for diagnostics in `register-customer`.
+- **Where:** `supabase/functions/invite-customer/index.ts`,
+  `supabase/functions/create-paper-customer/index.ts`,
+  `supabase/functions/register-customer/index.ts`.
 - **Prod resolution 2026-05-31 (Phase 4.6):** `FOUNDING_TENANT_ID` secret set on prod project (§ 1); all 8 EFs redeployed from staging SHA `cab5dca` (§ 2). F34 fully resolved on production.
 - **`register-customer` per-tenant-secret contract (5.4 S1, 2026-06-16):** the residual founding pin (un-pinned in S2) is replaced by a **per-tenant webhook secret** stored at `tenants.settings->>'mailerlite_webhook_secret'` (jsonb; `settings` is service-role-only, never returned by `resolve_tenant_by_slug`). Lookup: `GET /rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.<secret>&select=id,slug,display_name` via service-role. Empty/absent `?secret=` → `401`; no matching tenant → `401`; exactly one matching tenant → that tenant's id is used for the `user_profiles` insert. **Founding migrated 2026-06-16 (staging):** `tenants.settings->>'mailerlite_webhook_secret' = 'pulllist-staging-2026'` for `72e29f67-…`; lookup verified to return exactly one row (founding). Prod migration is 5.4 S6.
 
@@ -2288,7 +2302,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
 
 #### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
-- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist (5.5 may act on it).
+- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist. **Re-confirmed deferred at Phase 5 close (5.5 S6, 2026-07-15)** — tenant 2 (`comicstore`) stayed pilot/seeded through the soak with no real `register-customer` customers, so F72 never surfaced live; it becomes a **prerequisite to evaluate at tenant-2's real-customer go-live** (post-Phase-5 operational step) per `docs/tenant-onboarding-runbook.md`.
 - **Severity:** Low (documented gap, not a defect) — the un-pin (F34 residual) is data-correct: a customer registered via a non-founding tenant's webhook secret lands in that tenant's `user_profiles` with the right `tenant_id`. But `buildPendingEmail()` (register-customer/index.ts ~line 215+) hardcodes "Ray & Judy's Book Stop" / PULLLIST founding copy and the `from` name, regardless of which tenant the customer resolved to.
 - **Where:** `supabase/functions/register-customer/index.ts` — `buildPendingEmail()` and the MailerSend `from`/`subject` fields in the main handler.
 - **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
@@ -2305,9 +2319,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Detail:** During 5.4 S6 step 1 verification, Rick pasted the full SELECT result including the `has_secret` column value. Rotation was deferred until founding-routes-to-founding verification completed; rotated 2026-06-17 after S6 verification green.
 - **Where:** 5.4 S6 chat transcript, 2026-06-17. Fix applied: prod `tenants.settings->>'mailerlite_webhook_secret'` updated + MailerLite prod webhook URL `?secret=` updated 2026-06-17.
 
-#### F75 — (reserved; security-sensitive — details held in a local-only note until remediated)
-- **Status:** filed 2026-06-19, open. The full write-up and remediation plan are intentionally kept **out of this public repo** to avoid signaling an exploitable condition; they live in a local-only operator note (outside the repo tree). A sanitized, past-tense entry will replace this placeholder once remediation lands.
-- **Disposition:** remediation is a dedicated follow-on session (out of Phase 5.5 scope). New findings are numbered from **F76**.
+#### F75 — Service-role keys hardcoded in local import scripts, surfaced into a CLI transcript
+- **Status:** filed 2026-06-19, **resolved 2026-07-15** (sanitized past-tense entry replacing the placeholder — no key values, no exploitable specifics; full historical detail remains in the local-only operator note).
+- **Fix:** (1) both scripts refactored to load credentials via `loadDotEnv()`/`requireEnv()` from a gitignored `.env`, hard-failing on a missing var and asserting `SUPABASE_URL` targets the correct project — landed 2026-07-08 (scripts repo `c2e37c6`). (2) Staging current-generation key rotated 2026-07-15: new key created, verified via a `--no-write` dry run against staging, old key deleted. (3) Prod: a new current-generation key was created and verified via a `--no-write` dry run against prod — both scripts now authenticate with current-generation keys, not the original hardcoded literals.
+- **Residual:** the prod legacy `service_role` JWT (the actual credential from the original 2026-06-19 exposure event) could not be disabled — Supabase's prod project only exposes a single combined toggle covering both the legacy `service_role` and the legacy `anon` key that `config.js` depends on. The JWT stays live/unused pending a coordinated future `config.js` migration. Tracked as **F86** — this is not a reopening of F75; the exposure risk this finding tracked (hardcoded literals + an unrotated key) is closed, and F86 tracks the separate platform-level cleanup constraint.
+- **Where:** `import.js` / `import-staging.js` (scripts repo, credential loading); Supabase dashboard (key rotation, both envs). New findings are numbered from **F76**.
 
 #### F76 — Shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (distributor-agnostic)
 - **Status:** filed 2026-06-22, **fix landed on staging** (`feature/f76-arrivals-shipment-match-key`): `Preorders.getMy` now selects `catalog.upc`; `arrivals.html` `isReserved` and the orphan filter both match on `catalog_id OR upc OR item_code`.
@@ -2327,12 +2343,21 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `admin.html` `renderCatalogTypeahead()` + submit handler; `app.js` `Preorders.upsertReservation()`. (No `style.css` change — an earlier amber-toast approach was superseded by the upsert fix.)
 
 #### F78 — Import script produces duplicate `catalog` rows for cross-distributor (null-`catalog_id`) titles
-- **Status:** filed 2026-06-25, **open — deferred** (root-cause owner; the F77 client-side dedup is a mitigation, not a fix).
-- **Severity:** Low–Medium (data hygiene) — duplicate rows are mostly invisible to customers (F77 dedups the admin typeahead; F76 dedups the arrivals match), but they inflate catalog counts, can split a customer's reservations across two UUIDs for the same physical comic, and are the shared root of the F76/F77 symptom family.
-- **Root cause:** the monthly import upserts `catalog` on a unique key that includes `catalog_id` (the distributor's own code wiring). A title that is **catalogued under one distributor and shipped/listed under another** (the cross-distributor channel split documented in F76 — same UPC, different distributor) resolves to a **null `catalog_id`**, and two NULLs do not collide on the unique constraint. So the same physical comic is **inserted twice** (two UUIDs, same `item_code`/`upc`) instead of upserted in place. Every downstream "two rows for one comic" symptom (F76 false orphans, F77 duplicate typeahead) traces here.
-- **Fix (deferred):** make the import's catalog upsert key resilient to a null `catalog_id` — fall back to `upc` (Lunar) / `item_code` (PRH), mirroring the conflict keys the shipment path already uses (`import.js`), or add a pre-insert dedup/merge pass keyed on `upc`/`item_code`. Either collapses cross-distributor titles to a single catalog row, eliminating the duplicate-row family at the source. Requires an end-to-end staging import re-run to verify UUID preservation (preorder integrity) — same verification rigor as any `import.js` change.
-- **Where:** local-only `import.js` / `import-staging.js` (catalog upsert key; not in any repo — see `CLAUDE.md` § What's tracked vs local-only).
-- **Disposition / home:** best bundled into the **next dedicated `import.js` maintenance session — the same follow-on that carries the F75 import-script remediation** (operator's local-only note). Both are `import.js`-local changes that share the verification cost (one careful end-to-end staging import re-run covers both), so doing them together avoids re-paying that cost twice. Out of Phase 5.5 scope (5.5 is operational + doc-only; `import.js` stays founding-pinned through the soak per phase-5.5 § 1.5).
+- **Status:** filed 2026-06-25, **resolved 2026-07-15** — root cause fixed 2026-07-09 by F84; historical reconciliation (this session) found **0 duplicate groups on either env**, so no consolidation was needed.
+- **Severity:** Low–Medium (data hygiene) — duplicate rows are mostly invisible to customers (F77 dedups the admin typeahead; F76 dedups the arrivals match), but they inflate catalog counts, can split a customer's reservations across two UUIDs for the same physical comic.
+- **Root cause (as understood 2026-06-25, before F84):** the monthly import's `catalog` upsert conflict key is `(tenant_id, item_code, distributor, catalog_month)` (verified live in both scripts 2026-07-15, `import.js:433` / `import-staging.js:432`). A title catalogued under one distributor label but shipped/listed under a different (wrong) label — the cross-distributor mismatch documented in F76 — would not collide on this key even though it's the same physical comic, producing a second row.
+- **Root cause superseded 2026-07-09 (F84):** F84 found the *actual* mechanism was not a genuine "cross-distributor channel split" but an **inverted distributor label** in `normalizeShipment` (Format A tagged `'Lunar'` when it should be `'PRH'` and vice versa). F84's fix corrects the labels at the source. Per F84's own cross-reference: **"removes \[F76/F78's\] root cause... no *new* \[duplicate rows\] are produced"** on a corrected import. **F78's original "Fix (deferred): make the upsert key resilient to null catalog_id" prescription is therefore superseded as a *required* change** — it predates the F84 diagnosis and targets a symptom-level workaround for a bug that's now fixed at the source. It may still be worth doing as defense-in-depth (mirroring how the F76 distributor-agnostic display match was kept post-F84), but it is no longer blocking.
+- **Historical reconciliation (closed 2026-07-15):** the detection query below (grouping `(tenant_id, item_code, catalog_month)` for `catalog_month < '2026-07'` with `COUNT(*) > 1`) was run against both staging and prod in the `import.js` maintenance session and returned **zero rows on both envs** — no duplicate groups existed to consolidate. Most likely explanation: the routine monthly rollover (`archive_stale_reservations` → `purge_stale_catalog`) had already cleared the pre-2026-07-09 catalog rows this query targets, ahead of this session running it.
+  ```sql
+  SELECT tenant_id, item_code, catalog_month, COUNT(*) AS n,
+         array_agg(id) AS catalog_ids, array_agg(distributor) AS distributors
+  FROM catalog
+  WHERE catalog_month < '2026-07'
+  GROUP BY tenant_id, item_code, catalog_month
+  HAVING COUNT(*) > 1;
+  ```
+- **Where:** local-only `import.js` / `import-staging.js` (catalog upsert key, `buildCatalogIdMap`; not in any repo — see `CLAUDE.md` § What's tracked vs local-only) for the now-superseded hardening idea; live prod/staging `catalog`/`preorders` data for the historical reconciliation (closed, see above).
+- **Disposition:** closed via the **`import.js` maintenance session** alongside F75 (key rotation) and F85 (cross-month carry-forward root fix) — see `docs/import-js-maintenance-f75-f78-f85.md`.
 
 #### F79 — Asset cache skew: freshly-served HTML pairs with a stale cached `app.js`/`config.js`
 - **Status:** filed 2026-06-25, **resolved** — `_headers` file added (staging → prod via normal promotion).
@@ -2381,6 +2406,22 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Impact on F76 / F78:** removes their root cause. Catalog and shipment distributor now agree and `catalog_id` resolves for direct-market items, so the F76 false-orphan condition and the F78 null-`catalog_id` duplicate-row mechanism no longer arise on a corrected import. The F76 distributor-agnostic display match stays as harmless defense-in-depth. F78's *existing* duplicate catalog rows (created under the old behavior) are separate historical data to reconcile in the `import.js` catalog-upsert session, but no *new* ones are produced.
 - **Data migration:** rows written before the fix carry the old (inverted) labels. Staging was purged (`on_sale_date >= 2026-07-01`) and re-imported clean. **Prod:** next week's import lands correctly with no collision (that date has no prior rows); the current week's already-imported rows stay mislabeled until the week rolls over — swap them in place if reprinting this week's poster: `UPDATE weekly_shipment SET distributor = CASE WHEN distributor='Lunar' THEN 'PRH' ELSE 'Lunar' END WHERE tenant_id = <prod founding> AND on_sale_date = '<current week Wed>';` (label-only; `catalog_id` on the now-`Lunar` rows stays null until a re-import, and the arrivals display handles null via F76).
 - **Where:** scripts repo `import.js` / `import-staging.js` — `normalizeShipment`, the shipment split, `buildCatalogIdMap`, `upsertShipment`.
+
+#### F85 — Cross-month duplicate preorders: a re-listed item_code gets a second reservation against the new month's catalog row
+- **Status:** filed 2026-07-10; **resolved 2026-07-15** — prod duplicates cleaned 2026-07-10 (consolidation applied — detection query re-run returns 0 pairs; bagging list shows each comic once), and the root fix landed in both scripts this session, verified end-to-end on staging.
+- **Severity:** Medium (customer-facing + operational) — surfaced on the This Week **bagging list**: a customer's comic appears **twice** (same `item_code`, two catalog UUIDs). Inflates Total Items / Est. Value on the week header, and the store would bag two copies of one comic. ~45 duplicate pairs across ~7 customers as of 2026-07-10 (detection query below).
+- **Distinct from F84/F78:** these are **not** null-`catalog_id` rows. Both catalog rows are valid; they differ only in `catalog_month` (mostly `2026-05` + `2026-06`, one `2026-03`). A comic solicited one month with a later on-sale date is **re-listed** in the next month's catalog CSV, so the monthly import creates a **second catalog row** for the same `item_code` (catalog snapshots are per-month). The `preorders` unique key is `(user_id, catalog_id)`, so a reservation against each month's row does not collide — the customer ends with two preorder rows for one physical comic. Reservations arrive via the monthly auto-reserve (standard covers for subscribers) and via manual re-reserve (the month-scoped catalog view shows the new-month row as un-reserved because the prior reservation is against a different `catalog_id`). Same **cross-month family as F80** (which only fixed the paper-orders typeahead).
+- **Root fix (landed 2026-07-15):** `autoReserveSubscriptions()` in both `import.js` and `import-staging.js` now builds a cross-month carry-forward map (`buildCarryForwardMap`, pure function) from prior-month `catalog` rows sharing this month's `item_code`s and the `preorders` pointing at them, keyed `${user_id}||${item_code}`. The match/decision logic (`matchSubscriptions`, also extracted as a pure function) checks this map before deciding to insert: a hit becomes a `PATCH` of the existing preorder's `catalog_id` onto this month's row — `created_at` is never touched, so the original reserved date survives automatically — instead of a new `INSERT`. Both functions are exported from each script for testing; the existing-reservation check (`existingSet`, keyed `${user_id}||${catalog_id}`) still takes precedence, so an already-reserved-this-month hit is skipped rather than carried forward. 8 new unit tests added to the scripts-repo suite (37/37 passing) covering the carry-forward case, a genuinely-new `item_code` still inserting normally, and the already-reserved precedence case.
+- **Verification (staging, real import re-run, 2026-07-15):** a real subscriber's July preorder was temporarily repointed (via a synthetic June clone of the same `item_code`) to simulate a stale cross-month reservation, then a real (non-`--no-write`) `import-staging.js` run was executed. Result: `Carried forward: 1`, 0 new inserts; the preorder's `catalog_id` was patched back to the July row, `created_at` remained exactly unchanged from before the test, and exactly one preorder row existed afterward for that user+item_code (no duplicate). The synthetic test row was deleted after verification. No web-app change was required — the fix is entirely within the import scripts.
+- **One-time prod cleanup (applied 2026-07-10):** consolidated each `(user_id, item_code)` group onto the survivor = the **newest-`catalog_month` row** (most recent on-sale date), set its `created_at` to the group's **earliest** (retain the original reserved date), took `MAX(quantity)`, and marked `fulfilled` if **either** row was; deleted the superseded rows (~45 pairs). Detection query re-run afterward returned 0 rows. Window-function `UPDATE` (survivor `rn=1`) + `DELETE` (`rn>1`) partitioned by `(user_id, item_code)`, ordered `catalog_month DESC, on_sale_date DESC, created_at DESC`.
+- **Where:** scripts repo `import.js` / `import-staging.js` — `buildCarryForwardMap()` + `matchSubscriptions()` (new pure functions) called from `autoReserveSubscriptions()`; previously manifested in `admin.html` This Week bagging list (`renderThisWeek`, which correctly renders one row per preorder — no web-app defect, then or now).
+
+#### F86 — Prod legacy API keys (anon + service_role) can only be disabled as a single unit — blocks full F75 remediation without a coordinated `config.js` migration
+- **Status:** filed 2026-07-15 (surfaced during the `import.js` maintenance session, F75 prod step), **open — deferred**, residual/follow-on to F75.
+- **Severity:** Low–Medium — bounded residual risk, not a new exposure. The legacy `service_role` JWT from F75's original 2026-06-19 exposure event remains technically valid, but no script or code path uses it anymore (the new current-generation `sb_secret_` key created and verified this session is what `import.js` actually authenticates with going forward).
+- **Detail:** F75's prod remediation created a new current-generation `sb_secret_` key for `import.js` (verified via `--no-write` dry run against prod — correct project guard passed, catalog + subscription reads/simulated-writes succeeded). The final step — disabling the old legacy `service_role` JWT — turned out not to be independently possible: live-checked in the Supabase dashboard (prod project `plgegklqtdjxeglvyjte`, Settings → API Keys), there is only **one** toggle, "Disable legacy API keys," covering **both** the `anon` (public) and `service_role` (secret) legacy keys together. No per-key revoke exists. `config.js` in production still uses the legacy `anon` key (never migrated to a new-generation publishable key), so flipping that toggle would break the live app at pulllist.app immediately.
+- **Disposition:** legacy `service_role` JWT deliberately left live/unused rather than risk prod. Full retirement requires a coordinated future session: generate a new publishable key, update `config.js` on both `staging` and `main` branches, deploy, verify the live app, then disable legacy keys. Out of scope for the `import.js` maintenance session, whose plan explicitly puts `config.js` changes OUT — see `docs/import-js-maintenance-f75-f78-f85.md`.
+- **Where:** Supabase dashboard prod project settings (platform config, not repo code); `config.js` is the future migration target, not touched this session.
 
 ---
 
