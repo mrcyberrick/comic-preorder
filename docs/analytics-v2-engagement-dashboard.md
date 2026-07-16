@@ -2,9 +2,9 @@
 
 **Status:** In progress — 2026-07-16. Steps 0–4 done: implemented on
 `feature/analytics-v2`, merged to staging ff-only (commit `b3f942b`), pushed —
-V1 (syntax) and V2 (Playwright smoke regression, 19/19) green. **Step 5 (V3
-manual checklist, V4 SQL cross-check, V5 isolation spot check) is open —
-Rick-in-the-loop, not yet run.** Do not flip to Complete until V3–V5 are green
+V1 (syntax) and V2 (Playwright smoke regression, 19/19) green. V5 resolved
+(see § 5 note). **V3 (manual checklist) and V4 (SQL cross-check) are open —
+Rick-in-the-loop, not yet run.** Do not flip to Complete until V3–V4 are green
 per § 8.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Design reference:** `docs/analytics-v2-mockup.html` (committed copy of the approved
@@ -139,8 +139,9 @@ On https://staging.pulllist.pages.dev/analytics.html as admin:
 - [ ] Spot-check 3 numbers against SQL Editor superuser counts (staging):
       total events in window, distinct MAU users, win-back row count —
       queries in § 7. Client numbers (admin filter OFF) must match exactly.
-- [ ] Second-tenant isolation: comicstore admin sees only comicstore events
-      (RLS does this; verify, don't assume)
+- [x] Second-tenant isolation (V5) — satisfied via inherited RLS coverage, not
+      a comicstore click-through (no standing staging second tenant exists;
+      see § 5 V5 note). Rick's call 2026-07-16.
 
 ## 5. Verification gates
 
@@ -150,7 +151,19 @@ On https://staging.pulllist.pages.dev/analytics.html as admin:
 | V2 | Playwright smoke suite | all existing specs green | ✅ green 2026-07-16 (30 unit + 19 Playwright, 0 fail) |
 | V3 | Manual staging checklist (Step 5) | every box ticked | ⬜ open — Rick-in-the-loop |
 | V4 | SQL cross-check | 3/3 numbers match superuser counts | ⬜ open — Rick-in-the-loop |
-| V5 | Isolation spot check | 0 cross-tenant rows visible | ⬜ open — Rick-in-the-loop |
+| V5 | Isolation spot check | 0 cross-tenant rows visible | ✅ satisfied 2026-07-16 (see note) |
+
+**V5 note:** the checklist's original wording ("comicstore admin sees only
+comicstore events") assumed a standing second tenant on staging. There isn't
+one — `comicstore` was onboarded on production only (5.5); staging's second-
+tenant coverage is the synthetic tenant `07-tenant-isolation.spec.ts`
+provisions and tears down per run (green in V2, 5/5 isolation specs).
+`analytics.html` adds no new tables, RPCs, or service-role calls — it reads
+`usage_events`/`user_profiles`/`preorders`/`subscriptions`/`catalog` through
+the same anon-key `db` client as every other page, so it inherits the RLS
+isolation that suite already proves. Rick's call 2026-07-16: treat V5 as
+satisfied by that inherited coverage rather than standing up a canary tenant
+for this page specifically.
 
 ## 6. Chart palette (validated 2026-07-16, dataviz validator, surface #181818)
 
