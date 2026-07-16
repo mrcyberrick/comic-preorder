@@ -549,6 +549,14 @@ If a session needs to touch any of the above, **stop and confirm**.
 - **OneDrive + PowerShell scripts:** OneDrive flags synced `.ps1` files as
   "downloaded from internet," blocking execution. Run `Unblock-File .\<script>.ps1`
   after each sync
+- **Agent edits strip the UTF-8 BOM from `.ps1` files** — PowerShell 5.1 then
+  reads the file as CP1252, and an em dash inside a double-quoted string decodes
+  to `â€”` whose trailing `”` is a legal PS quote char: string boundaries silently
+  shift and later code is swallowed into string literals with NO parse error
+  (run-smoke.ps1 skipped its entire Playwright stage and exited 0, 2026-07-16).
+  After ANY agent edit to a `.ps1`, restore the BOM and verify the script still
+  reaches its last stage:
+  `[IO.File]::WriteAllText($p, [IO.File]::ReadAllText($p, [Text.Encoding]::UTF8), [Text.UTF8Encoding]::new($true))`
 - **Supabase `range()`:** returns 416 on empty result sets — use count-first approach
 - **UTC timezone shift:** never use `toISOString()` for date display — use local parts
 - **Import script service key:** must be `service_role` (or `sb_secret_`), NOT
@@ -594,8 +602,9 @@ npx playwright test 04-arrivals-this-week     # single spec
 
 **Coverage:** magic-link auth, catalog reserve → mylist, cancel guards, arrivals
 orphan-reserved rendering, subscriptions, admin bagging + week nav, tenant
-isolation (F15, F20). The import-script row-builder unit tests formerly here
-are superseded by the committed suite in the scripts repo (`npm test`).
+isolation (F15, F20), per-tenant branding unit spec. `run-smoke.ps1` runs the
+scripts repo's committed unit suite (`npm test`, step [1/2]) before Playwright;
+the old local `node-tests/` copy was retired 2026-07-16.
 
 **Rules:**
 - Local-only. Never committed. Never runs against production.
