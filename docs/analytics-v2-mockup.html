@@ -1,0 +1,794 @@
+<title>PULLLIST Analytics — Redesign Mockup</title>
+<style>
+  /* ── PULLLIST tokens (mirrors style.css — dark-only, deliberate) ── */
+  .plz {
+    color-scheme: dark;
+    --bg:            #0f0f0f;
+    --bg-card:       #181818;
+    --bg-elevated:   #222222;
+    --border:        #2e2e2e;
+    --text-primary:  #f0ece4;
+    --text-secondary:#9a9390;
+    --text-muted:    #737069;
+    --accent:        #e8321c;
+    --accent-dim:    rgba(232,50,28,0.15);
+    --success:       #22c55e;
+    --warning:       #f59e0b;
+    /* validated chart palette (dark surface #181818) */
+    --viz-blue:      #3987e5;   /* single data hue — magnitude charts   */
+    --viz-lunar:     #1d5cd6;   /* entity: Lunar  (CVD-safe vs PRH)     */
+    --viz-prh:       #9878eb;   /* entity: PRH                          */
+    --viz-seq-1:     #86b6ef;   /* ordinal ramp: depth 1                */
+    --viz-seq-2:     #3987e5;   /* ordinal ramp: depth 2                */
+    --viz-seq-3:     #184f95;   /* ordinal ramp: depth 3+               */
+    --radius:        4px;
+    --radius-lg:     8px;
+    --font-display:  'Bebas Neue', 'Oswald', 'Arial Narrow', Impact, sans-serif;
+    --font-body:     'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    margin: 0;
+    min-height: 100vh;
+  }
+  .plz * { box-sizing: border-box; }
+  .plz button { cursor: pointer; font-family: var(--font-body); }
+  .plz :is(button, a, input):focus-visible { outline: 2px solid var(--viz-blue); outline-offset: 2px; }
+
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Mockup banner ── */
+  .mock-banner {
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 6px 16px;
+    letter-spacing: 0.04em;
+  }
+  .mock-banner strong { color: var(--warning); font-weight: 600; }
+
+  /* ── Nav (replica) ── */
+  .nav { border-bottom: 1px solid var(--border); background: var(--bg); }
+  .nav-inner { display: flex; align-items: center; gap: 28px; height: 58px; }
+  .nav-logo { font-family: var(--font-display); font-size: 1.5rem; letter-spacing: 0.06em; color: var(--text-primary); text-decoration: none; }
+  .nav-logo span { color: var(--accent); }
+  .nav-links { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; flex: 1; }
+  .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; padding: 6px 12px; border-radius: var(--radius); }
+  .nav-links a:hover { color: var(--text-primary); background: var(--bg-elevated); }
+  .nav-links a.active { color: var(--text-primary); background: var(--bg-elevated); }
+  .nav-user { font-size: 0.8rem; color: var(--text-muted); }
+  .nav-user strong { color: var(--text-secondary); }
+
+  /* ── Page header ── */
+  .page-header { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 30px 0 18px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
+  .page-header h1 { font-family: var(--font-display); font-size: 2.2rem; letter-spacing: 0.04em; margin: 0; line-height: 1; text-wrap: balance; }
+  .page-header p { color: var(--text-secondary); font-size: 0.9rem; margin: 6px 0 0; }
+  .btn-refresh { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); padding: 7px 16px; border-radius: var(--radius); font-size: 0.8rem; }
+  .btn-refresh:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+  /* ── Toolbar: filters in one row ── */
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .toolbar-label { font-size: 0.76rem; color: var(--text-muted); font-weight: 500; }
+  .range-btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); padding: 5px 14px; border-radius: var(--radius); font-size: 0.78rem; }
+  .range-btn.active { border-color: var(--viz-blue); color: var(--text-primary); }
+  .range-btn:hover { color: var(--text-primary); }
+  .toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 6px; }
+
+  /* Admin filter switch */
+  .admin-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; user-select: none; }
+  .admin-toggle input { position: absolute; opacity: 0; width: 40px; height: 22px; margin: 0; cursor: pointer; }
+  .switch { width: 38px; height: 21px; border-radius: 11px; background: var(--bg-elevated); border: 1px solid var(--border); position: relative; transition: background 0.15s; flex: none; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--text-muted); transition: transform 0.15s, background 0.15s; }
+  .admin-toggle input:checked + .switch { background: rgba(57,135,229,0.35); border-color: var(--viz-blue); }
+  .admin-toggle input:checked + .switch::after { transform: translateX(17px); background: var(--viz-blue); }
+  .admin-toggle input:focus-visible + .switch { outline: 2px solid var(--viz-blue); outline-offset: 2px; }
+  .filter-note { font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 24px; }
+  .filter-note .admin-shown { color: var(--warning); display: none; }
+  .show-admin .filter-note .admin-hidden { display: none; }
+  .show-admin .filter-note .admin-shown { display: inline; }
+
+  /* ── Section dividers ── */
+  .section-head { display: flex; align-items: center; gap: 12px; margin: 34px 0 16px; }
+  .section-head h2 { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: 0.08em; margin: 0; color: var(--text-primary); }
+  .section-head .rule { flex: 1; height: 1px; background: var(--border); }
+  .plan-chip { font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 10px; }
+  .plan-chip.free { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+  .plan-chip.pro { background: var(--accent-dim); color: #ff6a55; border: 1px solid rgba(232,50,28,0.4); }
+  .section-sub { font-size: 0.78rem; color: var(--text-muted); margin: -10px 0 18px; }
+
+  /* ── KPI tiles ── */
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .kpi { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px 14px; }
+  .kpi-label { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .kpi-value { font-family: var(--font-display); font-size: 2.1rem; line-height: 1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .kpi-value small { font-size: 1.1rem; color: var(--text-secondary); }
+  .kpi-delta { font-size: 0.72rem; margin-top: 7px; font-variant-numeric: tabular-nums; }
+  .kpi-delta.up   { color: var(--success); }
+  .kpi-delta.down { color: #ff6a55; }
+  .kpi-delta.flat { color: var(--text-muted); }
+  .kpi-delta .vs { color: var(--text-muted); }
+  .kpi-note { font-size: 0.7rem; color: var(--text-muted); margin-top: 7px; }
+
+  /* ── Cards grid ── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-bottom: 18px; }
+  /* explicit column counts at full width so no row is left with an orphan gap */
+  @media (min-width: 700px) { .card.span-2 { grid-column: span 2; } }
+  @media (min-width: 980px) {
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 22px; }
+  .card.full { grid-column: 1 / -1; }
+  .card h3 { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 4px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card .h3-sub { font-size: 0.72rem; color: var(--text-muted); margin: 0 0 14px; font-weight: 400; }
+  .mini-chip { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; padding: 2px 6px; border-radius: 8px; background: var(--accent-dim); color: #ff6a55; }
+
+  /* ── Horizontal bars (existing page idiom, refined) ── */
+  .bars { display: flex; flex-direction: column; gap: 9px; }
+  .bar-item .bar-label { font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-item .bar-label .dist { color: var(--text-muted); font-size: 0.68rem; margin-left: 6px; }
+  .bar-row { display: grid; grid-template-columns: 1fr 52px; gap: 10px; align-items: center; }
+  .bar-track { height: 16px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 0 3px 3px 0; }
+  .bar-fill.lunar { background: var(--viz-lunar); }
+  .bar-fill.prh   { background: var(--viz-prh); }
+  .bar-fill.blue  { background: var(--viz-blue); }
+  .bar-count { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 0.72rem; color: var(--text-secondary); }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ── Tables ── */
+  .tbl-wrap { overflow-x: auto; }
+  table.tbl { width: 100%; border-collapse: collapse; }
+  .tbl th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  .tbl th.r { text-align: right; }
+  .tbl td { padding: 8px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl td.r { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 600; }
+  .tbl td.dim { color: var(--text-muted); font-size: 0.75rem; }
+  .tbl td.name { font-weight: 600; color: var(--text-primary); }
+  tr.admin-row { display: none; }
+  .show-admin tr.admin-row { display: table-row; background: rgba(245,158,11,0.05); }
+  .admin-badge { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; padding: 1px 6px; border-radius: 8px; background: rgba(245,158,11,0.15); color: var(--warning); margin-left: 7px; vertical-align: 1px; }
+
+  .event-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+  .badge-reserve      { background: rgba(34,197,94,0.14);  color: #4ade80; }
+  .badge-cancel       { background: rgba(232,50,28,0.14);  color: #ff6a55; }
+  .badge-subscribe    { background: rgba(29,92,214,0.2);   color: #7aa9f0; }
+  .badge-catalog_view { background: rgba(234,179,8,0.12);  color: #facc15; }
+  .badge-page_view    { background: rgba(20,184,166,0.12); color: #2dd4bf; }
+  .badge-login        { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+
+  /* ── Trend chart ── */
+  .trend-wrap { position: relative; }
+  .trend-svg { width: 100%; height: auto; display: block; }
+  .viz-tip { position: fixed; z-index: 40; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-size: 0.74rem; color: var(--text-primary); pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.5); white-space: nowrap; }
+  .viz-tip .tl { color: var(--text-muted); }
+  details.data-view { margin-top: 12px; }
+  details.data-view summary { font-size: 0.74rem; color: var(--text-muted); cursor: pointer; }
+  details.data-view summary:hover { color: var(--text-secondary); }
+  details.data-view table { margin-top: 10px; }
+
+  /* ── Histogram ── */
+  .hist { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding-top: 18px; }
+  .hist .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+  .hist .col .bar { width: 100%; max-width: 46px; background: var(--viz-blue); border-radius: 3px 3px 0 0; }
+  .hist .col .n { font-size: 0.7rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .hist-x { display: flex; gap: 10px; margin-top: 8px; }
+  .hist-x span { flex: 1; text-align: center; font-size: 0.68rem; color: var(--text-muted); }
+
+  /* ── Segmented (ordinal) bar ── */
+  .seg-bar { display: flex; gap: 2px; height: 26px; border-radius: 4px; overflow: hidden; margin: 14px 0 12px; }
+  .seg-bar .seg { height: 100%; }
+
+  /* ── AOV comparison ── */
+  .aov-flex { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
+  .aov-bars { flex: 1 1 260px; }
+  .aov-stat { flex: 0 0 auto; text-align: center; padding: 10px 22px; border-left: 1px solid var(--border); }
+  .aov-stat .v { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; color: var(--success); }
+  .aov-stat .l { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+
+  /* ── Cohort mini bars ── */
+  .cohort { display: flex; flex-direction: column; gap: 9px; }
+
+  /* ── Premium footer strip ── */
+  .pro-extras { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 22px; margin-bottom: 18px; }
+  .pro-extras .btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 16px; border-radius: var(--radius); font-size: 0.8rem; }
+  .pro-extras .btn:hover { border-color: var(--viz-blue); }
+  .pro-extras .hint { font-size: 0.76rem; color: var(--text-muted); }
+
+  /* ── Metric definitions ── */
+  .defs { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 22px; margin: 26px 0; }
+  .defs summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 12px 0; }
+  .defs dl { margin: 4px 0 16px; }
+  .defs dt { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); margin-top: 12px; }
+  .defs dd { font-size: 0.78rem; color: var(--text-secondary); margin: 3px 0 0; max-width: 72ch; }
+  .defs dd .src { color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 2px; }
+
+  .site-footer { border-top: 1px solid var(--border); margin-top: 40px; padding: 22px 24px 34px; text-align: center; font-size: 0.76rem; color: var(--text-muted); }
+
+  /* toast */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); padding: 9px 18px; border-radius: var(--radius); font-size: 0.8rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 50; }
+  .toast.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .plz * { transition: none !important; }
+  }
+</style>
+
+<div class="plz" id="plz-root">
+
+  <div class="mock-banner"><strong>DESIGN MOCKUP</strong> — proposed redesign of analytics.html · all data is fabricated sample data · 2026-07-16</div>
+
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="nav-logo" href="#" onclick="return false">PULL<span>LIST</span></a>
+      <ul class="nav-links">
+        <li><a href="#" onclick="return false">Catalog</a></li>
+        <li><a href="#" onclick="return false">My List</a></li>
+        <li><a href="#" onclick="return false">Subscriptions</a></li>
+        <li><a href="#" onclick="return false">This Week</a></li>
+        <li><a href="#" onclick="return false">Admin</a></li>
+        <li><a href="#" class="active" onclick="return false">Analytics</a></li>
+      </ul>
+      <div class="nav-user">Welcome, <strong>Rick</strong></div>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <div class="page-header">
+      <div>
+        <h1>Analytics</h1>
+        <p>Customer activity &amp; engagement · Last 30 days</p>
+      </div>
+      <button class="btn-refresh" data-toast>↺ Refresh</button>
+    </div>
+
+    <!-- Filters: one row -->
+    <div class="toolbar">
+      <span class="toolbar-label">Time window:</span>
+      <button class="range-btn" data-toast>7 days</button>
+      <button class="range-btn active">30 days</button>
+      <button class="range-btn" data-toast>90 days</button>
+      <div class="toolbar-sep"></div>
+      <label class="admin-toggle">
+        <input type="checkbox" id="admin-filter" checked>
+        <span class="switch"></span>
+        Hide admin activity
+      </label>
+    </div>
+    <p class="filter-note">
+      <span class="admin-hidden">2 admin accounts excluded (96 events) · events retained 90 days — “all time” is capped by the retention purge</span>
+      <span class="admin-shown">⚠ Admin activity shown — highlighted rows are admin accounts · events retained 90 days</span>
+    </p>
+
+    <!-- ═══════════════ FREE TIER ═══════════════ -->
+    <div class="section-head">
+      <h2>Core Dashboard</h2>
+      <span class="plan-chip free">Free plan</span>
+      <div class="rule"></div>
+    </div>
+    <p class="section-sub">Raw activity counts for the selected window — what happened, and who did it.</p>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Weekly Active Users</div>
+        <div class="kpi-value" data-on="19" data-off="21">19</div>
+        <div class="kpi-delta up">▲ 3 <span class="vs">vs prior week</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Monthly Active Users</div>
+        <div class="kpi-value" data-on="34" data-off="36">34</div>
+        <div class="kpi-delta up">▲ 2 <span class="vs">vs prior 30 days</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Reserves</div>
+        <div class="kpi-value" data-on="212" data-off="219">212</div>
+        <div class="kpi-delta up">▲ 12% <span class="vs">vs prior 30 days</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Cancels</div>
+        <div class="kpi-value" data-on="17" data-off="17">17</div>
+        <div class="kpi-delta up">▼ 4 <span class="vs">vs prior 30 days</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">New Subscriptions</div>
+        <div class="kpi-value" data-on="9" data-off="9">9</div>
+        <div class="kpi-delta up">▲ 2 <span class="vs">vs prior 30 days</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Logins</div>
+        <div class="kpi-value" data-on="87" data-off="94">87</div>
+        <div class="kpi-delta flat">— flat <span class="vs">vs prior 30 days</span></div>
+      </div>
+    </div>
+
+    <div class="grid cols-3">
+      <div class="card">
+        <h3>Most Reserved Titles</h3>
+        <p class="h3-sub">Reserve events · color = distributor</p>
+        <div class="bars" id="bars-reserved"></div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+          <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Most Subscribed Series</h3>
+        <p class="h3-sub">Net subscribers · color = distributor</p>
+        <div class="bars" id="bars-subscribed"></div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+          <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Most Cancelled Titles</h3>
+        <p class="h3-sub">Cancel events · color = distributor</p>
+        <div class="bars" id="bars-cancelled"></div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+          <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Event Breakdown</h3>
+        <p class="h3-sub">All events in window, by type</p>
+        <div class="bars" id="bars-events"></div>
+      </div>
+
+      <div class="card span-2">
+        <h3>Customer Activity</h3>
+        <p class="h3-sub">Per-customer event counts in window · sorted by last seen</p>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr><th>Customer</th><th class="r">Reserves</th><th class="r">Cancels</th><th class="r">Subscribes</th><th class="r">Logins</th><th class="r">Catalog Views</th><th class="r">Page Views</th><th>Last Seen</th></tr>
+            </thead>
+            <tbody>
+              <tr class="admin-row"><td class="name">Rick S<span class="admin-badge">Admin</span></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r">5</td><td class="r">61</td><td class="r">48</td><td class="dim">Jul 15</td></tr>
+              <tr><td class="name">Marcus Webb</td><td class="r">14</td><td class="r">1</td><td class="r">2</td><td class="r">6</td><td class="r">42</td><td class="r">18</td><td class="dim">Jul 15</td></tr>
+              <tr><td class="name">Dana Kowalski</td><td class="r">22</td><td class="r">0</td><td class="r">1</td><td class="r">8</td><td class="r">55</td><td class="r">31</td><td class="dim">Jul 15</td></tr>
+              <tr class="admin-row"><td class="name">Judy R<span class="admin-badge">Admin</span></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r">2</td><td class="r">21</td><td class="r">15</td><td class="dim">Jul 14</td></tr>
+              <tr><td class="name">Jamie Chen</td><td class="r">9</td><td class="r">2</td><td class="r">0</td><td class="r">4</td><td class="r">28</td><td class="r">12</td><td class="dim">Jul 14</td></tr>
+              <tr><td class="name">Sam Petrillo</td><td class="r">17</td><td class="r">0</td><td class="r">1</td><td class="r">7</td><td class="r">39</td><td class="r">22</td><td class="dim">Jul 14</td></tr>
+              <tr><td class="name">Priya Nair</td><td class="r">11</td><td class="r">3</td><td class="r">2</td><td class="r">5</td><td class="r">33</td><td class="r">17</td><td class="dim">Jul 13</td></tr>
+              <tr><td class="name">Tom Alvarez</td><td class="r">6</td><td class="r">0</td><td class="r">0</td><td class="r">3</td><td class="r">19</td><td class="r">8</td><td class="dim">Jul 12</td></tr>
+              <tr><td class="name">Erin Fitzgerald</td><td class="r">13</td><td class="r">1</td><td class="r">1</td><td class="r">6</td><td class="r">37</td><td class="r">20</td><td class="dim">Jul 12</td></tr>
+              <tr><td class="name">Leo Marchetti</td><td class="r">4</td><td class="r">0</td><td class="r">0</td><td class="r">2</td><td class="r">11</td><td class="r">5</td><td class="dim">Jul 9</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card full">
+        <h3>Recent Events</h3>
+        <p class="h3-sub">Latest 50 events, live feed</p>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>When</th><th>Customer</th><th>Event</th><th>Detail</th></tr></thead>
+            <tbody>
+              <tr><td class="dim">Jul 15, 8:42 PM</td><td class="name">Dana Kowalski</td><td><span class="event-badge badge-reserve">reserve</span></td><td>Batman #163 · DC</td></tr>
+              <tr class="admin-row"><td class="dim">Jul 15, 8:31 PM</td><td class="name">Rick S<span class="admin-badge">Admin</span></td><td><span class="event-badge badge-catalog_view">catalog view</span></td><td>month: 2026-08, page 3</td></tr>
+              <tr><td class="dim">Jul 15, 8:17 PM</td><td class="name">Marcus Webb</td><td><span class="event-badge badge-subscribe">subscribe</span></td><td>Ultimate Spider-Man · PRH</td></tr>
+              <tr><td class="dim">Jul 15, 7:56 PM</td><td class="name">Dana Kowalski</td><td><span class="event-badge badge-catalog_view">catalog view</span></td><td>search: "hellboy"</td></tr>
+              <tr><td class="dim">Jul 15, 7:52 PM</td><td class="name">Dana Kowalski</td><td><span class="event-badge badge-login">login</span></td><td>—</td></tr>
+              <tr><td class="dim">Jul 15, 6:04 PM</td><td class="name">Sam Petrillo</td><td><span class="event-badge badge-page_view">page view</span></td><td>arrivals</td></tr>
+              <tr class="admin-row"><td class="dim">Jul 15, 5:48 PM</td><td class="name">Rick S<span class="admin-badge">Admin</span></td><td><span class="event-badge badge-login">login</span></td><td>—</td></tr>
+              <tr><td class="dim">Jul 15, 5:31 PM</td><td class="name">Priya Nair</td><td><span class="event-badge badge-cancel">cancel</span></td><td>X-Men #23 · Marvel</td></tr>
+              <tr><td class="dim">Jul 15, 4:19 PM</td><td class="name">Jamie Chen</td><td><span class="event-badge badge-reserve">reserve</span></td><td>Saga #78 · Image</td></tr>
+              <tr><td class="dim">Jul 15, 2:03 PM</td><td class="name">Erin Fitzgerald</td><td><span class="event-badge badge-reserve">reserve</span></td><td>Absolute Wonder Woman #14 · DC</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PREMIUM ═══════════════ -->
+    <div class="section-head">
+      <h2>Advanced Insights</h2>
+      <span class="plan-chip pro">Pro — unlocked</span>
+      <div class="rule"></div>
+    </div>
+    <p class="section-sub">Stickiness, habit, and basket-value metrics — the “is usage growing?” layer. Included in your plan; free-plan tenants see this section locked with a preview.</p>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">WAU / MAU Stickiness <span class="mini-chip">PRO</span></div>
+        <div class="kpi-value">56<small>%</small></div>
+        <div class="kpi-delta up">▲ 4 pts <span class="vs">vs prior 30 days</span></div>
+        <div class="kpi-note">19 of 34 monthly users came back this week</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Return Rate (30 d) <span class="mini-chip">PRO</span></div>
+        <div class="kpi-value">68<small>%</small></div>
+        <div class="kpi-delta down">▼ 3 pts <span class="vs">vs prior cohort</span></div>
+        <div class="kpi-note">21 of 31 June-active customers returned within 30 days</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Session Frequency <span class="mini-chip">PRO</span></div>
+        <div class="kpi-value">2.4<small>/wk</small></div>
+        <div class="kpi-delta up">▲ 0.3 <span class="vs">vs prior 30 days</span></div>
+        <div class="kpi-note">Avg visits per active customer per week</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Feature Depth <span class="mini-chip">PRO</span></div>
+        <div class="kpi-value">2.1</div>
+        <div class="kpi-delta flat">— flat <span class="vs">vs prior 30 days</span></div>
+        <div class="kpi-note">Avg distinct core actions per session</div>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card full">
+        <h3>Daily Active Customers <span class="mini-chip">PRO</span></h3>
+        <p class="h3-sub">Jun 16 – Jul 15 · hover for values · new-comic Wednesdays and the Jul 8 import + notify emails drive the peaks</p>
+        <div class="trend-wrap" id="trend-wrap">
+          <svg class="trend-svg" id="trend-svg" viewBox="0 0 760 230" role="img" aria-label="Daily active customers, June 16 through July 15. Values range from 3 to 17, peaking on Wednesdays and after the July 8 import."></svg>
+        </div>
+        <details class="data-view">
+          <summary>View as table</summary>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>Week</th><th class="r">Weekly Active Users</th><th class="r">Peak day</th><th class="r">Peak DAU</th></tr></thead>
+              <tbody>
+                <tr><td>Jun 16 – Jun 22</td><td class="r">16</td><td class="r dim">Wed Jun 17</td><td class="r">14</td></tr>
+                <tr><td>Jun 23 – Jun 29</td><td class="r">15</td><td class="r dim">Wed Jun 24</td><td class="r">13</td></tr>
+                <tr><td>Jun 30 – Jul 6</td><td class="r">16</td><td class="r dim">Wed Jul 1</td><td class="r">15</td></tr>
+                <tr><td>Jul 7 – Jul 13</td><td class="r">18</td><td class="r dim">Wed Jul 8</td><td class="r">16</td></tr>
+                <tr><td>Jul 14 – Jul 15</td><td class="r">19</td><td class="r dim">Wed Jul 15</td><td class="r">17</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3>AOV Uplift — Subscribers vs À-la-carte <span class="mini-chip">PRO</span></h3>
+        <p class="h3-sub">Avg reserved value per customer this catalog month</p>
+        <div class="aov-flex">
+          <div class="aov-bars bars">
+            <div class="bar-item">
+              <div class="bar-label">Subscribers <span class="dist">14 customers</span></div>
+              <div class="bar-row">
+                <div class="bar-track"><div class="bar-fill blue" style="width:100%" data-tip="Subscribers: $47.80 avg reserved value"></div></div>
+                <div class="bar-count">$47.80</div>
+              </div>
+            </div>
+            <div class="bar-item">
+              <div class="bar-label">À-la-carte <span class="dist">20 customers</span></div>
+              <div class="bar-row">
+                <div class="bar-track"><div class="bar-fill blue" style="width:65%" data-tip="À-la-carte: $31.20 avg reserved value"></div></div>
+                <div class="bar-count">$31.20</div>
+              </div>
+            </div>
+          </div>
+          <div class="aov-stat">
+            <div class="v">+53%</div>
+            <div class="l">Subscriber uplift</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Return Rate by Weekly Cohort <span class="mini-chip">PRO</span></h3>
+        <p class="h3-sub">% of each week's active customers who returned within 30 days</p>
+        <div class="cohort bars">
+          <div class="bar-item">
+            <div class="bar-label">Week of Jun 15</div>
+            <div class="bar-row">
+              <div class="bar-track"><div class="bar-fill blue" style="width:74%" data-tip="Jun 15 cohort: 74% returned within 30 days"></div></div>
+              <div class="bar-count">74%</div>
+            </div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Week of Jun 22</div>
+            <div class="bar-row">
+              <div class="bar-track"><div class="bar-fill blue" style="width:71%" data-tip="Jun 22 cohort: 71% returned within 30 days"></div></div>
+              <div class="bar-count">71%</div>
+            </div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Week of Jun 29</div>
+            <div class="bar-row">
+              <div class="bar-track"><div class="bar-fill blue" style="width:65%" data-tip="Jun 29 cohort: 65% returned within 30 days"></div></div>
+              <div class="bar-count">65%</div>
+            </div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-label">Week of Jul 6</div>
+            <div class="bar-row">
+              <div class="bar-track"><div class="bar-fill blue" style="width:62%" data-tip="Jul 6 cohort: 62% returned so far (window still open)"></div></div>
+              <div class="bar-count">62%*</div>
+            </div>
+          </div>
+        </div>
+        <p class="h3-sub" style="margin:10px 0 0">*window still open — will rise until Aug 5</p>
+      </div>
+
+      <div class="card">
+        <h3>Session Frequency Distribution <span class="mini-chip">PRO</span></h3>
+        <p class="h3-sub">Customers by avg sessions per week · session = events with &lt;30 min gaps</p>
+        <div class="hist" id="hist-sessions"></div>
+        <div class="hist-x"><span>&lt;1</span><span>1–2</span><span>2–3</span><span>3–4</span><span>5+</span></div>
+      </div>
+
+      <div class="card">
+        <h3>Feature Depth per Session <span class="mini-chip">PRO</span></h3>
+        <p class="h3-sub">Share of sessions by distinct core actions taken (browse, reserve, manage list, subscriptions, arrivals)</p>
+        <div class="seg-bar">
+          <div class="seg" style="width:38%;background:var(--viz-seq-1)" data-tip="1 core action — 38% of sessions (75 sessions)"></div>
+          <div class="seg" style="width:33%;background:var(--viz-seq-2)" data-tip="2 core actions — 33% of sessions (65 sessions)"></div>
+          <div class="seg" style="width:29%;background:var(--viz-seq-3)" data-tip="3+ core actions — 29% of sessions (57 sessions)"></div>
+        </div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--viz-seq-1)"></span>1 action — 38%</span>
+          <span><span class="sw" style="background:var(--viz-seq-2)"></span>2 actions — 33%</span>
+          <span><span class="sw" style="background:var(--viz-seq-3)"></span>3+ actions — 29%</span>
+        </div>
+        <p class="h3-sub" style="margin:12px 0 0">Sessions that touch 2+ features return at nearly twice the rate of single-action sessions — the upsell story for subscriptions &amp; arrivals.</p>
+      </div>
+
+      <div class="card full">
+        <h3>Win-back List — Inactive Customers <span class="mini-chip">PRO</span></h3>
+        <p class="h3-sub">Active accounts with no activity in 30+ days · 7 of 41 customers · most-recently-lapsed first (easiest to win back)</p>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Customer</th><th>Type</th><th>Last Seen</th><th class="r">Inactive</th><th>Email</th><th>Suggested Play</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Nadia Osei</td><td class="dim">app</td><td class="dim">Jun 12</td><td class="r">33 d</td><td class="dim">nadia.o@example.com</td><td class="dim">“Your pulls are waiting” nudge</td></tr>
+              <tr><td class="name">Vic Papadakis</td><td class="dim">app</td><td class="dim">Jun 9</td><td class="r">36 d</td><td class="dim">vpapadakis@example.com</td><td class="dim">August catalog highlight email</td></tr>
+              <tr><td class="name">Chris Delgado</td><td class="dim">app</td><td class="dim">Jun 4</td><td class="r">41 d</td><td class="dim">c.delgado@example.com</td><td class="dim">August catalog highlight email</td></tr>
+              <tr><td class="name">Becca Liu</td><td class="dim">app</td><td class="dim">May 29</td><td class="r">47 d</td><td class="dim">becca.liu@example.com</td><td class="dim">Subscribe pitch — reserved Saga 3× before lapsing</td></tr>
+              <tr><td class="name">Omar Haddad</td><td class="dim">app</td><td class="dim">none in retention</td><td class="r">90+ d</td><td class="dim">ohaddad@example.com</td><td class="dim">Personal call — long lapse</td></tr>
+              <tr><td class="name">Hank Morrow</td><td class="dim">paper</td><td class="dim">never logged in</td><td class="r">—</td><td class="dim">—</td><td class="dim">Invite to app (claim flow)</td></tr>
+              <tr><td class="name">Gwen Sattler</td><td class="dim">paper</td><td class="dim">never logged in</td><td class="r">—</td><td class="dim">gsattler@example.com</td><td class="dim">Invite to app (claim flow)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="legend" style="margin-top:14px;gap:10px">
+          <button class="btn" data-toast style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 14px;border-radius:var(--radius);font-size:0.76rem">✉ Copy emails</button>
+          <button class="btn" data-toast style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 14px;border-radius:var(--radius);font-size:0.76rem">⬇ Export CSV</button>
+          <span style="font-size:0.72rem;color:var(--text-muted);align-self:center">Paper customers never log in — they're invite-to-app candidates, not lapses.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pro-extras">
+      <button class="btn" data-toast>⬇ Export CSV</button>
+      <button class="btn" data-toast>Per-customer drill-down</button>
+      <span class="hint">Premium extras: raw event export and a per-customer engagement timeline.</span>
+    </div>
+
+    <details class="defs">
+      <summary>Metric definitions &amp; data sources</summary>
+      <dl>
+        <dt>Weekly / Monthly Active Users (WAU / MAU)</dt>
+        <dd>Distinct non-admin <code>user_id</code>s with ≥1 event in the trailing 7 / 30 days.
+          <span class="src">Source: usage_events — computable today, no new instrumentation.</span></dd>
+        <dt>WAU/MAU Stickiness</dt>
+        <dd>WAU ÷ MAU. The share of monthly customers who came back this week; &gt;50% is strong for a monthly-cadence product.
+          <span class="src">Source: usage_events — computable today.</span></dd>
+        <dt>Return Rate (within 30 days)</dt>
+        <dd>Of customers active in the prior 30-day window, the % with any event in the following 30 days. Needs 60 days of history — fits inside the 90-day retention purge.
+          <span class="src">Source: usage_events — computable today.</span></dd>
+        <dt>Session Frequency</dt>
+        <dd>Sessions per active customer per week. A session is a burst of one user's events with no gap &gt;30 minutes (derived client-side; login events undercount because magic-link sessions persist).
+          <span class="src">Source: usage_events, derived — computable today; a session_id in metadata would make it exact.</span></dd>
+        <dt>Feature Depth</dt>
+        <dd>Distinct core actions per session, where core = catalog browse, reserve/cancel, my-list view, subscriptions view, arrivals view.
+          <span class="src">Source: usage_events, derived from the same session clustering.</span></dd>
+        <dt>AOV &amp; AOV Uplift</dt>
+        <dd>Average reserved basket value per customer for the catalog month, split subscribers vs à-la-carte. Uplift = subscriber AOV ÷ à-la-carte AOV − 1.
+          <span class="src">Source: preorders × catalog.price_usd join (accurate, survives cancels); reserve events carry price_usd for trend approximations.</span></dd>
+        <dt>Win-back List (Inactive Customers)</dt>
+        <dd>Profiles with status = active and is_admin false, whose newest usage event is older than 30 days (or absent within the 90-day retention). Paper profiles (is_paper) never log in and are listed as invite-to-app candidates, not lapses.
+          <span class="src">Source: user_profiles LEFT JOIN latest usage_events per user — computable today.</span></dd>
+        <dt>Admin filter</dt>
+        <dd>Excludes events whose user_id belongs to a profile with is_admin = true. Client-side set-filter against user_profiles — no schema change. Default ON.
+          <span class="src">Note: admin self-actions ARE currently logged (only impersonation is skipped) — docs say otherwise; see F87 candidate.</span></dd>
+      </dl>
+    </details>
+
+  </div>
+
+  <footer class="site-footer">
+    Service provided by Ray &amp; Judy's Book Stop · Rockaway, NJ<br>
+    Design mockup v1 · sample data only · proposed free/premium split for multi-tenant plans (Phase 6+)
+  </footer>
+
+  <div class="viz-tip" id="viz-tip"></div>
+  <div class="toast" id="toast">Static mockup — sample data doesn't change</div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('plz-root');
+  const tip  = document.getElementById('viz-tip');
+
+  // ── shared tooltip ──────────────────────────────────────────
+  function showTip(html, x, y) {
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    const pad = 14;
+    const r = tip.getBoundingClientRect();
+    let left = x + pad, top = y - r.height - pad;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
+    if (top < 8) top = y + pad;
+    tip.style.left = left + 'px';
+    tip.style.top  = top + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+
+  // Delegated so bars built later also get tooltips; the trend SVG
+  // manages its own crosshair tooltip and is excluded here.
+  root.addEventListener('mousemove', e => {
+    if (e.target.closest('#trend-svg')) return;
+    const t = e.target.closest('[data-tip]');
+    if (t) showTip(t.dataset.tip, e.clientX, e.clientY);
+    else hideTip();
+  });
+  root.addEventListener('mouseleave', hideTip);
+
+  // ── toast for inert mockup controls ─────────────────────────
+  const toast = document.getElementById('toast');
+  let toastTimer;
+  root.querySelectorAll('[data-toast]').forEach(el => {
+    el.addEventListener('click', () => {
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    });
+  });
+
+  // ── admin filter toggle ──────────────────────────────────────
+  const adminFilter = document.getElementById('admin-filter');
+  function applyAdminFilter() {
+    const hide = adminFilter.checked;
+    root.classList.toggle('show-admin', !hide);
+    root.querySelectorAll('.kpi-value[data-on]').forEach(el => {
+      el.childNodes[0].textContent = hide ? el.dataset.on : el.dataset.off;
+    });
+  }
+  adminFilter.addEventListener('change', applyAdminFilter);
+  applyAdminFilter();
+
+  // ── horizontal bar builders (free tier) ─────────────────────
+  function bars(containerId, rows, unit) {
+    const max = Math.max(...rows.map(r => r.n));
+    document.getElementById(containerId).innerHTML = rows.map(r => {
+      const pct = Math.max(4, Math.round(r.n / max * 100));
+      const cls = r.d === 'Lunar' ? 'lunar' : r.d === 'PRH' ? 'prh' : 'blue';
+      const dist = r.d ? `<span class="dist">${r.pub} · ${r.d}</span>` : '';
+      return `<div class="bar-item">
+        <div class="bar-label">${r.t}${dist}</div>
+        <div class="bar-row">
+          <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%" data-tip="${r.t}: ${r.n} ${unit}"></div></div>
+          <div class="bar-count">${r.n}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  bars('bars-reserved', [
+    { t: 'Batman #163',               pub: 'DC',     d: 'Lunar', n: 21 },
+    { t: 'Ultimate Spider-Man #24',   pub: 'Marvel', d: 'PRH',   n: 18 },
+    { t: 'Absolute Superman #12',     pub: 'DC',     d: 'Lunar', n: 15 },
+    { t: 'Saga #78',                  pub: 'Image',  d: 'Lunar', n: 12 },
+    { t: 'X-Men #23',                 pub: 'Marvel', d: 'PRH',   n: 10 },
+    { t: 'TMNT #22',                  pub: 'IDW',    d: 'PRH',   n: 8 },
+  ], 'reserves');
+
+  bars('bars-subscribed', [
+    { t: 'Batman',                pub: 'DC',     d: 'Lunar', n: 11 },
+    { t: 'Ultimate Spider-Man',   pub: 'Marvel', d: 'PRH',   n: 9 },
+    { t: 'Saga',                  pub: 'Image',  d: 'Lunar', n: 7 },
+    { t: 'Absolute Wonder Woman', pub: 'DC',     d: 'Lunar', n: 6 },
+    { t: 'TMNT',                  pub: 'IDW',    d: 'PRH',   n: 4 },
+  ], 'net subscribers');
+
+  bars('bars-cancelled', [
+    { t: 'Energon Universe 2026 Special', pub: 'Image',  d: 'Lunar', n: 3 },
+    { t: 'X-Men #23',                     pub: 'Marvel', d: 'PRH',   n: 3 },
+    { t: 'Detective Comics #1103',        pub: 'DC',     d: 'Lunar', n: 2 },
+    { t: 'Hellboy: Silver Lantern #4',    pub: 'Dark Horse', d: 'PRH', n: 2 },
+  ], 'cancels');
+
+  bars('bars-events', [
+    { t: 'catalog view', n: 486 },
+    { t: 'page view',    n: 291 },
+    { t: 'reserve',      n: 212 },
+    { t: 'login',        n: 87 },
+    { t: 'logout',       n: 41 },
+    { t: 'cancel',       n: 17 },
+    { t: 'subscribe',    n: 9 },
+    { t: 'unsubscribe',  n: 3 },
+  ], 'events');
+
+  // ── session-frequency histogram ─────────────────────────────
+  const buckets = [
+    { label: '<1 per wk',  n: 9 },
+    { label: '1–2 per wk', n: 8 },
+    { label: '2–3 per wk', n: 7 },
+    { label: '3–4 per wk', n: 6 },
+    { label: '5+ per wk',  n: 4 },
+  ];
+  const maxB = Math.max(...buckets.map(b => b.n));
+  document.getElementById('hist-sessions').innerHTML = buckets.map(b => `
+    <div class="col">
+      <span class="n">${b.n}</span>
+      <div class="bar" style="height:${Math.round(b.n / maxB * 100)}%" data-tip="${b.label}: ${b.n} customers"></div>
+    </div>`).join('');
+
+  // ── DAU trend chart (SVG, crosshair + tooltip) ──────────────
+  const DAU = [
+    ['Tue Jun 16', 7], ['Wed Jun 17', 14], ['Thu Jun 18', 9],  ['Fri Jun 19', 8],
+    ['Sat Jun 20', 6], ['Sun Jun 21', 4],  ['Mon Jun 22', 6],  ['Tue Jun 23', 7],
+    ['Wed Jun 24', 13],['Thu Jun 25', 8],  ['Fri Jun 26', 7],  ['Sat Jun 27', 5],
+    ['Sun Jun 28', 4], ['Mon Jun 29', 6],  ['Tue Jun 30', 8],  ['Wed Jul 1', 15],
+    ['Thu Jul 2', 9],  ['Fri Jul 3', 7],   ['Sat Jul 4', 4],   ['Sun Jul 5', 3],
+    ['Mon Jul 6', 6],  ['Tue Jul 7', 8],   ['Wed Jul 8', 16],  ['Thu Jul 9', 15],
+    ['Fri Jul 10', 12],['Sat Jul 11', 8],  ['Sun Jul 12', 6],  ['Mon Jul 13', 9],
+    ['Tue Jul 14', 10],['Wed Jul 15', 17],
+  ];
+  const svg = document.getElementById('trend-svg');
+  const W = 760, H = 230, M = { t: 16, r: 46, b: 28, l: 34 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+  const yMax = 20;
+  const xAt = i => M.l + i / (DAU.length - 1) * iw;
+  const yAt = v => M.t + (1 - v / yMax) * ih;
+  const NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs) {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+  // gridlines + y labels
+  [0, 5, 10, 15, 20].forEach(v => {
+    svg.appendChild(el('line', { x1: M.l, x2: W - M.r, y1: yAt(v), y2: yAt(v), stroke: '#2e2e2e', 'stroke-width': v === 0 ? 1.25 : 0.75 }));
+    const t = el('text', { x: M.l - 8, y: yAt(v) + 4, 'text-anchor': 'end', fill: '#737069', 'font-size': '11', 'font-family': 'inherit' });
+    t.textContent = v; svg.appendChild(t);
+  });
+  // x ticks (weekly)
+  [0, 7, 14, 21, 28].forEach(i => {
+    const t = el('text', { x: xAt(i), y: H - 8, 'text-anchor': 'middle', fill: '#737069', 'font-size': '11', 'font-family': 'inherit' });
+    t.textContent = DAU[i][0].slice(4); svg.appendChild(t);
+  });
+  // area + line
+  const pts = DAU.map((d, i) => [xAt(i), yAt(d[1])]);
+  const lineD = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('');
+  svg.appendChild(el('path', { d: lineD + `L${xAt(DAU.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`, fill: 'rgba(57,135,229,0.13)', stroke: 'none' }));
+  svg.appendChild(el('path', { d: lineD, fill: 'none', stroke: '#3987e5', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+  // emphasized endpoint + direct label
+  const last = pts[pts.length - 1];
+  svg.appendChild(el('circle', { cx: last[0], cy: last[1], r: 4, fill: '#3987e5', stroke: '#181818', 'stroke-width': 2 }));
+  const endLbl = el('text', { x: last[0] + 8, y: last[1] + 4, fill: '#f0ece4', 'font-size': '12', 'font-weight': '600', 'font-family': 'inherit' });
+  endLbl.textContent = '17'; svg.appendChild(endLbl);
+  // crosshair
+  const cross = el('line', { y1: M.t, y2: M.t + ih, stroke: '#5a5755', 'stroke-width': 1, 'stroke-dasharray': '3,3', visibility: 'hidden' });
+  const dot = el('circle', { r: 4, fill: '#3987e5', stroke: '#181818', 'stroke-width': 2, visibility: 'hidden' });
+  svg.appendChild(cross); svg.appendChild(dot);
+  svg.addEventListener('mousemove', e => {
+    const r = svg.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(DAU.length - 1, Math.round((fx - M.l) / iw * (DAU.length - 1))));
+    const [x, y] = pts[i];
+    cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('visibility', 'visible');
+    showTip(`<span class="tl">${DAU[i][0]}</span> · <strong>${DAU[i][1]}</strong> active customers`, e.clientX, e.clientY);
+  });
+  svg.addEventListener('mouseleave', () => {
+    cross.setAttribute('visibility', 'hidden');
+    dot.setAttribute('visibility', 'hidden');
+    hideTip();
+  });
+})();
+</script>

@@ -23,9 +23,11 @@ Tenant 2 is **pilot/seeded only** throughout this soak (decision: Rick, 2026-06-
 
 ---
 
-## Operational note (from S3 Deploy Log)
+## Operational note (from S3 Deploy Log) — corrected 2026-07-15 (S6 closeout)
 
-`create-paper-customer` and `invite-customer` Edge Functions retain the F34 residual partial tenant-awareness: they write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. **Do NOT use these EFs from the Comic Store admin dashboard during the pilot** — customers would land in the founding tenant, not tenant 2. If pilot customers must be added, use a service-role INSERT directly into `user_profiles` scoped to tenant 2's id, or wait for a dedicated fix (post-Phase 5).
+**Correction:** the original S3 note below claimed `create-paper-customer` and `invite-customer` write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. That description matched pre-2026-05-10 behavior; the F34 fix (commit `7ea592c`, 2026-05-10) resolves `tenant_id` from the caller's own profile (`callerTenantId`, falling back to `FOUNDING_TENANT_ID` only if the profile lookup fails) and was live on both envs well before S3 ran. Re-verified against deployed source at S6 closeout (2026-07-15) — see `docs/technical-reference.md` § 13 F34. **Both EFs are safe to use from the Comic Store admin dashboard.** Original (incorrect) note preserved below for the record:
+
+> `create-paper-customer` and `invite-customer` Edge Functions retain the F34 residual partial tenant-awareness: they write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. **Do NOT use these EFs from the Comic Store admin dashboard during the pilot** — customers would land in the founding tenant, not tenant 2. If pilot customers must be added, use a service-role INSERT directly into `user_profiles` scoped to tenant 2's id, or wait for a dedicated fix (post-Phase 5).
 
 ---
 
@@ -77,6 +79,34 @@ Tenant 2 is **pilot/seeded only** throughout this soak (decision: Rick, 2026-06-
 
 ---
 
-*Next major gate: **monthly prod import (expected early July 2026)**. When Rick runs the normal founding monthly import, paste the import summary → Claude prepares post-import isolation re-verification SQL → Rick pastes counts → if all clean, S4 close gate passed → proceed to S5.*
+### S4 close — 2026-07-15
 
-*For post-import re-verification, use the superuser row-count probe above plus a founding-catalog + founding-preorders sanity check that tenant-2 seeded rows are unchanged. Full RLS simulation (SET LOCAL) will be attempted via the SQL Editor; if it fails again, superuser counts + the confirmed-clean S3 baseline together constitute the pass evidence.*
+**Import cycle:** the normal founding monthly import ran 2026-07-08→10 (already recorded in `CLAUDE.md` § Current Migration Phase at the time this session opened). The verbatim `import.js` console summary was pasted into a separate CLI session on or around 2026-07-10 and is not duplicated here; this session verified the import's effect directly against live prod state (below), which is stronger evidence than a duplicated log excerpt.
+
+**Post-import isolation re-verification (prod SQL Editor, superuser row-count probe, 2026-07-15):**
+
+| slug | id | profiles | catalog | preorders | subscriptions | weekly_shipment | reservation_history | usage_events |
+|---|---|---|---|---|---|---|---|---|
+| comicstore | `6f6ef2c3-da60-4fe8-91fa-2acca368fcdf` | 1 | 2 | 0 | 0 | 0 | 0 | 1 |
+| rjbookstop | `20941129-c35a-476d-ae21-44b8f77af89c` | 22 | 12263 | 1276 | 3 | 687 | 247 | 973 |
+
+- `comicstore` is **byte-identical** to its pre-import baseline (2026-06-20: profiles=1, catalog=2, preorders=0) — the founding import touched zero tenant-2 rows. `usage_events=1` is the tenant-2 admin's own S2/S3 sign-in activity, correctly scoped to its own tenant — not a leak.
+- `rjbookstop` shows normal one-month growth: catalog +1147 (new July catalog month), preorders +475, reservation_history +247 archived (old-month archival on import), profiles +3 — all consistent with a routine monthly import plus a month of real customer activity.
+- Orphan check (any row whose `tenant_id` doesn't resolve to a real tenant) across `catalog`/`preorders`/`user_profiles`: **0/0/0**.
+- `total_tenants = 2` (unchanged — no stray tenants).
+
+**Founding Playwright:** 19/19 green (run 2026-07-15, directly via `npx playwright test --reporter=line` — the `run-smoke.ps1` wrapper truncated output for unrelated reasons on two attempts; the underlying suite is unaffected). Node import-regression tests 7/7 green. Synthetic tenant `pw-627f5329` created and torn down cleanly by the suite. Tenant-isolation specs (F15/F20) green.
+
+**Founding write-smoke post-import:** Rick confirmed a reserve + cancel cycle on `pulllist.app` completed successfully against prod (2026-07-15).
+
+**Customer-reported regressions:** none, across the full soak span 2026-06-20 → 2026-07-15 (Rick attestation).
+
+**Close-gate checklist (§ Close gate above):**
+1. ✓ One complete monthly prod import elapsed with both tenants present (2026-07-08→10)
+2. ✓ Founding import touched only founding rows; tenant-2 seeded data unchanged
+3. ✓ Post-import isolation re-verification = 0 cross-tenant / 0 orphans, both directions
+4. ✓ Founding Playwright green (19/19) after the import
+5. ✓ Founding write-smoke clean post-import
+6. ✓ No customer-reported regressions across the soak span
+
+**Soak result: PASSED.** Elapsed window: 2026-06-20 → 2026-07-15 (25 days; import boundary 2026-07-08→10). Proceeding to S6 (Phase 5 closeout).

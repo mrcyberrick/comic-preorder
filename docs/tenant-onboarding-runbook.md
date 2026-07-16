@@ -128,15 +128,7 @@ In MailerLite: **Automations → Webhook → URL** → paste the URL above.
 
 If the tenant will not use MailerLite during the pilot period, **defer this step and note it**. Pilot customers can be added via direct service-role INSERT into `user_profiles` (see § Operational note below). Deferring does not block any other step.
 
-**Operational note — F34 residual:** `create-paper-customer` and `invite-customer` Edge Functions currently write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. **Do NOT use these EFs from a non-founding admin dashboard during the pilot.** Add pilot customers via SQL with a service-role key:
-
-```sql
--- Prod SQL Editor (service-role / postgres)
-INSERT INTO user_profiles (id, full_name, email, is_paper, tenant_id, status)
-VALUES (gen_random_uuid(), '<name>', '<email>', true, '<tenant_id>'::uuid, 'active');
-```
-
-This restriction applies until F34 residual is fully remediated (a follow-on sub-deploy).
+**Note (corrected 2026-07-15, 5.5 S6):** an earlier version of this note warned that `create-paper-customer` and `invite-customer` write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. That described pre-2026-05-10 behavior — the F34 fix (`docs/technical-reference.md` § 13) resolves `tenant_id` from the caller's own profile and was live on both envs before this runbook was first written. **Both EFs are safe to use from any tenant's admin dashboard**; no manual SQL workaround is needed for pilot customers.
 
 ---
 
@@ -182,7 +174,6 @@ If any count is unexpected, investigate before announcing the new tenant. File a
 - [ ] **Isolation spot-check green** (Step 6) against the pilot/seeded data.
 - [ ] **`<slug>.pulllist.app` TLS Active** and the admin has confirmed sign-in.
 - [ ] **Rollback acknowledged:** once real customers are onboarded, forward-fix only. The tenant row + its customer data cannot be cleanly removed via the §4.1 teardown.
-- [ ] **Inform the tenant admin** about the `create-paper-customer` / `invite-customer` F34 residual (§ Step 4 operational note) — until remediated, paper customers added from their admin dashboard would land in the founding tenant.
 
 Only after all boxes are checked: announce the new tenant and allow customer-facing use.
 
@@ -225,7 +216,7 @@ After real customer writes: no clean teardown exists. Forward-fix only.
 - `register-tenant` contract: `docs/technical-reference.md` § 11.3
 - FK-ordered teardown template: `docs/phase-4.1-canary-procedure.md` § Teardown
 - curl pattern (`--data-binary @file`; not `Invoke-RestMethod`): `CLAUDE.md` § Known Issues
-- F34 residual (`create-paper-customer` / `invite-customer` write to founding): `docs/technical-reference.md` § 13 F34
+- F34 (`create-paper-customer` / `invite-customer` tenant resolution, fixed 2026-05-10): `docs/technical-reference.md` § 13 F34
 - F72 (`register-customer` email branding still founding-only): `docs/technical-reference.md` § 13 F72
 - Reserved slug denylist: `docs/technical-reference.md` § 11.3 (`register-tenant` contract)
 - Projects: prod `plgegklqtdjxeglvyjte`; staging `puoaiyezsreowpwxzxhj`
