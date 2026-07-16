@@ -137,7 +137,7 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 **Session 3 — 2026-07-16 (gate scheduling only; no code, config, or dashboard changes):**
 - **Step 4 gate computed and scheduled.** First qualifying Wednesday on the new key = **2026-07-22**; earliest valid Step 5 day = **Thursday 2026-07-23** (quiet day: not Tue/Wed, before the early-August import week; days-of-week verified via `Get-Date`).
 - Two one-time reminder routines created (Claude Code cloud routines, fire 8:00 AM ET): `trig_0134vBDGdPfCnfBXyW44c2n4` (Jul 22 — shipment-day watch: browser-console anon-key check on both tenant domains + confirm the `SUPABASE_SERVICE_KEY_PROD` rotation) and `trig_01MgG9WDZzW7vcHxBM7KPdEN` (Jul 23 — Step 5 ready, with precondition check and Steps 5–7 checklist). **Reminders only** — the toggle flip itself remains Rick-in-the-loop per Step 5. Manage/delete at https://claude.ai/code/routines. One-shots auto-disable after firing.
-- Google Calendar events not created (connector token expired; re-auth pending). Pattern generalized into the local skill `/schedule-gate`; `/wrap-up` drift check now flags open gates with no scheduled reminder.
+- Google Calendar events added same day after Rick re-authorized the connector (primary calendar, 8:00 AM ET, popup+email reminders): event `gsq4qf3pl1ds4d7c4fk85vn62c` (Jul 22 watch) and `7cveofd3lgbtkkn7fg5bvnt38k` (Jul 23 Step 5) — both gate days now have calendar + cloud-routine coverage. Pattern generalized into the local skill `/schedule-gate`; `/wrap-up` drift check now flags open gates with no scheduled reminder.
 
 ## 7. Rollback
 
