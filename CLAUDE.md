@@ -526,8 +526,12 @@ approval.
   app) is required before the prod legacy `service_role`/`anon` toggle can be
   disabled. See `docs/technical-reference.md` § 13 F86.
 - **Subscription promotion (catalog banner + post-reserve subscribe prompt)**
-  — planned 2026-07-17, not started; builds dark, banner enable is gated on
-  Rick's subscription-perk/copy decision. Plan: `docs/subscription-promotion.md`.
+  — code complete, merged + pushed to staging 2026-07-17 (commit `4b4da8f`);
+  local smoke suite green (30 unit + 32 Playwright, specs 09/10 new). Only
+  remaining: staging DB enable (TEST banner, founding tenant) — SQL handed to
+  Rick 2026-07-17, pending his run + visual pass (V5). Real perk copy still
+  gated on Rick's subscription-perk/pricing decision (prod promotion separate).
+  Plan: `docs/subscription-promotion.md`.
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
 no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
