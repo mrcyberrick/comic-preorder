@@ -6,159 +6,228 @@
   <title>Analytics — Pull List</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Analytics v2 — chart-only palette ────────────────────
-       --viz-lunar/--viz-prh replace --lunar/--prh for charts only:
-       the global token pair fails CVD separation (deutan ΔE 0.9).
-       Do not use these for anything outside chart/bar fills. */
+    /* ── Analytics 3-tier redesign — page-scoped styles ───────────
+       Uses the shared style.css variables + flat class names; nothing
+       here belongs in the global stylesheet (analytics-only surface).
+
+       --viz-* replace --lunar/--prh for chart fills only: the global
+       token pair fails CVD separation (deutan ΔE 0.9). Do not use
+       these for anything outside chart/bar fills. */
     :root {
-      --viz-blue:  #3987e5;
-      --viz-lunar: #1d5cd6;
-      --viz-prh:   #9878eb;
-      --viz-seq-1: #86b6ef;
-      --viz-seq-2: #3987e5;
-      --viz-seq-3: #184f95;
+      --viz-blue:   #3987e5;
+      --viz-lunar:  #1d5cd6;
+      --viz-prh:    #9878eb;
+      --viz-seq-1:  #86b6ef;
+      --viz-seq-2:  #3987e5;
+      --viz-seq-3:  #1d5cd6;
+      --viz-seq-4:  #184f95;
+      --risk:       #ff6a55;
+      --seg-1:      #6b46d9;
+      --seg-2:      #9878eb;
+      --seg-3:      #c9b8f5;
     }
 
-    /* ── Toolbar ──────────────────────────────────────────── */
-    .toolbar-label { font-size: 0.76rem; color: var(--text-muted); font-weight: 500; }
-    .toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 6px; }
-    .range-btn {
-      background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary);
-      padding: 5px 14px; border-radius: var(--radius); font-size: 0.78rem;
-      font-family: var(--font-body); cursor: pointer; transition: border-color 0.15s, color 0.15s;
+    /* ── Header controls ──────────────────────────────────────── */
+    .head-controls { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    .adm-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      padding: 6px 12px; border-radius: var(--radius);
+      font-size: 0.78rem; font-weight: 600; font-family: var(--font-body);
+      color: var(--text-secondary); cursor: pointer; transition: border-color 0.15s, color 0.15s;
     }
-    .range-btn.active { border-color: var(--viz-blue); color: var(--text-primary); }
-    .range-btn:hover { color: var(--text-primary); }
+    .adm-pill:hover { border-color: var(--border-accent); color: var(--text-primary); }
+    .adm-track { width: 26px; height: 14px; border-radius: 7px; background: var(--border); position: relative; flex: none; transition: background 0.15s; }
+    .adm-knob { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--text-primary); transition: left 0.15s; }
+    .adm-pill.on .adm-track { background: var(--warning); }
+    .adm-pill.on .adm-knob { left: 14px; }
 
-    .admin-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; user-select: none; }
-    .admin-toggle input { position: absolute; opacity: 0; width: 40px; height: 22px; margin: 0; cursor: pointer; }
-    .switch { width: 38px; height: 21px; border-radius: 11px; background: var(--bg-elevated); border: 1px solid var(--border); position: relative; transition: background 0.15s; flex: none; }
-    .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--text-muted); transition: transform 0.15s, background 0.15s; }
-    .admin-toggle input:checked + .switch { background: rgba(57,135,229,0.35); border-color: var(--viz-blue); }
-    .admin-toggle input:checked + .switch::after { transform: translateX(17px); background: var(--viz-blue); }
-    .admin-toggle input:focus-visible + .switch { outline: 2px solid var(--viz-blue); outline-offset: 2px; }
-    .filter-note { font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 24px; }
-    .filter-note.warn { color: var(--warning); }
+    .warn-banner {
+      display: flex; gap: 8px; align-items: flex-start;
+      background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25);
+      border-radius: var(--radius); padding: 9px 14px; margin-top: 14px;
+    }
+    .warn-banner .ic { color: var(--warning); font-size: 0.8rem; line-height: 1.5; }
+    .warn-banner p { font-size: 0.76rem; color: var(--text-secondary); margin: 0; }
+    .warn-banner strong { color: var(--text-primary); }
 
-    /* ── Section dividers ─────────────────────────────────── */
-    .section-head { display: flex; align-items: center; gap: 12px; margin: 34px 0 16px; }
-    .section-head h2 { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: 0.08em; margin: 0; color: var(--text-primary); }
-    .section-head .rule { flex: 1; height: 1px; background: var(--border); }
-    .section-sub { font-size: 0.78rem; color: var(--text-muted); margin: -10px 0 18px; }
+    /* ── Tab bar ──────────────────────────────────────────────── */
+    .tabbar { display: flex; gap: 4px; margin-top: 22px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .tab-btn {
+      background: transparent; border: none; border-bottom: 2px solid transparent;
+      font-family: var(--font-body); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.03em;
+      padding: 10px 18px; cursor: pointer; margin-bottom: -1px;
+      color: var(--text-secondary); transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-btn.active { color: var(--text-primary); border-bottom-color: var(--viz-blue); }
+    .tab-desc { font-size: 0.78rem; color: var(--text-muted); margin: 14px 0 20px; }
+    .tab-panel[hidden] { display: none; }
 
-    /* ── KPI tiles ────────────────────────────────────────── */
-    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 26px; }
+    /* ── KPI tiles (shared) ───────────────────────────────────── */
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 4px; }
+    .kpi-row.wide { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .kpi { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px 14px; }
     .kpi-label { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
     .kpi-value { font-family: var(--font-display); font-size: 2.1rem; line-height: 1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
     .kpi-value small { font-size: 1.1rem; color: var(--text-secondary); }
     .kpi-delta { font-size: 0.72rem; margin-top: 7px; font-variant-numeric: tabular-nums; }
-    .kpi-delta.up   { color: var(--success); }
-    .kpi-delta.down { color: #ff6a55; }
-    .kpi-delta.flat { color: var(--text-muted); }
+    .kpi-delta.up    { color: var(--success); }
+    .kpi-delta.down  { color: var(--risk); }
+    .kpi-delta.watch { color: var(--warning); }
+    .kpi-delta.flat  { color: var(--text-muted); }
     .kpi-delta .vs { color: var(--text-muted); }
-    .kpi-note { font-size: 0.7rem; color: var(--text-muted); margin-top: 7px; }
+    .kpi-note { font-size: 0.74rem; color: var(--text-secondary); margin-top: 8px; }
 
-    /* ── Card grid ────────────────────────────────────────── */
-    .v2-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-bottom: 18px; }
-    @media (min-width: 700px) { .v2-card.span-2 { grid-column: span 2; } }
+    /* ── Card grid ────────────────────────────────────────────── */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-top: 18px; }
+    .grid.wide { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
     @media (min-width: 980px) {
-      /* minmax(0, 1fr), not bare 1fr (≡ minmax(auto, 1fr)) — a bare-fr column's
-         width floor is its content's min-content size, so a card containing an
-         unbroken white-space:nowrap bar-label (a long comic title) blows its
-         column wider than its fair share, squeezing the sibling columns down
-         to a sliver. minmax(0,1fr) removes that floor so columns stay equal
-         and .bar-label's own overflow:hidden/text-overflow:ellipsis can do
-         its job within its fair share of space instead of being pre-empted. */
-      .v2-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .v2-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      /* minmax(0,1fr) not bare 1fr: a bare-fr column's floor is its
+         content min-content, so an unbreakable bar label blows the
+         column past its share and squeezes siblings. */
+      .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    .v2-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 22px; }
-    .v2-card.full { grid-column: 1 / -1; }
-    .v2-card h3 { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 4px; font-weight: 600; }
-    .v2-card .h3-sub { font-size: 0.72rem; color: var(--text-muted); margin: 0 0 14px; font-weight: 400; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 22px; display: flex; flex-direction: column; }
+    .card h3 { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 4px; font-weight: 600; }
+    .card .sub { font-size: 0.72rem; color: var(--text-muted); margin: 0 0 16px; font-weight: 400; }
+    .card .note { font-size: 0.74rem; color: var(--text-muted); margin: 16px 0 0; }
 
-    /* ── Horizontal bars ──────────────────────────────────── */
+    /* ── Engagement hero ──────────────────────────────────────── */
+    .eng-hero { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px 28px; display: flex; gap: 36px; align-items: center; flex-wrap: wrap; }
+    .eng-left { flex: 1 1 320px; min-width: 280px; }
+    .eng-right { flex: 0 1 340px; display: flex; flex-direction: column; gap: 10px; border-left: 1px solid var(--border); padding-left: 32px; }
+    @media (max-width: 640px) { .eng-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 20px; } }
+    .eng-cap { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+    .eng-scorewrap { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    .eng-score { font-family: var(--font-display); font-size: 4.4rem; line-height: 1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .eng-outof { font-size: 1.2rem; color: var(--text-muted); }
+    .eng-delta { font-size: 0.82rem; font-weight: 600; }
+    .eng-bar { height: 10px; background: var(--bg-elevated); border-radius: 5px; overflow: hidden; margin: 16px 0 10px; }
+    .eng-fill { height: 100%; background: var(--success); border-radius: 5px; }
+    .eng-explain { font-size: 0.78rem; color: var(--text-secondary); margin: 0; }
+    .eng-comp { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; font-size: 0.8rem; align-items: baseline; }
+    .eng-comp .lbl { color: var(--text-secondary); }
+    .eng-comp .val { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .eng-comp .d { font-size: 0.72rem; text-align: right; min-width: 46px; font-variant-numeric: tabular-nums; }
+    .eng-comp .d.up { color: var(--success); } .eng-comp .d.watch { color: var(--warning); } .eng-comp .d.flat { color: var(--text-muted); }
+
+    /* ── Labeled proportion bars (funnel + subscription opp) ───── */
+    .lbars { display: flex; flex-direction: column; gap: 14px; }
+    .lbar-head { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 4px; gap: 10px; }
+    .lbar-head .lbl { color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lbar-head .lbl .cnt { color: var(--text-muted); font-size: 0.68rem; margin-left: 4px; }
+    .lbar-head strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .lbar-track { height: 18px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
+    .lbar-track.short { height: 16px; }
+    .lbar-fill { height: 100%; border-radius: 0 3px 3px 0; }
+
+    /* ── Callout boxes ────────────────────────────────────────── */
+    .callout { display: flex; gap: 8px; align-items: flex-start; border-radius: var(--radius); padding: 10px 14px; margin-top: 18px; }
+    .callout .ic { font-size: 0.8rem; line-height: 1.5; }
+    .callout p { font-size: 0.76rem; color: var(--text-secondary); margin: 0; }
+    .callout.amber { background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25); }
+    .callout.amber .ic { color: var(--warning); }
+
+    /* ── What Changed list ────────────────────────────────────── */
+    .changes { display: flex; flex-direction: column; gap: 13px; }
+    .change-item { display: flex; gap: 11px; align-items: flex-start; }
+    .change-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 7px; }
+    .change-item p { font-size: 0.82rem; color: var(--text-secondary); margin: 0; }
+    .change-item strong { color: var(--text-primary); }
+
+    /* ── Customers Needing Attention ──────────────────────────── */
+    .attn-body { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+    .attn-count { font-family: var(--font-display); font-size: 3.6rem; line-height: 1; color: var(--risk); font-variant-numeric: tabular-nums; }
+    .attn-legend { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; }
+    .attn-legend .row { display: flex; align-items: center; gap: 9px; }
+    .attn-legend .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .attn-legend .lbl { color: var(--text-secondary); }
+    .attn-legend strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+    /* ── FOC deadline banner ──────────────────────────────────── */
+    .foc-banner { display: flex; align-items: center; gap: 10px; background: rgba(232,50,28,0.07); border: 1px solid rgba(232,50,28,0.22); border-radius: var(--radius); padding: 11px 16px; margin-bottom: 22px; font-size: 0.875rem; color: var(--text-secondary); }
+    .foc-banner .ic { color: var(--accent); }
+    .foc-banner strong { color: var(--text-primary); }
+
+    /* ── Horizontal title bars ────────────────────────────────── */
     .bars { display: flex; flex-direction: column; gap: 9px; }
     .bar-item .bar-label { font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bar-item .bar-label .dist { color: var(--text-muted); font-size: 0.68rem; margin-left: 6px; }
-    .v2-bar-row { display: grid; grid-template-columns: 1fr 52px; gap: 10px; align-items: center; }
-    .v2-bar-track { height: 16px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
-    .v2-bar-fill { height: 100%; border-radius: 0 3px 3px 0; }
-    .v2-bar-fill.lunar { background: var(--viz-lunar); }
-    .v2-bar-fill.prh   { background: var(--viz-prh); }
-    .v2-bar-fill.blue  { background: var(--viz-blue); }
-    .v2-bar-count { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
-    .v2-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 0.72rem; color: var(--text-secondary); }
-    .v2-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+    .bar-row { display: grid; grid-template-columns: 1fr 52px; gap: 10px; align-items: center; }
+    .bar-track { height: 16px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 0 3px 3px 0; }
+    .bar-fill.lunar { background: var(--viz-lunar); }
+    .bar-fill.prh   { background: var(--viz-prh); }
+    .bar-fill.blue  { background: var(--viz-blue); }
+    .bar-count { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 0.72rem; color: var(--text-secondary); }
+    .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 
-    /* ── Tables ───────────────────────────────────────────── */
-    .v2-tbl-wrap { overflow-x: auto; }
-    table.v2-tbl { width: 100%; border-collapse: collapse; }
-    .v2-tbl th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-    .v2-tbl th.r { text-align: right; }
-    .v2-tbl td { padding: 8px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
-    .v2-tbl tr:last-child td { border-bottom: none; }
-    .v2-tbl td.r { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 600; }
-    .v2-tbl td.dim { color: var(--text-muted); font-size: 0.75rem; }
-    .v2-tbl td.name { font-weight: 600; color: var(--text-primary); }
-    .v2-tbl tr.admin-row { background: rgba(245,158,11,0.05); }
-    .admin-badge { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; padding: 1px 6px; border-radius: 8px; background: rgba(245,158,11,0.15); color: var(--warning); margin-left: 7px; vertical-align: 1px; }
+    /* ── Publisher demand rows ────────────────────────────────── */
+    .pub-row { display: grid; grid-template-columns: 80px 1fr 44px; gap: 12px; align-items: center; font-size: 0.78rem; }
+    .pub-row .name { color: var(--text-secondary); }
+    .pub-row .track { height: 16px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; }
+    .pub-row .fill { height: 100%; background: var(--viz-blue); border-radius: 0 3px 3px 0; }
+    .pub-row .pct { color: var(--text-primary); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 
-    .event-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
-    .badge-reserve      { background: rgba(34,197,94,0.14);  color: #4ade80; }
-    .badge-cancel       { background: rgba(232,50,28,0.14);  color: #ff6a55; }
-    .badge-subscribe    { background: rgba(29,92,214,0.2);   color: #7aa9f0; }
-    .badge-unsubscribe  { background: rgba(168,85,247,0.15); color: #c084fc; }
-    .badge-catalog_view { background: rgba(234,179,8,0.12);  color: #facc15; }
-    .badge-page_view    { background: rgba(20,184,166,0.12); color: #2dd4bf; }
-    .badge-login        { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
-    .badge-logout       { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+    /* ── Tables ───────────────────────────────────────────────── */
+    .tbl-wrap { overflow-x: auto; }
+    table.tbl { width: 100%; border-collapse: collapse; }
+    .tbl th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    .tbl th.r { text-align: right; }
+    .tbl td { padding: 8px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td.r { text-align: right; font-variant-numeric: tabular-nums; }
+    .tbl td.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+    .tbl td.dim { color: var(--text-muted); font-size: 0.75rem; }
+    .tbl td.name { font-weight: 600; color: var(--text-primary); }
+    .tbl td.strong { color: var(--text-primary); font-weight: 600; }
+    .tbl tr.risk-row td { background: rgba(232,50,28,0.06); }
+    .tbl td.risk { color: var(--risk); }
 
-    /* ── Trend chart ──────────────────────────────────────── */
-    .trend-wrap { position: relative; }
-    .trend-svg { width: 100%; height: auto; display: block; }
-    .viz-tip { position: fixed; z-index: 40; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-size: 0.74rem; color: var(--text-primary); pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.5); white-space: nowrap; }
-    .viz-tip .tl { color: var(--text-muted); }
-    details.data-view { margin-top: 12px; }
-    details.data-view summary { font-size: 0.74rem; color: var(--text-muted); cursor: pointer; }
-    details.data-view summary:hover { color: var(--text-secondary); }
-    details.data-view table { margin-top: 10px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+    .pill.high  { background: rgba(232,50,28,0.14); color: var(--risk); }
+    .pill.med   { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .pill.paper { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
 
-    /* ── Histogram ────────────────────────────────────────── */
-    .hist { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding-top: 18px; }
-    .hist .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
-    .hist .col .bar { width: 100%; max-width: 46px; background: var(--viz-blue); border-radius: 3px 3px 0 0; }
-    .hist .col .n { font-size: 0.7rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-    .hist-x { display: flex; gap: 10px; margin-top: 8px; }
-    .hist-x span { flex: 1; text-align: center; font-size: 0.68rem; color: var(--text-muted); }
+    /* ── Insight cards (Customer Intelligence) ────────────────── */
+    .insight { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
+    .insight.risk { border-color: rgba(232,50,28,0.35); }
+    .insight .cap { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .insight.risk .cap { color: var(--risk); }
+    .insight .who { font-family: var(--font-display); font-size: 1.5rem; letter-spacing: 0.03em; color: var(--text-primary); line-height: 1.2; }
+    .insight .why { font-size: 0.76rem; color: var(--text-secondary); margin-top: 6px; }
 
-    /* ── Segmented (ordinal) bar ──────────────────────────── */
-    .seg-bar { display: flex; gap: 2px; height: 26px; border-radius: 4px; overflow: hidden; margin: 14px 0 12px; }
+    /* ── Customer segments ────────────────────────────────────── */
+    .seg-bar { display: flex; gap: 2px; height: 26px; border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
     .seg-bar .seg { height: 100%; }
+    .seg-legend { display: flex; flex-direction: column; gap: 10px; font-size: 0.8rem; }
+    .seg-legend .row { display: flex; align-items: baseline; gap: 9px; }
+    .seg-legend .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; align-self: center; }
+    .seg-legend .tier { color: var(--text-primary); font-weight: 600; }
+    .seg-legend .desc { color: var(--text-secondary); }
 
-    /* ── AOV comparison ───────────────────────────────────── */
-    .aov-flex { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
-    .aov-bars { flex: 1 1 260px; }
-    .aov-stat { flex: 0 0 auto; text-align: center; padding: 10px 22px; border-left: 1px solid var(--border); }
-    .aov-stat .v { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; color: var(--success); }
-    .aov-stat .l { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
-
-    .cohort { display: flex; flex-direction: column; gap: 9px; }
-
-    /* ── Metric definitions ───────────────────────────────── */
-    .defs { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 22px; margin: 26px 0; }
-    .defs summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 12px 0; }
-    .defs dl { margin: 4px 0 16px; }
-    .defs dt { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); margin-top: 12px; }
-    .defs dd { font-size: 0.78rem; color: var(--text-secondary); margin: 3px 0 0; max-width: 72ch; }
-    .defs dd .src { color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 2px; }
+    /* ── Weekly cohorts ───────────────────────────────────────── */
+    .cohort-row { display: grid; grid-template-columns: 96px 1fr 48px; gap: 12px; align-items: center; font-size: 0.78rem; }
+    .cohort-row .wk { color: var(--text-secondary); }
+    .cohort-row .track { height: 22px; border-radius: 3px; }
+    .cohort-row .pct { color: var(--text-primary); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 
     .win-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
     .win-actions .hint { font-size: 0.72rem; color: var(--text-muted); }
 
     .no-data { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 24px; }
     .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; }
+
+    /* ── Metric definitions ───────────────────────────────────── */
+    .defs { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 22px; margin: 30px 0; }
+    .defs summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 12px 0; }
+    .defs dl { margin: 4px 0 16px; }
+    .defs dt { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); margin-top: 12px; }
+    .defs dd { font-size: 0.78rem; color: var(--text-secondary); margin: 3px 0 0; max-width: 74ch; }
+    .defs dd .src { color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -190,177 +259,211 @@
       <h1>Analytics</h1>
       <p id="analytics-subtitle">Customer activity &amp; engagement</p>
     </div>
-    <button class="btn btn-secondary btn-sm" id="btn-refresh" style="padding-top:8px">
-      ↺ Refresh
-    </button>
+    <div class="head-controls">
+      <button class="adm-pill" id="admin-toggle"
+        title="Your own browsing, reserves and logins are filtered out so the numbers reflect customers only">
+        <span class="adm-track"><span class="adm-knob"></span></span>
+        <span id="adm-label">Customers only</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh">↺ Refresh</button>
+    </div>
   </div>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <span class="toolbar-label">Time window:</span>
-    <button class="range-btn" data-days="7">7 days</button>
-    <button class="range-btn active" data-days="30">30 days</button>
-    <button class="range-btn" data-days="90">90 days</button>
-    <div class="toolbar-sep"></div>
-    <label class="admin-toggle">
-      <input type="checkbox" id="admin-filter" checked>
-      <span class="switch"></span>
-      Hide admin activity
-    </label>
+  <div id="warn-banner" hidden class="warn-banner">
+    <span class="ic">⚠</span>
+    <p><strong>Staff activity is included.</strong> Engagement, visits and login counts
+       will read high — switch back to customers-only before making decisions.</p>
   </div>
-  <p class="filter-note" id="filter-note">—</p>
 
-  <!-- ═══════════════ CORE ═══════════════ -->
-  <div class="section-head">
-    <h2>Core Dashboard</h2>
-    <div class="rule"></div>
+  <div class="tabbar" id="tabbar">
+    <button class="tab-btn" data-tab="executive">Executive</button>
+    <button class="tab-btn" data-tab="operations">Operations</button>
+    <button class="tab-btn" data-tab="intelligence">Customer Intelligence</button>
   </div>
-  <p class="section-sub">Raw activity counts for the selected window — what happened, and who did it.</p>
 
-  <div class="kpi-row" id="kpi-core"></div>
+  <!-- ═══════════════ TAB 1 — EXECUTIVE ═══════════════ -->
+  <section class="tab-panel" data-tab="executive" hidden>
+    <p class="tab-desc">How the business is doing, in plain language — details live in the other two tabs.</p>
 
-  <div class="v2-grid cols-3">
-    <div class="v2-card">
-      <h3>Most Reserved Titles</h3>
-      <p class="h3-sub">Reserve events · color = distributor</p>
-      <div class="bars" id="bars-reserved"></div>
-      <div class="v2-legend">
-        <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
-        <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+    <div id="engagement-hero"><p class="loading-row">Loading…</p></div>
+
+    <div class="kpi-row wide" id="kpi-exec" style="margin-top:18px"></div>
+
+    <div class="grid wide cols-2">
+      <div class="card">
+        <h3>Customer Journey</h3>
+        <p class="sub" id="funnel-sub">How many customers take each step</p>
+        <div class="lbars" id="funnel-bars"></div>
+        <div id="funnel-callout"></div>
+      </div>
+      <div class="card">
+        <h3>What Changed This Month</h3>
+        <p class="sub">Written from the numbers — no chart-reading required</p>
+        <div class="changes" id="what-changed"></div>
       </div>
     </div>
 
-    <div class="v2-card">
-      <h3>Most Subscribed Series</h3>
-      <p class="h3-sub">Net subscribers · color = distributor</p>
-      <div class="bars" id="bars-subscribed"></div>
-      <div class="v2-legend">
-        <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
-        <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+    <div class="grid wide cols-2">
+      <div class="card">
+        <h3>Subscription Opportunity</h3>
+        <p class="sub" id="subopp-sub">Average reserved value per customer, this catalog</p>
+        <div id="subopp-body"><p class="loading-row">Loading…</p></div>
+      </div>
+      <div class="card">
+        <h3>Customers Needing Attention</h3>
+        <p class="sub">Inactive 30+ days — full list in Customer Intelligence</p>
+        <div id="attention-body"><p class="loading-row">Loading…</p></div>
+        <div style="margin-top:auto;padding-top:18px">
+          <button class="btn btn-secondary btn-sm" data-goto-tab="intelligence">View win-back list →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ TAB 2 — OPERATIONS ═══════════════ -->
+  <section class="tab-panel" data-tab="operations" hidden>
+    <p class="tab-desc">Day-to-day store management — what's being reserved and cancelled.</p>
+
+    <div id="foc-banner"></div>
+
+    <div class="kpi-row" id="kpi-ops"></div>
+
+    <div class="grid cols-3" style="margin-top:24px">
+      <div class="card">
+        <h3>Most Reserved Titles</h3>
+        <p class="sub">Reserve events, last 30 days · color = distributor</p>
+        <div class="bars" id="bars-reserved"></div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+          <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Most Subscribed Series</h3>
+        <p class="sub">Net subscribers, last 30 days · color = distributor</p>
+        <div class="bars" id="bars-subscribed"></div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
+          <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Most Cancelled Titles</h3>
+        <p class="sub">Cancel events, last 30 days · color = distributor</p>
+        <div class="bars" id="bars-cancelled"></div>
+        <p class="note" id="cancel-note"></p>
       </div>
     </div>
 
-    <div class="v2-card">
-      <h3>Most Cancelled Titles</h3>
-      <p class="h3-sub">Cancel events · color = distributor</p>
-      <div class="bars" id="bars-cancelled"></div>
-      <div class="v2-legend">
-        <span><span class="sw" style="background:var(--viz-lunar)"></span>Lunar</span>
-        <span><span class="sw" style="background:var(--viz-prh)"></span>PRH</span>
+    <div class="grid wide">
+      <div class="card">
+        <h3>Publisher Demand</h3>
+        <p class="sub">Share of reserves, last 90 days — a guide for weighting shelf copies</p>
+        <div class="bars" id="pub-demand"></div>
+        <p class="note" id="pub-note"></p>
       </div>
     </div>
 
-    <div class="v2-card">
-      <h3>Event Breakdown</h3>
-      <p class="h3-sub" id="bars-events-sub">All events in window, by type</p>
-      <div class="bars" id="bars-events"></div>
-    </div>
-
-    <div class="v2-card span-2">
+    <div class="card" style="margin-top:18px">
       <h3>Customer Activity</h3>
-      <p class="h3-sub">Per-customer event counts in window · sorted by last seen</p>
-      <div class="v2-tbl-wrap" id="customer-activity"><p class="loading-row">Loading…</p></div>
+      <p class="sub">Per-customer counts, last 30 days · sorted by last seen</p>
+      <div class="tbl-wrap" id="ops-activity"><p class="loading-row">Loading…</p></div>
     </div>
+  </section>
 
-    <div class="v2-card full">
-      <h3>Recent Events</h3>
-      <p class="h3-sub">Latest 50 events, live feed (ignores time window)</p>
-      <details class="data-view">
-        <summary>View recent events</summary>
-        <div class="v2-tbl-wrap" id="recent-events"><p class="loading-row">Loading…</p></div>
-      </details>
-    </div>
-  </div>
+  <!-- ═══════════════ TAB 3 — CUSTOMER INTELLIGENCE ═══════════════ -->
+  <section class="tab-panel" data-tab="intelligence" hidden>
+    <p class="tab-desc">Who your customers are, who's healthy, and who to reach out to.</p>
 
-  <!-- ═══════════════ ADVANCED ═══════════════ -->
-  <div class="section-head">
-    <h2>Advanced Insights</h2>
-    <div class="rule"></div>
-  </div>
-  <p class="section-sub">Stickiness, habit, and basket-value metrics — the "is usage growing?" layer.</p>
+    <div class="grid wide" id="insights" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))"></div>
 
-  <div class="kpi-row" id="kpi-advanced"></div>
-
-  <div class="v2-grid cols-2">
-    <div class="v2-card full">
-      <h3>Daily Active Customers</h3>
-      <p class="h3-sub" id="trend-sub">Hover for values</p>
-      <div class="trend-wrap" id="trend-wrap">
-        <svg class="trend-svg" id="trend-svg" viewBox="0 0 760 230" role="img" aria-label="Daily active customers over the selected window"></svg>
+    <div class="grid wide cols-2">
+      <div class="card">
+        <h3>Customer Segments</h3>
+        <p class="sub">By visit frequency, last 30 days</p>
+        <div id="segments-body"><p class="loading-row">Loading…</p></div>
       </div>
-      <details class="data-view">
-        <summary>View as table</summary>
-        <div class="v2-tbl-wrap" id="trend-table"></div>
-      </details>
+      <div class="card">
+        <h3>Weekly Cohorts — Who Came Back</h3>
+        <p class="sub">Of customers active each week, % returning within 30 days</p>
+        <div id="cohorts-body"></div>
+        <p class="note">Deeper green = healthier cohort · *window still open, will keep rising</p>
+      </div>
     </div>
 
-    <div class="v2-card">
-      <h3>AOV Uplift — Subscribers vs À-la-carte</h3>
-      <p class="h3-sub">Avg reserved value per customer this catalog month</p>
-      <div id="aov-body"><p class="loading-row">Loading…</p></div>
-    </div>
-
-    <div class="v2-card">
-      <h3>Return Rate by Weekly Cohort</h3>
-      <p class="h3-sub">% of each week's active customers who returned within 30 days</p>
-      <div class="cohort bars" id="cohort-body"></div>
-    </div>
-
-    <div class="v2-card">
-      <h3>Session Frequency Distribution</h3>
-      <p class="h3-sub">Customers by avg sessions per week · session = events with &lt;30 min gaps</p>
-      <div class="hist" id="hist-sessions"></div>
-      <div class="hist-x"><span>&lt;1</span><span>1–2</span><span>2–3</span><span>3–4</span><span>5+</span></div>
-    </div>
-
-    <div class="v2-card">
-      <h3>Feature Depth per Session</h3>
-      <p class="h3-sub">Share of sessions by distinct core actions taken (browse, reserve, my-list, subscriptions, arrivals)</p>
-      <div class="seg-bar" id="seg-depth"></div>
-      <div class="v2-legend" id="seg-depth-legend"></div>
-    </div>
-
-    <div class="v2-card full">
-      <h3>Win-back List — Inactive Customers</h3>
-      <p class="h3-sub" id="winback-sub">Active accounts with no activity in 30+ days</p>
-      <div class="v2-tbl-wrap" id="winback-body"><p class="loading-row">Loading…</p></div>
+    <div class="card" style="margin-top:18px">
+      <h3>Win-back List</h3>
+      <p class="sub" id="winback-sub">Active accounts with no activity in 30+ days</p>
+      <div class="tbl-wrap" id="winback-body"><p class="loading-row">Loading…</p></div>
       <div class="win-actions">
         <button class="btn btn-secondary btn-sm" id="btn-copy-emails">✉ Copy emails</button>
         <button class="btn btn-secondary btn-sm" id="btn-export-csv">⬇ Export CSV</button>
         <span class="hint">Paper customers never log in — they're invite-to-app candidates, not lapses.</span>
       </div>
     </div>
-  </div>
+  </section>
 
   <details class="defs">
     <summary>Metric definitions &amp; data sources</summary>
     <dl>
-      <dt>Weekly / Monthly Active Users (WAU / MAU)</dt>
-      <dd>Distinct filtered <code>user_id</code>s with ≥1 event in the trailing 7 / 30 days.
-        <span class="src">Source: usage_events.</span></dd>
-      <dt>WAU/MAU Stickiness</dt>
-      <dd>WAU ÷ MAU. The share of monthly customers who came back this week.
-        <span class="src">Source: usage_events.</span></dd>
-      <dt>Return Rate (within 30 days)</dt>
-      <dd>Of customers active in the 30-day window ending 30 days ago, the % with any event in the following 30 days.
-        <span class="src">Source: usage_events.</span></dd>
-      <dt>Session Frequency</dt>
-      <dd>Sessions per active customer per week, for the selected window. A session is a burst of one user's events with no gap &gt;30 minutes.
+      <dt>Customer Engagement Score</dt>
+      <dd>One number, 0–100, blending four components: <em>customer retention</em> (40%),
+        <em>habit score</em> (25%), <em>visits per week</em> (20%) and <em>actions per visit</em> (15%).
+        Retention and habit are already percentages; visits/week is normalized as min(visits ÷ 3, 1)×100
+        (3+ visits a week = full marks) and actions/visit as min(actions ÷ 3, 1)×100 (3+ distinct core
+        actions per visit = full marks). The delta compares this month's blend to last month's on the
+        same basis.
         <span class="src">Source: usage_events, derived client-side.</span></dd>
-      <dt>Feature Depth</dt>
-      <dd>Distinct core actions per session, where core = catalog browse, reserve/cancel, my-list view, subscriptions view, arrivals view.
-        <span class="src">Source: usage_events, derived from the same session clustering.</span></dd>
-      <dt>AOV &amp; AOV Uplift</dt>
-      <dd>Average reserved basket value per customer for the current catalog month, split subscribers vs à-la-carte. Uplift = subscriber AOV ÷ à-la-carte AOV − 1.
-        <span class="src">Source: preorders × catalog.price_usd.</span></dd>
-      <dt>Win-back List (Inactive Customers)</dt>
-      <dd>Profiles with status = active and is_admin false, whose newest usage event is older than 30 days (or absent within the 90-day retention). Paper profiles never log in and are listed as invite-to-app candidates, not lapses.
+      <dt>Customer Retention</dt>
+      <dd>Of customers active in the prior 30-day window (30–60 days ago), the % with any activity
+        in the last 30 days. "Did last month's customers come back this month."
+        <span class="src">Source: usage_events.</span></dd>
+      <dt>Habit Score</dt>
+      <dd>Of customers active in the last 30 days, the % who were also active in the last 7 days
+        (WAU ÷ MAU) — how many monthly customers keep a weekly habit.
+        <span class="src">Source: usage_events.</span></dd>
+      <dt>Visits per Week &amp; Actions per Visit</dt>
+      <dd>A visit (session) is a burst of one customer's events with no gap &gt; 30 minutes.
+        Visits/week = sessions ÷ active customers ÷ weeks. Actions/visit = average distinct core
+        actions (browse, reserve/cancel, my-list, subscriptions, arrivals) per session.
+        <span class="src">Source: usage_events, session-clustered client-side.</span></dd>
+      <dt>Reserved value</dt>
+      <dd>Gross value of reserve actions logged for a catalog month (price × reserves), non-admin.
+        The month-over-month delta compares the current catalog month to the previous one on the
+        same basis. Per-customer averages in Subscription Opportunity come from live preorders for
+        the current catalog month instead.
+        <span class="src">Source: usage_events (price_usd on reserve events) + preorders × catalog.price_usd.</span></dd>
+      <dt>Publisher Demand</dt>
+      <dd>Share of reserve events by publisher over the last 90 days. The trend note compares each
+        publisher's share in the most recent 45 days to the prior 45 days (a full 90-day-vs-prior-90
+        comparison isn't possible — usage_events are purged after 90 days).
+        <span class="src">Source: usage_events (publisher on reserve events).</span></dd>
+      <dt>Cancel timing</dt>
+      <dd>For each cancel, the time since that customer's most recent prior reserve of the same title.
+        Cancels within 24 hours read as second thoughts rather than lost sales.
+        <span class="src">Source: usage_events (reserve → cancel deltas).</span></dd>
+      <dt>Customer Segments</dt>
+      <dd>Customers bucketed by visits/week: Power user 5+/wk, Regulars 2–4/wk, Occasional under 2/wk.
+        The upgrade value compares average reserved value between the Regular and Occasional tiers.
+        <span class="src">Source: usage_events + reserve-event value.</span></dd>
+      <dt>Weekly Cohorts</dt>
+      <dd>For each of the last four weeks, the % of that week's active customers with any activity
+        in the following 30 days. Bar green deepens with the rate; * marks cohorts whose 30-day
+        window is still open.
+        <span class="src">Source: usage_events.</span></dd>
+      <dt>Win-back List &amp; priorities</dt>
+      <dd>Active, non-admin accounts whose newest event is 30+ days old (or absent within the 90-day
+        retention). Priority: <em>High value</em> = prior reserved value above the customer median;
+        <em>Paper</em> = never logged in (invite-to-app candidates, not lapses); <em>Medium</em> = the rest.
         <span class="src">Source: user_profiles + usage_events.</span></dd>
       <dt>Admin filter</dt>
-      <dd>Excludes events whose user_id belongs to a profile with is_admin = true. Client-side set-filter — no schema change. Default ON.
-        <span class="src">Note: admin self-actions ARE logged (only impersonated sessions are skipped).</span></dd>
-      <dt>Retention</dt>
-      <dd>usage_events are purged after 90 days by the monthly import. There is no "all time" view — every metric on this page is bounded by that window.</dd>
+      <dd>Excludes events whose user belongs to an is_admin profile. Client-side set-filter, default ON.
+        Admin self-actions ARE logged (only impersonated sessions are skipped).
+        <span class="src">Note: toggling includes/excludes admin users; the amber banner warns when included.</span></dd>
+      <dt>Retention window</dt>
+      <dd>usage_events are purged after 90 days by the monthly import. There is no "all time" view —
+        every metric here is bounded by that window. Windows are fixed (30-day for most, 90-day for
+        publisher share); deltas compare equal-length prior windows.</dd>
     </dl>
   </details>
 </div>
@@ -369,7 +472,6 @@
   Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
 </footer>
 <div id="toast-container"></div>
-<div class="viz-tip" id="viz-tip"></div>
 
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -383,45 +485,27 @@
   const navAnalytics = document.getElementById('nav-analytics');
   if (navAnalytics) navAnalytics.style.display = 'block';
 
-  const tip = document.getElementById('viz-tip');
-  function showTip(html, x, y) {
-    tip.innerHTML = html;
-    tip.style.display = 'block';
-    const pad = 14;
-    const r = tip.getBoundingClientRect();
-    let left = x + pad, top = y - r.height - pad;
-    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
-    if (top < 8) top = y + pad;
-    tip.style.left = left + 'px';
-    tip.style.top  = top + 'px';
-  }
-  function hideTip() { tip.style.display = 'none'; }
-  document.addEventListener('mousemove', e => {
-    if (e.target.closest('#trend-svg')) return;
-    const t = e.target.closest('[data-tip]');
-    if (t) showTip(t.dataset.tip, e.clientX, e.clientY);
-    else hideTip();
-  });
+  // ── Fixed windows (redesign removed the range picker) ──────────
+  const WIN = 30;        // primary window for most metrics
+  const PUB_WIN = 90;    // publisher-share window
 
-  // ── State ────────────────────────────────────────────────
-  // All panels derive from these cached arrays; window/admin-filter
-  // changes re-render from memory — never a refetch (only Refresh refetches).
+  // ── State ──────────────────────────────────────────────────────
+  // All panels derive from these cached arrays; the admin toggle
+  // re-renders from memory — never a refetch (only Refresh refetches).
   const state = {
     profiles: new Map(),
     adminIds: new Set(),
-    events: [],          // trailing 90 days, unfiltered
-    preorderRows: [],     // current catalog month, {user_id, catalog:{price_usd}}
+    events: [],           // trailing 90 days, unfiltered
+    preorderRows: [],      // current catalog month, {user_id, catalog:{price_usd}}
     subscriberIds: new Set(),
     currentMonth: null,
-    selectedDays: 30,
+    orderDeadline: null,   // 'YYYY-MM-DD' | null
     hideAdmin: true,
   };
   let NOW = Date.now();
   let winbackRows = [];
 
-  // ── Ranged fetch helper (F82 pattern) ───────────────────────
-  // Count first so an empty result never issues a range() call
-  // (Supabase range() 416s on empty sets).
+  // ── Ranged fetch helper (count-first; F82 pattern) ─────────────
   async function countRows(table, applyFilters) {
     let q = db.from(table).select('*', { count: 'exact', head: true });
     if (applyFilters) q = applyFilters(q);
@@ -431,11 +515,9 @@
   }
 
   async function fetchRanged(table, selectStr, applyFilters, total) {
-    // range() pagination is only stable across calls with an explicit,
-    // deterministic ORDER BY (same fix as F82 in Catalog.getPublishers) —
-    // without one, rows inserted between paginated calls (e.g. your own
-    // admin clicks while testing this page) can shift offsets and cause
-    // silent gaps or duplicates.
+    // range() pagination is only stable with a deterministic ORDER BY
+    // (same fix as F82) — otherwise rows inserted between paginated
+    // calls shift offsets and cause silent gaps/duplicates.
     const out = [];
     for (let from = 0; from < total; from += 1000) {
       let q = db.from(table).select(selectStr);
@@ -450,22 +532,21 @@
     return out;
   }
 
-  // ── Load all data (one pass) ────────────────────────────────
+  // ── Load all data (one pass) ───────────────────────────────────
   async function loadData() {
     NOW = Date.now();
     const nowIso = new Date(NOW).toISOString();
     const ninetyDaysAgoIso = new Date(NOW - 90 * 86400000).toISOString();
-    // Upper-bound every usage_events read at the same instant the count is
-    // taken, so the count and the paginated range fetches describe the exact
-    // same row set — otherwise a row inserted between the count and a later
-    // range() page (e.g. your own admin clicks while this page is loading)
-    // shifts offsets and the fetch silently drops or duplicates rows.
+    // Upper-bound every usage_events read at the same instant the count
+    // is taken so the count and the paginated fetches describe the exact
+    // same row set (rows inserted mid-load would shift offsets otherwise).
     const ueFilter = q => q.gte('created_at', ninetyDaysAgoIso).lte('created_at', nowIso);
 
-    const [{ data: profiles }, ueTotal, currentMonth] = await Promise.all([
+    const [{ data: profiles }, ueTotal, currentMonth, orderDeadline] = await Promise.all([
       db.from('user_profiles').select('id, full_name, email, is_admin, is_paper, status'),
       countRows('usage_events', ueFilter),
       Catalog.getLatestMonth(),
+      Settings.getOrderDeadline().catch(() => null),
     ]);
 
     state.profiles = new Map();
@@ -480,6 +561,7 @@
     );
 
     state.currentMonth = currentMonth;
+    state.orderDeadline = orderDeadline;
     if (currentMonth) {
       const [{ data: preorderRows }, { data: subRows }] = await Promise.all([
         db.from('preorders')
@@ -495,7 +577,7 @@
     }
   }
 
-  // ── Shared aggregation helpers ───────────────────────────────
+  // ── Shared aggregation helpers ─────────────────────────────────
   function filteredEvents() {
     return state.hideAdmin ? state.events.filter(e => !state.adminIds.has(e.user_id)) : state.events;
   }
@@ -504,43 +586,28 @@
     return events.filter(e => { const a = ageDaysOf(e); return a >= fromDays && a < toDays; });
   }
   function distinctUserCount(events) { return new Set(events.map(e => e.user_id)).size; }
+  function distinctUsersWith(events, pred) { return new Set(events.filter(pred).map(e => e.user_id)).size; }
   function countByType(events) {
     const c = { reserve: 0, cancel: 0, subscribe: 0, unsubscribe: 0, login: 0, logout: 0, catalog_view: 0, page_view: 0 };
     events.forEach(e => { if (c[e.event_type] !== undefined) c[e.event_type]++; });
     return c;
   }
+  function profileName(uid) { return state.profiles.get(uid)?.full_name || 'Unknown'; }
   function fmtUsd(n) { return '$' + (n || 0).toFixed(2); }
-
-  function computeWauMau(fAll) {
-    return {
-      wauNow: distinctUserCount(eventsInAge(fAll, 0, 7)),
-      wauPrior: distinctUserCount(eventsInAge(fAll, 7, 14)),
-      mauNow: distinctUserCount(eventsInAge(fAll, 0, 30)),
-      mauPrior: distinctUserCount(eventsInAge(fAll, 30, 60)),
-    };
+  function fmtMoney(n) { return '$' + Math.round(n || 0).toLocaleString('en-US'); }
+  function monthLabel(ym) {
+    if (!ym) return '';
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long' });
+  }
+  function shiftMonth(ym, delta) {
+    if (!ym) return null;
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  function kpiDeltaHtml(current, prior, vsLabel, { suffix = '', decimals = 0, noPrior = false } = {}) {
-    if (noPrior || prior == null) {
-      return `<div class="kpi-delta flat">— <span class="vs">${vsLabel}</span></div>`;
-    }
-    const diff = Number((current - prior).toFixed(decimals));
-    const dir = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
-    const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '—';
-    const body = dir === 'flat' ? 'flat' : `${arrow} ${Math.abs(diff)}${suffix}`;
-    return `<div class="kpi-delta ${dir}">${body} <span class="vs">${vsLabel}</span></div>`;
-  }
-
-  function kpiTile(label, valueHtml, deltaHtml, note) {
-    return `<div class="kpi">
-      <div class="kpi-label">${label}</div>
-      <div class="kpi-value">${valueHtml}</div>
-      ${deltaHtml}
-      ${note ? `<div class="kpi-note">${note}</div>` : ''}
-    </div>`;
-  }
-
-  // ── Session clustering (shared by Session Frequency + Feature Depth) ──
+  // ── Session clustering (visits + feature depth) ────────────────
   const CORE_BUCKETS = {
     catalog:  e => e.event_type === 'catalog_view',
     reserve:  e => e.event_type === 'reserve' || e.event_type === 'cancel',
@@ -548,7 +615,6 @@
     subs:     e => e.event_type === 'subscribe' || e.event_type === 'unsubscribe' || (e.event_type === 'page_view' && e.metadata?.page === 'subscriptions'),
     arrivals: e => e.event_type === 'page_view' && e.metadata?.page === 'arrivals',
   };
-
   function buildSessions(events) {
     const byUser = new Map();
     events.forEach(e => {
@@ -571,7 +637,6 @@
     });
     return sessions;
   }
-
   function sessionDepth(session) {
     const buckets = new Set();
     session.events.forEach(e => {
@@ -579,43 +644,385 @@
     });
     return buckets.size;
   }
-
   function sessionMetrics(events, windowDays) {
     const sessions = buildSessions(events);
     const users = distinctUserCount(events);
     const weeks = windowDays / 7;
     const freq = users > 0 ? sessions.length / users / weeks : 0;
     const depths = sessions.map(sessionDepth);
-    const mean = depths.length ? depths.reduce((a, b) => a + b, 0) / depths.length : 0;
-    const share = { 1: 0, 2: 0, 3: 0 };
-    depths.forEach(d => { share[d >= 3 ? 3 : d]++; });
-    return { sessionCount: sessions.length, freq, meanDepth: mean, share, total: depths.length };
+    const meanDepth = depths.length ? depths.reduce((a, b) => a + b, 0) / depths.length : 0;
+    return { freq, meanDepth };
   }
 
-  // ── Render: Core KPIs ────────────────────────────────────────
-  function renderCoreKpis() {
-    const fAll = filteredEvents();
-    const days = state.selectedDays;
-    const noPrior90 = days === 90;
+  // Visits/week per user, for segmentation.
+  function visitsPerWeekByUser(events, windowDays) {
+    const sessions = buildSessions(events);
+    const perUser = new Map();
+    sessions.forEach(s => perUser.set(s.user_id, (perUser.get(s.user_id) || 0) + 1));
+    const weeks = windowDays / 7;
+    const out = new Map();
+    perUser.forEach((n, uid) => out.set(uid, n / weeks));
+    return out;
+  }
 
-    const { wauNow, wauPrior, mauNow, mauPrior } = computeWauMau(fAll);
+  // Per-user event tallies over an event list.
+  function perUserCounts(events) {
+    const m = new Map();
+    events.forEach(e => {
+      if (!e.user_id) return;
+      if (!m.has(e.user_id)) m.set(e.user_id, { reserves: 0, cancels: 0, subscribes: 0, logins: 0, catalog_views: 0, page_views: 0, total: 0, last: null });
+      const u = m.get(e.user_id); u.total++;
+      if (e.event_type === 'reserve') u.reserves++;
+      else if (e.event_type === 'cancel') u.cancels++;
+      else if (e.event_type === 'subscribe') u.subscribes++;
+      else if (e.event_type === 'login') u.logins++;
+      else if (e.event_type === 'catalog_view') u.catalog_views++;
+      else if (e.event_type === 'page_view') u.page_views++;
+      if (!u.last || e.created_at > u.last) u.last = e.created_at;
+    });
+    return m;
+  }
 
-    const countsNow = countByType(eventsInAge(fAll, 0, days));
-    const countsPrior = noPrior90 ? null : countByType(eventsInAge(fAll, days, days * 2));
+  // Reserved value (gross) for a catalog month, from reserve events.
+  function reservedValueForMonth(month) {
+    if (!month) return { value: 0, count: 0, customers: 0 };
+    let value = 0, count = 0; const users = new Set();
+    filteredEvents().forEach(e => {
+      if (e.event_type !== 'reserve' || e.metadata?.catalog_month !== month) return;
+      value += e.metadata?.price_usd || 0; count++; users.add(e.user_id);
+    });
+    return { value, count, customers: users.size };
+  }
 
-    const windowLabel = `vs prior ${days} days`;
+  // ── Engagement metrics (fixed 30-day basis + prior 30) ─────────
+  function execMetrics() {
+    const f = filteredEvents();
+
+    // Retention = return rate: prior-window cohort still active this window.
+    const cohort = new Set(eventsInAge(f, 30, 60).map(e => e.user_id));
+    const active30 = new Set(eventsInAge(f, 0, 30).map(e => e.user_id));
+    let ret = 0; cohort.forEach(u => { if (active30.has(u)) ret++; });
+    const retention = cohort.size ? ret / cohort.size * 100 : 0;
+
+    const cohortP = new Set(eventsInAge(f, 60, 90).map(e => e.user_id));
+    const active3060 = new Set(eventsInAge(f, 30, 60).map(e => e.user_id));
+    let retP = 0; cohortP.forEach(u => { if (active3060.has(u)) retP++; });
+    const retentionPrior = cohortP.size ? retP / cohortP.size * 100 : null;
+
+    // Habit = WAU / MAU (weekly-active share of monthly-active).
+    const wauNow = distinctUserCount(eventsInAge(f, 0, 7));
+    const mauNow = distinctUserCount(eventsInAge(f, 0, 30));
+    const habit = mauNow ? wauNow / mauNow * 100 : 0;
+    const wauP = distinctUserCount(eventsInAge(f, 30, 37));
+    const mauP = distinctUserCount(eventsInAge(f, 30, 60));
+    const habitPrior = mauP ? wauP / mauP * 100 : null;
+
+    const smNow = sessionMetrics(eventsInAge(f, 0, 30), 30);
+    const smPrior = sessionMetrics(eventsInAge(f, 30, 60), 30);
+    const freq = smNow.freq, depth = smNow.meanDepth;
+    const freqPrior = mauP ? smPrior.freq : null;
+    const depthPrior = mauP ? smPrior.meanDepth : null;
+
+    const norm3 = v => Math.min(v / 3, 1) * 100;
+    const score = 0.40 * retention + 0.25 * habit + 0.20 * norm3(freq) + 0.15 * norm3(depth);
+    const scorePrior = (retentionPrior != null && habitPrior != null)
+      ? 0.40 * retentionPrior + 0.25 * habitPrior + 0.20 * norm3(freqPrior || 0) + 0.15 * norm3(depthPrior || 0)
+      : null;
+
+    const cur = reservedValueForMonth(state.currentMonth);
+    const prev = reservedValueForMonth(shiftMonth(state.currentMonth, -1));
+
+    return {
+      retention, retentionPrior, retReturned: ret, retCohort: cohort.size,
+      habit, habitPrior, wauNow, mauNow,
+      freq, freqPrior, depth, depthPrior,
+      score, scorePrior,
+      reservedCur: cur, reservedPrev: prev,
+    };
+  }
+
+  // ── Delta rendering ────────────────────────────────────────────
+  // mode: 'default' (up green / down red), 'exec' (up green / down amber),
+  //       'cancel' (down green / up red).
+  function deltaHtml(cur, prior, vsLabel, { mode = 'default', fmt = v => String(v), decimals = 0 } = {}) {
+    if (prior == null || !isFinite(prior)) {
+      return `<div class="kpi-delta flat">— <span class="vs">${vsLabel}</span></div>`;
+    }
+    const diff = Number((cur - prior).toFixed(decimals));
+    if (diff === 0) return `<div class="kpi-delta flat">no change <span class="vs">${vsLabel}</span></div>`;
+    const rising = diff > 0;
+    let cls;
+    if (mode === 'cancel') cls = rising ? 'down' : 'up';
+    else if (mode === 'exec') cls = rising ? 'up' : 'watch';
+    else cls = rising ? 'up' : 'down';
+    const arrow = rising ? '▲' : '▼';
+    return `<div class="kpi-delta ${cls}">${arrow} ${fmt(Math.abs(diff))} <span class="vs">${vsLabel}</span></div>`;
+  }
+  function kpiTile(label, valueHtml, deltaHtml, note) {
+    return `<div class="kpi">
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value">${valueHtml}</div>
+      ${deltaHtml}
+      ${note ? `<div class="kpi-note">${note}</div>` : ''}
+    </div>`;
+  }
+  const ptsFmt = v => `${v % 1 === 0 ? v : v.toFixed(1)} pts`;
+  const oneFmt = v => v.toFixed(1);
+
+  // ── EXECUTIVE: engagement hero ─────────────────────────────────
+  function compRow(label, valueHtml, cur, prior, { fmt = v => String(v), decimals = 0 } = {}) {
+    let d = '<span class="d flat">—</span>';
+    if (prior != null && isFinite(prior)) {
+      const diff = Number((cur - prior).toFixed(decimals));
+      if (diff === 0) d = '<span class="d flat">flat</span>';
+      else { const up = diff > 0; d = `<span class="d ${up ? 'up' : 'watch'}">${up ? '▲' : '▼'} ${fmt(Math.abs(diff))}</span>`; }
+    }
+    return `<div class="eng-comp"><span class="lbl">${label}</span><strong class="val">${valueHtml}</strong>${d}</div>`;
+  }
+  function renderEngagementHero(m) {
+    const el = document.getElementById('engagement-hero');
+    const score = Math.round(m.score);
+    const vsLabel = `vs ${monthLabel(shiftMonth(state.currentMonth, -1)) || 'last month'}`;
+    let delta = '';
+    if (m.scorePrior != null) {
+      const diff = Math.round(m.score - m.scorePrior);
+      const cls = diff > 0 ? 'up' : diff < 0 ? 'watch' : 'flat';
+      const col = diff > 0 ? 'var(--success)' : diff < 0 ? 'var(--warning)' : 'var(--text-muted)';
+      const body = diff === 0 ? 'no change' : `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} ${vsLabel}`;
+      delta = `<span class="eng-delta ${cls}" style="color:${col}">${body}</span>`;
+    }
+    el.innerHTML = `<div class="eng-hero">
+      <div class="eng-left">
+        <div class="eng-cap">Customer Engagement Score</div>
+        <div class="eng-scorewrap">
+          <span class="eng-score">${score}</span><span class="eng-outof">/100</span>${delta}
+        </div>
+        <div class="eng-bar"><div class="eng-fill" style="width:${Math.max(2, Math.min(100, score))}%"></div></div>
+        <p class="eng-explain">One number blending retention, habit, visit frequency and depth of use.
+          Above 75 means your customers keep coming back.</p>
+      </div>
+      <div class="eng-right">
+        ${compRow('Customer retention', `${m.retention.toFixed(0)}%`, m.retention, m.retentionPrior, { fmt: ptsFmt, decimals: 0 })}
+        ${compRow('Habit score', `${m.habit.toFixed(0)}%`, m.habit, m.habitPrior, { fmt: ptsFmt, decimals: 0 })}
+        ${compRow('Visits per week', m.freq.toFixed(1), m.freq, m.freqPrior, { fmt: oneFmt, decimals: 1 })}
+        ${compRow('Actions per visit', m.depth.toFixed(1), m.depth, m.depthPrior, { fmt: oneFmt, decimals: 1 })}
+      </div>
+    </div>`;
+  }
+
+  // ── EXECUTIVE: KPI row ─────────────────────────────────────────
+  function renderExecKpis(m) {
+    const vsLabel = `vs ${monthLabel(shiftMonth(state.currentMonth, -1)) || 'last month'}`;
+    const freqCopy = m.freqPrior == null ? 'Average visits per active customer.'
+      : m.freq < m.freqPrior ? 'Customers return, but slightly less often.'
+      : m.freq > m.freqPrior ? 'Customers are visiting a little more often.'
+      : 'Visit frequency is holding steady.';
+    const rv = m.reservedCur;
     const tiles = [
-      kpiTile('Weekly Active Users', wauNow, kpiDeltaHtml(wauNow, wauPrior, 'vs prior week')),
-      kpiTile('Monthly Active Users', mauNow, kpiDeltaHtml(mauNow, mauPrior, 'vs prior 30 days')),
-      kpiTile('Reserves', countsNow.reserve, kpiDeltaHtml(countsNow.reserve, countsPrior?.reserve, windowLabel, { noPrior: noPrior90 })),
-      kpiTile('Cancels', countsNow.cancel, kpiDeltaHtml(countsNow.cancel, countsPrior?.cancel, windowLabel, { noPrior: noPrior90 })),
-      kpiTile('New Subscriptions', countsNow.subscribe, kpiDeltaHtml(countsNow.subscribe, countsPrior?.subscribe, windowLabel, { noPrior: noPrior90 })),
-      kpiTile('Logins', countsNow.login, kpiDeltaHtml(countsNow.login, countsPrior?.login, windowLabel, { noPrior: noPrior90 })),
+      kpiTile('Customer Retention', `${m.retention.toFixed(0)}<small>%</small>`,
+        deltaHtml(m.retention, m.retentionPrior, 'vs prior month', { mode: 'exec', fmt: ptsFmt }),
+        `${m.retReturned} of ${m.retCohort} customers came back this month.`),
+      kpiTile('Habit Score', `${m.habit.toFixed(0)}<small>%</small>`,
+        deltaHtml(m.habit, m.habitPrior, 'vs prior month', { mode: 'exec', fmt: ptsFmt }),
+        `${m.wauNow} of ${m.mauNow} monthly customers also visited this week.`),
+      kpiTile('Visits per Week', m.freq.toFixed(1),
+        deltaHtml(m.freq, m.freqPrior, 'vs prior month', { mode: 'exec', fmt: oneFmt, decimals: 1 }),
+        freqCopy),
+      kpiTile('Reserved This Month', fmtMoney(rv.value),
+        deltaHtml(rv.value, m.reservedPrev.value, vsLabel, { mode: 'exec', fmt: v => fmtMoney(v) }),
+        `${rv.count} comic${rv.count === 1 ? '' : 's'} reserved by ${rv.customers} customer${rv.customers === 1 ? '' : 's'}.`),
     ];
-    document.getElementById('kpi-core').innerHTML = tiles.join('');
+    document.getElementById('kpi-exec').innerHTML = tiles.join('');
   }
 
-  // ── Render: bar charts (reserved/subscribed/cancelled/events) ─
+  // ── EXECUTIVE: customer journey funnel ─────────────────────────
+  function renderFunnel() {
+    const f30 = eventsInAge(filteredEvents(), 0, WIN);
+    const totalCustomers = distinctUserCount(f30);
+    const steps = [
+      { label: 'Browse the catalog',      n: distinctUsersWith(f30, e => e.event_type === 'catalog_view'), color: 'var(--viz-seq-1)' },
+      { label: 'Reserve titles',          n: distinctUsersWith(f30, e => e.event_type === 'reserve'),       color: 'var(--viz-seq-2)' },
+      { label: 'Manage their pull list',  n: distinctUsersWith(f30, e => e.event_type === 'page_view' && e.metadata?.page === 'mylist'), color: 'var(--viz-seq-3)' },
+      { label: 'Subscribe to a series',   n: distinctUsersWith(f30, e => e.event_type === 'subscribe'),     color: 'var(--viz-seq-4)' },
+    ];
+    document.getElementById('funnel-sub').textContent =
+      `How many of your ${totalCustomers} customer${totalCustomers === 1 ? '' : 's'} take each step`;
+
+    const base = steps[0].n || Math.max(...steps.map(s => s.n), 1);
+    document.getElementById('funnel-bars').innerHTML = steps.map(s => {
+      const pct = Math.max(2, Math.min(100, Math.round(s.n / base * 100)));
+      return `<div class="lbar">
+        <div class="lbar-head"><span class="lbl">${s.label}</span><strong>${s.n}</strong></div>
+        <div class="lbar-track"><div class="lbar-fill" style="width:${pct}%;background:${s.color}"></div></div>
+      </div>`;
+    }).join('');
+
+    // Drop-off detection: largest absolute drop between consecutive steps.
+    let dropIdx = -1, dropSize = 0;
+    for (let i = 0; i < steps.length - 1; i++) {
+      const d = steps[i].n - steps[i + 1].n;
+      if (d > dropSize) { dropSize = d; dropIdx = i; }
+    }
+    const co = document.getElementById('funnel-callout');
+    if (dropIdx < 0 || dropSize <= 0) { co.innerHTML = ''; return; }
+    const from = steps[dropIdx], to = steps[dropIdx + 1];
+    let msg;
+    if (dropIdx + 1 === steps.length - 1) {
+      msg = `Biggest drop-off: only ${to.n} of ${from.n} reserving customers subscribes. Subscriptions lock in monthly orders — worth promoting to your regulars.`;
+    } else if (dropIdx === 0) {
+      msg = `Biggest drop-off: only ${to.n} of ${from.n} browsers reserve. A shelf nudge or a "did you see this?" email could convert more of them.`;
+    } else {
+      msg = `Biggest drop-off between "${from.label}" and "${to.label}" — ${to.n} of ${from.n} carry through.`;
+    }
+    co.innerHTML = `<div class="callout amber"><span class="ic">⚠</span><p>${msg}</p></div>`;
+  }
+
+  // ── EXECUTIVE: what changed this month ─────────────────────────
+  function renderWhatChanged(m) {
+    const items = [];
+    // 1) Retention change (≥1 pt).
+    if (m.retentionPrior != null && Math.abs(m.retention - m.retentionPrior) >= 1) {
+      const up = m.retention > m.retentionPrior;
+      const pts = Math.abs(Math.round(m.retention - m.retentionPrior));
+      items.push({ color: up ? 'var(--success)' : 'var(--risk)',
+        html: up
+          ? `Retention improved ${pts} point${pts === 1 ? '' : 's'} — <strong>${m.retReturned} of ${m.retCohort} customers returned</strong> after last month.`
+          : `Retention slipped ${pts} point${pts === 1 ? '' : 's'} — only <strong>${m.retReturned} of ${m.retCohort} customers returned</strong> after last month.` });
+    }
+    // 2) Reserved value change (≥$1).
+    const dv = m.reservedCur.value - m.reservedPrev.value;
+    if (m.reservedPrev.value > 0 && Math.abs(dv) >= 1) {
+      const up = dv > 0;
+      items.push({ color: up ? 'var(--success)' : 'var(--risk)',
+        html: `Reserved value is ${up ? 'up' : 'down'} <strong>${fmtMoney(Math.abs(dv))} to ${fmtMoney(m.reservedCur.value)}</strong> for the ${monthLabel(state.currentMonth)} catalog.` });
+    }
+    // 3) Visit-frequency change (≥0.1/wk).
+    if (m.freqPrior != null && Math.abs(m.freq - m.freqPrior) >= 0.1) {
+      const up = m.freq > m.freqPrior;
+      const d = Math.abs(m.freq - m.freqPrior).toFixed(1);
+      items.push({ color: up ? 'var(--success)' : 'var(--warning)',
+        html: up
+          ? `Visit frequency rose <strong>${d} per week</strong> — customers are coming back more often.`
+          : `Visit frequency slipped <strong>${d} per week</strong> — customers are returning, but less often.` });
+    }
+    // 4) Activity concentration (top-3 share ≥40%).
+    const f30 = eventsInAge(filteredEvents(), 0, WIN);
+    const per = perUserCounts(f30);
+    const total = f30.length;
+    if (per.size >= 3 && total > 0) {
+      const top3 = [...per.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 3);
+      const share = top3.reduce((a, [, u]) => a + u.total, 0) / total;
+      if (share >= 0.40) {
+        const names = top3.map(([uid]) => profileName(uid));
+        const phrase = share >= 0.5 ? 'more than half' : 'nearly half';
+        items.push({ color: 'var(--warning)',
+          html: `<strong>${names.slice(0, -1).map(escapeHtml).join(', ')} and ${escapeHtml(names[names.length - 1])}</strong> account for ${phrase} of all activity — a concentrated base.` });
+      }
+    }
+    // 5) Lapsed high-value customer.
+    const atRisk = winbackRows.find(r => r.priority === 'high' && r.type === 'app');
+    if (atRisk) {
+      const cancelBit = atRisk.cancels > 0 && atRisk.reserves + atRisk.cancels > 0 && (atRisk.cancels / (atRisk.reserves + atRisk.cancels)) >= 0.4
+        ? ', after cancelling half their reserves' : '';
+      items.push({ color: 'var(--risk)',
+        html: `<strong>${escapeHtml(atRisk.name)}</strong> has gone quiet for ${atRisk.inactiveDays >= 91 ? '90+' : atRisk.inactiveDays} days${cancelBit}.` });
+    }
+
+    const el = document.getElementById('what-changed');
+    if (!items.length) { el.innerHTML = '<p class="no-data">Not enough history yet to summarize month-over-month changes.</p>'; return; }
+    el.innerHTML = items.slice(0, 5).map(it =>
+      `<div class="change-item"><span class="change-dot" style="background:${it.color}"></span><p>${it.html}</p></div>`).join('');
+  }
+
+  // ── EXECUTIVE: subscription opportunity ────────────────────────
+  function subscriberAverages() {
+    const perUser = new Map();
+    state.preorderRows.forEach(r => {
+      if (state.hideAdmin && state.adminIds.has(r.user_id)) return;
+      perUser.set(r.user_id, (perUser.get(r.user_id) || 0) + (r.catalog?.price_usd || 0));
+    });
+    const sub = [], non = [];
+    perUser.forEach((tot, uid) => (state.subscriberIds.has(uid) ? sub : non).push(tot));
+    const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+    return { subAvg: avg(sub), nonSubAvg: avg(non), subN: sub.length, nonN: non.length, any: sub.length + non.length > 0 };
+  }
+  function renderSubOpportunity() {
+    const el = document.getElementById('subopp-body');
+    document.getElementById('subopp-sub').textContent =
+      `Average reserved value per customer, ${monthLabel(state.currentMonth) || 'this'} catalog`;
+    if (!state.currentMonth) { el.innerHTML = '<p class="no-data">No current catalog month yet.</p>'; return; }
+    const a = subscriberAverages();
+    if (!a.any) { el.innerHTML = '<p class="no-data">No reservations yet this catalog month.</p>'; return; }
+    const max = Math.max(a.subAvg, a.nonSubAvg) || 1;
+    const bar = (label, n, val) => {
+      const pct = Math.max(2, Math.round(val / max * 100));
+      return `<div class="lbar">
+        <div class="lbar-head"><span class="lbl">${label} <span class="cnt">${n} customer${n === 1 ? '' : 's'}</span></span><strong>${fmtUsd(val)}</strong></div>
+        <div class="lbar-track short"><div class="lbar-fill" style="width:${pct}%;background:var(--viz-blue)"></div></div>
+      </div>`;
+    };
+    let callout = '';
+    if (a.subN > 0 && a.nonN > 0) {
+      callout = a.subAvg < a.nonSubAvg
+        ? `<div class="callout amber"><span class="ic">⚠</span><p>Subscribers are reserving less than à-la-carte buyers. Review what the subscription includes — or pitch it to your top à-la-carte customers, who already order more.</p></div>`
+        : `<div class="callout amber"><span class="ic">✓</span><p>Subscribers reserve more on average than à-la-carte buyers — the subscription is pulling its weight.</p></div>`;
+    } else if (a.subN === 0) {
+      callout = `<div class="callout amber"><span class="ic">⚠</span><p>No subscribers reserving this month — the à-la-carte base is your best pool to pitch subscriptions to.</p></div>`;
+    }
+    el.innerHTML = `<div class="lbars">${bar('À-la-carte', a.nonN, a.nonSubAvg)}${bar('Subscribers', a.subN, a.subAvg)}</div>${callout}`;
+  }
+
+  // ── EXECUTIVE: customers needing attention ─────────────────────
+  function renderAttention() {
+    const el = document.getElementById('attention-body');
+    const c = { high: 0, med: 0, paper: 0 };
+    winbackRows.forEach(r => { if (r.priority === 'high') c.high++; else if (r.priority === 'paper') c.paper++; else c.med++; });
+    const total = winbackRows.length;
+    if (!total) { el.innerHTML = '<p class="no-data">No customers need attention right now.</p>'; return; }
+    el.innerHTML = `<div class="attn-body">
+      <span class="attn-count">${total}</span>
+      <div class="attn-legend">
+        <div class="row"><span class="dot" style="background:var(--risk)"></span><span class="lbl">High value — worth a personal call</span><strong>${c.high}</strong></div>
+        <div class="row"><span class="dot" style="background:var(--warning)"></span><span class="lbl">Medium — send a nudge email</span><strong>${c.med}</strong></div>
+        <div class="row"><span class="dot" style="background:var(--text-muted)"></span><span class="lbl">Paper customer — invite to the app</span><strong>${c.paper}</strong></div>
+      </div>
+    </div>`;
+  }
+
+  // ── OPERATIONS: FOC deadline banner ────────────────────────────
+  function renderFocBanner() {
+    const el = document.getElementById('foc-banner');
+    const dl = state.orderDeadline;
+    if (!dl) { el.innerHTML = ''; return; }
+    const today = new Date(DateUtils.todayLocal() + 'T00:00:00');
+    const dd = new Date(dl + 'T00:00:00');
+    const days = Math.round((dd - today) / 86400000);
+    const pretty = dd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const monthWord = monthLabel(state.currentMonth) || 'this month';
+    let msg;
+    if (days > 0) msg = `<strong>Order deadline: ${pretty}</strong> — ${days} day${days === 1 ? '' : 's'} to lock the ${monthWord} order sheet.`;
+    else if (days === 0) msg = `<strong>Order deadline: ${pretty}</strong> — the ${monthWord} order sheet locks today.`;
+    else msg = `<strong>Order window closed ${pretty}</strong> — the ${monthWord} order sheet is locked.`;
+    el.innerHTML = `<div class="foc-banner"><span class="ic">◆</span><span>${msg}</span></div>`;
+  }
+
+  // ── OPERATIONS: KPI row ────────────────────────────────────────
+  function renderOpsKpis() {
+    const f = filteredEvents();
+    const now = countByType(eventsInAge(f, 0, WIN));
+    const prior = countByType(eventsInAge(f, WIN, WIN * 2));
+    const vs = 'vs prior 30 days';
+    const tiles = [
+      kpiTile('Reserves', now.reserve, deltaHtml(now.reserve, prior.reserve, vs)),
+      kpiTile('Cancels', now.cancel, deltaHtml(now.cancel, prior.cancel, vs, { mode: 'cancel' })),
+      kpiTile('New Subscriptions', now.subscribe, deltaHtml(now.subscribe, prior.subscribe, vs)),
+      kpiTile('Catalog Views', now.catalog_view, deltaHtml(now.catalog_view, prior.catalog_view, vs)),
+      kpiTile('Logins', now.login, deltaHtml(now.login, prior.login, vs)),
+    ];
+    document.getElementById('kpi-ops').innerHTML = tiles.join('');
+  }
+
+  // ── OPERATIONS: title bars ─────────────────────────────────────
   function renderBars(containerId, rows, unit) {
     const el = document.getElementById(containerId);
     if (!rows.length) { el.innerHTML = '<p class="no-data">No data yet for this period.</p>'; return; }
@@ -623,20 +1030,18 @@
     el.innerHTML = rows.map(r => {
       const pct = Math.max(4, Math.round(Math.abs(r.n) / max * 100));
       const cls = r.d === 'Lunar' ? 'lunar' : r.d === 'PRH' ? 'prh' : 'blue';
-      const dist = r.d ? `<span class="dist">${escapeHtml(r.pub || '')} · ${escapeHtml(r.d)}</span>` : '';
+      const dist = r.d ? `<span class="dist">${escapeHtml([r.pub, r.d].filter(Boolean).join(' · '))}</span>` : '';
       return `<div class="bar-item">
         <div class="bar-label">${escapeHtml(r.t)}${dist}</div>
-        <div class="v2-bar-row">
-          <div class="v2-bar-track"><div class="v2-bar-fill ${cls}" style="width:${pct}%" data-tip="${escapeHtml(r.t)}: ${r.n} ${unit}"></div></div>
-          <div class="v2-bar-count">${r.n}</div>
+        <div class="bar-row">
+          <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+          <div class="bar-count">${r.n}</div>
         </div>
       </div>`;
     }).join('');
   }
-
-  function renderCoreCharts() {
-    const fAll = filteredEvents();
-    const windowed = eventsInAge(fAll, 0, state.selectedDays);
+  function renderTitleBars() {
+    const windowed = eventsInAge(filteredEvents(), 0, WIN);
 
     const reservedMap = {};
     windowed.filter(e => e.event_type === 'reserve').forEach(e => {
@@ -644,15 +1049,7 @@
       if (!reservedMap[key]) reservedMap[key] = { t: key, pub: e.metadata?.publisher, d: e.metadata?.distributor, n: 0 };
       reservedMap[key].n++;
     });
-    renderBars('bars-reserved', Object.values(reservedMap).sort((a, b) => b.n - a.n).slice(0, 6), 'reserves');
-
-    const cancelMap = {};
-    windowed.filter(e => e.event_type === 'cancel').forEach(e => {
-      const key = e.metadata?.title; if (!key) return;
-      if (!cancelMap[key]) cancelMap[key] = { t: key, pub: e.metadata?.publisher, d: e.metadata?.distributor, n: 0 };
-      cancelMap[key].n++;
-    });
-    renderBars('bars-cancelled', Object.values(cancelMap).sort((a, b) => b.n - a.n).slice(0, 6), 'cancels');
+    renderBars('bars-reserved', Object.values(reservedMap).sort((a, b) => b.n - a.n).slice(0, 5), 'reserves');
 
     const subMap = {};
     windowed.filter(e => e.event_type === 'subscribe' || e.event_type === 'unsubscribe').forEach(e => {
@@ -660,463 +1057,345 @@
       if (!subMap[key]) subMap[key] = { t: key, pub: null, d: e.metadata?.distributor, n: 0 };
       subMap[key].n += e.event_type === 'subscribe' ? 1 : -1;
     });
-    renderBars('bars-subscribed', Object.values(subMap).sort((a, b) => b.n - a.n).slice(0, 6), 'net subscribers');
+    renderBars('bars-subscribed', Object.values(subMap).filter(r => r.n > 0).sort((a, b) => b.n - a.n).slice(0, 3), 'net subscribers');
 
-    const counts = countByType(windowed);
-    const rows = Object.entries(counts).filter(([, n]) => n > 0).map(([type, n]) => ({ t: type.replace('_', ' '), d: null, n })).sort((a, b) => b.n - a.n);
-    renderBars('bars-events', rows, 'events');
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    document.getElementById('bars-events-sub').textContent =
-      `All events in window, by type · ${total} total`;
+    const cancelMap = {};
+    windowed.filter(e => e.event_type === 'cancel').forEach(e => {
+      const key = e.metadata?.title; if (!key) return;
+      if (!cancelMap[key]) cancelMap[key] = { t: key, pub: e.metadata?.publisher, d: e.metadata?.distributor, n: 0 };
+      cancelMap[key].n++;
+    });
+    renderBars('bars-cancelled', Object.values(cancelMap).sort((a, b) => b.n - a.n).slice(0, 3), 'cancels');
+
+    document.getElementById('cancel-note').textContent = cancelTimingNote();
   }
 
-  // ── Render: Customer Activity table ──────────────────────────
-  function renderCustomerActivity() {
-    const el = document.getElementById('customer-activity');
-    const windowed = eventsInAge(state.hideAdmin ? filteredEvents() : state.events, 0, state.selectedDays);
-
-    const perUser = new Map();
-    windowed.forEach(e => {
-      if (!e.user_id) return;
-      if (!perUser.has(e.user_id)) perUser.set(e.user_id, {
-        reserves: 0, cancels: 0, subscribes: 0, logins: 0, catalog_views: 0, page_views: 0, last_seen: null,
+  // Cancel-to-reserve timing: for each cancel, find the same customer's most
+  // recent prior reserve of the same title; count those within 24 hours.
+  function cancelTimingNote() {
+    const f = filteredEvents();
+    const cancels = eventsInAge(f, 0, WIN).filter(e => e.event_type === 'cancel');
+    if (!cancels.length) return '';
+    let quick = 0, matched = 0;
+    cancels.forEach(c => {
+      const ct = new Date(c.created_at).getTime();
+      const title = c.metadata?.title;
+      if (!title) return;
+      let best = null;
+      f.forEach(e => {
+        if (e.event_type !== 'reserve' || e.user_id !== c.user_id || e.metadata?.title !== title) return;
+        const rt = new Date(e.created_at).getTime();
+        if (rt <= ct && (best === null || rt > best)) best = rt;
       });
-      const u = perUser.get(e.user_id);
-      if (e.event_type === 'reserve') u.reserves++;
-      if (e.event_type === 'cancel') u.cancels++;
-      if (e.event_type === 'subscribe') u.subscribes++;
-      if (e.event_type === 'login') u.logins++;
-      if (e.event_type === 'catalog_view') u.catalog_views++;
-      if (e.event_type === 'page_view') u.page_views++;
-      if (!u.last_seen || e.created_at > u.last_seen) u.last_seen = e.created_at;
+      if (best !== null) { matched++; if (ct - best <= 24 * 3600000) quick++; }
     });
+    if (!matched) return `${cancels.length} cancel${cancels.length === 1 ? '' : 's'} in the last 30 days.`;
+    return `${quick} of ${matched} cancels happened within 24 hours of reserving — mostly second thoughts, not lost sales.`;
+  }
 
-    const rows = Array.from(perUser.entries())
-      .map(([uid, u]) => ({ uid, ...u, isAdmin: state.adminIds.has(uid) }))
-      .sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || ''));
+  // ── OPERATIONS: publisher demand (90-day) ──────────────────────
+  function publisherShare(fromDays, toDays) {
+    const f = filteredEvents();
+    const map = new Map();
+    eventsInAge(f, fromDays, toDays).forEach(e => {
+      if (e.event_type !== 'reserve') return;
+      const pub = e.metadata?.publisher || 'Other';
+      map.set(pub, (map.get(pub) || 0) + 1);
+    });
+    return map;
+  }
+  function renderPublisherDemand() {
+    const el = document.getElementById('pub-demand');
+    const now = publisherShare(0, PUB_WIN);
+    const total = [...now.values()].reduce((a, b) => a + b, 0);
+    if (!total) { el.innerHTML = '<p class="no-data">No reserves in the last 90 days.</p>'; document.getElementById('pub-note').textContent = ''; return; }
 
+    // Top 5 publishers; fold the rest into "Other".
+    const sorted = [...now.entries()].sort((a, b) => b[1] - a[1]);
+    const top = sorted.slice(0, 5);
+    const otherN = sorted.slice(5).reduce((a, [, n]) => a + n, 0);
+    const rows = top.map(([pub, n]) => ({ pub, share: n / total * 100 }));
+    if (otherN > 0) rows.push({ pub: 'Other', share: otherN / total * 100 });
+    const max = Math.max(...rows.map(r => r.share)) || 1;
+    el.innerHTML = rows.map(r => `<div class="pub-row">
+      <span class="name">${escapeHtml(r.pub)}</span>
+      <div class="track"><div class="fill" style="width:${Math.max(2, Math.round(r.share / max * 100))}%"></div></div>
+      <span class="pct">${r.share.toFixed(0)}%</span>
+    </div>`).join('');
+
+    // Trend note: recent 45 days vs prior 45 days (retention caps us at 90).
+    const recent = publisherShare(0, 45), prior = publisherShare(45, 90);
+    const rTot = [...recent.values()].reduce((a, b) => a + b, 0);
+    const pTot = [...prior.values()].reduce((a, b) => a + b, 0);
+    const note = document.getElementById('pub-note');
+    if (rTot >= 5 && pTot >= 5) {
+      let mover = null, moveBy = 0;
+      new Set([...recent.keys(), ...prior.keys()]).forEach(pub => {
+        const d = (recent.get(pub) || 0) / rTot * 100 - (prior.get(pub) || 0) / pTot * 100;
+        if (Math.abs(d) > Math.abs(moveBy)) { moveBy = d; mover = pub; }
+      });
+      if (mover && Math.abs(moveBy) >= 3) {
+        note.textContent = `${mover} is ${moveBy > 0 ? 'up' : 'down'} ${Math.abs(Math.round(moveBy))} pts vs the prior 45 days.`;
+      } else { note.textContent = 'Publisher mix is steady vs the prior 45 days.'; }
+    } else { note.textContent = ''; }
+  }
+
+  // ── OPERATIONS: customer activity table ────────────────────────
+  function renderOpsActivity() {
+    const el = document.getElementById('ops-activity');
+    const per = perUserCounts(eventsInAge(filteredEvents(), 0, WIN));
+    // Last-seen across the full cache, to flag at-risk rows.
+    const lastFull = new Map();
+    (state.hideAdmin ? filteredEvents() : state.events).forEach(e => {
+      if (!lastFull.has(e.user_id) || e.created_at > lastFull.get(e.user_id)) lastFull.set(e.user_id, e.created_at);
+    });
+    const rows = [...per.entries()].map(([uid, u]) => ({ uid, ...u, lastFull: lastFull.get(uid) || u.last }))
+      .sort((a, b) => (b.lastFull || '').localeCompare(a.lastFull || ''));
     if (!rows.length) { el.innerHTML = '<p class="no-data">No activity yet for this period.</p>'; return; }
-
-    el.innerHTML = `<table class="v2-tbl">
-      <thead><tr><th>Customer</th><th class="r">Reserves</th><th class="r">Cancels</th><th class="r">Subscribes</th><th class="r">Logins</th><th class="r">Catalog Views</th><th class="r">Page Views</th><th>Last Seen</th></tr></thead>
+    el.innerHTML = `<table class="tbl">
+      <thead><tr><th>Customer</th><th class="r">Reserves</th><th class="r">Cancels</th><th class="r">Subscribes</th><th class="r">Logins</th><th>Last Seen</th></tr></thead>
       <tbody>${rows.map(u => {
-        const p = state.profiles.get(u.uid);
-        const name = escapeHtml(p?.full_name || 'Unknown');
-        const badge = u.isAdmin ? '<span class="admin-badge">Admin</span>' : '';
-        return `<tr${u.isAdmin ? ' class="admin-row"' : ''}>
-          <td class="name">${name}${badge}</td>
-          <td class="r">${u.reserves}</td><td class="r">${u.cancels}</td><td class="r">${u.subscribes}</td>
-          <td class="r">${u.logins}</td><td class="r">${u.catalog_views}</td><td class="r">${u.page_views}</td>
-          <td class="dim">${u.last_seen ? formatDate(DateUtils.fmtLocal(new Date(u.last_seen))) : '—'}</td>
+        const ageDays = u.lastFull ? Math.floor((NOW - new Date(u.lastFull).getTime()) / 86400000) : 999;
+        const atRisk = ageDays >= 30;
+        return `<tr${atRisk ? ' class="risk-row"' : ''}>
+          <td class="name">${escapeHtml(profileName(u.uid))}</td>
+          <td class="num strong">${u.reserves}</td>
+          <td class="num${atRisk && u.cancels > 0 ? ' risk' : ''}">${u.cancels}</td>
+          <td class="num">${u.subscribes}</td>
+          <td class="num">${u.logins}</td>
+          <td class="dim${atRisk ? ' risk' : ''}">${u.lastFull ? formatDate(DateUtils.fmtLocal(new Date(u.lastFull))) : '—'}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
   }
 
-  // ── Render: Recent Events feed (ignores window) ──────────────
-  function eventDetail(e) {
-    const m = e.metadata || {};
-    switch (e.event_type) {
-      case 'reserve':
-      case 'cancel':
-        return escapeHtml([m.title, m.publisher].filter(Boolean).join(' · ') || '—');
-      case 'subscribe':
-      case 'unsubscribe':
-        return escapeHtml([m.series_name, m.distributor].filter(Boolean).join(' · ') || '—');
-      case 'catalog_view':
-        return escapeHtml([
-          m.catalog_month ? `month: ${m.catalog_month}` : null,
-          m.publisher ? `publisher: ${m.publisher}` : null,
-          m.search ? `search: "${m.search}"` : null,
-          m.page > 1 ? `page ${m.page}` : null,
-        ].filter(Boolean).join(', ') || 'catalog');
-      case 'page_view':
-        return escapeHtml([m.page || null].filter(Boolean).join(' · ') || '—');
-      default:
-        return '—';
+  // ── CUSTOMER INTELLIGENCE: insight cards ───────────────────────
+  function renderInsights() {
+    const f30 = eventsInAge(filteredEvents(), 0, WIN);
+    const per = perUserCounts(f30);
+    const total = f30.length;
+
+    // Top customer: most reserves in window.
+    let top = null;
+    per.forEach((u, uid) => { if (!top || u.reserves > top.reserves) top = { uid, ...u }; });
+    let topCard;
+    if (top && top.reserves > 0) {
+      const share = total ? top.total / total : 0;
+      const phrase = share >= 0.5 ? 'over half' : share >= 0.33 ? 'over a third' : share >= 0.25 ? 'a quarter' : `${Math.round(share * 100)}%`;
+      const cancelBit = top.cancels === 0 ? 'no cancels' : top.cancels === 1 ? 'just 1 cancel' : `just ${top.cancels} cancels`;
+      topCard = insightCard('Top Customer', profileName(top.uid),
+        `${top.reserves} reservation${top.reserves === 1 ? '' : 's'}, ${cancelBit} — ${phrase} of all activity.`);
+    } else {
+      topCard = insightCard('Top Customer', '—', 'No reservations in the last 30 days yet.');
     }
-  }
 
-  function renderRecentEvents() {
-    const el = document.getElementById('recent-events');
-    const pool = state.hideAdmin ? filteredEvents() : state.events;
-    const rows = [...pool].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 50);
-    if (!rows.length) { el.innerHTML = '<p class="no-data">No events recorded yet.</p>'; return; }
-
-    el.innerHTML = `<table class="v2-tbl">
-      <thead><tr><th>When</th><th>Customer</th><th>Event</th><th>Detail</th></tr></thead>
-      <tbody>${rows.map(e => {
-        const p = state.profiles.get(e.user_id);
-        const isAdmin = state.adminIds.has(e.user_id);
-        const name = escapeHtml(p?.full_name || 'Unknown');
-        const badge = isAdmin ? '<span class="admin-badge">Admin</span>' : '';
-        const when = new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-        return `<tr${isAdmin ? ' class="admin-row"' : ''}>
-          <td class="dim">${when}</td>
-          <td class="name">${name}${badge}</td>
-          <td><span class="event-badge badge-${e.event_type}">${e.event_type.replace('_', ' ')}</span></td>
-          <td>${eventDetail(e)}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
-  }
-
-  // ── Render: Advanced KPIs ────────────────────────────────────
-  function renderAdvancedKpis() {
-    const fAll = filteredEvents();
-    const days = state.selectedDays;
-    const noPrior90 = days === 90;
-
-    const { wauNow, wauPrior, mauNow, mauPrior } = computeWauMau(fAll);
-    const stickNow = mauNow > 0 ? wauNow / mauNow * 100 : 0;
-    const stickPrior = mauPrior > 0 ? wauPrior / mauPrior * 100 : null;
-
-    // Return rate: cohort active 30-60d ago; returned = subset active in last 30d.
-    const cohortNow = new Set(eventsInAge(fAll, 30, 60).map(e => e.user_id));
-    const activeLast30 = new Set(eventsInAge(fAll, 0, 30).map(e => e.user_id));
-    let returnedNow = 0;
-    cohortNow.forEach(u => { if (activeLast30.has(u)) returnedNow++; });
-    const rateNow = cohortNow.size ? returnedNow / cohortNow.size * 100 : 0;
-
-    // Prior cohort: active 60-90d ago; returned = subset active 30-60d ago.
-    const cohortPrior = new Set(eventsInAge(fAll, 60, 90).map(e => e.user_id));
-    const active30to60 = new Set(eventsInAge(fAll, 30, 60).map(e => e.user_id));
-    let returnedPrior = 0;
-    cohortPrior.forEach(u => { if (active30to60.has(u)) returnedPrior++; });
-    const ratePrior = cohortPrior.size ? returnedPrior / cohortPrior.size * 100 : null;
-
-    const windowNow = eventsInAge(fAll, 0, days);
-    const windowPrior = noPrior90 ? null : eventsInAge(fAll, days, days * 2);
-    const smNow = sessionMetrics(windowNow, days);
-    const smPrior = windowPrior ? sessionMetrics(windowPrior, days) : null;
-
-    const tiles = [
-      kpiTile('WAU / MAU Stickiness', `${stickNow.toFixed(0)}<small>%</small>`,
-        kpiDeltaHtml(stickNow, stickPrior, 'vs prior 30 days', { suffix: ' pts', decimals: 1 }),
-        `${wauNow} of ${mauNow} monthly users came back this week`),
-      kpiTile('Return Rate (30 d)', `${rateNow.toFixed(0)}<small>%</small>`,
-        kpiDeltaHtml(rateNow, ratePrior, 'vs prior cohort', { suffix: ' pts', decimals: 1 }),
-        `${returnedNow} of ${cohortNow.size} prior-window customers returned within 30 days`),
-      kpiTile('Session Frequency', `${smNow.freq.toFixed(1)}<small>/wk</small>`,
-        kpiDeltaHtml(smNow.freq, smPrior?.freq, `vs prior ${days} days`, { decimals: 1, suffix: '', noPrior: noPrior90 }),
-        'Avg visits per active customer per week'),
-      kpiTile('Feature Depth', smNow.meanDepth.toFixed(1),
-        kpiDeltaHtml(smNow.meanDepth, smPrior?.meanDepth, `vs prior ${days} days`, { decimals: 1, noPrior: noPrior90 }),
-        'Avg distinct core actions per session'),
-    ];
-    document.getElementById('kpi-advanced').innerHTML = tiles.join('');
-
-    return { smNow };
-  }
-
-  // ── Render: Session Frequency histogram ──────────────────────
-  function renderSessionHistogram() {
-    const fAll = filteredEvents();
-    const windowed = eventsInAge(fAll, 0, state.selectedDays);
-    const sessions = buildSessions(windowed);
-    const perUser = new Map();
-    sessions.forEach(s => perUser.set(s.user_id, (perUser.get(s.user_id) || 0) + 1));
-    const weeks = state.selectedDays / 7;
-    const freqs = Array.from(perUser.values()).map(n => n / weeks);
-
-    const buckets = [
-      { label: '<1 per wk', test: f => f < 1, n: 0 },
-      { label: '1–2 per wk', test: f => f >= 1 && f < 2, n: 0 },
-      { label: '2–3 per wk', test: f => f >= 2 && f < 3, n: 0 },
-      { label: '3–4 per wk', test: f => f >= 3 && f < 4, n: 0 },
-      { label: '5+ per wk', test: f => f >= 4, n: 0 },
-    ];
-    freqs.forEach(f => { const b = buckets.find(b => b.test(f)); if (b) b.n++; });
-
-    const el = document.getElementById('hist-sessions');
-    const max = Math.max(...buckets.map(b => b.n), 1);
-    el.innerHTML = buckets.map(b => `
-      <div class="col">
-        <span class="n">${b.n}</span>
-        <div class="bar" style="height:${Math.round(b.n / max * 100)}%" data-tip="${b.label}: ${b.n} customers"></div>
-      </div>`).join('');
-  }
-
-  // ── Render: Feature Depth segmented bar ──────────────────────
-  function renderFeatureDepth(smNow) {
-    const total = smNow.total || 0;
-    const seg = document.getElementById('seg-depth');
-    const legend = document.getElementById('seg-depth-legend');
-    if (!total) {
-      seg.innerHTML = '';
-      legend.innerHTML = '<span class="dim">No sessions in this window yet.</span>';
-      return;
-    }
-    const pct1 = Math.round(smNow.share[1] / total * 100);
-    const pct2 = Math.round(smNow.share[2] / total * 100);
-    const pct3 = 100 - pct1 - pct2;
-    seg.innerHTML = `
-      <div class="seg" style="width:${pct1}%;background:var(--viz-seq-1)" data-tip="1 core action — ${pct1}% of sessions (${smNow.share[1]} sessions)"></div>
-      <div class="seg" style="width:${pct2}%;background:var(--viz-seq-2)" data-tip="2 core actions — ${pct2}% of sessions (${smNow.share[2]} sessions)"></div>
-      <div class="seg" style="width:${pct3}%;background:var(--viz-seq-3)" data-tip="3+ core actions — ${pct3}% of sessions (${smNow.share[3]} sessions)"></div>`;
-    legend.innerHTML = `
-      <span><span class="sw" style="background:var(--viz-seq-1)"></span>1 action — ${pct1}%</span>
-      <span><span class="sw" style="background:var(--viz-seq-2)"></span>2 actions — ${pct2}%</span>
-      <span><span class="sw" style="background:var(--viz-seq-3)"></span>3+ actions — ${pct3}%</span>`;
-  }
-
-  // ── Render: AOV uplift ────────────────────────────────────────
-  function renderAov() {
-    const el = document.getElementById('aov-body');
-    if (!state.currentMonth) { el.innerHTML = '<p class="no-data">No current catalog month yet.</p>'; return; }
-
-    const perUser = new Map();
-    state.preorderRows.forEach(r => {
-      if (state.hideAdmin && state.adminIds.has(r.user_id)) return;
-      const price = r.catalog?.price_usd || 0;
-      perUser.set(r.user_id, (perUser.get(r.user_id) || 0) + price);
+    // Highest conversion: best reserves-per-catalog-view (min 3 views).
+    let conv = null;
+    per.forEach((u, uid) => {
+      if (u.catalog_views >= 3 && u.reserves >= 1) {
+        const ratio = u.reserves / u.catalog_views;
+        if (!conv || ratio > conv.ratio) conv = { uid, ratio, ...u };
+      }
     });
-    const subTotals = [], nonSubTotals = [];
-    perUser.forEach((total, uid) => (state.subscriberIds.has(uid) ? subTotals : nonSubTotals).push(total));
-    const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-    const subAvg = avg(subTotals), nonSubAvg = avg(nonSubTotals);
-    const upliftPct = nonSubAvg > 0 ? (subAvg / nonSubAvg - 1) * 100 : null;
+    const convCard = conv
+      ? insightCard('Highest Conversion', profileName(conv.uid),
+          `${conv.reserves} reserves from ${conv.catalog_views} catalog views — knows exactly what they want.`)
+      : insightCard('Highest Conversion', '—', 'Not enough catalog-view data yet to rank conversion.');
 
-    if (!subTotals.length && !nonSubTotals.length) { el.innerHTML = '<p class="no-data">No reservations yet this catalog month.</p>'; return; }
+    // At risk: highest-value lapsed customer.
+    const risk = winbackRows.find(r => r.priority === 'high' && r.type === 'app') || winbackRows.find(r => r.type === 'app');
+    const riskCard = risk
+      ? insightCard('At Risk', risk.name,
+          `${risk.reserves} reserve${risk.reserves === 1 ? '' : 's'}, ${risk.cancels} cancel${risk.cancels === 1 ? '' : 's'}, quiet for ${risk.inactiveDays >= 91 ? '90+' : risk.inactiveDays} days — worth a call.`, true)
+      : insightCard('At Risk', '—', 'No lapsed app customers right now.', true);
 
-    const maxAvg = Math.max(subAvg, nonSubAvg) || 1;
-    el.innerHTML = `<div class="aov-flex">
-      <div class="aov-bars bars">
-        <div class="bar-item">
-          <div class="bar-label">Subscribers <span class="dist">${subTotals.length} customers</span></div>
-          <div class="v2-bar-row"><div class="v2-bar-track"><div class="v2-bar-fill blue" style="width:${Math.max(4, Math.round(subAvg / maxAvg * 100))}%" data-tip="Subscribers: ${fmtUsd(subAvg)} avg reserved value"></div></div><div class="v2-bar-count">${fmtUsd(subAvg)}</div></div>
-        </div>
-        <div class="bar-item">
-          <div class="bar-label">À-la-carte <span class="dist">${nonSubTotals.length} customers</span></div>
-          <div class="v2-bar-row"><div class="v2-bar-track"><div class="v2-bar-fill blue" style="width:${Math.max(4, Math.round(nonSubAvg / maxAvg * 100))}%" data-tip="À-la-carte: ${fmtUsd(nonSubAvg)} avg reserved value"></div></div><div class="v2-bar-count">${fmtUsd(nonSubAvg)}</div></div>
-        </div>
-      </div>
-      <div class="aov-stat">
-        <div class="v">${upliftPct == null ? '—' : (upliftPct >= 0 ? '+' : '') + upliftPct.toFixed(0) + '%'}</div>
-        <div class="l">Subscriber uplift</div>
-      </div>
+    document.getElementById('insights').innerHTML = topCard + convCard + riskCard;
+  }
+  function insightCard(cap, who, why, risk) {
+    return `<div class="insight${risk ? ' risk' : ''}">
+      <div class="cap">${cap}</div>
+      <div class="who">${escapeHtml(who)}</div>
+      <div class="why">${escapeHtml(why)}</div>
     </div>`;
   }
 
-  // ── Render: Return Rate by Weekly Cohort ─────────────────────
-  function renderCohort() {
-    const fAll = filteredEvents();
-    const el = document.getElementById('cohort-body');
+  // ── CUSTOMER INTELLIGENCE: segments ────────────────────────────
+  function renderSegments() {
+    const el = document.getElementById('segments-body');
+    const f30 = eventsInAge(filteredEvents(), 0, WIN);
+    const vpw = visitsPerWeekByUser(f30, WIN);
+    if (!vpw.size) { el.innerHTML = '<p class="no-data">Not enough visit history yet.</p>'; return; }
+
+    const tiers = { power: [], reg: [], occ: [] };
+    vpw.forEach((v, uid) => { (v >= 5 ? tiers.power : v >= 2 ? tiers.reg : tiers.occ).push(uid); });
+    const totalN = vpw.size;
+
+    // Per-user reserved value (from reserve events) → upgrade-value gap.
+    const valBy = new Map();
+    filteredEvents().forEach(e => { if (e.event_type === 'reserve') valBy.set(e.user_id, (valBy.get(e.user_id) || 0) + (e.metadata?.price_usd || 0)); });
+    const avgVal = ids => ids.length ? ids.reduce((a, id) => a + (valBy.get(id) || 0), 0) / ids.length : 0;
+    const gap = Math.max(0, avgVal(tiers.reg) - avgVal(tiers.occ));
+
+    const seg = (n, color) => n > 0 ? `<div class="seg" style="width:${n / totalN * 100}%;background:${color}"></div>` : '';
+    const names = ids => ids.slice(0, 3).map(uid => profileName(uid)).map(escapeHtml).join(', ');
+    const legendRow = (color, tier, n, desc) => `<div class="row">
+      <span class="sw" style="background:${color}"></span>
+      <span class="tier">${tier}</span>
+      <span class="desc">${n}${n && desc.namesFor ? ' — ' + names(desc.namesFor) : ''} · ${desc.text}</span>
+    </div>`;
+
+    el.innerHTML = `
+      <div class="seg-bar">
+        ${seg(tiers.power.length, 'var(--seg-1)')}
+        ${seg(tiers.reg.length, 'var(--seg-2)')}
+        ${seg(tiers.occ.length, 'var(--seg-3)')}
+      </div>
+      <div class="seg-legend">
+        ${legendRow('var(--seg-1)', 'Power user', tiers.power.length, { namesFor: tiers.power, text: 'visits 5+ times a week' })}
+        ${legendRow('var(--seg-2)', 'Regulars', tiers.reg.length, { namesFor: tiers.reg, text: '2–4 visits a week' })}
+        ${legendRow('var(--seg-3)', 'Occasional', tiers.occ.length, { namesFor: tiers.occ, text: 'fewer than 2 visits a week' })}
+      </div>
+      ${gap > 0 ? `<p class="note">Goal: move occasionals up a tier — each regular is worth ~${fmtMoney(gap)}/month more in reserves.</p>`
+                : `<p class="note">Goal: move occasionals up a tier into a weekly habit.</p>`}`;
+  }
+
+  // ── CUSTOMER INTELLIGENCE: weekly cohorts ──────────────────────
+  function renderCohorts() {
+    const f = filteredEvents();
+    const el = document.getElementById('cohorts-body');
     const weeks = [];
     for (let i = 3; i >= 0; i--) {
-      const d = new Date(NOW);
-      d.setDate(d.getDate() - i * 7);
+      const d = new Date(NOW); d.setDate(d.getDate() - i * 7);
       weeks.push(DateUtils.weekRange(DateUtils.fmtLocal(d)));
     }
     const rows = weeks.map(w => {
       const startTs = new Date(w.start + 'T00:00:00').getTime();
       const endTs = new Date(w.end + 'T23:59:59.999').getTime();
-      const cohort = new Set(fAll.filter(e => { const t = new Date(e.created_at).getTime(); return t >= startTs && t <= endTs; }).map(e => e.user_id));
+      const cohort = new Set(f.filter(e => { const t = new Date(e.created_at).getTime(); return t >= startTs && t <= endTs; }).map(e => e.user_id));
       const followEndTs = endTs + 30 * 86400000;
       const isOpen = followEndTs > NOW;
       let returned = 0;
       cohort.forEach(uid => {
-        const has = fAll.some(e => e.user_id === uid && new Date(e.created_at).getTime() > endTs && new Date(e.created_at).getTime() <= followEndTs);
-        if (has) returned++;
+        if (f.some(e => e.user_id === uid && new Date(e.created_at).getTime() > endTs && new Date(e.created_at).getTime() <= followEndTs)) returned++;
       });
       const rate = cohort.size ? returned / cohort.size * 100 : 0;
-      return { start: w.start, rate, isOpen, cohortSize: cohort.size };
+      return { start: w.start, rate, isOpen, size: cohort.size };
     });
-
-    if (!rows.some(r => r.cohortSize > 0)) {
-      el.innerHTML = '<p class="no-data">Not enough history yet.</p>';
-      return;
-    }
-    const max = Math.max(...rows.map(r => r.rate), 1);
-    el.innerHTML = rows.map(r => `
-      <div class="bar-item">
-        <div class="bar-label">Week of ${formatDate(r.start)}</div>
-        <div class="v2-bar-row"><div class="v2-bar-track"><div class="v2-bar-fill blue" style="width:${Math.max(4, Math.round(r.rate / max * 100))}%" data-tip="${formatDate(r.start)} cohort: ${r.rate.toFixed(0)}% returned${r.isOpen ? ' so far (window still open)' : ' within 30 days'}"></div></div><div class="v2-bar-count">${r.rate.toFixed(0)}%${r.isOpen ? '*' : ''}</div></div>
-      </div>`).join('') + (rows.some(r => r.isOpen) ? '<p class="h3-sub" style="margin:10px 0 0">*window still open — will keep rising</p>' : '');
+    if (!rows.some(r => r.size > 0)) { el.innerHTML = '<p class="no-data">Not enough history yet.</p>'; return; }
+    el.innerHTML = `<div class="bars">${rows.map(r => {
+      const op = Math.max(0.08, r.rate / 100 * 0.6);
+      return `<div class="cohort-row">
+        <span class="wk">${formatDate(r.start)}</span>
+        <div class="track" style="background:rgba(34,197,94,${op.toFixed(3)})"></div>
+        <span class="pct">${r.rate.toFixed(0)}%${r.isOpen ? '*' : ''}</span>
+      </div>`;
+    }).join('')}</div>`;
   }
 
-  // ── Render: DAU trend (SVG) ───────────────────────────────────
-  function dauBuckets(fEvents, days) {
-    const buckets = new Map();
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(NOW);
-      d.setDate(d.getDate() - i);
-      buckets.set(DateUtils.fmtLocal(d), new Set());
-    }
-    fEvents.forEach(e => {
-      const key = DateUtils.fmtLocal(new Date(e.created_at));
-      if (buckets.has(key)) buckets.get(key).add(e.user_id);
-    });
-    return buckets;
-  }
-
-  function weeklyRollup(buckets) {
-    const weeks = new Map();
-    buckets.forEach((set, date) => {
-      const { start, end } = DateUtils.weekRange(date);
-      if (!weeks.has(start)) weeks.set(start, { start, end, users: new Set(), peakDate: date, peakCount: 0 });
-      const w = weeks.get(start);
-      set.forEach(u => w.users.add(u));
-      if (set.size > w.peakCount) { w.peakCount = set.size; w.peakDate = date; }
-    });
-    return Array.from(weeks.values()).sort((a, b) => a.start.localeCompare(b.start));
-  }
-
-  function renderTrend() {
-    const fAll = filteredEvents();
-    const days = state.selectedDays;
-    const buckets = dauBuckets(fAll, days);
-    const series = Array.from(buckets, ([date, set]) => ({ date, count: set.size }));
-
-    document.getElementById('trend-sub').textContent =
-      `${formatDate(series[0].date)} – ${formatDate(series[series.length - 1].date)} · hover for values`;
-
-    const svg = document.getElementById('trend-svg');
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-    const NS = 'http://www.w3.org/2000/svg';
-    function el(tag, attrs) {
-      const n = document.createElementNS(NS, tag);
-      for (const k in attrs) n.setAttribute(k, attrs[k]);
-      return n;
-    }
-
-    const W = 760, H = 230, M = { t: 16, r: 46, b: 28, l: 34 };
-    const iw = W - M.l - M.r, ih = H - M.t - M.b;
-    const maxVal = Math.max(...series.map(d => d.count), 1);
-    const yMax = Math.max(5, Math.ceil((maxVal * 1.15) / 5) * 5);
-    const xAt = i => M.l + (series.length > 1 ? i / (series.length - 1) : 0) * iw;
-    const yAt = v => M.t + (1 - v / yMax) * ih;
-
-    [0, 0.25, 0.5, 0.75, 1].forEach(f => {
-      const v = Math.round(yMax * f);
-      svg.appendChild(el('line', { x1: M.l, x2: W - M.r, y1: yAt(v), y2: yAt(v), stroke: '#2e2e2e', 'stroke-width': f === 0 ? 1.25 : 0.75 }));
-      const t = el('text', { x: M.l - 8, y: yAt(v) + 4, 'text-anchor': 'end', fill: '#737069', 'font-size': '11', 'font-family': 'inherit' });
-      t.textContent = v; svg.appendChild(t);
-    });
-
-    const tickIdx = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (series.length - 1)));
-    [...new Set(tickIdx)].forEach(i => {
-      const t = el('text', { x: xAt(i), y: H - 8, 'text-anchor': 'middle', fill: '#737069', 'font-size': '11', 'font-family': 'inherit' });
-      t.textContent = new Date(series[i].date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      svg.appendChild(t);
-    });
-
-    const pts = series.map((d, i) => [xAt(i), yAt(d.count)]);
-    const lineD = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('');
-    svg.appendChild(el('path', { d: lineD + `L${xAt(series.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`, fill: 'rgba(57,135,229,0.13)', stroke: 'none' }));
-    svg.appendChild(el('path', { d: lineD, fill: 'none', stroke: '#3987e5', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
-
-    const last = pts[pts.length - 1];
-    svg.appendChild(el('circle', { cx: last[0], cy: last[1], r: 4, fill: '#3987e5', stroke: '#181818', 'stroke-width': 2 }));
-    const endLbl = el('text', { x: last[0] + 8, y: last[1] + 4, fill: '#f0ece4', 'font-size': '12', 'font-weight': '600', 'font-family': 'inherit' });
-    endLbl.textContent = String(series[series.length - 1].count);
-    svg.appendChild(endLbl);
-
-    const cross = el('line', { y1: M.t, y2: M.t + ih, stroke: '#5a5755', 'stroke-width': 1, 'stroke-dasharray': '3,3', visibility: 'hidden' });
-    const dot = el('circle', { r: 4, fill: '#3987e5', stroke: '#181818', 'stroke-width': 2, visibility: 'hidden' });
-    svg.appendChild(cross); svg.appendChild(dot);
-    svg.addEventListener('mousemove', e => {
-      const r = svg.getBoundingClientRect();
-      const fx = (e.clientX - r.left) / r.width * W;
-      const i = Math.max(0, Math.min(series.length - 1, Math.round((fx - M.l) / iw * (series.length - 1))));
-      const [x, y] = pts[i];
-      cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
-      dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('visibility', 'visible');
-      const label = new Date(series[i].date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      showTip(`<span class="tl">${label}</span> · <strong>${series[i].count}</strong> active customers`, e.clientX, e.clientY);
-    });
-    svg.addEventListener('mouseleave', () => {
-      cross.setAttribute('visibility', 'hidden');
-      dot.setAttribute('visibility', 'hidden');
-      hideTip();
-    });
-
-    const rollup = weeklyRollup(buckets);
-    const tblEl = document.getElementById('trend-table');
-    tblEl.innerHTML = `<table class="v2-tbl">
-      <thead><tr><th>Week</th><th class="r">Weekly Active Users</th><th class="r">Peak day</th><th class="r">Peak DAU</th></tr></thead>
-      <tbody>${rollup.map(w => `<tr><td>${formatDate(w.start)} – ${formatDate(w.end)}</td><td class="r">${w.users.size}</td><td class="r dim">${formatDate(w.peakDate)}</td><td class="r">${w.peakCount}</td></tr>`).join('')}</tbody>
-    </table>`;
-  }
-
-  // ── Render: Win-back list ─────────────────────────────────────
-  function renderWinback() {
-    const lastSeenByUser = new Map();
+  // ── Win-back computation (shared by attention/insights/table) ──
+  function computeWinback() {
+    // Last-seen + value + reserve/cancel counts from the full cache.
+    const lastSeen = new Map(), value = new Map(), rc = new Map(), cc = new Map();
     state.events.forEach(e => {
       const t = new Date(e.created_at).getTime();
-      if (!lastSeenByUser.has(e.user_id) || t > lastSeenByUser.get(e.user_id)) lastSeenByUser.set(e.user_id, t);
+      if (!lastSeen.has(e.user_id) || t > lastSeen.get(e.user_id)) lastSeen.set(e.user_id, t);
+      if (e.event_type === 'reserve') { value.set(e.user_id, (value.get(e.user_id) || 0) + (e.metadata?.price_usd || 0)); rc.set(e.user_id, (rc.get(e.user_id) || 0) + 1); }
+      if (e.event_type === 'cancel') cc.set(e.user_id, (cc.get(e.user_id) || 0) + 1);
     });
+    // Median reserved value across active, non-admin, non-paper customers.
+    const vals = [];
+    state.profiles.forEach((p, id) => { if (!p.is_admin && p.status === 'active' && !p.is_paper) vals.push(value.get(id) || 0); });
+    vals.sort((a, b) => a - b);
+    const median = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
 
     const rows = [];
-    let totalActive = 0;
     state.profiles.forEach((p, id) => {
       if (p.is_admin || p.status !== 'active') return;
-      totalActive++;
+      const reserves = rc.get(id) || 0, cancels = cc.get(id) || 0, val = value.get(id) || 0;
       if (p.is_paper) {
-        rows.push({ id, name: p.full_name, type: 'paper', lastSeenLabel: 'never logged in', inactiveDays: 9999, email: p.email, play: 'Invite to app (claim flow)' });
+        rows.push({ id, name: p.full_name, type: 'paper', priority: 'paper', lastSeenLabel: 'Never logged in', inactiveDays: 9999, email: p.email, reserves, cancels, value: val });
         return;
       }
-      const lastSeen = lastSeenByUser.get(id) || null;
-      if (lastSeen === null) {
-        rows.push({ id, name: p.full_name, type: 'app', lastSeenLabel: 'none in retention', inactiveDays: 91, email: p.email, play: 'Personal call — long lapse' });
-        return;
+      const ls = lastSeen.get(id) || null;
+      let inactiveDays, lastSeenLabel;
+      if (ls === null) { inactiveDays = 91; lastSeenLabel = 'None in retention'; }
+      else {
+        inactiveDays = Math.floor((NOW - ls) / 86400000);
+        if (inactiveDays < 30) return; // still active — not a win-back row
+        lastSeenLabel = formatDate(DateUtils.fmtLocal(new Date(ls)));
       }
-      const inactiveDays = Math.floor((NOW - lastSeen) / 86400000);
-      if (inactiveDays >= 30) {
-        const play = inactiveDays > 45 ? 'Personal call — long lapse' : '"Your pulls are waiting" nudge';
-        rows.push({ id, name: p.full_name, type: 'app', lastSeenLabel: formatDate(DateUtils.fmtLocal(new Date(lastSeen))), inactiveDays, email: p.email, play });
-      }
+      const priority = (val > median && val > 0) ? 'high' : 'medium';
+      const row = { id, name: p.full_name, type: 'app', priority, lastSeenLabel, inactiveDays, email: p.email, reserves, cancels, value: val };
+      row.play = playFor(row);
+      rows.push(row);
     });
-    rows.sort((a, b) => a.inactiveDays - b.inactiveDays);
-    winbackRows = rows;
+    // Fill paper play strings too.
+    rows.forEach(r => { if (!r.play) r.play = playFor(r); });
+    // Sort: high value first, then most-recently lapsed.
+    const rank = { high: 0, medium: 1, paper: 2 };
+    rows.sort((a, b) => (rank[a.priority] - rank[b.priority]) || (a.inactiveDays - b.inactiveDays));
+    return rows;
+  }
+  function playFor(row) {
+    if (row.type === 'paper') return 'Invite to the app (claim flow)';
+    if (row.priority === 'high') {
+      if (row.cancels > 0 && row.reserves + row.cancels > 0 && (row.cancels / (row.reserves + row.cancels)) >= 0.4) {
+        return 'Personal call — cancelled a large share of reserves before lapsing';
+      }
+      return 'Personal call — high-value regular gone quiet';
+    }
+    return row.inactiveDays > 45 ? 'Personal call — long lapse' : '"Your pulls are waiting" nudge email';
+  }
 
+  // ── CUSTOMER INTELLIGENCE: win-back table ──────────────────────
+  function renderWinback() {
+    let totalActive = 0;
+    state.profiles.forEach(p => { if (!p.is_admin && p.status === 'active') totalActive++; });
     document.getElementById('winback-sub').textContent =
-      `Active accounts with no activity in 30+ days · ${rows.length} of ${totalActive} customers · most-recently-lapsed first`;
+      `Active accounts with no activity in 30+ days · ${winbackRows.length} of ${totalActive} customer${totalActive === 1 ? '' : 's'}`;
 
     const el = document.getElementById('winback-body');
-    if (!rows.length) { el.innerHTML = '<p class="no-data">No lapsed customers right now.</p>'; return; }
-
-    el.innerHTML = `<table class="v2-tbl">
-      <thead><tr><th>Customer</th><th>Type</th><th>Last Seen</th><th class="r">Inactive</th><th>Email</th><th>Suggested Play</th></tr></thead>
-      <tbody>${rows.map(r => `<tr>
+    if (!winbackRows.length) { el.innerHTML = '<p class="no-data">No lapsed customers right now.</p>'; return; }
+    const pillFor = r => r.priority === 'high' ? '<span class="pill high">High value</span>'
+      : r.priority === 'paper' ? '<span class="pill paper">Paper</span>' : '<span class="pill med">Medium</span>';
+    el.innerHTML = `<table class="tbl">
+      <thead><tr><th>Customer</th><th>Priority</th><th>Last Seen</th><th class="r">Inactive</th><th>Suggested Play</th></tr></thead>
+      <tbody>${winbackRows.map(r => `<tr${r.priority === 'high' ? ' class="risk-row"' : ''}>
         <td class="name">${escapeHtml(r.name)}</td>
-        <td class="dim">${r.type}</td>
+        <td>${pillFor(r)}</td>
         <td class="dim">${escapeHtml(r.lastSeenLabel)}</td>
-        <td class="r">${r.inactiveDays >= 9999 ? '—' : r.inactiveDays >= 91 ? '90+ d' : r.inactiveDays + ' d'}</td>
-        <td class="dim">${escapeHtml(r.email || '—')}</td>
+        <td class="r strong">${r.inactiveDays >= 9999 ? '—' : r.inactiveDays >= 91 ? '90+ d' : r.inactiveDays + ' d'}</td>
         <td class="dim">${escapeHtml(r.play)}</td>
       </tr>`).join('')}</tbody>
     </table>`;
   }
 
-  // ── Filter note ────────────────────────────────────────────
-  function renderFilterNote() {
-    const windowed = eventsInAge(state.events, 0, state.selectedDays);
-    const adminEvents = windowed.filter(e => state.adminIds.has(e.user_id)).length;
-    const noteEl = document.getElementById('filter-note');
-    if (state.hideAdmin) {
-      noteEl.classList.remove('warn');
-      noteEl.textContent = `${state.adminIds.size} admin account${state.adminIds.size === 1 ? '' : 's'} excluded (${adminEvents} events) · events retained 90 days — no "all time" view`;
-    } else {
-      noteEl.classList.add('warn');
-      noteEl.textContent = '⚠ Admin activity shown — highlighted rows are admin accounts · events retained 90 days';
-    }
-  }
-
-  // ── Render everything from cached state (no refetch) ─────────
+  // ── Render everything from cached state (no refetch) ───────────
   function renderAll() {
-    document.getElementById('analytics-subtitle').textContent = `Customer activity & engagement · Last ${state.selectedDays} days`;
-    renderFilterNote();
-    renderCoreKpis();
-    renderCoreCharts();
-    renderCustomerActivity();
-    renderRecentEvents();
-    const { smNow } = renderAdvancedKpis();
-    renderSessionHistogram();
-    renderFeatureDepth(smNow);
-    renderAov();
-    renderCohort();
-    renderTrend();
+    document.getElementById('analytics-subtitle').textContent =
+      `Last 30 days · ${monthLabel(state.currentMonth) || 'current'} catalog`;
+    document.getElementById('warn-banner').hidden = state.hideAdmin;
+
+    // Win-back is a shared dependency of three panels — compute once.
+    winbackRows = computeWinback();
+
+    const m = execMetrics();
+    renderEngagementHero(m);
+    renderExecKpis(m);
+    renderFunnel();
+    renderWhatChanged(m);
+    renderSubOpportunity();
+    renderAttention();
+
+    renderFocBanner();
+    renderOpsKpis();
+    renderTitleBars();
+    renderPublisherDemand();
+    renderOpsActivity();
+
+    renderInsights();
+    renderSegments();
+    renderCohorts();
     renderWinback();
   }
 
@@ -1131,23 +1410,38 @@
     }
   }
 
-  // ── Controls ──────────────────────────────────────────────
-  document.querySelectorAll('.range-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.selectedDays = parseInt(btn.dataset.days, 10);
-      renderAll();
-    });
-  });
+  // ── Tabs ───────────────────────────────────────────────────────
+  const TABS = ['executive', 'operations', 'intelligence'];
+  function setTab(tab) {
+    if (!TABS.includes(tab)) tab = 'executive';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = p.dataset.tab !== tab; });
+    try { localStorage.setItem('analytics_tab', tab); } catch {}
+    if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
+  }
+  function initTab() {
+    let tab = location.hash.slice(1);
+    if (!TABS.includes(tab)) { try { tab = localStorage.getItem('analytics_tab'); } catch {} }
+    setTab(TABS.includes(tab) ? tab : 'executive');
+  }
+  document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  document.querySelectorAll('[data-goto-tab]').forEach(b => b.addEventListener('click', () => {
+    setTab(b.dataset.gotoTab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }));
 
-  document.getElementById('admin-filter').addEventListener('change', e => {
-    state.hideAdmin = e.target.checked;
+  // ── Admin toggle ───────────────────────────────────────────────
+  const admBtn = document.getElementById('admin-toggle');
+  admBtn.addEventListener('click', () => {
+    state.hideAdmin = !state.hideAdmin;
+    admBtn.classList.toggle('on', !state.hideAdmin);
+    document.getElementById('adm-label').textContent = state.hideAdmin ? 'Customers only' : 'Staff activity included';
     renderAll();
   });
 
   document.getElementById('btn-refresh').addEventListener('click', loadAll);
 
+  // ── Win-back exports ───────────────────────────────────────────
   document.getElementById('btn-copy-emails').addEventListener('click', async () => {
     const emails = winbackRows.map(r => r.email).filter(Boolean);
     if (!emails.length) { toast('No emails to copy', 'error'); return; }
@@ -1155,19 +1449,16 @@
       await navigator.clipboard.writeText(emails.join(', '));
     } catch {
       const ta = document.createElement('textarea');
-      ta.value = emails.join(', ');
-      ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); ta.remove();
+      ta.value = emails.join(', '); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
     }
     toast(`Copied ${emails.length} email${emails.length === 1 ? '' : 's'} to clipboard`);
   });
-
   document.getElementById('btn-export-csv').addEventListener('click', () => {
     if (!winbackRows.length) { toast('No rows to export', 'error'); return; }
-    const header = ['Customer', 'Type', 'Last Seen', 'Inactive Days', 'Email', 'Suggested Play'];
+    const header = ['Customer', 'Priority', 'Last Seen', 'Inactive Days', 'Email', 'Suggested Play'];
     const csvRows = winbackRows.map(r => [
-      r.name, r.type, r.lastSeenLabel, r.inactiveDays >= 9999 ? '' : r.inactiveDays, r.email || '', r.play,
+      r.name, r.priority, r.lastSeenLabel, r.inactiveDays >= 9999 ? '' : r.inactiveDays, r.email || '', r.play,
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     const csv = [header.join(','), ...csvRows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -1178,6 +1469,7 @@
     toast('CSV downloaded');
   });
 
+  initTab();
   await loadAll();
 })();
 </script>
