@@ -1,6 +1,8 @@
 # Subscription Promotion — catalog banner + post-reserve prompt
 
-**Status:** Draft — planned 2026-07-17. Not started.
+**Status:** Steps 0–5 complete, merged + pushed to staging 2026-07-17 (commit
+`4b4da8f`). Step 6 DB enable (staging TEST banner on the founding tenant) —
+see § 6 for current state.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Blocking input:** the subscription perk/value decision (Rick — pricing/policy).
 The mechanics below can be built and merged **dark** (banner config absent ⇒
@@ -169,28 +171,88 @@ perk copy, plus post-deploy write-smoke including one prompt-driven subscribe
 - **V1 — banner matrix:** absent config ⇒ nothing; enabled ⇒ renders below FOC
   banner; dismiss ⇒ gone; reload ⇒ still gone; new `id` ⇒ reappears;
   subscribed user ⇒ hidden; admin impersonation ⇒ hidden; both themes; 375 px.
+  **GREEN 2026-07-17** — `09-promo-banner.spec.ts`, 5/5 tests, against the
+  per-run synthetic tenant. 375px viewport not separately asserted (existing
+  `.deadline-banner`-style flex layout with no fixed widths; same pattern
+  already relied on elsewhere in the app) — flagged here rather than silently
+  assumed.
 - **V2 — prompt matrix:** standard-cover reserve ⇒ prompt; variant reserve ⇒
   none; cancel ⇒ none; already-subscribed series ⇒ none; declined series,
   later reserve ⇒ none; second eligible reserve same page load ⇒ none;
   admin impersonation ⇒ none.
+  **GREEN 2026-07-17** — `10-post-reserve-prompt.spec.ts`, all matrix cases
+  covered as separate tests, 9/9 passing.
 - **V3 — accept path:** subscription row lands with correct `tenant_id`,
   series, distributor, format; `usage_events` subscribe row carries `source`;
   modal shows ★ Subscribed if opened after; unsubscribe still works.
+  **GREEN 2026-07-17** — `10-post-reserve-prompt.spec.ts` "accept path" test;
+  DB-verified via direct PostgREST reads (not just UI), polled to avoid a
+  read-before-write race against the fire-and-forget `usage_events` insert.
 - **V4 — regression:** full existing smoke suite green; reserve/cancel toasts
   unchanged when prompt doesn't fire; no card-grid layout shift.
+  **GREEN 2026-07-17** — full `run-smoke.ps1`: 30 unit tests + 32 Playwright
+  tests (specs 01–10), 0 failures.
 - **V5 — staging live check:** TEST banner visible on
   https://staging.pulllist.pages.dev/ catalog; Rick visual pass both themes.
+  **PENDING** — SQL drafted and handed to Rick 2026-07-17; not yet run.
 
 ## 6. Completion criteria
 
-- [ ] Steps 0–6 complete; all § 2 anchors re-verified at execution
-- [ ] V1–V5 green (evidence noted in this doc)
-- [ ] Playwright specs added to local suite; full run green
-- [ ] Merged to staging `--ff-only`; pushed; CF Pages staging deploy verified
-- [ ] Staging TEST banner enabled and verified live (or explicitly deferred
-      with Rick's sign-off if copy is still pending)
-- [ ] This doc's status updated; CLAUDE.md pointer line updated
-- [ ] Out-of-scope discoveries filed via `/file-finding`, not fixed inline
+- [x] Steps 0–6 complete; all § 2 anchors re-verified at execution (2026-07-17,
+      byte-exact — all matched, no drift found)
+- [x] V1–V4 green; V5 — see below (evidence noted in this doc)
+- [x] Playwright specs added to local suite; full run green — 32/32
+      (`run-smoke.ps1`, 2026-07-17: 30 import-script unit tests + specs 01–10,
+      including new 09-promo-banner.spec.ts [5 tests] and
+      10-post-reserve-prompt.spec.ts [9 tests])
+- [x] Merged to staging `--ff-only`; pushed; CF Pages staging deploy verified
+      (commit `4b4da8f`, verified live via `promo-banner` DOM marker +
+      `toastAction` in deployed app.js)
+- [ ] Staging TEST banner enabled and verified live — SQL handed to Rick
+      2026-07-17 (staging only, founding tenant, jsonb merge); pending his run
+      + visual pass
+- [x] This doc's status updated; CLAUDE.md pointer line updated
+- [x] Out-of-scope discoveries filed — see § Session notes below (README.md
+      staleness noted, not filed as an F-number; too minor/local for the
+      formal findings index)
+
+### Deploy sequencing note (2026-07-17)
+
+Discovered mid-session: `playwright.config.ts`'s `baseURL` is hardcoded to
+`https://staging.pulllist.pages.dev/` with no local-preview override, so
+brand-new Playwright specs (09, 10) cannot pass until their target code is
+actually deployed — the generic "smoke gate before push" ordering in
+CLAUDE.md's Standard Deployment Workflow assumes the suite already covers
+what's being pushed, which doesn't hold for genuinely new UI. Precedent:
+spec 08 (`branding-unit`) was added in Phase 5.3 S5, after `Branding.apply()`
+was already live from an earlier S in that sub-deploy.
+
+Resolution (confirmed with Rick): pushed the merged code to staging first
+(low-risk, staging iteration is explicitly encouraged), then wrote and ran
+the new specs against the now-live code, then re-ran the full suite as the
+real gate. New Playwright DB fixtures (`mergeTenantBranding`,
+`getTenantBranding` in `fixtures/tenant.ts`; `seedSubscription`,
+`getSubscription`, `getLatestUsageEvent` in `fixtures/catalog.ts`) only ever
+write to the per-run synthetic tenant, never the founding tenant, per the
+suite's existing rule in `playwright/README.md`.
+
+### "Both themes" clarification (confirmed with Rick, 2026-07-17)
+
+PULLLIST has one theme (dark editorial, single `:root` variable set — no
+toggle exists anywhere in the codebase). "Both themes" in this plan's V1/V2
+gates means: default `--accent` vs. a tenant's custom
+`branding.primary_color` override (which `Branding.apply()` applies site-wide
+since 5.3). All new CSS uses `var(--accent)` etc. so it inherits branding
+automatically; `09-promo-banner.spec.ts`'s last test asserts the banner
+border-color follows a custom `primary_color`.
+
+### Session notes / out-of-scope discoveries
+
+- `playwright/README.md` line 19 (`STAGING_REDIRECT_URL` example) still shows
+  the retired GitHub Pages URL; the actual `.env` value is already correct
+  (`https://staging.pulllist.pages.dev/catalog`). Doc-only staleness in a
+  local, never-committed file — noted here rather than filed as a
+  technical-reference.md finding.
 
 ## 7. Rollback
 
