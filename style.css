@@ -152,6 +152,46 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .deadline-banner strong { color: var(--text-primary); }
 
+/* ── Subscription Promo Banner (driven by tenants.branding.promo_banner) ── */
+.promo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 11px 16px;
+  margin-bottom: 24px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.promo-banner-content { flex: 1 1 auto; }
+.promo-banner-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.promo-banner-link:hover { text-decoration: underline; }
+.promo-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+.promo-banner-dismiss:hover { color: var(--text-primary); }
+.promo-banner-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ── Pickup Notice (My List page) ──────────────────────────── */
 .pickup-notice {
   display: flex;
@@ -974,6 +1014,50 @@ button { cursor: pointer; font-family: var(--font-body); }
 @keyframes slideIn {
   from { transform: translateX(20px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
+
+/* ── Toast with action button (e.g. post-reserve subscribe offer) ── */
+.toast-action {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  max-width: 320px;
+}
+.toast-action-message { color: var(--text-primary); line-height: 1.4; }
+.toast-action-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.toast-action-btn {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: var(--transition);
+}
+.toast-action-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.toast-dismiss-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  transition: var(--transition);
+}
+.toast-dismiss-btn:hover { color: var(--text-secondary); border-color: var(--border-accent); }
+.toast-action-btn:focus-visible,
+.toast-dismiss-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Loading ───────────────────────────────────────────────── */
