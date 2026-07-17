@@ -15,25 +15,29 @@ Deno.serve(async (req) => {
   const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
 
   // Caller authentication: this function triggers a customer-wide email blast,
-  // so we verify the caller is an authenticated admin before doing anything.
-  // (JWT verification is disabled at the platform level per Supabase's recommended
-  // pattern of off-plus-in-body-auth; the check below is the actual gate.)
+  // so we verify the caller before doing anything. Platform JWT verification is
+  // OFF for this function (Supabase's off-plus-in-body-auth pattern), so this
+  // in-body check is the actual gate — and it must NOT trust an unverified
+  // token's self-declared claims, because any crafted token reaches this code.
   const authHeader = req.headers.get('Authorization') || ''
   if (!authHeader) {
     return Response.json({ error: 'Missing Authorization header' }, { status: 401, headers: corsHeaders })
   }
-
-  // Resolve caller identity: service-role bypass (import script) or user JWT (admin UI).
-  // Decode JWT role claim to detect service-role callers. Safe: platform JWT verification is ON,
-  // so only Supabase-signed tokens reach this function; a forged service_role claim is impossible.
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
-  const isServiceRole = (() => {
+
+  // Resolve caller identity: service-role caller (import script) or admin user (UI).
+  // Detect a service-role caller by PROVING the key, not decoding a claim: use it
+  // against an admin-only endpoint — only a genuine service key (legacy JWT or the
+  // new sb_secret_ secret key) gets 200; a user JWT or a forged role=service_role
+  // token gets 401/403. Format-agnostic and spoof-proof. (Replaces an unsigned-JWT
+  // role decode that a crafted token could satisfy and that also stopped recognizing
+  // the post-F75 sb_secret_ key — see technical-reference.md § 13 F87.)
+  const isServiceRole = await (async () => {
     try {
-      const parts = token.split('.')
-      if (parts.length !== 3) return false
-      const pad = (s: string) => s + '=='.slice(0, (4 - s.length % 4) % 4)
-      const payload = JSON.parse(atob(pad(parts[1].replace(/-/g, '+').replace(/_/g, '/'))))
-      return payload.role === 'service_role'
+      const probe = await fetch(SUPABASE_URL + '/auth/v1/admin/users?page=1&per_page=1', {
+        headers: { Authorization: `Bearer ${token}`, apikey: token }
+      })
+      return probe.status === 200
     } catch { return false }
   })()
   let callerTenantId: string
