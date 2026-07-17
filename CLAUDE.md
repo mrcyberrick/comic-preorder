@@ -542,11 +542,13 @@ candidate (admin-logging doc/code contradiction) remains a separate open
 filing decision, not part of this closure.
 
 The subscription promotion feature (catalog banner + post-reserve subscribe
-prompt) closed on staging 2026-07-17 — no longer listed here. All V1–V5
-gates green, Rick's staging visual sign-off received. See
-`docs/subscription-promotion.md` for the full closed scope. Still open as
-separate, explicit future work: the real perk/pricing copy (banner currently
-carries only staging TEST copy) and prod promotion.
+prompt) closed 2026-07-17 — **live in production**, no longer listed here.
+All V1–V5 gates green; promoted via PR #86 (`107fc0a`) at Rick's explicit
+request the same session; post-deploy write-smoke passed; final copy (no
+separate perk/discount — Rick confirmed the informational copy as-is) live
+on both staging (`raysandjudys`) and production (`rjbookstop`) founding
+tenants, verified via the public `resolve_tenant_by_slug` RPC. See
+`docs/subscription-promotion.md` for full scope and evidence.
 
 If a session needs to touch any of the above, **stop and confirm**.
 
