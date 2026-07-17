@@ -525,6 +525,9 @@ approval.
   anon-key migration (new publishable key, both branches, deploy, verify live
   app) is required before the prod legacy `service_role`/`anon` toggle can be
   disabled. See `docs/technical-reference.md` § 13 F86.
+- **Subscription promotion (catalog banner + post-reserve subscribe prompt)**
+  — planned 2026-07-17, not started; builds dark, banner enable is gated on
+  Rick's subscription-perk/copy decision. Plan: `docs/subscription-promotion.md`.
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
 no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
