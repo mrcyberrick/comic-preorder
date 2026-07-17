@@ -1,8 +1,9 @@
 # Subscription Promotion — catalog banner + post-reserve prompt
 
-**Status:** Steps 0–5 complete, merged + pushed to staging 2026-07-17 (commit
-`4b4da8f`). Step 6 DB enable (staging TEST banner on the founding tenant) —
-see § 6 for current state.
+**Status:** Complete on staging — 2026-07-17. All steps done, V1–V5 green,
+Rick's visual sign-off received (commits `4b4da8f`, `ba83501`, `e26e028`,
+`60dadd5`). Real perk copy + prod promotion remain separate, explicit
+follow-ups — see § 6.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Blocking input:** the subscription perk/value decision (Rick — pricing/policy).
 The mechanics below can be built and merged **dark** (banner config absent ⇒
@@ -194,23 +195,36 @@ perk copy, plus post-deploy write-smoke including one prompt-driven subscribe
   tests (specs 01–10), 0 failures.
 - **V5 — staging live check:** TEST banner visible on
   https://staging.pulllist.pages.dev/ catalog; Rick visual pass both themes.
-  **PENDING** — SQL drafted and handed to Rick 2026-07-17; not yet run.
+  **GREEN 2026-07-17.** Rick ran the SQL (founding tenant `branding` merge
+  confirmed clean — only `promo_banner` added, no other keys touched).
+  Initial check found the banner hidden: his staging test account had 5
+  active subscriptions, correctly triggering the hide-if-subscribed rule
+  (confirmed via a live browser-console diagnostic reading `TenantContext`/
+  `AdminContext`/`Subscriptions.getAll` directly — not guessed). After
+  temporarily clearing subscriptions via the Subscriptions page, the banner
+  rendered — but visually competed with the red FOC deadline banner directly
+  above it (same accent-red tint/border on both). Fixed by switching
+  `.promo-banner` to a neutral `bg-elevated`/`border` card (commit
+  `60dadd5`); the "Learn more" link keeps `var(--accent)` so per-tenant
+  branding color is still reflected there. Rick confirmed the fix looks
+  right on staging. `09-promo-banner.spec.ts`'s custom-color test was
+  retargeted from the banner border to the link color to match.
 
 ## 6. Completion criteria
 
 - [x] Steps 0–6 complete; all § 2 anchors re-verified at execution (2026-07-17,
       byte-exact — all matched, no drift found)
-- [x] V1–V4 green; V5 — see below (evidence noted in this doc)
+- [x] V1–V5 all green (evidence noted in this doc)
 - [x] Playwright specs added to local suite; full run green — 32/32
       (`run-smoke.ps1`, 2026-07-17: 30 import-script unit tests + specs 01–10,
       including new 09-promo-banner.spec.ts [5 tests] and
       10-post-reserve-prompt.spec.ts [9 tests])
 - [x] Merged to staging `--ff-only`; pushed; CF Pages staging deploy verified
       (commit `4b4da8f`, verified live via `promo-banner` DOM marker +
-      `toastAction` in deployed app.js)
-- [ ] Staging TEST banner enabled and verified live — SQL handed to Rick
-      2026-07-17 (staging only, founding tenant, jsonb merge); pending his run
-      + visual pass
+      `toastAction` in deployed app.js; follow-up styling fix `60dadd5`
+      pushed and verified live after Rick's V5 visual pass)
+- [x] Staging TEST banner enabled and verified live — Rick ran the SQL and
+      confirmed the fix visually on 2026-07-17 (see V5 above)
 - [x] This doc's status updated; CLAUDE.md pointer line updated
 - [x] Out-of-scope discoveries filed — see § Session notes below (README.md
       staleness noted, not filed as an F-number; too minor/local for the

@@ -525,13 +525,6 @@ approval.
   anon-key migration (new publishable key, both branches, deploy, verify live
   app) is required before the prod legacy `service_role`/`anon` toggle can be
   disabled. See `docs/technical-reference.md` § 13 F86.
-- **Subscription promotion (catalog banner + post-reserve subscribe prompt)**
-  — code complete, merged + pushed to staging 2026-07-17 (commit `4b4da8f`);
-  local smoke suite green (30 unit + 32 Playwright, specs 09/10 new). Only
-  remaining: staging DB enable (TEST banner, founding tenant) — SQL handed to
-  Rick 2026-07-17, pending his run + visual pass (V5). Real perk copy still
-  gated on Rick's subscription-perk/pricing decision (prod promotion separate).
-  Plan: `docs/subscription-promotion.md`.
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
 no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
@@ -547,6 +540,13 @@ ungated) closed 2026-07-16 — no longer listed here. See
 `docs/analytics-v2-engagement-dashboard.md` for the full closed scope; F87
 candidate (admin-logging doc/code contradiction) remains a separate open
 filing decision, not part of this closure.
+
+The subscription promotion feature (catalog banner + post-reserve subscribe
+prompt) closed on staging 2026-07-17 — no longer listed here. All V1–V5
+gates green, Rick's staging visual sign-off received. See
+`docs/subscription-promotion.md` for the full closed scope. Still open as
+separate, explicit future work: the real perk/pricing copy (banner currently
+carries only staging TEST copy) and prod promotion.
 
 If a session needs to touch any of the above, **stop and confirm**.
 
