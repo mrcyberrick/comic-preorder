@@ -152,14 +152,17 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .deadline-banner strong { color: var(--text-primary); }
 
-/* ── Subscription Promo Banner (driven by tenants.branding.promo_banner) ── */
+/* ── Subscription Promo Banner (driven by tenants.branding.promo_banner) ──
+   Neutral bg-elevated treatment — deliberately recedes so it doesn't visually
+   compete with the red FOC deadline banner directly above it (2026-07-17,
+   Rick visual QA on staging). */
 .promo-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: var(--accent-dim);
-  border: 1px solid var(--accent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 11px 16px;
   margin-bottom: 24px;
