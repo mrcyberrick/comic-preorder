@@ -91,6 +91,10 @@
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
   <div id="deadline-banner" class="deadline-banner" style="display:none" role="status" aria-live="polite"></div>
 
+  <!-- Subscription promo banner — driven by tenants.branding.promo_banner (jsonb).
+       Absent config or enabled:false ⇒ nothing renders (ships dark). -->
+  <div id="promo-banner" class="promo-banner" style="display:none" role="status" aria-live="polite"></div>
+
   <!-- Stats -->
   <div class="stats-bar" id="stats-bar">
     <div class="stat">
@@ -279,6 +283,7 @@
   let reservedIds = new Set();
   let currentMonthQty = 0;  // reserved qty scoped to current catalog month only
   let mySubscriptions = new Set(); // Set of "series_name||distributor" keys
+  let promptShownThisLoad = false; // post-reserve subscribe prompt — max one per page load
   let allItems = [];
   let totalCount = 0;
   let modalComicId = null;
@@ -426,6 +431,53 @@
     });
   }
 
+  // ── Subscription promo banner ─────────────────────────────────
+  // Driven by tenants.branding.promo_banner (jsonb, public by design — see
+  // technical-reference.md § slug→id RPC). Absent key or enabled:false ⇒
+  // nothing renders. Called after mySubscriptions loads so the
+  // hide-if-subscribed rule applies on first render, not reactively.
+  function renderPromoBanner() {
+    if (AdminContext.isActive()) return;
+    const tenant = TenantContext.current();
+    const cfg = tenant?.branding?.promo_banner;
+    if (!cfg || !cfg.enabled || !cfg.id || !cfg.text) return;
+    if (mySubscriptions.size > 0) return;
+
+    const dismissKey = `pulllist_promo_dismissed_${tenant.slug || 'default'}_${cfg.id}`;
+    if (localStorage.getItem(dismissKey)) return;
+
+    const banner = document.getElementById('promo-banner');
+    if (!banner) return;
+    banner.innerHTML = '';
+
+    const content = document.createElement('div');
+    content.className = 'promo-banner-content';
+    const textSpan = document.createElement('span');
+    textSpan.textContent = cfg.text;
+    content.appendChild(textSpan);
+    if (cfg.link_href && cfg.link_text) {
+      const link = document.createElement('a');
+      link.href = cfg.link_href;
+      link.className = 'promo-banner-link';
+      link.textContent = cfg.link_text;
+      content.appendChild(link);
+    }
+    banner.appendChild(content);
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.className = 'promo-banner-dismiss';
+    dismissBtn.setAttribute('aria-label', 'Dismiss');
+    dismissBtn.textContent = '×';
+    dismissBtn.addEventListener('click', () => {
+      localStorage.setItem(dismissKey, '1');
+      banner.style.display = 'none';
+    });
+    banner.appendChild(dismissBtn);
+
+    banner.style.display = 'flex';
+  }
+
   // ── Admin user switcher ───────────────────────────────────
   const adminSelectEl = document.getElementById('admin-user-select');
   if (profile?.is_admin) {
@@ -471,6 +523,8 @@
   // Load subscriptions for subscribe button state
   const { items: subItems } = await Subscriptions.getAll(user.id);
   mySubscriptions = new Set(subItems.map(s => `${s.series_name}||${s.distributor}`));
+
+  renderPromoBanner();
 
   // Load publishers for filter
   if (currentMonth) {
@@ -891,6 +945,65 @@
     });
   }
 
+  // ── Post-reserve subscribe prompt ───────────────────────────────
+  // Fires at most once per page load, on a successful reserve (never cancel),
+  // for standard-cover items whose series isn't already subscribed and hasn't
+  // been declined/ignored before on this device. Same eligibility gate as the
+  // modal subscribe button (catalog.html ~1150). Applies to both card-grid
+  // and modal reserve paths since both funnel through toggleReserve().
+  const DECLINED_PROMPT_KEY = `pulllist_subscribe_prompt_declined_${user.id}`;
+
+  function getDeclinedSeries() {
+    try { return new Set(JSON.parse(localStorage.getItem(DECLINED_PROMPT_KEY)) || []); }
+    catch { return new Set(); }
+  }
+
+  function addDeclinedSeries(subKey) {
+    const s = getDeclinedSeries();
+    s.add(subKey);
+    localStorage.setItem(DECLINED_PROMPT_KEY, JSON.stringify([...s]));
+  }
+
+  // Returns true if the prompt was shown (caller should skip the standard toast).
+  function maybeShowSubscribePrompt(comicObj) {
+    if (promptShownThisLoad) return false;
+    if (!comicObj || !comicObj.series_name) return false;
+    if (AdminContext.isActive() || isPending) return false;
+    if (!isStandardCover(comicObj)) return false;
+
+    const subKey = `${comicObj.series_name}||${comicObj.distributor}`;
+    if (mySubscriptions.has(subKey)) return false;
+    if (getDeclinedSeries().has(subKey)) return false;
+
+    promptShownThisLoad = true;
+    toastAction(
+      `Reserved! Subscribe to ${comicObj.series_name} and never miss an issue?`,
+      'Subscribe',
+      async () => {
+        const { error } = await Subscriptions.subscribe(
+          user.id, comicObj.series_name, comicObj.distributor,
+          comicObj.format || null, 'post_reserve_prompt'
+        );
+        if (error) {
+          toast('Failed to subscribe', 'error');
+        } else {
+          mySubscriptions.add(subKey);
+          // Refresh the modal subscribe button if it's open on this item
+          if (modalComicId === comicObj.id) {
+            const modalSubBtn = document.getElementById('modal-subscribe');
+            if (modalSubBtn && modalSubBtn.style.display !== 'none') {
+              modalSubBtn.textContent = '★ Subscribed';
+              modalSubBtn.className   = 'btn btn-ghost subscribed';
+            }
+          }
+          toast(`Subscribed to ${comicObj.series_name}!`);
+        }
+      },
+      { onDismiss: () => addDeclinedSeries(subKey) }
+    );
+    return true;
+  }
+
   // ── Reserve Toggle ────────────────────────────────────────
   // comic is the full catalog row — passed directly from the call site so
   // logging metadata is always available regardless of which page is loaded.
@@ -935,9 +1048,11 @@
           badge.textContent = 'Qty: ' + quantity;
           cover.appendChild(badge);
         }
-        toast('Reserved! Please pick up and pay when it arrives in store.');
         updateReservedStat();
         UsageEvents.reserve(user.id, comicObj);
+        if (!maybeShowSubscribePrompt(comicObj)) {
+          toast('Reserved! Please pick up and pay when it arrives in store.');
+        }
       }
     }
 
@@ -1112,7 +1227,7 @@
             toast(`Unsubscribed from ${comic.series_name}`);
           }
         } else {
-          const { error } = await Subscriptions.subscribe(user.id, comic.series_name, comic.distributor, comic.format || null);
+          const { error } = await Subscriptions.subscribe(user.id, comic.series_name, comic.distributor, comic.format || null, 'modal');
           if (error) { toast('Failed to subscribe', 'error'); }
           else {
             mySubscriptions.add(subKey);

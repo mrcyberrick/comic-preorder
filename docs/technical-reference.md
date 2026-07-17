@@ -1195,8 +1195,11 @@ See F30.
 Subscriptions.getAll(userId)                        // → { items, error }
 Subscriptions.isSubscribed(userId, series, distributor)
                                                     // → boolean
-Subscriptions.subscribe(userId, series, distributor, format?)
-                                                    // → { data, error }; logs event
+Subscriptions.subscribe(userId, series, distributor, format?, source?)
+                                                    // → { data, error }; logs event.
+                                                    // source: 'modal' | 'post_reserve_prompt' | null —
+                                                    // attribution written to usage_events.metadata.source
+                                                    // (subscription-promotion, 2026-07-17)
 Subscriptions.unsubscribe(userId, series, distributor)
                                                     // → { error }; logs event
 Subscriptions.getAllAdmin()                         // → { items, error } (admin)
@@ -1233,7 +1236,7 @@ so admin actions and impersonated sessions don't pollute analytics data.
 ```javascript
 UsageEvents.reserve(userId, catalogItem)
 UsageEvents.cancel(userId, catalogItem)
-UsageEvents.subscribe(userId, seriesName, distributor)
+UsageEvents.subscribe(userId, seriesName, distributor, source?)  // source → metadata.source if truthy
 UsageEvents.unsubscribe(userId, seriesName, distributor)
 UsageEvents.catalogView(userId, { catalogMonth, page, search, publisher, distributor })
 UsageEvents.pageView(userId, page, metadata?)

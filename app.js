@@ -682,8 +682,10 @@ const UsageEvents = {
     });
   },
 
-  subscribe(userId, seriesName, distributor) {
-    this._log(userId, 'subscribe', { series_name: seriesName, distributor });
+  subscribe(userId, seriesName, distributor, source = null) {
+    const metadata = { series_name: seriesName, distributor };
+    if (source) metadata.source = source;
+    this._log(userId, 'subscribe', metadata);
   },
 
   unsubscribe(userId, seriesName, distributor) {
@@ -922,7 +924,8 @@ const Subscriptions = {
   // format: the catalog format string (e.g. 'Comic Book', 'Trade Paperback').
   // Pass null for legacy/popular-series subscriptions — the import script
   // will default to comic-only matching via isComicFormat().
-  async subscribe(userId, seriesName, distributor, format = null) {
+  // source: attribution for the subscribe usage event ('modal' | 'post_reserve_prompt' | null).
+  async subscribe(userId, seriesName, distributor, format = null, source = null) {
     const { data, error } = await db
       .from('subscriptions')
       .insert({
@@ -934,7 +937,7 @@ const Subscriptions = {
       })
       .select()
       .single();
-    if (!error) UsageEvents.subscribe(userId, seriesName, distributor);
+    if (!error) UsageEvents.subscribe(userId, seriesName, distributor, source);
     return { data, error };
   },
 
@@ -1288,6 +1291,49 @@ function toast(message, type = 'success') {
   t.textContent = message;
   container.appendChild(t);
   setTimeout(() => t.remove(), 3500);
+}
+
+// Toast with one action button + Dismiss, for prompts that need a response
+// rather than a fire-and-forget confirmation (e.g. post-reserve subscribe offer).
+// onAction fires once on accept. onDismiss fires on explicit Dismiss click OR
+// on timeout (both count as "declined/ignored") — never on accept.
+function toastAction(message, actionLabel, onAction, { duration = 8000, type = 'success', onDismiss = null } = {}) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const t = document.createElement('div');
+  t.className = `toast toast-action ${type}`;
+  t.setAttribute('role', 'status');
+
+  const msg = document.createElement('span');
+  msg.className = 'toast-action-message';
+  msg.textContent = message;
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'toast-action-row';
+
+  const actionBtn = document.createElement('button');
+  actionBtn.type = 'button';
+  actionBtn.className = 'toast-action-btn';
+  actionBtn.textContent = actionLabel;
+
+  const dismissBtn = document.createElement('button');
+  dismissBtn.type = 'button';
+  dismissBtn.className = 'toast-dismiss-btn';
+  dismissBtn.textContent = 'Dismiss';
+
+  const remove = () => { clearTimeout(timer); t.remove(); };
+  actionBtn.addEventListener('click', () => { remove(); onAction(); });
+  dismissBtn.addEventListener('click', () => { remove(); if (onDismiss) onDismiss(); });
+
+  btnRow.append(actionBtn, dismissBtn);
+  t.append(msg, btnRow);
+  container.appendChild(t);
+  const timer = setTimeout(() => { remove(); if (onDismiss) onDismiss(); }, duration);
+  return { remove };
 }
 
 function formatDate(dateStr) {
