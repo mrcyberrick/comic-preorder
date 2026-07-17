@@ -22,7 +22,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. All Complete. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). **The `import.js` maintenance session (F75 key rotation + F78 historical dedup + F85 cross-month root fix) closed 2026-07-15 — plan: `docs/import-js-maintenance-f75-f78-f85.md`.** All other findings through F86 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F87**.
+**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). F87 — `notify-customers` service-role detection vs the new `sb_secret_` key (F75 regression) → monthly catalog email not sent — **resolved 2026-07-17** (capability-probe fix deployed staging v23 + prod v33; July email sent; source promotion PR #87; see `docs/technical-reference.md` § 13 F87). **The `import.js` maintenance session (F75 key rotation + F78 historical dedup + F85 cross-month root fix) closed 2026-07-15 — plan: `docs/import-js-maintenance-f75-f78-f85.md`.** All other findings through F87 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F88**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -542,11 +542,13 @@ candidate (admin-logging doc/code contradiction) remains a separate open
 filing decision, not part of this closure.
 
 The subscription promotion feature (catalog banner + post-reserve subscribe
-prompt) closed on staging 2026-07-17 — no longer listed here. All V1–V5
-gates green, Rick's staging visual sign-off received. See
-`docs/subscription-promotion.md` for the full closed scope. Still open as
-separate, explicit future work: the real perk/pricing copy (banner currently
-carries only staging TEST copy) and prod promotion.
+prompt) closed 2026-07-17 — **live in production**, no longer listed here.
+All V1–V5 gates green; promoted via PR #86 (`107fc0a`) at Rick's explicit
+request the same session; post-deploy write-smoke passed; final copy (no
+separate perk/discount — Rick confirmed the informational copy as-is) live
+on both staging (`raysandjudys`) and production (`rjbookstop`) founding
+tenants, verified via the public `resolve_tenant_by_slug` RPC. See
+`docs/subscription-promotion.md` for full scope and evidence.
 
 If a session needs to touch any of the above, **stop and confirm**.
 

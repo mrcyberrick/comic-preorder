@@ -1,14 +1,17 @@
 # Subscription Promotion — catalog banner + post-reserve prompt
 
-**Status:** Complete on staging — 2026-07-17. All steps done, V1–V5 green,
-Rick's visual sign-off received (commits `4b4da8f`, `ba83501`, `e26e028`,
-`60dadd5`). Real perk copy + prod promotion remain separate, explicit
-follow-ups — see § 6.
-**Target:** staging only (standard flow; prod promotion is a separate explicit request)
-**Blocking input:** the subscription perk/value decision (Rick — pricing/policy).
-The mechanics below can be built and merged **dark** (banner config absent ⇒
-nothing renders) before that decision; enabling the banner is a data-only SQL
-step once copy is final.
+**Status:** **Complete — live in production, 2026-07-17.** All steps done,
+V1–V5 green, Rick's staging visual sign-off received, prod-promoted via
+PR #86 (`107fc0a`), post-deploy write-smoke passed, banner enabled with
+final copy on both staging and production founding tenants (verified live
+via `resolve_tenant_by_slug`, not just SQL Editor output).
+**Target:** staging first (standard flow), then explicitly promoted to
+production the same session at Rick's request.
+**Perk/copy decision:** resolved 2026-07-17 — Rick confirmed the informational
+copy ("Subscribe to a series and never miss an issue — auto-reserved every
+month.") as final; no separate discount/perk needed. The mechanics were built
+and merged **dark** first (banner config absent ⇒ nothing renders) before
+that decision, per the original plan.
 **Origin:** July 2026 engagement analysis (report artifact:
 https://claude.ai/code/artifact/2b826ea1-67ea-42c9-aa81-40e165dee877 — Action 2)
 plus the 2026-07-17 discoverability finding: subscribe is invisible on the
@@ -229,6 +232,32 @@ perk copy, plus post-deploy write-smoke including one prompt-driven subscribe
 - [x] Out-of-scope discoveries filed — see § Session notes below (README.md
       staleness noted, not filed as an F-number; too minor/local for the
       formal findings index)
+- [x] Promoted to production — PR #86 merged (`107fc0a`), CF Pages prod
+      deploy verified live, post-deploy write-smoke passed (Rick), banner
+      enabled with final copy on both environments (see § Production
+      promotion below)
+
+### Production promotion (2026-07-17)
+
+Rick decided the informational copy was final (no perk/discount needed) and
+requested prod promotion directly. Followed `/promote-prod`:
+- Merge `staging` → `main` with `git checkout main -- config.js` (prod
+  credentials preserved, confirmed not in PR diff); F59 check clean —
+  `app.js` differs from main as expected, `mylist.html`/`arrivals.html`/
+  `admin.html` correctly identical (this feature never touched them).
+- PR #86 → merged by Rick → `107fc0a` on `main`.
+- Prod deploy verified live via `promo-banner` DOM marker + `toastAction` in
+  the deployed `app.js` (`https://pulllist.app/`).
+- Post-deploy write-smoke: Rick reserved + cancelled one item on prod as a
+  real user — passed.
+- Banner SQL: staging `[TEST]` prefix stripped, campaign id finalized to
+  `sub-promo-1`; same real copy added to the **production** founding tenant
+  (`20941129-c35a-476d-ae21-44b8f77af89c`) — that `branding` key didn't exist
+  there before. Both verified **live** (not just SQL Editor output) via the
+  public `resolve_tenant_by_slug` RPC — staging slug `raysandjudys`, prod
+  slug `rjbookstop` (these differ; see technical-reference.md § 13 F71
+  history — same gotcha rediscovered and confirmed against live data rather
+  than assumed).
 
 ### Deploy sequencing note (2026-07-17)
 
@@ -257,8 +286,9 @@ toggle exists anywhere in the codebase). "Both themes" in this plan's V1/V2
 gates means: default `--accent` vs. a tenant's custom
 `branding.primary_color` override (which `Branding.apply()` applies site-wide
 since 5.3). All new CSS uses `var(--accent)` etc. so it inherits branding
-automatically; `09-promo-banner.spec.ts`'s last test asserts the banner
-border-color follows a custom `primary_color`.
+automatically; `09-promo-banner.spec.ts`'s last test asserts the "Learn more"
+link color follows a custom `primary_color` (retargeted from the banner's own
+border after the neutral-card styling fix — see § 6 V5 evidence).
 
 ### Session notes / out-of-scope discoveries
 
@@ -271,11 +301,16 @@ border-color follows a custom `primary_color`.
 ## 7. Rollback
 
 Client-code + data only; no schema, no Edge Functions, no config.js.
-- Banner off: SQL `enabled: false` (or remove the `promo_banner` key) — no
-  deploy needed.
-- Full rollback: revert the merge on staging (standard flow).
+- Banner off (either environment): SQL `enabled: false` (or remove the
+  `promo_banner` key) on that environment's `tenants.branding` — no deploy
+  needed. Staging and prod are independent — toggling one does not affect
+  the other.
+- Full code rollback: revert the merge — on `staging` for the pre-prod state,
+  or via a new PR reverting `107fc0a` on `main` for production (prod is a
+  protected branch via PR flow, same as the original promotion).
 - Subscriptions created via the prompt are **real customer intent — never
-  mass-delete** as part of rollback.
+  mass-delete** as part of rollback, on either environment (production now
+  carries real customer data for this feature going forward).
 
 ## References
 
