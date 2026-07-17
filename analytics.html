@@ -47,6 +47,11 @@
       background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25);
       border-radius: var(--radius); padding: 9px 14px; margin-top: 14px;
     }
+    /* Author `display:flex` above beats the UA `[hidden]{display:none}` rule
+       (author origin wins over UA), so the HTML `hidden` attribute alone would
+       not hide the banner — this higher-specificity override restores it.
+       Same pattern as `.tab-panel[hidden]`. */
+    .warn-banner[hidden] { display: none; }
     .warn-banner .ic { color: var(--warning); font-size: 0.8rem; line-height: 1.5; }
     .warn-banner p { font-size: 0.76rem; color: var(--text-secondary); margin: 0; }
     .warn-banner strong { color: var(--text-primary); }
