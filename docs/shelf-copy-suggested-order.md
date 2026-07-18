@@ -12,8 +12,12 @@ commit `1c5dfc0`) at Rick's explicit request. Live at https://pulllist.app/.
 demand numbers (71 of 123 reserved titles triggering a suggestion), Rick
 identified the standard-cover-only demand filter as a subscription-feature
 convention that didn't belong in shelf-copy — removed on staging (commit
-`21a1645`), verified via smoke suite, not yet re-promoted to production.
-See § 3 IN item 1 for the corrected demand-query description.
+`21a1645`), promoted via PR #89 (merged 2026-07-18, commit `72cb25a`).
+**Confirmed on production**: preview now shows 123 of 123 titles considered,
+reconciling exactly with the live "Reserved Titles" report total (no titles
+currently fulfilled, FOC-locked, or admin-owned this cycle to be excluded —
+expect "considered" to drop below the report total later in the month as
+that changes). See § 3 IN item 1 for the corrected demand-query description.
 **Target:** staging first (standard flow); production promotion only on
 explicit request after staging verification.
 **Origin:** 2026-07-17 planning discussion — shelf-copy ("store inventory")
