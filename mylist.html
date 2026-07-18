@@ -1280,22 +1280,20 @@ function confirmDialog(message, okLabel = 'Remove') {
     btnShelfOrder.style.display = '';
   }
 
-  function isStandardCoverCatalogItem(c) {
-    const vt = c.variant_type;
-    return !vt || vt === 'Standard' || vt === 'Primary Title';
-  }
-
-  // Open (fulfilled = false), standard-cover, non-FOC-locked customer demand
-  // for the current catalog month, aggregated per title. Excludes admin
-  // accounts' own reservations — without that exclusion, re-running this
-  // button would count BookStop's own shelf copies as demand and inflate
-  // the suggestion forever (self-count ratchet).
+  // Open (fulfilled = false), non-FOC-locked customer demand for the current
+  // catalog month, aggregated per title — standard covers and variants alike
+  // (Rick, 2026-07-18: standard-cover-only was borrowed from the Subscribe
+  // button's convention, which is itself a subscription-feature limitation,
+  // not a shelf-copy rule — dropped). Excludes admin accounts' own
+  // reservations — without that exclusion, re-running this button would
+  // count BookStop's own shelf copies as demand and inflate the suggestion
+  // forever (self-count ratchet).
   async function fetchOpenDemandRows() {
     const { data, error } = await db
       .from('preorders')
       .select(`
         quantity,
-        catalog!inner ( id, title, variant_type, foc_date, catalog_month ),
+        catalog!inner ( id, title, foc_date, catalog_month ),
         user_profiles ( is_admin )
       `)
       .eq('fulfilled', false)
@@ -1307,7 +1305,6 @@ function confirmDialog(message, okLabel = 'Remove') {
       const c = p.catalog;
       if (!c) return;
       if (p.user_profiles?.is_admin) return;
-      if (!isStandardCoverCatalogItem(c)) return;
       if (isFocLocked(c.foc_date)) return;
       const entry = byCatalog.get(c.id) || { title: c.title, openQty: 0 };
       entry.openQty += (p.quantity || 1);

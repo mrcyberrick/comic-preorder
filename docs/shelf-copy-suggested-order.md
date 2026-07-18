@@ -1,13 +1,19 @@
 # Shelf-Copy Suggested Order — My List store-inventory automation
 
-**Status:** **Complete — 2026-07-17 (staging).** Execution session ran the
-same day as planning. Both Open defaults confirmed as-is with Rick at
-execution pre-flight (plan-default tier thresholds; plan-proposed preview
-columns). All V1–V5 gates green on staging (evidence below); seed fixture
-torn down and independently re-verified via a live SELECT (0 rows). Merged
-`feature/shelf-copy-suggested-order` → `staging` (ff-only, commit `68e9314`)
-and pushed; live at https://staging.pulllist.pages.dev/. **Production
-promotion not yet requested — separate explicit session per CLAUDE.md.**
+**Status:** **Complete and promoted to production.** Execution session ran
+2026-07-17, same day as planning. Both Open defaults confirmed as-is with
+Rick at execution pre-flight (plan-default tier thresholds; plan-proposed
+preview columns). All V1–V5 gates green on staging (evidence below); seed
+fixture torn down and independently re-verified via a live SELECT (0 rows).
+Merged `feature/shelf-copy-suggested-order` → `staging` (ff-only, commit
+`68e9314`); promoted `staging` → `main` via PR #88 (merged 2026-07-18,
+commit `1c5dfc0`) at Rick's explicit request. Live at https://pulllist.app/.
+**Post-promotion correction (2026-07-18):** after seeing real production
+demand numbers (71 of 123 reserved titles triggering a suggestion), Rick
+identified the standard-cover-only demand filter as a subscription-feature
+convention that didn't belong in shelf-copy — removed on staging (commit
+`21a1645`), verified via smoke suite, not yet re-promoted to production.
+See § 3 IN item 1 for the corrected demand-query description.
 **Target:** staging first (standard flow); production promotion only on
 explicit request after staging verification.
 **Origin:** 2026-07-17 planning discussion — shelf-copy ("store inventory")
@@ -70,8 +76,12 @@ Drift Prevention).
 - **Auto-reserve** (import script, new-month sequence): inserts preorders
   for subscribers' standard covers. Believed qty 1 — **pre-flight must
   confirm** in `import.js` (private scripts repo).
-- **Standard-cover test** (used by subscribe eligibility, catalog.html:1096–1097):
-  `variant_type` null / `'Standard'` / `'Primary Title'`.
+- **Standard-cover test** (used by subscribe eligibility — `isStandardCover()`
+  at catalog.html:395–398, inline duplicate at catalog.html:1211; the § 2
+  line ref in earlier drafts of this doc, catalog.html:1096–1097, was stale
+  and pointed at unrelated modal code): `variant_type` null / `'Standard'` /
+  `'Primary Title'`. **No longer used by this feature's demand query** as of
+  2026-07-18 — see § 3 IN item 1.
 - **RLS:** admins SELECT all tenant preorders ("admins manage" policy);
   any user inserts/updates own rows. The aggregation query and the bulk
   upsert both run as the logged-in BookStop admin — no policy changes.
@@ -84,9 +94,15 @@ Drift Prevention).
 
 1. **Suggestion computation** (client-side, My List page code):
    - Demand query: open preorders joined to catalog for the current
-     catalog month — `fulfilled = false`, standard covers only, title not
-     FOC-locked (client-side `isFocLocked` on `foc_date`), **excluding rows
-     belonging to admin accounts** (`user_profiles.is_admin = true`).
+     catalog month — `fulfilled = false`, title not FOC-locked (client-side
+     `isFocLocked` on `foc_date`), **excluding rows belonging to admin
+     accounts** (`user_profiles.is_admin = true`). **Standard-cover-only
+     was dropped 2026-07-18** (Rick, after seeing production numbers): it
+     was borrowed from the Subscribe button's convention without
+     independent justification for shelf-copy — that convention is a
+     subscription-feature limitation, not a shelf-copy rule. Variant-cover
+     reservations now count as demand, and variant titles are eligible for
+     suggestions on the same tier rule as standard covers.
    - The admin exclusion is what prevents the self-count ratchet: without
      it, re-running the button counts the store's own shelf copies as
      demand and inflates forever. Filtering on `is_admin` (not a hardcoded
