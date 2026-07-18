@@ -53,6 +53,12 @@ the upsert runs ("mid-month refresh") — safe to re-run any time.
 
 ### Step 2 — Confirm Last Month Is Closed Out
 
+Before exporting the order sheets: on **My List** (logged in as the BookStop
+admin account), click **Suggest Shelf Order** to populate/review BookStop's
+own shelf-copy reservations from open customer demand, then adjust with the
+normal quantity steppers / Remove button as needed. See
+`docs/shelf-copy-suggested-order.md`.
+
 The order sheets for the closing month should already have been exported and
 placed with the distributors at FOC time (admin → **By Distributor** /
 **Paper Orders** print buttons). If not, export them now — the new-month

@@ -579,6 +579,9 @@
     <button class="btn btn-secondary btn-sm" id="btn-print">
       ⎙ Print / Save PDF
     </button>
+    <button class="btn btn-secondary btn-sm" id="btn-shelf-order" style="display:none" title="Suggest BookStop shelf-copy quantities from open customer demand">
+      📦 Suggest Shelf Order
+    </button>
     <a href="catalog.html" class="btn btn-primary btn-sm">
       + Add More
     </a>
@@ -655,9 +658,38 @@
   </div>
 </div>
 
+<!-- Shelf-Copy Suggested Order preview — admin only, see docs/shelf-copy-suggested-order.md -->
+<div class="modal-overlay" id="shelf-order-overlay">
+  <div class="modal" id="shelf-order-modal" style="max-width:820px" role="dialog" aria-modal="true" aria-labelledby="shelf-order-title">
+    <div class="modal-body">
+      <h3 id="shelf-order-title">Suggested Shelf Order</h3>
+      <p id="shelf-order-summary"></p>
+      <div style="overflow-x:auto">
+        <table class="list-table" id="shelf-order-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Open Customer Qty</th>
+              <th>Current Store Qty</th>
+              <th>Suggested Qty</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="shelf-order-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="shelf-order-cancel">Cancel</button>
+      <button class="btn btn-primary" id="shelf-order-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="shelf-order.js"></script>
 <script>
 function confirmDialog(message, okLabel = 'Remove') {
   return new Promise(resolve => {
@@ -1232,6 +1264,127 @@ function confirmDialog(message, okLabel = 'Remove') {
       }
     });
   }
+
+  // ── Shelf-Copy Suggested Order (admin only) ──────────────────────────
+  // See docs/shelf-copy-suggested-order.md. Hidden in impersonation context —
+  // the feature always operates on the logged-in admin's own list.
+  const btnShelfOrder  = document.getElementById('btn-shelf-order');
+  const shelfOverlay   = document.getElementById('shelf-order-overlay');
+  const shelfTbody     = document.getElementById('shelf-order-tbody');
+  const shelfSummary   = document.getElementById('shelf-order-summary');
+  const shelfApplyBtn  = document.getElementById('shelf-order-apply');
+  const shelfCancelBtn = document.getElementById('shelf-order-cancel');
+  let shelfOrderPlan   = null; // { preview, payload } from the last computed suggestion
+
+  if (profile?.is_admin && !AdminContext.isActive()) {
+    btnShelfOrder.style.display = '';
+  }
+
+  function isStandardCoverCatalogItem(c) {
+    const vt = c.variant_type;
+    return !vt || vt === 'Standard' || vt === 'Primary Title';
+  }
+
+  // Open (fulfilled = false), standard-cover, non-FOC-locked customer demand
+  // for the current catalog month, aggregated per title. Excludes admin
+  // accounts' own reservations — without that exclusion, re-running this
+  // button would count BookStop's own shelf copies as demand and inflate
+  // the suggestion forever (self-count ratchet).
+  async function fetchOpenDemandRows() {
+    const { data, error } = await db
+      .from('preorders')
+      .select(`
+        quantity,
+        catalog!inner ( id, title, variant_type, foc_date, catalog_month ),
+        user_profiles ( is_admin )
+      `)
+      .eq('fulfilled', false)
+      .eq('catalog.catalog_month', currentMonth);
+    if (error) return { rows: null, error };
+
+    const byCatalog = new Map();
+    (data || []).forEach(p => {
+      const c = p.catalog;
+      if (!c) return;
+      if (p.user_profiles?.is_admin) return;
+      if (!isStandardCoverCatalogItem(c)) return;
+      if (isFocLocked(c.foc_date)) return;
+      const entry = byCatalog.get(c.id) || { title: c.title, openQty: 0 };
+      entry.openQty += (p.quantity || 1);
+      byCatalog.set(c.id, entry);
+    });
+
+    const rows = Array.from(byCatalog, ([catalogId, v]) => ({ catalogId, title: v.title, openQty: v.openQty }));
+    return { rows, error: null };
+  }
+
+  function renderShelfOrderModal() {
+    const preview = shelfOrderPlan.preview;
+    if (!preview.length) {
+      shelfSummary.textContent = 'No suggestions — no open customer demand found for this catalog month.';
+      shelfTbody.innerHTML = '';
+    } else {
+      const changeCount = preview.filter(r => r.action !== 'no change').length;
+      shelfSummary.textContent =
+        `${changeCount} title${changeCount !== 1 ? 's' : ''} to update out of ${preview.length} considered.`;
+      shelfTbody.innerHTML = preview.map(r => `
+        <tr>
+          <td>${escapeHtml(r.title)}</td>
+          <td>${r.openQty}</td>
+          <td>${r.currentQty}</td>
+          <td>${r.suggestedQty}</td>
+          <td>${r.action === 'insert' ? 'Insert' : r.action === 'raise' ? 'Raise' : 'No change'}</td>
+        </tr>
+      `).join('');
+    }
+    shelfApplyBtn.disabled = !shelfOrderPlan.payload.length;
+    shelfApplyBtn.textContent = shelfOrderPlan.payload.length ? 'Apply' : 'Nothing to update';
+    shelfOverlay.classList.add('open');
+  }
+
+  function closeShelfOrderModal() {
+    shelfOverlay.classList.remove('open');
+  }
+
+  btnShelfOrder.addEventListener('click', async () => {
+    btnShelfOrder.disabled = true;
+    const { rows: demandRows, error } = await fetchOpenDemandRows();
+    btnShelfOrder.disabled = false;
+    if (error) {
+      toast('Failed to compute shelf order suggestions', 'error');
+      return;
+    }
+    const storeRows = allItems
+      .map(i => ({ catalogId: i.catalog?.id, quantity: i.quantity || 1 }))
+      .filter(r => r.catalogId);
+    shelfOrderPlan = ShelfOrder.buildShelfOrderPlan(demandRows, storeRows);
+    renderShelfOrderModal();
+  });
+
+  shelfCancelBtn.addEventListener('click', closeShelfOrderModal);
+  shelfOverlay.addEventListener('click', e => { if (e.target === shelfOverlay) closeShelfOrderModal(); });
+
+  shelfApplyBtn.addEventListener('click', async () => {
+    if (!shelfOrderPlan || !shelfOrderPlan.payload.length) return;
+    shelfApplyBtn.disabled = true;
+    shelfApplyBtn.textContent = 'Applying…';
+    const rows = shelfOrderPlan.payload.map(p => ({
+      user_id: user.id,
+      catalog_id: p.catalogId,
+      quantity: p.quantity,
+      tenant_id: TenantContext.current().id,
+    }));
+    const { error } = await Preorders.bulkUpsert(rows);
+    if (error) {
+      toast('Failed to apply shelf order — no changes were saved', 'error');
+      shelfApplyBtn.disabled = false;
+      shelfApplyBtn.textContent = 'Apply';
+      return;
+    }
+    toast(`Shelf order applied — ${rows.length} title${rows.length !== 1 ? 's' : ''} updated`);
+    closeShelfOrderModal();
+    await loadList();
+  });
 
   await loadList();
   renderArrivingThisMonth();
