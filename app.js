@@ -812,6 +812,17 @@ const Preorders = {
     return { data, error };
   },
 
+  // Bulk insert-or-update multiple reservations in one call. Used by the
+  // shelf-copy suggested-order feature (admin only) to apply several rows at
+  // once; each row must include tenant_id explicitly (post-3.3: no column
+  // default). Returns { error }.
+  async bulkUpsert(rows) {
+    const { error } = await db
+      .from('preorders')
+      .upsert(rows, { onConflict: 'user_id,catalog_id' });
+    return { error };
+  },
+
   async updateQuantity(userId, catalogId, quantity) {
     const { error } = await db
       .from('preorders')
