@@ -1,9 +1,13 @@
 # Shelf-Copy Suggested Order — My List store-inventory automation
 
-**Status:** **Planned — not started.** Scope settled with Rick 2026-07-17
-(planning session); execution session not yet scheduled. Two defaults await
-Rick's confirmation at execution pre-flight (tier thresholds, preview-modal
-columns) — see § 3 Open defaults.
+**Status:** **Complete — 2026-07-17 (staging).** Execution session ran the
+same day as planning. Both Open defaults confirmed as-is with Rick at
+execution pre-flight (plan-default tier thresholds; plan-proposed preview
+columns). All V1–V5 gates green on staging (evidence below); seed fixture
+torn down and independently re-verified via a live SELECT (0 rows). Merged
+`feature/shelf-copy-suggested-order` → `staging` (ff-only, commit `68e9314`)
+and pushed; live at https://staging.pulllist.pages.dev/. **Production
+promotion not yet requested — separate explicit session per CLAUDE.md.**
 **Target:** staging first (standard flow); production promotion only on
 explicit request after staging verification.
 **Origin:** 2026-07-17 planning discussion — shelf-copy ("store inventory")
@@ -186,14 +190,51 @@ on explicit request.
   demand query carries no cross-tenant rows by RLS construction and record
   that in the gate log).
 
+## 5a. Verification gate evidence — 2026-07-17 (staging)
+
+Seed: 7 synthetic `ZZSHELF-*` catalog rows (founding tenant, `catalog_month =
+'2026-07'`) + preorders spanning every case, per prepared seed SQL. Rick ran
+the seed, worked the gates as the staging Test Admin, then ran teardown.
+
+- **V1 — Pass.** Preview showed exactly the 4 expected rows — `ZZSHELF-TIER1`
+  (open 2 → suggest 1, Insert), `ZZSHELF-TIER2` (open 4 → suggest 2, Insert —
+  confirms cross-row summing across 2 customers), `ZZSHELF-TIER3` (open 5 →
+  suggest 3, Insert), `ZZSHELF-FULFILL` (open 1 → suggest 1, Insert — confirms
+  the fulfilled row is excluded from the sum). `ZZSHELF-FOCLOCK` and
+  `ZZSHELF-VARIANT` were absent from the preview, as required. Screenshot
+  evidence captured during the session.
+- **V2 — Pass.** Re-running the button after Apply showed all 4 titles as "No
+  change" at the same open-qty counts — no self-count ratchet from BookStop's
+  own new rows.
+- **V3 — Pass.** Hand-raised `ZZSHELF-TIER1` above its suggestion and
+  hand-reserved `ZZSHELF-ZERODEMAND` (a title with zero customer demand);
+  re-run + Apply changed neither.
+- **V4 — Pass.** Order-sheet export included the `ZZSHELF-*` titles at
+  BookStop's applied quantities, consolidated with customer demand.
+- **V5 — Pass.** Button absent for a non-admin customer. No tenant-2 staging
+  admin exists (checked live via service-role read, 2026-07-17), so
+  cross-tenant isolation was asserted by RLS construction per the plan's
+  accepted fallback: the demand query carries no explicit tenant filter and
+  relies on the same admin RLS policy (`admins manage tenant preorders`)
+  already proven by admin.html's identically-shaped preorders query.
+- **Teardown — verified.** Rick ran the teardown SQL; independently
+  re-confirmed via a live read-only SELECT (service-role) —
+  `catalog` and `preorders` both return 0 rows for `item_code LIKE
+  'ZZSHELF-%'`.
+
 ## 6. Completion criteria
 
-- [ ] All § 5 gates green on staging, evidence logged in this doc
-- [ ] Unit tests for tier rule + payload builder committed and passing
-- [ ] `monthly-catalog-refresh.md` Step 2 updated
-- [ ] No admin.html, schema, or Edge Function diffs in the feature branch
-- [ ] Playwright smoke suite green (`run-smoke.ps1`) before staging push
-- [ ] This doc's Status updated; CLAUDE.md untouched unless a finding is filed
+- [x] All § 5 gates green on staging, evidence logged in this doc
+- [x] Unit tests for tier rule + payload builder committed and passing (9
+      tests, `test/shelf-order.test.mjs`)
+- [x] `monthly-catalog-refresh.md` Step 2 updated
+- [x] No admin.html, schema, or Edge Function diffs in the feature branch
+      (diff touched only `app.js`, `mylist.html`, `shelf-order.js`,
+      `test/shelf-order.test.mjs`, `docs/monthly-catalog-refresh.md`)
+- [x] Playwright smoke suite green (`run-smoke.ps1`) before staging push (30
+      unit + 32 Playwright specs, all passing)
+- [x] This doc's Status updated; CLAUDE.md untouched — no findings filed this
+      session
 
 ## 7. Rollback
 
