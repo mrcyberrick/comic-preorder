@@ -520,11 +520,23 @@ approval.
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
+### Planned — next session (plan committed 2026-07-19, not started)
+- **Analytics cycle alignment** — cycle-anchored deltas (fixes the
+  monthly-cycle confound in the engagement score), "This Cycle vs Last"
+  overlay chart, New Customers tile. Client-only, single-file
+  (`analytics.html`). Plan: `docs/analytics-cycle-alignment.md`.
+
 ### Deferred — separate future session
 - **Prod legacy API key retirement (F86)** — a coordinated `config.js`
   anon-key migration (new publishable key, both branches, deploy, verify live
   app) is required before the prod legacy `service_role`/`anon` toggle can be
   disabled. See `docs/technical-reference.md` § 13 F86.
+- **Analytics conversion instrumentation (F89)** — log claims/invites so
+  paper→app conversion is measurable (Edge Function touch). See
+  `docs/technical-reference.md` § 13 F89.
+- **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
+  import so adoption trends survive the 90-day purge (schema + import
+  script). See `docs/technical-reference.md` § 13 F90.
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
 no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
