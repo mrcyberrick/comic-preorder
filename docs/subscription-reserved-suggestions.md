@@ -1,12 +1,12 @@
 # Subscription Reserved-Suggestions — one-click subscribe from your own reservations
 
-**Status:** In execution — implemented (`5451406`), then amended per Rick's V5
-feedback (`a3995fa`, § 4c: always-on suggestions, Popular dropped, admin
-read-only view). Live on https://staging.pulllist.pages.dev/. V1–V4 **green**
-2026-07-19 under the amended matrix (post-amendment full suite: 30 unit + 39
-Playwright, 0 failures; spec 11 = 7 tests incl. the two inverted V5-amendment
-cases). **V5 re-check by Rick pending** — no zero-subs account needed anymore;
-any account with unsubscribed reserved series shows the section.
+**Status:** **Complete — 2026-07-19, staging only.** Implemented (`5451406`),
+amended per Rick's V5 feedback (`a3995fa`, § 4c: always-on suggestions,
+Popular dropped, admin read-only view). V1–V5 all green under the amended
+matrix (post-amendment full suite: 30 unit + 39 Playwright, 0 failures;
+spec 11 = 7 tests incl. the two inverted V5-amendment cases; V5 = Rick's
+live pass, § 6). **Prod promotion is not part of this closure** — separate
+explicit `/promote-prod` request when desired.
 **Target:** staging only. Prod promotion is OUT — separate explicit request via
 `/promote-prod` after staging sign-off.
 **Origin:** Rick's request 2026-07-19; follow-on to the subscription-promotion
@@ -336,20 +336,28 @@ V4 full-suite re-run required; V5 re-check by Rick after deploy.
 - **V5 — staging live check:** Rick visual pass on live staging with a
   zero-subs account holding qualifying reservations (see Step 6 note);
   mobile width included.
+  **GREEN 2026-07-19** — two rounds. Round 1 surfaced the two § 4c change
+  requests (Popular below suggestions felt redundant and both vanished
+  after the first subscribe; admin impersonation hid the list). Round 2,
+  after the amendments were live (`a3995fa`): Rick confirmed the amended
+  behavior ("looks good"). The original zero-subs account requirement
+  dissolved with the always-on amendment — his regular test account
+  exercises the section directly.
 
 ## 7. Completion criteria
 
-- [x] Steps 0–5 complete; all § 2 anchors re-verified byte-exact at
+- [x] Steps 0–6 complete; all § 2 anchors re-verified byte-exact at
       execution (2026-07-19 — all matched at the planned line numbers)
-- [ ] V1–V5 all green (V1–V4 green 2026-07-19, evidence in § 6; V5 pending
-      Rick's live staging pass)
-- [x] Playwright spec 11 added to local suite (7 tests); full run green —
-      30 unit + 38 Playwright (specs 01–11), then spec 11 re-run 7/7 after
-      the test-7 addition
-- [x] Merged to staging `--ff-only` (`5451406`); pushed; CF Pages staging
-      deploy verified live (Rick visual + `curl -L` DOM-marker fetch)
-- [ ] This doc's status updated; CLAUDE.md updated at close (same pattern
-      as subscription-promotion)
+- [x] V1–V5 all green (evidence in § 6; V1/V4/V5 re-earned post-§ 4c
+      amendments)
+- [x] Playwright spec 11 added to local suite (7 tests, two amended per
+      § 4c); post-amendment full run green — 30 unit + 39 Playwright
+      (specs 01–11), 0 failures
+- [x] Merged to staging `--ff-only` (`5451406`; amendments `a3995fa`);
+      pushed; CF Pages staging deploy verified live (Rick visual +
+      `curl -L` DOM-marker fetch)
+- [x] This doc's status updated; CLAUDE.md updated at close (closure
+      paragraph + Series Subscriptions impersonation clarification)
 - [x] Out-of-scope discoveries filed, not fixed inline (none found; session
       notes below record process lessons only)
 

@@ -455,8 +455,16 @@ Items from previous months where `on_sale_date < today` are hidden from My List
 ### Series Subscriptions
 - Subscribe button appears only on standard covers (`variant_type` null,
   `'Standard'`, or `'Primary Title'`)
-- Hidden in admin impersonation context
+- Hidden in admin impersonation context — **exception (2026-07-19):** the
+  reserved-suggestions list on `subscriptions.html` stays visible during
+  impersonation (it shows the impersonated customer's unsubscribed reserved
+  series) with its subscribe buttons disabled, per Rick's explicit decision
+  in `docs/subscription-reserved-suggestions.md` § 4c
 - Import script auto-reserves standard covers for subscribers each month
+- `subscriptions.html` shows an always-on "Series you're already reading"
+  one-click subscribe list built from the customer's own reservations; the
+  hand-curated "Popular at Book Stop" section was removed 2026-07-19 and
+  `app_settings.popular_series` is no longer read by the app
 
 ### Variant Type Handling
 - Lunar standard: `variant_type = 'Standard'` or null
@@ -554,6 +562,15 @@ ungated) closed 2026-07-16 — no longer listed here. See
 `docs/analytics-v2-engagement-dashboard.md` for the full closed scope; F87
 candidate (admin-logging doc/code contradiction) remains a separate open
 filing decision, not part of this closure.
+
+The subscription reserved-suggestions feature (always-on "Series you're
+already reading" one-click subscribe list with Undo on `subscriptions.html`;
+Popular section removed; admin impersonation sees a read-only list) closed
+2026-07-19 — **staging only, all V1–V5 green; prod promotion not yet
+requested.** Subscribe paths on the page now carry `source` attribution
+(`reserved_suggestion` / `series_search`). `app_settings.popular_series`
+is now unused by the app (left in place, no DB change). See
+`docs/subscription-reserved-suggestions.md` for the full closed scope.
 
 The subscription promotion feature (catalog banner + post-reserve subscribe
 prompt) closed 2026-07-17 — **live in production**, no longer listed here.
