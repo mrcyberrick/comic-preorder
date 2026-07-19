@@ -1,6 +1,8 @@
 # Subscription Reserved-Suggestions — one-click subscribe from your own reservations
 
-**Status:** Planned — 2026-07-19. Not started.
+**Status:** In execution — implemented, merged to staging (`5451406`), live on
+https://staging.pulllist.pages.dev/ (Rick confirmed visually). V1–V4 **green**
+2026-07-19; V5 (Rick's live staging pass with a zero-subs account) **pending**.
 **Target:** staging only. Prod promotion is OUT — separate explicit request via
 `/promote-prod` after staging sign-off.
 **Origin:** Rick's request 2026-07-19; follow-on to the subscription-promotion
@@ -255,6 +257,12 @@ In-place flip, `allSubs` push + `renderSubs()`, `toastAction` Undo per
   no section; admin impersonation ⇒ no section, no preorders fetch; a
   series in both suggestions and Popular appears only in suggestions;
   375 px; custom `primary_color` tenant.
+  **GREEN 2026-07-19** — `11-reserved-suggestions.spec.ts` tests 1–5.
+  Not separately spec-asserted (same treatment as promo-banner V1): 375 px
+  (flex rows, no fixed widths, CSS variables only — folded into V5 manual
+  pass) and custom `primary_color` (all new CSS uses shared classes +
+  `var(--accent)`-based button/badge styles). Popular-dedup case moved to
+  V5 per § 4b.2 (F6 app_settings trap).
 - **V2 — subscribe path:** click ⇒ row flips to ★ Subscribed in place;
   remaining rows persist; table renders above with the new subscription;
   DB row lands with correct `tenant_id`, series, distributor, **format from
@@ -262,29 +270,72 @@ In-place flip, `allSubs` push + `renderSubs()`, `toastAction` Undo per
   `source: 'reserved_suggestion'` (DB-verified via PostgREST, polled — the
   usage-event insert is fire-and-forget); a second suggestion subscribes
   independently (multi-subscribe).
+  **GREEN 2026-07-19** — spec 11 test 6: flip in place, second row's button
+  stays live, table renders the new sub, DB row carries `tenant_id` +
+  `format: 'Comic Book'` (comic preferred over the also-reserved TPB),
+  source polled. Multi-subscribe evidenced by the surviving live button +
+  a successful re-subscribe after undo, not a literal second-series
+  subscribe — noted, not glossed.
 - **V3 — undo path:** Undo within the toast window ⇒ subscription row
   deleted (DB-verified), table updates (or returns to empty state if it was
   the only sub), suggestion row restores to ☆ Subscribe and works again;
   unsubscribe usage event logged.
+  **GREEN 2026-07-19** — spec 11 test 6 (continued): DB row polled to null
+  after Undo, row restored and re-subscribable, table back to the empty
+  branch. Unsubscribe event logging is pre-existing
+  `Subscriptions.unsubscribe` behavior (app.js), untouched by this feature
+  — noted rather than re-asserted.
 - **V4 — regression:** full `run-smoke.ps1` green; search and Popular
   subscribe flows unchanged except the new `source` metadata (spot-check
   one search subscribe carries `'series_search'`); no layout shift for the
   subscriptions table when the section is absent.
+  **GREEN 2026-07-19** — full `run-smoke.ps1`: 30 unit tests + 38
+  Playwright tests (specs 01–11), 0 failures, 0 retries. The
+  `'series_search'` spot-check was then automated as spec 11 test 7
+  (search-subscribe → usage event source polled — green; spec re-run 7/7).
+  `'popular_series'` source is not spec-testable (F6 app_settings trap) —
+  identical one-argument pattern, code-reviewed; check opportunistically at
+  V5 if Popular is configured on the staging founding tenant.
 - **V5 — staging live check:** Rick visual pass on live staging with a
   zero-subs account holding qualifying reservations (see Step 6 note);
   mobile width included.
 
 ## 7. Completion criteria
 
-- [ ] Steps 0–6 complete; all § 2 anchors re-verified byte-exact at
-      execution
-- [ ] V1–V5 all green (evidence noted in this doc)
-- [ ] Playwright spec 11 added to local suite; full run green
-- [ ] Merged to staging `--ff-only`; pushed; CF Pages staging deploy
-      verified live
+- [x] Steps 0–5 complete; all § 2 anchors re-verified byte-exact at
+      execution (2026-07-19 — all matched at the planned line numbers)
+- [ ] V1–V5 all green (V1–V4 green 2026-07-19, evidence in § 6; V5 pending
+      Rick's live staging pass)
+- [x] Playwright spec 11 added to local suite (7 tests); full run green —
+      30 unit + 38 Playwright (specs 01–11), then spec 11 re-run 7/7 after
+      the test-7 addition
+- [x] Merged to staging `--ff-only` (`5451406`); pushed; CF Pages staging
+      deploy verified live (Rick visual + `curl -L` DOM-marker fetch)
 - [ ] This doc's status updated; CLAUDE.md updated at close (same pattern
       as subscription-promotion)
-- [ ] Out-of-scope discoveries filed, not fixed inline
+- [x] Out-of-scope discoveries filed, not fixed inline (none found; session
+      notes below record process lessons only)
+
+### Session notes (2026-07-19 execution)
+
+- **Deploy-verification gotcha:** `staging.pulllist.pages.dev` answers
+  `/subscriptions.html` with an **HTTP 308** redirect to the extensionless
+  path and an empty body. Status-blind `curl` polls therefore read as "old
+  version" indefinitely — this session burned ~25 minutes on a phantom
+  "stuck deploy / cache flapping" theory (including one harmless
+  doc-commit retrigger push) before checking the status code. Rule: poll
+  deploys with `curl -L` (or check `%{http_code}`) and inspect what the
+  response actually is before theorizing.
+- **Spec auth race:** navigating away from catalog immediately after the
+  magic-link `waitForURL` lands can outrun Supabase session persistence —
+  subscriptions.html then bounces to the login page (diagnosed from the
+  failure screenshot, per the diagnose-with-data rule). Fix: helper waits
+  for `networkidle` on catalog before `goto('subscriptions.html')`, plus a
+  Loading-placeholder wait before assertions. Spec was 1-failed/1-flaky
+  before the fix; 7/7 stable after, with the page code unchanged —
+  confirming both failures were spec-side.
+- Spec 11 grew beyond the planned V1–V3 matrix to 7 tests: test 7
+  automates V4's `'series_search'` attribution spot-check.
 
 ## 8. Rollback
 
