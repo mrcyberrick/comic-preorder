@@ -126,10 +126,9 @@
       text-align: center;
     }
 
-    /* ── Popular Series (empty-state discovery) ───────────── */
-    .popular-series-section {
-      margin-top: 28px;
-    }
+    /* ── Series suggestion rows (reserved suggestions) ────────
+       Class names predate the removal of the Popular section (V5
+       amendment, 2026-07-19) — kept to avoid selector churn. */
     .popular-series-header {
       display: flex;
       align-items: baseline;
@@ -358,7 +357,6 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   }
 
   let allSubs = [];
-  let popularSeries = []; // loaded once from app_settings
   let suggestions = [];   // unsubscribed series from the customer's own reservations
   const suggestEl = document.getElementById('reserved-suggestions');
 
@@ -379,15 +377,6 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
              'digest', 'box set', 'album'].some(t => f.includes(t));
   }
 
-  async function loadPopularSeries() {
-    try {
-      const value = await Settings.get('popular_series');
-      if (value) popularSeries = JSON.parse(value);
-    } catch(e) {
-      // Settings key not set yet or JSON parse error — silently ignore
-    }
-  }
-
   async function loadSubs() {
     const targetUserId = AdminContext.resolveUserId(user.id);
     const { items, error } = await Subscriptions.getAll(targetUserId);
@@ -398,25 +387,29 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     }
 
     allSubs = items;
-    await buildSuggestions(); // no-op unless zero subs in a real customer session
+    await buildSuggestions(); // always-on: unsubscribed reserved series (V5 amendment)
     renderSuggestions();
     renderSubs();
   }
 
   // Build one suggestion per unsubscribed series from the customer's own
-  // reservations. Preorders.getMy is ordered created_at desc, so the first
-  // occurrence per series is the most recent reservation and Map insertion
-  // order gives the recency sort for free.
+  // reservations — always-on, regardless of subscription count. In admin
+  // impersonation this reflects the impersonated customer's reservations
+  // (subscribe buttons render disabled). Preorders.getMy is ordered
+  // created_at desc, so the first occurrence per series is the most recent
+  // reservation and Map insertion order gives the recency sort for free.
   async function buildSuggestions() {
     suggestions = [];
-    if (AdminContext.isActive() || allSubs.length) return;
-    const { items, error } = await Preorders.getMy(user.id);
+    const targetUserId = AdminContext.resolveUserId(user.id);
+    const { items, error } = await Preorders.getMy(targetUserId);
     if (error) return; // non-fatal — page just renders without suggestions
+    const subKeys = new Set(allSubs.map(s => `${s.series_name}||${s.distributor}`));
     const seen = new Map();
     for (const item of items) {
       const c = item.catalog;
       if (!c || !c.series_name || !isStandardCover(c)) continue;
       const key = `${c.series_name}||${c.distributor}`;
+      if (subKeys.has(key)) continue; // already subscribed
       const existing = seen.get(key);
       if (!existing) {
         seen.set(key, {
@@ -451,7 +444,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     suggestEl.innerHTML = `
       <div class="reserved-suggestions-section">
         <div class="popular-series-header">📚 Series you're already reading</div>
-        <p class="popular-series-note">You've reserved these — subscribe and your copy is auto-reserved every month, no action needed.</p>
+        <p class="popular-series-note">${AdminContext.isActive()
+          ? 'Series this customer has reserved — subscribe is unavailable while impersonating.'
+          : "You've reserved these — subscribe and your copy is auto-reserved every month, no action needed."}</p>
         <div class="popular-series-list">
           ${suggestions.map(s => {
             const cover = s.cover_url
@@ -473,7 +468,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
                   ${fmtBadge}
                   ${s.subscribed
                     ? '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>'
-                    : `<button class="btn btn-primary btn-sm rsv-sub-btn" data-key="${escapeHtml(s.key)}">☆ Subscribe</button>`}
+                    : `<button class="btn btn-primary btn-sm rsv-sub-btn" data-key="${escapeHtml(s.key)}"${
+                         AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"' : ''
+                       }>☆ Subscribe</button>`}
                 </div>
               </div>`;
           }).join('')}
@@ -482,6 +479,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
     suggestEl.querySelectorAll('.rsv-sub-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (AdminContext.isActive()) return; // belt-and-braces; buttons render disabled
         const s = suggestions.find(x => x.key === btn.dataset.key);
         if (!s || s.subscribed) return;
         btn.disabled = true;
@@ -527,36 +525,10 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
       allSubs.filter(s => s.distributor === 'PRH').length;
 
     if (!allSubs.length) {
-      // Never show a series in both sections — reserved suggestions win.
-      const sugKeys = new Set(suggestions.map(s => s.key));
-      const popFiltered = popularSeries.filter(s => !sugKeys.has(`${s.series_name}||${s.distributor}`));
-
-      const popularRows = popFiltered.length && !AdminContext.isActive()
-        ? `<div class="popular-series-section">
-            <div class="popular-series-header">⭐ Popular at Book Stop</div>
-            <p class="popular-series-note">Series our customers love — subscribe to auto-reserve your copy each month.</p>
-            <div class="popular-series-list">
-              ${popFiltered.map(s => `
-                <div class="popular-series-row">
-                  <div class="popular-series-name">${escapeHtml(s.series_name)}</div>
-                  <div class="popular-series-publisher">${escapeHtml(s.publisher || '')}</div>
-                  <div class="popular-series-actions">
-                    <span class="badge badge-${(s.distributor || '').toLowerCase()}">${escapeHtml(s.distributor || '')}</span>
-                    <button class="btn btn-primary btn-sm pop-sub-btn"
-                      data-series="${escapeHtml(s.series_name)}"
-                      data-distributor="${escapeHtml(s.distributor)}">
-                      ☆ Subscribe
-                    </button>
-                  </div>
-                </div>`).join('')}
-            </div>
-          </div>`
-        : '';
-
       // When the reserved-suggestions section is showing above, the big
       // empty-state block is redundant — its header carries the message and
       // the toolbar already has a Browse Catalog button.
-      const emptyBlock = suggestions.length ? '' : `
+      container.innerHTML = suggestions.length ? '' : `
         <div class="sub-empty">
           <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"
                viewBox="0 0 24 24" style="margin-bottom:16px;color:var(--text-muted)">
@@ -566,34 +538,6 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
           <p>Open any series in the catalog and click <strong>☆ Subscribe</strong> to get started.</p>
           <a href="catalog.html" class="btn btn-primary" style="margin-top:16px">Browse Catalog</a>
         </div>`;
-
-      container.innerHTML = `${emptyBlock}${popularRows}`;
-
-      // Wire up subscribe buttons in the popular series section
-      container.querySelectorAll('.pop-sub-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          btn.textContent = 'Subscribing…';
-          const targetUserId = AdminContext.resolveUserId(user.id);
-          const { error } = await Subscriptions.subscribe(
-            targetUserId, btn.dataset.series, btn.dataset.distributor,
-            null, 'popular_series'
-          );
-          if (error) {
-            toast('Failed to subscribe', 'error');
-            btn.disabled = false;
-            btn.textContent = '☆ Subscribe';
-          } else {
-            allSubs.push({
-              series_name:  btn.dataset.series,
-              distributor:  btn.dataset.distributor,
-              created_at:   new Date().toISOString(),
-            });
-            toast(`Subscribed to ${btn.dataset.series}!`);
-            renderSubs(); // re-renders — now allSubs has an entry, shows the table
-          }
-        });
-      });
 
       return;
     }
@@ -651,7 +595,6 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     });
   }
 
-  await loadPopularSeries();
   await loadSubs();
 
   // ── Series Search ──────────────────────────────────────────
