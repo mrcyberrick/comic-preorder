@@ -181,6 +181,29 @@
       flex-shrink: 0;
     }
 
+    /* ── Reserved Suggestions (series you're already reading) ─ */
+    .reserved-suggestions-section { margin-bottom: 24px; }
+    .reserved-suggestion-cover {
+      width: 36px;
+      height: 54px;
+      flex-shrink: 0;
+      border-radius: 3px;
+      overflow: hidden;
+      background: var(--bg-elevated);
+    }
+    .reserved-suggestion-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .reserved-suggestion-count {
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
     /* ── Confirm Modal ────────────────────────────────────────── */
     .confirm-modal {
       max-width: 320px;
@@ -252,6 +275,11 @@
 
   <!-- Search results — shown while searching -->
   <div id="search-results-panel" style="display:none" class="search-results-panel"></div>
+
+  <!-- Reserved-series suggestions — rendered when the customer has no
+       subscriptions but has qualifying reservations; lives outside
+       #subs-container so it survives renderSubs() re-renders -->
+  <div id="reserved-suggestions" style="display:none"></div>
 
   <!-- Subscriptions list -->
   <div id="subs-container">
@@ -331,6 +359,25 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
   let allSubs = [];
   let popularSeries = []; // loaded once from app_settings
+  let suggestions = [];   // unsubscribed series from the customer's own reservations
+  const suggestEl = document.getElementById('reserved-suggestions');
+
+  // Standard-cover gate — same eligibility rule as the catalog subscribe button.
+  // Variant-only reservations never qualify (variant collectors often don't
+  // want the standard cover auto-reserved).
+  function isStandardCover(c) {
+    return !c.variant_type || c.variant_type === 'Standard' || c.variant_type === 'Primary Title';
+  }
+
+  // When a series has both a comic issue and a TPB (both are standard covers),
+  // prefer the comic format so the subscription targets the right item.
+  // Shared by the series search results and the reserved suggestions.
+  function isComicFormat(fmt) {
+    if (!fmt) return true; // no format = treat as comic
+    const f = fmt.toLowerCase();
+    return !['trade paperback', 'hardcover', 'omnibus', 'graphic novel',
+             'digest', 'box set', 'album'].some(t => f.includes(t));
+  }
 
   async function loadPopularSeries() {
     try {
@@ -351,7 +398,124 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     }
 
     allSubs = items;
+    await buildSuggestions(); // no-op unless zero subs in a real customer session
+    renderSuggestions();
     renderSubs();
+  }
+
+  // Build one suggestion per unsubscribed series from the customer's own
+  // reservations. Preorders.getMy is ordered created_at desc, so the first
+  // occurrence per series is the most recent reservation and Map insertion
+  // order gives the recency sort for free.
+  async function buildSuggestions() {
+    suggestions = [];
+    if (AdminContext.isActive() || allSubs.length) return;
+    const { items, error } = await Preorders.getMy(user.id);
+    if (error) return; // non-fatal — page just renders without suggestions
+    const seen = new Map();
+    for (const item of items) {
+      const c = item.catalog;
+      if (!c || !c.series_name || !isStandardCover(c)) continue;
+      const key = `${c.series_name}||${c.distributor}`;
+      const existing = seen.get(key);
+      if (!existing) {
+        seen.set(key, {
+          key,
+          series_name: c.series_name,
+          distributor: c.distributor,
+          format:      c.format || null,
+          publisher:   c.publisher || '',
+          cover_url:   c.cover_url || null,
+          count:       1,
+          subscribed:  false,
+        });
+      } else {
+        existing.count++;
+        if (isComicFormat(c.format) && !isComicFormat(existing.format)) {
+          existing.format = c.format || null; // comic beats TPB/HC
+          if (c.cover_url) existing.cover_url = c.cover_url;
+        }
+        if (!existing.cover_url && c.cover_url) existing.cover_url = c.cover_url;
+      }
+    }
+    suggestions = [...seen.values()];
+  }
+
+  function renderSuggestions() {
+    if (!suggestions.length) {
+      suggestEl.style.display = 'none';
+      suggestEl.innerHTML = '';
+      return;
+    }
+    suggestEl.style.display = 'block';
+    suggestEl.innerHTML = `
+      <div class="reserved-suggestions-section">
+        <div class="popular-series-header">📚 Series you're already reading</div>
+        <p class="popular-series-note">You've reserved these — subscribe and your copy is auto-reserved every month, no action needed.</p>
+        <div class="popular-series-list">
+          ${suggestions.map(s => {
+            const cover = s.cover_url
+              ? `<img src="${escapeHtml(s.cover_url)}" alt="" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
+              : `<img src="${COVER_PLACEHOLDER}" alt="">`;
+            const fmtBadge = s.format && !isComicFormat(s.format)
+              ? `<span class="badge badge-format">${escapeHtml(s.format)}</span>`
+              : '';
+            return `
+              <div class="popular-series-row">
+                <div class="reserved-suggestion-cover">${cover}</div>
+                <div class="popular-series-name">
+                  ${escapeHtml(s.series_name)}
+                  ${s.count > 1 ? `<div class="reserved-suggestion-count">${s.count} issues reserved</div>` : ''}
+                </div>
+                <div class="popular-series-publisher">${escapeHtml(s.publisher)}</div>
+                <div class="popular-series-actions">
+                  <span class="badge badge-${(s.distributor || '').toLowerCase()}">${escapeHtml(s.distributor)}</span>
+                  ${fmtBadge}
+                  ${s.subscribed
+                    ? '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>'
+                    : `<button class="btn btn-primary btn-sm rsv-sub-btn" data-key="${escapeHtml(s.key)}">☆ Subscribe</button>`}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+
+    suggestEl.querySelectorAll('.rsv-sub-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const s = suggestions.find(x => x.key === btn.dataset.key);
+        if (!s || s.subscribed) return;
+        btn.disabled = true;
+        btn.textContent = 'Subscribing…';
+        const { error } = await Subscriptions.subscribe(
+          user.id, s.series_name, s.distributor, s.format || null, 'reserved_suggestion'
+        );
+        if (error) {
+          toast('Failed to subscribe', 'error');
+          btn.disabled = false;
+          btn.textContent = '☆ Subscribe';
+          return;
+        }
+        s.subscribed = true;
+        allSubs.push({
+          series_name: s.series_name,
+          distributor: s.distributor,
+          format:      s.format || null,
+          created_at:  new Date().toISOString(),
+        });
+        renderSuggestions(); // row flips to ★ Subscribed; remaining rows persist
+        renderSubs();        // subscriptions table below picks up the new row
+        toastAction(`Subscribed to ${s.series_name}!`, 'Undo', async () => {
+          const { error: undoErr } = await Subscriptions.unsubscribe(user.id, s.series_name, s.distributor);
+          if (undoErr) { toast('Failed to undo', 'error'); return; }
+          s.subscribed = false;
+          allSubs = allSubs.filter(x =>
+            !(x.series_name === s.series_name && x.distributor === s.distributor));
+          renderSuggestions(); // row's Subscribe button restored
+          renderSubs();
+          toast(`Unsubscribed from ${s.series_name}`);
+        });
+      });
+    });
   }
 
   function renderSubs() {
@@ -363,14 +527,16 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
       allSubs.filter(s => s.distributor === 'PRH').length;
 
     if (!allSubs.length) {
-      const subKeys = new Set(); // empty — no existing subs
+      // Never show a series in both sections — reserved suggestions win.
+      const sugKeys = new Set(suggestions.map(s => s.key));
+      const popFiltered = popularSeries.filter(s => !sugKeys.has(`${s.series_name}||${s.distributor}`));
 
-      const popularRows = popularSeries.length && !AdminContext.isActive()
+      const popularRows = popFiltered.length && !AdminContext.isActive()
         ? `<div class="popular-series-section">
             <div class="popular-series-header">⭐ Popular at Book Stop</div>
             <p class="popular-series-note">Series our customers love — subscribe to auto-reserve your copy each month.</p>
             <div class="popular-series-list">
-              ${popularSeries.map(s => `
+              ${popFiltered.map(s => `
                 <div class="popular-series-row">
                   <div class="popular-series-name">${escapeHtml(s.series_name)}</div>
                   <div class="popular-series-publisher">${escapeHtml(s.publisher || '')}</div>
@@ -387,7 +553,10 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
           </div>`
         : '';
 
-      container.innerHTML = `
+      // When the reserved-suggestions section is showing above, the big
+      // empty-state block is redundant — its header carries the message and
+      // the toolbar already has a Browse Catalog button.
+      const emptyBlock = suggestions.length ? '' : `
         <div class="sub-empty">
           <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"
                viewBox="0 0 24 24" style="margin-bottom:16px;color:var(--text-muted)">
@@ -396,8 +565,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
           <h3>No subscriptions yet</h3>
           <p>Open any series in the catalog and click <strong>☆ Subscribe</strong> to get started.</p>
           <a href="catalog.html" class="btn btn-primary" style="margin-top:16px">Browse Catalog</a>
-        </div>
-        ${popularRows}`;
+        </div>`;
+
+      container.innerHTML = `${emptyBlock}${popularRows}`;
 
       // Wire up subscribe buttons in the popular series section
       container.querySelectorAll('.pop-sub-btn').forEach(btn => {
@@ -406,7 +576,8 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
           btn.textContent = 'Subscribing…';
           const targetUserId = AdminContext.resolveUserId(user.id);
           const { error } = await Subscriptions.subscribe(
-            targetUserId, btn.dataset.series, btn.dataset.distributor
+            targetUserId, btn.dataset.series, btn.dataset.distributor,
+            null, 'popular_series'
           );
           if (error) {
             toast('Failed to subscribe', 'error');
@@ -517,15 +688,8 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
       return;
     }
 
-    // Deduplicate by series_name + distributor.
-    // When a series has both a comic issue and a TPB (both are standard covers),
-    // prefer the comic format so the subscribe button targets the right item.
-    function isComicFormat(fmt) {
-      if (!fmt) return true; // no format = treat as comic
-      const f = fmt.toLowerCase();
-      return !['trade paperback', 'hardcover', 'omnibus', 'graphic novel',
-               'digest', 'box set', 'album'].some(t => f.includes(t));
-    }
+    // Deduplicate by series_name + distributor, preferring the comic format
+    // over TPB/HC via the shared isComicFormat() helper.
     const seen = new Map();
     for (const r of data) {
       const key = `${r.series_name}||${r.distributor}`;
@@ -575,7 +739,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
         const targetUserId = AdminContext.resolveUserId(user.id);
         const { error } = await Subscriptions.subscribe(
           targetUserId, btn.dataset.series, btn.dataset.distributor,
-          btn.dataset.format || null
+          btn.dataset.format || null, 'series_search'
         );
         if (error) {
           toast('Failed to subscribe', 'error');
