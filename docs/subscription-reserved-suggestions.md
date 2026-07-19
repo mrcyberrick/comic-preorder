@@ -1,12 +1,12 @@
 # Subscription Reserved-Suggestions — one-click subscribe from your own reservations
 
-**Status:** **Complete — 2026-07-19, staging only.** Implemented (`5451406`),
-amended per Rick's V5 feedback (`a3995fa`, § 4c: always-on suggestions,
-Popular dropped, admin read-only view). V1–V5 all green under the amended
-matrix (post-amendment full suite: 30 unit + 39 Playwright, 0 failures;
-spec 11 = 7 tests incl. the two inverted V5-amendment cases; V5 = Rick's
-live pass, § 6). **Prod promotion is not part of this closure** — separate
-explicit `/promote-prod` request when desired.
+**Status:** **Complete — live in production, 2026-07-19.** Implemented
+(`5451406`), amended per Rick's V5 feedback (`a3995fa`, § 4c: always-on
+suggestions, Popular dropped, admin read-only view). V1–V5 all green under
+the amended matrix (post-amendment full suite: 30 unit + 39 Playwright,
+0 failures; spec 11 = 7 tests incl. the two inverted V5-amendment cases;
+V5 = Rick's live pass, § 6). Promoted the same day at Rick's explicit
+request via PR #91 — see § Production promotion below.
 **Target:** staging only. Prod promotion is OUT — separate explicit request via
 `/promote-prod` after staging sign-off.
 **Origin:** Rick's request 2026-07-19; follow-on to the subscription-promotion
@@ -360,6 +360,36 @@ V4 full-suite re-run required; V5 re-check by Rick after deploy.
       paragraph + Series Subscriptions impersonation clarification)
 - [x] Out-of-scope discoveries filed, not fixed inline (none found; session
       notes below record process lessons only)
+
+### Production promotion (2026-07-19)
+
+Rick requested promotion via `/promote-prod` the same session, after V5
+closure. Followed the skill:
+- Merge `staging` → PR branch with `git checkout main -- config.js` (prod
+  credentials preserved; `config.js` confirmed absent from the PR diff).
+- F59 check clean — `subscriptions.html` differs as expected;
+  `app.js`/`mylist.html`/`arrivals.html`/`admin.html` correctly identical
+  (feature never touched them).
+- Merge-base check: the two Phase-4 migration SQL files that appear as
+  deletions in the raw `main..staging` diff are main-only additions
+  outside the merge-base — merge leaves them untouched (verified via
+  `git cat-file -e` against the merge-base before merging).
+- PR #91 → merged by Rick → `5167ab4` on `main`. True merge commit
+  (`47263b2`, parents = main tip + staging tip) preserved for future
+  merge-bases. Process note: the first commit attempt hit the PowerShell
+  5.1 embedded-double-quote native-arg bug (same as earlier in the
+  session) and left an empty pushed branch; caught because
+  `git checkout -b` had also silently dropped `MERGE_HEAD` — merge redone
+  properly with a `-F` message file after verifying parents.
+- Prod deploy verified live via `curl -L` DOM-marker fetch
+  (`reserved-suggestions` container + impersonation tooltip string both
+  present at https://pulllist.app/subscriptions.html).
+- Post-deploy write-smoke: Rick, as a real user on prod — passed
+  ("Green, pass").
+- Bundling check: `main..staging` carried only this feature + doc-only
+  commits. The shelf-copy feature, previously believed unpromoted, was
+  confirmed already live on prod (PR #89) — the stale local memory note
+  was corrected.
 
 ### Session notes (2026-07-19 execution)
 
