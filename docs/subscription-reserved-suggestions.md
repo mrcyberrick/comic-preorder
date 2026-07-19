@@ -231,6 +231,39 @@ In-place flip, `allSubs` push + `renderSubs()`, `toastAction` Undo per
    on each suggestion (set on subscribe, cleared on undo) covers post-load
    state instead.
 
+## 4c. V5 feedback amendments (2026-07-19, Rick — scope amended at his request)
+
+Rick's V5 pass produced two change requests, both accepted after discussion:
+
+1. **Suggestions are always-on; Popular section dropped entirely.** The
+   suggestions section now renders for any customer with qualifying
+   *unsubscribed* reserved series, regardless of subscription count — the
+   original zero-subs gate and the § 3 OUT-scoped "v2 From your pull list"
+   are superseded by this. The "exclude already-subscribed series" filter
+   (§ 4b.4 called it unreachable) is now real and load-bearing. The
+   ⭐ Popular at Book Stop section, its `app_settings.popular_series` read
+   (this page's last F6-trap touch), the `'popular_series'` source, and the
+   Popular-dedup logic are all removed. The `popular_series` key in
+   `app_settings` simply becomes unused — no DB change made or needed. The
+   `popular-series-*` CSS row classes are **kept** (now styling the
+   suggestion rows only) to avoid selector churn in page + spec; the CSS
+   comment is retitled and the unused `.popular-series-section` wrapper
+   rule dropped. Placement stays above the table — CTA visible without
+   scrolling, click targets stable.
+2. **Admin impersonation shows the list, with subscribe disabled.**
+   Explicit decision (AskUserQuestion): disabled button + "Unavailable
+   while impersonating" tooltip, over subscribe-on-behalf (deferred; noted
+   as a 3-line change if phone workflows want it) and over keep-hidden.
+   The preorders fetch switches to `AdminContext.resolveUserId(user.id)`
+   so the list reflects the impersonated customer. The section note gets
+   an admin-context copy variant. This deliberately diverges from the
+   catalog modal's hide-in-impersonation rule — CLAUDE.md § Series
+   Subscriptions gets a clarifying line at close.
+
+Gate impact: spec 11 tests 4 (has-sub) and 5 (admin) inverted to the new
+behavior; V1's has-sub and admin rows re-earned under the amended matrix;
+V4 full-suite re-run required; V5 re-check by Rick after deploy.
+
 ## 5. UX decisions (settled at planning, 2026-07-19)
 
 - **One click + Undo toast, not a confirm dialog** — a confirm defeats the
