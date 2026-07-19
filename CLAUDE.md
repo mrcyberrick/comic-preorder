@@ -22,7 +22,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Phase 1 reference:** `docs/phase-1-schema-migration.md`, `docs/pre-multitenancy-state.md` (§ 2/§ 4 superseded by `docs/production-baseline-2026-05-28.md`)
 
 **Phase 5 sub-deploy index:** 5.0 housekeeping → 5.1 hosting migration → 5.2 slug→id routing RPC → 5.3 per-tenant branding → 5.4 tenant signup (incl. `register-customer` un-pin) → 5.5 second-tenant onboarding + soak. All Complete. Sequencing rationale and completion criteria in the parent plan.
-**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). F87 — `notify-customers` service-role detection vs the new `sb_secret_` key (F75 regression) → monthly catalog email not sent — **resolved 2026-07-17** (capability-probe fix deployed staging v23 + prod v33; July email sent; source promotion PR #87; see `docs/technical-reference.md` § 13 F87). F88 — disabling prod legacy API keys (the F86 toggle) will 401 every edge function's own `SUPABASE_SERVICE_ROLE_KEY`-based service calls (auto-injected legacy JWT) → broad function-layer outage; **verify + migrate each function's service key before the F86 disable** (predicted, unverified; see `docs/technical-reference.md` § 13 F88). **The `import.js` maintenance session (F75 key rotation + F78 historical dedup + F85 cross-month root fix) closed 2026-07-15 — plan: `docs/import-js-maintenance-f75-f78-f85.md`.** All other findings through F88 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F89**.
+**Open findings:** F72 — `register-customer` email template stays founding-branded (deferred; multi-tenant email branding out of Phase 5 scope; re-confirmed deferred at Phase 5 close — now a prerequisite for tenant-2's real-customer go-live, per `docs/tenant-onboarding-runbook.md`). F86 — prod legacy API keys (anon+service_role) can only be disabled as one unit; full F75 closure needs a coordinated `config.js` anon-key migration (separate future session; deferred). F87 — `notify-customers` service-role detection vs the new `sb_secret_` key (F75 regression) → monthly catalog email not sent — **resolved 2026-07-17** (capability-probe fix deployed staging v23 + prod v33; July email sent; source promotion PR #87; see `docs/technical-reference.md` § 13 F87). F88 — disabling prod legacy API keys (the F86 toggle) will 401 every edge function's own `SUPABASE_SERVICE_ROLE_KEY`-based service calls (auto-injected legacy JWT) → broad function-layer outage; **verify + migrate each function's service key before the F86 disable** (predicted, unverified; see `docs/technical-reference.md` § 13 F88). F89 — paper→app conversion is unmeasurable: `claim-paper-customer` deletes the paper rows on success and no usage_event records claims or invites (filed 2026-07-19; deferred to a future instrumentation session; see § 13 F89). F90 — `usage_events` 90-day purge forecloses adoption-trend analytics; needs a per-tenant monthly rollup snapshot written at import (filed 2026-07-19; deferred to a future schema + import-script session; see § 13 F90). **The `import.js` maintenance session (F75 key rotation + F78 historical dedup + F85 cross-month root fix) closed 2026-07-15 — plan: `docs/import-js-maintenance-f75-f78-f85.md`.** All other findings through F88 are resolved — full entries and statuses live in `docs/technical-reference.md` § 13 (canonical findings index; the F76 distributor-agnostic display match remains as defense-in-depth post-F84). Next free finding ID: **F91**.
 
 Before proposing any work, read the active phase docs and confirm the proposed
 change is in scope. **If something seems related but isn't on the IN scope list
@@ -525,6 +525,12 @@ approval.
   anon-key migration (new publishable key, both branches, deploy, verify live
   app) is required before the prod legacy `service_role`/`anon` toggle can be
   disabled. See `docs/technical-reference.md` § 13 F86.
+- **Analytics conversion instrumentation (F89)** — log claims/invites so
+  paper→app conversion is measurable (Edge Function touch). See
+  `docs/technical-reference.md` § 13 F89.
+- **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
+  import so adoption trends survive the 90-day purge (schema + import
+  script). See `docs/technical-reference.md` § 13 F90.
 Phase 5 (all sub-deploys 5.0–5.5, incl. the slug→id RPC, per-tenant branding,
 self-service tenant signup, and second-tenant onboarding) closed 2026-07-15 —
 no longer listed here. See `docs/phase-5-second-tenant-onboarding.md` for the
@@ -534,6 +540,12 @@ carried forward.
 The `import.js` maintenance session (F75 key rotation, F78 historical dedup,
 F85 cross-month root fix) closed 2026-07-15 — no longer listed here. See
 `docs/import-js-maintenance-f75-f78-f85.md` for the full closed scope.
+
+The analytics cycle-alignment session (cycle-anchored deltas on Executive +
+Operations KPIs, "This Cycle vs Last" overlay chart, New Customers tile)
+closed 2026-07-19 — **live on staging**, no longer listed here. V1–V5 all
+green; merged ff-only (`d6ee227`). See `docs/analytics-cycle-alignment.md`
+for the full closed scope. Not yet promoted to production.
 
 The Analytics v2 engagement dashboard (full redesign of `analytics.html`,
 ungated) closed 2026-07-16 — no longer listed here. See

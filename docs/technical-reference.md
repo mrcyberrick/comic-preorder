@@ -2446,6 +2446,26 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Fix / next step (do BEFORE the F86 toggle):** verify what `SUPABASE_SERVICE_ROLE_KEY` resolves to inside a deployed edge function once legacy keys are off (dashboard test on staging first, and/or Supabase's key-migration docs). If it stays the dead legacy JWT, give each function an explicit `sb_secret_` service key as a function secret, update every function to read that instead of the auto-injected legacy env, redeploy, and re-test one function end-to-end — then the F86 toggle is safe. Sequence this into the F86 remediation session.
 - **Where:** all `supabase/functions/*/index.ts` (each reads `SUPABASE_SERVICE_ROLE_KEY`); `notify-customers` is the confirmed example.
 
+#### F89 — Paper→app conversion is unmeasurable: a successful claim deletes the paper rows and no event records it
+
+- **Status:** filed 2026-07-19; **open — deferred to a future instrumentation session** (explicitly OUT of the planned analytics cycle-alignment session, which is client-only — see `docs/analytics-cycle-alignment.md`). Related: F33 (claim EF reimplements the unused `claim_paper_account` RPC), F72 (invite email branding), F90 (rollup would make conversions survive retention).
+- **Severity:** Low as a defect (no correctness or security impact) — but it blocks measuring one of the store's primary adoption goals (converting paper customers to app users).
+- **Symptom:** neither `analytics.html` nor any SQL can count paper→app conversions. On success, `claim-paper-customer` deletes the paper `user_profiles` row and its placeholder `auth.users` row (`index.ts` ~lines 167–191; same destructive-merge design as §6.7). A shrinking `is_paper` count is therefore indistinguishable from admin deletions. `usage_events` has no `claim`/`invite`/`signup` event type (§4.8), and `UsageEvents._log()` is client-side only — the claim happens inside the Edge Function, so nothing is logged. Invites (`invite-customer`) are likewise unrecorded.
+- **Root cause:** conversion was designed as a destructive merge with no durable audit record; observability was never in scope for the claim/invite flows.
+- **Scope:** staging + prod (identical function code).
+- **Fix direction (future session):** smallest viable — log a `claim` usage_event from `claim-paper-customer` on success (prior paper id in `metadata`) and an `invite_sent` event from `invite-customer`; or persist a `converted_from_paper_at` timestamp on the surviving profile. Any variant touches Edge Functions (and possibly §4.8's event-type list) → own scoped session with runbook. Pairs naturally with F90 so conversion counts survive the 90-day purge.
+- **Where:** `supabase/functions/claim-paper-customer/index.ts`, `supabase/functions/invite-customer/index.ts`; §4.8 event-type note.
+
+#### F90 — `usage_events` 90-day retention forecloses adoption-trend analytics; a monthly rollup snapshot is needed
+
+- **Status:** filed 2026-07-19; **open — deferred to a future schema + import-script session** (candidate to bundle with F89's instrumentation). Related: §6.6 (`purge_old_usage_events`), F89, `docs/analytics-cycle-alignment.md` (client-only session; explicitly excludes this).
+- **Severity:** Low — the data loss is by design (retention policy), but it caps every trend question at the ~2–3 catalog cycles that fit in 90 days.
+- **Symptom:** `analytics.html` can never answer "is adoption growing quarter over quarter." `purge_old_usage_events(90)` runs at every import and erases the history the question needs; deltas can only ever compare against the immediately-prior cycle. No new-signups / MAU / paper-count / conversion trend beyond ~90 days is derivable from live data.
+- **Root cause:** `usage_events` is the only engagement record; no aggregate survives the purge.
+- **Scope:** staging + prod (same retention design).
+- **Fix direction (future session):** a small per-tenant monthly rollup table (e.g. `analytics_monthly`: `tenant_id`, `catalog_month`, `new_signups`, `mau`, `paper_count`, `claims`, `reserve_events`, `reserved_value_usd`) written by the import scripts at month-close via service-role **before** the purge, with admin-read RLS. Unlocks 12-month trend lines in `analytics.html`. Schema + RLS + `import.js`/`import-staging.js` + doc changes → own sub-deploy-style session with Rick-in-the-loop DB steps.
+- **Where:** new table (schema TBD), `import.js` / `import-staging.js`, later a trend panel in `analytics.html`.
+
 ---
 
 *End of document.*
