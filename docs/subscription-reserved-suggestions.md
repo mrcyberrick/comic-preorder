@@ -1,8 +1,12 @@
 # Subscription Reserved-Suggestions — one-click subscribe from your own reservations
 
-**Status:** In execution — implemented, merged to staging (`5451406`), live on
-https://staging.pulllist.pages.dev/ (Rick confirmed visually). V1–V4 **green**
-2026-07-19; V5 (Rick's live staging pass with a zero-subs account) **pending**.
+**Status:** In execution — implemented (`5451406`), then amended per Rick's V5
+feedback (`a3995fa`, § 4c: always-on suggestions, Popular dropped, admin
+read-only view). Live on https://staging.pulllist.pages.dev/. V1–V4 **green**
+2026-07-19 under the amended matrix (post-amendment full suite: 30 unit + 39
+Playwright, 0 failures; spec 11 = 7 tests incl. the two inverted V5-amendment
+cases). **V5 re-check by Rick pending** — no zero-subs account needed anymore;
+any account with unsubscribed reserved series shows the section.
 **Target:** staging only. Prod promotion is OUT — separate explicit request via
 `/promote-prod` after staging sign-off.
 **Origin:** Rick's request 2026-07-19; follow-on to the subscription-promotion
