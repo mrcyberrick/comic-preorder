@@ -203,6 +203,32 @@ In-place flip, `allSubs` push + `renderSubs()`, `toastAction` Undo per
   reservations only.
 - Update this doc's status + completion boxes as earned.
 
+## 4b. Execution deviations (recorded 2026-07-19, during implementation)
+
+1. **§ 3.5 copy swap dropped — plan self-contradiction resolved.** § 3.2
+   places the suggestions container *above* `#subs-container`, but § 3.5's
+   swapped empty-state copy said "Subscribe **below**" — both can't hold.
+   Resolution: § 3.2 placement kept (required for the list to survive
+   re-renders; keeps click targets stable during multi-subscribe); instead
+   of swapped copy, the `sub-empty` block is **suppressed entirely** when
+   suggestions are showing — the section header carries the message and the
+   toolbar already has a Browse Catalog button (`btn-secondary`, so the
+   § 3.5 demote is moot). When no suggestions exist, the empty state renders
+   byte-identical to before.
+2. **Popular-dedup case moved from spec to manual V5.** Popular series live
+   in `app_settings`, whose key-only PK is shared state (the F6 trap) — a
+   Playwright spec writing `popular_series` would clobber founding-tenant
+   staging data. The dedup is a pure client-side filter; it is verified by
+   code review + the live V5 pass instead of spec 11.
+3. **Fixture extension:** `seedCatalogRow` gained an optional `format`
+   field (`fixtures/catalog.ts`, defaults unchanged) so spec 11 can assert
+   comic-over-TPB format propagation. Synthetic-tenant-only, local suite.
+4. **`buildSuggestions` has no subscribed-series exclusion check** — the
+   plan's § 3.1 "not already subscribed" filter is structurally unreachable:
+   the builder only runs when `allSubs.length === 0`. The `subscribed` flag
+   on each suggestion (set on subscribe, cleared on undo) covers post-load
+   state instead.
+
 ## 5. UX decisions (settled at planning, 2026-07-19)
 
 - **One click + Undo toast, not a confirm dialog** — a confirm defeats the
