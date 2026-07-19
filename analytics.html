@@ -226,6 +226,16 @@
     .no-data { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 24px; }
     .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; }
 
+    /* ── Cycle overlay chart ("This Cycle vs Last") ──────────────── */
+    .trend-wrap { position: relative; }
+    .trend-svg { width: 100%; height: auto; display: block; }
+    .viz-tip { position: fixed; z-index: 40; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-size: 0.74rem; color: var(--text-primary); pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.5); white-space: nowrap; }
+    .viz-tip .tl { color: var(--text-muted); }
+    details.data-view { margin-top: 12px; }
+    details.data-view summary { font-size: 0.74rem; color: var(--text-muted); cursor: pointer; }
+    details.data-view summary:hover { color: var(--text-secondary); }
+    details.data-view table { margin-top: 10px; }
+
     /* ── Metric definitions ───────────────────────────────────── */
     .defs { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 22px; margin: 30px 0; }
     .defs summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 12px 0; }
@@ -294,6 +304,21 @@
 
     <div class="kpi-row wide" id="kpi-exec" style="margin-top:18px"></div>
 
+    <div class="card" id="overlay-card" style="margin-top:18px">
+      <h3>This Cycle vs Last</h3>
+      <p class="sub" id="overlay-sub">Daily active customers by day of cycle</p>
+      <div class="trend-wrap" id="overlay-wrap">
+        <svg class="trend-svg" id="overlay-svg" viewBox="0 0 760 230" role="img" aria-label="Daily active customers, current cycle vs prior cycle, by day of cycle."></svg>
+        <div class="viz-tip" id="overlay-tip"></div>
+      </div>
+      <div id="overlay-legend" class="legend"></div>
+      <div id="overlay-empty" hidden></div>
+      <details class="data-view">
+        <summary>View as table</summary>
+        <div class="tbl-wrap" id="overlay-table"></div>
+      </details>
+    </div>
+
     <div class="grid wide cols-2">
       <div class="card">
         <h3>Customer Journey</h3>
@@ -302,7 +327,7 @@
         <div id="funnel-callout"></div>
       </div>
       <div class="card">
-        <h3>What Changed This Month</h3>
+        <h3>What Changed This Cycle</h3>
         <p class="sub">Written from the numbers — no chart-reading required</p>
         <div class="changes" id="what-changed"></div>
       </div>
@@ -411,32 +436,60 @@
   <details class="defs">
     <summary>Metric definitions &amp; data sources</summary>
     <dl>
+      <dt>Cycle start &amp; day of cycle</dt>
+      <dd>A "cycle" begins when a catalog month's first row is imported (min(catalog.created_at) for
+        the current catalog_month) and runs until the next month's catalog is first imported. Day 1 =
+        the import day; "Day N" in the page subtitle counts elapsed local days since then. Weekly
+        reloads of the same month (new shipment invoices, corrected catalog rows) don't move day 1 —
+        only a new catalog_month does.
+        <span class="src">Source: catalog.created_at.</span></dd>
       <dt>Customer Engagement Score</dt>
       <dd>One number, 0–100, blending four components: <em>customer retention</em> (40%),
         <em>habit score</em> (25%), <em>visits per week</em> (20%) and <em>actions per visit</em> (15%).
         Retention and habit are already percentages; visits/week is normalized as min(visits ÷ 3, 1)×100
         (3+ visits a week = full marks) and actions/visit as min(actions ÷ 3, 1)×100 (3+ distinct core
-        actions per visit = full marks). The delta compares this month's blend to last month's on the
-        same basis.
+        actions per visit = full marks). The delta compares this cycle's blend to the same point in the
+        prior cycle, on the same basis — reads "—" if the prior-cycle baseline isn't available.
         <span class="src">Source: usage_events, derived client-side.</span></dd>
       <dt>Customer Retention</dt>
-      <dd>Of customers active in the prior 30-day window (30–60 days ago), the % with any activity
-        in the last 30 days. "Did last month's customers come back this month."
+      <dd>Of customers active in the prior cycle (from that cycle's start up to this cycle's start), the
+        % with any activity so far this cycle — "Did last cycle's customers come back this cycle." The
+        delta's baseline cohort is approximated one cycle further back (<code>prevPrevStart*</code> =
+        prior cycle start minus the prior cycle's own length, since the real month-before-prior catalog
+        rows are typically purged by then) and is phase-capped to the same number of elapsed days as the
+        current cycle. Reads "—" when that approximation falls outside the 90-day usage_events window.
         <span class="src">Source: usage_events.</span></dd>
       <dt>Habit Score</dt>
       <dd>Of customers active in the last 30 days, the % who were also active in the last 7 days
-        (WAU ÷ MAU) — how many monthly customers keep a weekly habit.
+        (WAU ÷ MAU) — how many monthly customers keep a weekly habit. The delta re-anchors both windows
+        at the same day-of-cycle point in the prior cycle, instead of a fixed "30-60 days ago" window.
         <span class="src">Source: usage_events.</span></dd>
       <dt>Visits per Week &amp; Actions per Visit</dt>
       <dd>A visit (session) is a burst of one customer's events with no gap &gt; 30 minutes.
-        Visits/week = sessions ÷ active customers ÷ weeks. Actions/visit = average distinct core
-        actions (browse, reserve/cancel, my-list, subscriptions, arrivals) per session.
+        Visits/week = sessions ÷ active customers ÷ weeks, over the days elapsed so far this cycle.
+        Actions/visit = average distinct core actions (browse, reserve/cancel, my-list, subscriptions,
+        arrivals) per session. The delta compares the same number of elapsed days in the prior cycle.
         <span class="src">Source: usage_events, session-clustered client-side.</span></dd>
+      <dt>New Customers</dt>
+      <dd>Non-admin, non-paper user_profiles created since this cycle began. The delta compares the same
+        number of elapsed days in the prior cycle. Profiles are never purged, so both sides are exact —
+        unlike the usage_events-based metrics above, this one isn't bounded by the 90-day window.
+        <span class="src">Source: user_profiles.created_at.</span></dd>
+      <dt>This Cycle vs Last (overlay chart)</dt>
+      <dd>Distinct active customers per day of cycle, current cycle overlaid on the prior cycle at the
+        same day offset. The prior line stops at that cycle's own length — a longer current cycle simply
+        has no prior line past that point. The dashed marker plots the order deadline's day-of-cycle
+        offset when it falls within the chart's range. Bursts (e.g. from a notify-customers email) don't
+        necessarily land at the same day offset every cycle — that email can be suppressed on a given
+        import, so the chart's job is a stable anchor, not a guaranteed aligned spike.
+        <span class="src">Source: usage_events (day-of-cycle bucketed) + catalog.created_at (cycle anchors).</span></dd>
       <dt>Reserved value</dt>
       <dd>Gross value of reserve actions logged for a catalog month (price × reserves), non-admin.
         The month-over-month delta compares the current catalog month to the previous one on the
-        same basis. Per-customer averages in Subscription Opportunity come from live preorders for
-        the current catalog month instead.
+        same basis — unlike the other Executive metrics above, this one stays anchored to the calendar
+        catalog month rather than the cycle, since it's already scoped to catalog_month. Per-customer
+        averages in Subscription Opportunity come from live preorders for the current catalog month
+        instead.
         <span class="src">Source: usage_events (price_usd on reserve events) + preorders × catalog.price_usd.</span></dd>
       <dt>Publisher Demand</dt>
       <dd>Share of reserve events by publisher over the last 90 days. The trend note compares each
@@ -467,8 +520,10 @@
         <span class="src">Note: toggling includes/excludes admin users; the amber banner warns when included.</span></dd>
       <dt>Retention window</dt>
       <dd>usage_events are purged after 90 days by the monthly import. There is no "all time" view —
-        every metric here is bounded by that window. Windows are fixed (30-day for most, 90-day for
-        publisher share); deltas compare equal-length prior windows.</dd>
+        every metric here is bounded by that window, including cycle-anchored ones (a delta reads "—"
+        once its baseline window falls outside the 90 days). The Executive and Operations tiles above
+        compare equal-length cycle windows; the panels below (funnel, title bars, publisher demand,
+        activity table, segments, cohorts, win-back) use fixed 30-day/90-day trailing windows instead.</dd>
     </dl>
   </details>
 </div>
@@ -505,6 +560,9 @@
     subscriberIds: new Set(),
     currentMonth: null,
     orderDeadline: null,   // 'YYYY-MM-DD' | null
+    cycleStart: null,      // ISO timestamp | null — min(created_at) for currentMonth
+    prevStart: null,       // ISO timestamp | null — min(created_at) for the prior catalog month
+    cycle: null,           // derived cycle-window info, see computeCycle()
     hideAdmin: true,
   };
   let NOW = Date.now();
@@ -537,6 +595,20 @@
     return out;
   }
 
+  // Cycle start = min(created_at) of catalog rows for a given catalog_month.
+  // The import upserts in place, so the earliest row for a month is a stable
+  // anchor even though later re-runs (weekly reloads) add more rows with
+  // later created_at values (§5.1, docs/analytics-cycle-alignment.md).
+  async function fetchCycleStart(month) {
+    if (!month) return null;
+    const { data } = await db.from('catalog')
+      .select('created_at')
+      .eq('catalog_month', month)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    return (data && data[0]) ? data[0].created_at : null;
+  }
+
   // ── Load all data (one pass) ───────────────────────────────────
   async function loadData() {
     NOW = Date.now();
@@ -547,11 +619,15 @@
     // same row set (rows inserted mid-load would shift offsets otherwise).
     const ueFilter = q => q.gte('created_at', ninetyDaysAgoIso).lte('created_at', nowIso);
 
-    const [{ data: profiles }, ueTotal, currentMonth, orderDeadline] = await Promise.all([
-      db.from('user_profiles').select('id, full_name, email, is_admin, is_paper, status'),
+    const currentMonth = await Catalog.getLatestMonth();
+    const prevMonth = shiftMonth(currentMonth, -1);
+
+    const [{ data: profiles }, ueTotal, orderDeadline, cycleStart, prevStart] = await Promise.all([
+      db.from('user_profiles').select('id, full_name, email, is_admin, is_paper, status, created_at'),
       countRows('usage_events', ueFilter),
-      Catalog.getLatestMonth(),
       Settings.getOrderDeadline().catch(() => null),
+      fetchCycleStart(currentMonth),
+      fetchCycleStart(prevMonth),
     ]);
 
     state.profiles = new Map();
@@ -567,6 +643,9 @@
 
     state.currentMonth = currentMonth;
     state.orderDeadline = orderDeadline;
+    state.cycleStart = cycleStart;
+    state.prevStart = prevStart;
+    state.cycle = computeCycle(cycleStart, prevStart);
     if (currentMonth) {
       const [{ data: preorderRows }, { data: subRows }] = await Promise.all([
         db.from('preorders')
@@ -610,6 +689,47 @@
     const [y, m] = ym.split('-').map(Number);
     const d = new Date(y, m - 1 + delta, 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // ── Cycle resolution (§5.1) ─────────────────────────────────────
+  // All day math uses local date parts (CLAUDE.md Local Date Pattern) —
+  // cycleStart/prevStart arrive as timestamptz strings; localDateFromIso
+  // converts to the local calendar day before any day-count arithmetic.
+  function localDateFromIso(iso) { return DateUtils.fmtLocal(new Date(iso)); }
+  function daysBetween(startLocal, endLocal) {
+    return Math.round((new Date(endLocal + 'T00:00:00') - new Date(startLocal + 'T00:00:00')) / 86400000);
+  }
+  function addDaysLocal(dateStr, days) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return DateUtils.fmtLocal(d);
+  }
+  function localMidnightTs(dateStr) { return new Date(dateStr + 'T00:00:00').getTime(); }
+
+  // Derives N (days elapsed this cycle), prevLen (full length of the prior
+  // cycle), Nc (phase cap) and prevPrevStart* (approximation) from the two
+  // catalog-anchored timestamps. Returns null when there's no current cycle
+  // at all (no catalog data yet — existing empty states apply).
+  function computeCycle(cycleStartIso, prevStartIso) {
+    if (!cycleStartIso) return null;
+    const csLocal = localDateFromIso(cycleStartIso);
+    const N = Math.max(1, daysBetween(csLocal, DateUtils.todayLocal()) + 1);
+    if (!prevStartIso) {
+      return { csIso: cycleStartIso, csLocal, N, psIso: null, psLocal: null, prevLen: null, Nc: null, prevPrevLocal: null };
+    }
+    const psLocal = localDateFromIso(prevStartIso);
+    const prevLen = Math.max(1, daysBetween(psLocal, csLocal));
+    const Nc = Math.min(N, prevLen);
+    const prevPrevLocal = addDaysLocal(psLocal, -prevLen);
+    return { csIso: cycleStartIso, csLocal, N, psIso: prevStartIso, psLocal, prevLen, Nc, prevPrevLocal };
+  }
+
+  // Events with created_at in [fromTs, toTs) — toTs null means no upper bound.
+  function eventsInInstantWindow(events, fromTs, toTs) {
+    return events.filter(e => {
+      const t = new Date(e.created_at).getTime();
+      return t >= fromTs && (toTs == null || t < toTs);
+    });
   }
 
   // ── Session clustering (visits + feature depth) ────────────────
@@ -699,34 +819,79 @@
     return { value, count, customers: users.size };
   }
 
-  // ── Engagement metrics (fixed 30-day basis + prior 30) ─────────
+  // ── Engagement metrics (cycle-anchored, §5.2) ──────────────────
   function execMetrics() {
     const f = filteredEvents();
+    const cur = reservedValueForMonth(state.currentMonth);
+    const prev = reservedValueForMonth(shiftMonth(state.currentMonth, -1));
+    const cycle = state.cycle;
 
-    // Retention = return rate: prior-window cohort still active this window.
-    const cohort = new Set(eventsInAge(f, 30, 60).map(e => e.user_id));
-    const active30 = new Set(eventsInAge(f, 0, 30).map(e => e.user_id));
-    let ret = 0; cohort.forEach(u => { if (active30.has(u)) ret++; });
-    const retention = cohort.size ? ret / cohort.size * 100 : 0;
+    if (!cycle) {
+      // No catalog data at all yet — existing empty states apply (§5.1 fallback).
+      return {
+        cycle: null,
+        retention: 0, retentionPrior: null, retReturned: 0, retCohort: 0,
+        habit: 0, habitPrior: null, wauNow: 0, mauNow: 0,
+        freq: 0, freqPrior: null, depth: 0, depthPrior: null,
+        score: 0, scorePrior: null,
+        newCustomers: 0, newCustomersPrior: null,
+        reservedCur: cur, reservedPrev: prev,
+      };
+    }
 
-    const cohortP = new Set(eventsInAge(f, 60, 90).map(e => e.user_id));
-    const active3060 = new Set(eventsInAge(f, 30, 60).map(e => e.user_id));
-    let retP = 0; cohortP.forEach(u => { if (active3060.has(u)) retP++; });
-    const retentionPrior = cohortP.size ? retP / cohortP.size * 100 : null;
+    const csTs = new Date(cycle.csIso).getTime();
+    const hasPrior = cycle.psLocal != null;
+    const psTs = hasPrior ? new Date(cycle.psIso).getTime() : null;
+    const priorPhaseEndTs = hasPrior ? localMidnightTs(addDaysLocal(cycle.psLocal, cycle.Nc)) : null;
 
-    // Habit = WAU / MAU (weekly-active share of monthly-active).
+    // Retention = return rate: prior-cycle cohort still active this cycle.
+    const curCohort = hasPrior ? new Set(eventsInInstantWindow(f, psTs, csTs).map(e => e.user_id)) : new Set();
+    const curActive = new Set(eventsInInstantWindow(f, csTs, null).map(e => e.user_id));
+    let retReturned = 0; curCohort.forEach(u => { if (curActive.has(u)) retReturned++; });
+    const retention = curCohort.size ? retReturned / curCohort.size * 100 : 0;
+
+    // Prior-baseline retention uses the prevPrevStart* approximation, phase-capped
+    // at Nc days. Null (not 0) when that approximation falls outside the 90-day
+    // usage_events retention window, or the cohort is empty — an undercounted
+    // cohort would understate the baseline rather than honestly reading "—".
+    let retentionPrior = null;
+    if (hasPrior) {
+      const ninetyAgoTs = NOW - 90 * 86400000;
+      const prevPrevTs = localMidnightTs(cycle.prevPrevLocal);
+      if (prevPrevTs >= ninetyAgoTs) {
+        const priorCohort = new Set(eventsInInstantWindow(f, prevPrevTs, psTs).map(e => e.user_id));
+        if (priorCohort.size) {
+          const priorReturned = new Set(eventsInInstantWindow(f, psTs, priorPhaseEndTs).map(e => e.user_id));
+          let retP = 0; priorCohort.forEach(u => { if (priorReturned.has(u)) retP++; });
+          retentionPrior = retP / priorCohort.size * 100;
+        }
+      }
+    }
+
+    // Habit = WAU / MAU. Current side stays a trailing window from NOW (§5.2 —
+    // "unchanged"); the prior side re-anchors both windows at T = prevStart + Nc
+    // so it reads as "habit at the same point last cycle," not "30-60 days ago."
     const wauNow = distinctUserCount(eventsInAge(f, 0, 7));
     const mauNow = distinctUserCount(eventsInAge(f, 0, 30));
     const habit = mauNow ? wauNow / mauNow * 100 : 0;
-    const wauP = distinctUserCount(eventsInAge(f, 30, 37));
-    const mauP = distinctUserCount(eventsInAge(f, 30, 60));
-    const habitPrior = mauP ? wauP / mauP * 100 : null;
+    let habitPrior = null;
+    if (hasPrior) {
+      const T = priorPhaseEndTs;
+      const mauP = distinctUserCount(eventsInInstantWindow(f, T - 30 * 86400000, T));
+      const wauP = distinctUserCount(eventsInInstantWindow(f, T - 7 * 86400000, T));
+      habitPrior = mauP ? wauP / mauP * 100 : null;
+    }
 
-    const smNow = sessionMetrics(eventsInAge(f, 0, 30), 30);
-    const smPrior = sessionMetrics(eventsInAge(f, 30, 60), 30);
+    // Visits/week & actions/visit: current over [cycleStart, now] ÷ N days;
+    // prior over [prevStart, prevStart+Nc] ÷ Nc days — same phase length both sides.
+    const smNow = sessionMetrics(eventsInInstantWindow(f, csTs, null), cycle.N);
     const freq = smNow.freq, depth = smNow.meanDepth;
-    const freqPrior = mauP ? smPrior.freq : null;
-    const depthPrior = mauP ? smPrior.meanDepth : null;
+    let freqPrior = null, depthPrior = null;
+    if (hasPrior) {
+      const smPrior = sessionMetrics(eventsInInstantWindow(f, psTs, priorPhaseEndTs), cycle.Nc);
+      freqPrior = smPrior.freq;
+      depthPrior = smPrior.meanDepth;
+    }
 
     const norm3 = v => Math.min(v / 3, 1) * 100;
     const score = 0.40 * retention + 0.25 * habit + 0.20 * norm3(freq) + 0.15 * norm3(depth);
@@ -734,14 +899,30 @@
       ? 0.40 * retentionPrior + 0.25 * habitPrior + 0.20 * norm3(freqPrior || 0) + 0.15 * norm3(depthPrior || 0)
       : null;
 
-    const cur = reservedValueForMonth(state.currentMonth);
-    const prev = reservedValueForMonth(shiftMonth(state.currentMonth, -1));
+    // New customers: non-admin, non-paper profiles created since cycle start.
+    // Profiles never purge, so the prior-cycle count is exact, not 90-day-bounded.
+    let newCustomers = 0;
+    state.profiles.forEach(p => {
+      if (p.is_admin || p.is_paper || !p.created_at) return;
+      if (new Date(p.created_at).getTime() >= csTs) newCustomers++;
+    });
+    let newCustomersPrior = null;
+    if (hasPrior) {
+      newCustomersPrior = 0;
+      state.profiles.forEach(p => {
+        if (p.is_admin || p.is_paper || !p.created_at) return;
+        const t = new Date(p.created_at).getTime();
+        if (t >= psTs && t < priorPhaseEndTs) newCustomersPrior++;
+      });
+    }
 
     return {
-      retention, retentionPrior, retReturned: ret, retCohort: cohort.size,
+      cycle,
+      retention, retentionPrior, retReturned, retCohort: curCohort.size,
       habit, habitPrior, wauNow, mauNow,
       freq, freqPrior, depth, depthPrior,
       score, scorePrior,
+      newCustomers, newCustomersPrior,
       reservedCur: cur, reservedPrev: prev,
     };
   }
@@ -787,7 +968,7 @@
   function renderEngagementHero(m) {
     const el = document.getElementById('engagement-hero');
     const score = Math.round(m.score);
-    const vsLabel = `vs ${monthLabel(shiftMonth(state.currentMonth, -1)) || 'last month'}`;
+    const vsLabel = 'vs same point last cycle';
     let delta = '';
     if (m.scorePrior != null) {
       const diff = Math.round(m.score - m.scorePrior);
@@ -817,7 +998,9 @@
 
   // ── EXECUTIVE: KPI row ─────────────────────────────────────────
   function renderExecKpis(m) {
-    const vsLabel = `vs ${monthLabel(shiftMonth(state.currentMonth, -1)) || 'last month'}`;
+    // Reserved This Month is explicitly unchanged (§5.2) — stays month-anchored.
+    const reservedVsLabel = `vs ${monthLabel(shiftMonth(state.currentMonth, -1)) || 'last month'}`;
+    const cycleVsLabel = 'vs same point last cycle';
     const freqCopy = m.freqPrior == null ? 'Average visits per active customer.'
       : m.freq < m.freqPrior ? 'Customers return, but slightly less often.'
       : m.freq > m.freqPrior ? 'Customers are visiting a little more often.'
@@ -825,20 +1008,198 @@
     const rv = m.reservedCur;
     const tiles = [
       kpiTile('Customer Retention', `${m.retention.toFixed(0)}<small>%</small>`,
-        deltaHtml(m.retention, m.retentionPrior, 'vs prior month', { mode: 'exec', fmt: ptsFmt }),
-        `${m.retReturned} of ${m.retCohort} customers came back this month.`),
+        deltaHtml(m.retention, m.retentionPrior, cycleVsLabel, { mode: 'exec', fmt: ptsFmt }),
+        `${m.retReturned} of ${m.retCohort} customers came back this cycle.`),
       kpiTile('Habit Score', `${m.habit.toFixed(0)}<small>%</small>`,
-        deltaHtml(m.habit, m.habitPrior, 'vs prior month', { mode: 'exec', fmt: ptsFmt }),
+        deltaHtml(m.habit, m.habitPrior, cycleVsLabel, { mode: 'exec', fmt: ptsFmt }),
         `${m.wauNow} of ${m.mauNow} monthly customers also visited this week.`),
       kpiTile('Visits per Week', m.freq.toFixed(1),
-        deltaHtml(m.freq, m.freqPrior, 'vs prior month', { mode: 'exec', fmt: oneFmt, decimals: 1 }),
+        deltaHtml(m.freq, m.freqPrior, cycleVsLabel, { mode: 'exec', fmt: oneFmt, decimals: 1 }),
         freqCopy),
+      kpiTile('New Customers', String(m.newCustomers),
+        deltaHtml(m.newCustomers, m.newCustomersPrior, cycleVsLabel, { mode: 'exec' }),
+        'Non-paper signups since this cycle began.'),
       kpiTile('Reserved This Month', fmtMoney(rv.value),
-        deltaHtml(rv.value, m.reservedPrev.value, vsLabel, { mode: 'exec', fmt: v => fmtMoney(v) }),
+        deltaHtml(rv.value, m.reservedPrev.value, reservedVsLabel, { mode: 'exec', fmt: v => fmtMoney(v) }),
         `${rv.count} comic${rv.count === 1 ? '' : 's'} reserved by ${rv.customers} customer${rv.customers === 1 ? '' : 's'}.`),
     ];
     document.getElementById('kpi-exec').innerHTML = tiles.join('');
   }
+
+  // ── EXECUTIVE: cycle overlay chart ("This Cycle vs Last", §5.3) ─
+  // Per local day d (1-based day-of-cycle), distinct filtered user_id count
+  // with ≥1 event that day. Index 0 = day 1 = the local day cycleStart falls on.
+  function overlayDayCounts(events, startLocal, days) {
+    const byDay = new Array(days).fill(null).map(() => new Set());
+    events.forEach(e => {
+      const idx = daysBetween(startLocal, localDateFromIso(e.created_at));
+      if (idx >= 0 && idx < days) byDay[idx].add(e.user_id);
+    });
+    return byDay.map(s => s.size);
+  }
+
+  let overlayState = null; // shared with the crosshair mousemove handler
+  const OVERLAY_W = 760, OVERLAY_H = 230, OVERLAY_M = { t: 16, r: 46, b: 28, l: 34 };
+
+  function drawOverlaySvg(curCounts, prevCounts, deadlineDay, curLabel, prevLabel) {
+    const svg = document.getElementById('overlay-svg');
+    svg.innerHTML = '';
+    const NS = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs) {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      return n;
+    }
+    const extent = Math.max(curCounts.length, prevCounts.length, 2);
+    const iw = OVERLAY_W - OVERLAY_M.l - OVERLAY_M.r, ih = OVERLAY_H - OVERLAY_M.t - OVERLAY_M.b;
+    const maxVal = Math.max(1, ...curCounts, ...prevCounts);
+    const yMax = Math.max(5, Math.ceil(maxVal / 5) * 5);
+    const xAt = i => OVERLAY_M.l + (extent > 1 ? i / (extent - 1) * iw : 0);
+    const yAt = v => OVERLAY_M.t + (1 - v / yMax) * ih;
+
+    for (let s = 0; s <= 4; s++) {
+      const v = Math.round(yMax / 4 * s);
+      svg.appendChild(el('line', { x1: OVERLAY_M.l, x2: OVERLAY_W - OVERLAY_M.r, y1: yAt(v), y2: yAt(v), stroke: 'var(--border)', 'stroke-width': v === 0 ? 1.25 : 0.75 }));
+      const t = el('text', { x: OVERLAY_M.l - 8, y: yAt(v) + 4, 'text-anchor': 'end', fill: 'var(--text-muted)', 'font-size': '11' });
+      t.textContent = v; svg.appendChild(t);
+    }
+    for (let i = 0; i < extent; i += 7) {
+      const t = el('text', { x: xAt(i), y: OVERLAY_H - 8, 'text-anchor': 'middle', fill: 'var(--text-muted)', 'font-size': '11' });
+      t.textContent = 'Day ' + (i + 1); svg.appendChild(t);
+    }
+
+    const pathFor = counts => counts.map((v, i) => [xAt(i), yAt(v)]);
+    const lineD = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('');
+
+    if (prevCounts.length > 1) {
+      svg.appendChild(el('path', { d: lineD(pathFor(prevCounts)), fill: 'none', stroke: 'var(--viz-seq-1)', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    }
+    const cPts = pathFor(curCounts);
+    if (cPts.length > 1) {
+      svg.appendChild(el('path', { d: lineD(cPts) + `L${xAt(curCounts.length - 1)},${yAt(0)}L${xAt(0)},${yAt(0)}Z`, fill: 'rgba(57,135,229,0.13)', stroke: 'none' }));
+      svg.appendChild(el('path', { d: lineD(cPts), fill: 'none', stroke: 'var(--viz-blue)', 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+      const last = cPts[cPts.length - 1];
+      svg.appendChild(el('circle', { cx: last[0], cy: last[1], r: 4, fill: 'var(--viz-blue)', stroke: 'var(--bg-card)', 'stroke-width': 2 }));
+    }
+
+    if (deadlineDay != null) {
+      const x = xAt(deadlineDay - 1);
+      svg.appendChild(el('line', { x1: x, x2: x, y1: OVERLAY_M.t, y2: OVERLAY_M.t + ih, stroke: 'var(--risk)', 'stroke-width': 1, 'stroke-dasharray': '3,3' }));
+    }
+
+    // crosshair (hidden until hover; mousemove handler set up once at init)
+    const cross = el('line', { id: 'overlay-crosshair', y1: OVERLAY_M.t, y2: OVERLAY_M.t + ih, stroke: 'var(--text-muted)', 'stroke-width': 1, 'stroke-dasharray': '3,3', visibility: 'hidden' });
+    const dot = el('circle', { id: 'overlay-crosshair-dot', r: 4, fill: 'var(--viz-blue)', stroke: 'var(--bg-card)', 'stroke-width': 2, visibility: 'hidden' });
+    svg.appendChild(cross); svg.appendChild(dot);
+
+    overlayState = { xAt, yAt, curCounts, prevCounts, curLabel, prevLabel, extent };
+  }
+
+  function renderOverlayTable(curCounts, prevCounts, cycle, curLabel, prevLabel) {
+    const extent = Math.max(curCounts.length, prevCounts.length);
+    let rows = '';
+    for (let i = 0; i < extent; i++) {
+      const curDate = i < curCounts.length ? addDaysLocal(cycle.csLocal, i) : null;
+      const prevDate = (cycle.psLocal && i < prevCounts.length) ? addDaysLocal(cycle.psLocal, i) : null;
+      rows += `<tr>
+        <td>Day ${i + 1}</td>
+        <td class="num">${curDate ? curCounts[i] : '—'}</td>
+        <td class="dim">${curDate ? formatDate(curDate) : ''}</td>
+        <td class="num">${prevDate ? prevCounts[i] : '—'}</td>
+        <td class="dim">${prevDate ? formatDate(prevDate) : ''}</td>
+      </tr>`;
+    }
+    document.getElementById('overlay-table').innerHTML = `<table class="tbl">
+      <thead><tr><th>Day</th><th class="r">${escapeHtml(curLabel)} (current)</th><th>Date</th><th class="r">${prevLabel ? escapeHtml(prevLabel) : '—'}</th><th>Date</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  function renderOverlay() {
+    const cycle = state.cycle;
+    const emptyEl = document.getElementById('overlay-empty');
+    const subEl = document.getElementById('overlay-sub');
+    const legendEl = document.getElementById('overlay-legend');
+    const svg = document.getElementById('overlay-svg');
+
+    if (!cycle) {
+      svg.innerHTML = '';
+      legendEl.innerHTML = '';
+      document.getElementById('overlay-table').innerHTML = '';
+      subEl.textContent = 'Daily active customers by day of cycle';
+      emptyEl.hidden = false;
+      emptyEl.innerHTML = '<p class="no-data">No current catalog month yet.</p>';
+      overlayState = null;
+      return;
+    }
+    emptyEl.hidden = true;
+
+    const f = filteredEvents();
+    const curLabel = monthLabel(state.currentMonth);
+    const hasPrior = cycle.psLocal != null;
+    const prevLabel = hasPrior ? monthLabel(shiftMonth(state.currentMonth, -1)) : null;
+
+    const curCounts = overlayDayCounts(f, cycle.csLocal, cycle.N);
+    const prevCounts = hasPrior ? overlayDayCounts(f, cycle.psLocal, cycle.prevLen) : [];
+
+    subEl.textContent = hasPrior
+      ? `Daily active customers by day of cycle — day 1 = ${formatDate(cycle.csLocal)}`
+      : 'Daily active customers by day of cycle. No prior cycle in the 90-day window.';
+
+    legendEl.innerHTML = `<span><span class="sw" style="background:var(--viz-blue)"></span>${escapeHtml(curLabel)} (current)</span>` +
+      (hasPrior ? `<span><span class="sw" style="background:var(--viz-seq-1)"></span>${escapeHtml(prevLabel)}</span>` : '');
+
+    let deadlineDay = null;
+    if (state.orderDeadline) {
+      const off = daysBetween(cycle.csLocal, state.orderDeadline) + 1;
+      const extent = Math.max(cycle.N, cycle.prevLen || 0);
+      if (off >= 1 && off <= extent) deadlineDay = off;
+    }
+
+    drawOverlaySvg(curCounts, prevCounts, deadlineDay, curLabel, prevLabel);
+    renderOverlayTable(curCounts, prevCounts, cycle, curLabel, prevLabel);
+  }
+
+  // Crosshair + tooltip: wired once; reads the shared, render-refreshed overlayState.
+  function showOverlayTip(html, x, y) {
+    const tip = document.getElementById('overlay-tip');
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    const pad = 14;
+    const r = tip.getBoundingClientRect();
+    let left = x + pad, top = y - r.height - pad;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
+    if (top < 8) top = y + pad;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  }
+  function hideOverlayTip() { document.getElementById('overlay-tip').style.display = 'none'; }
+  document.getElementById('overlay-svg').addEventListener('mousemove', e => {
+    if (!overlayState) return;
+    const svg = document.getElementById('overlay-svg');
+    const r = svg.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width * OVERLAY_W;
+    const iw = OVERLAY_W - OVERLAY_M.l - OVERLAY_M.r;
+    const i = Math.max(0, Math.min(overlayState.extent - 1, Math.round((fx - OVERLAY_M.l) / iw * (overlayState.extent - 1))));
+    const x = overlayState.xAt(i);
+    const curV = overlayState.curCounts[i], prevV = overlayState.prevCounts[i];
+    const y = curV != null ? overlayState.yAt(curV) : overlayState.yAt(0);
+    const cross = document.getElementById('overlay-crosshair');
+    const dot = document.getElementById('overlay-crosshair-dot');
+    if (cross) { cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible'); }
+    if (dot) { dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('visibility', 'visible'); }
+    let html = `<span class="tl">Day ${i + 1}</span>`;
+    if (curV != null) html += ` · <strong>${curV}</strong> ${escapeHtml(overlayState.curLabel)}`;
+    if (prevV != null) html += ` · <strong>${prevV}</strong> ${escapeHtml(overlayState.prevLabel || '')}`;
+    showOverlayTip(html, e.clientX, e.clientY);
+  });
+  document.getElementById('overlay-svg').addEventListener('mouseleave', () => {
+    const cross = document.getElementById('overlay-crosshair');
+    const dot = document.getElementById('overlay-crosshair-dot');
+    if (cross) cross.setAttribute('visibility', 'hidden');
+    if (dot) dot.setAttribute('visibility', 'hidden');
+    hideOverlayTip();
+  });
 
   // ── EXECUTIVE: customer journey funnel ─────────────────────────
   function renderFunnel() {
@@ -891,8 +1252,8 @@
       const pts = Math.abs(Math.round(m.retention - m.retentionPrior));
       items.push({ color: up ? 'var(--success)' : 'var(--risk)',
         html: up
-          ? `Retention improved ${pts} point${pts === 1 ? '' : 's'} — <strong>${m.retReturned} of ${m.retCohort} customers returned</strong> after last month.`
-          : `Retention slipped ${pts} point${pts === 1 ? '' : 's'} — only <strong>${m.retReturned} of ${m.retCohort} customers returned</strong> after last month.` });
+          ? `Retention improved ${pts} point${pts === 1 ? '' : 's'} — <strong>${m.retReturned} of ${m.retCohort} customers returned</strong> after last cycle.`
+          : `Retention slipped ${pts} point${pts === 1 ? '' : 's'} — only <strong>${m.retReturned} of ${m.retCohort} customers returned</strong> after last cycle.` });
     }
     // 2) Reserved value change (≥$1).
     const dv = m.reservedCur.value - m.reservedPrev.value;
@@ -1011,18 +1372,32 @@
     el.innerHTML = `<div class="foc-banner"><span class="ic">◆</span><span>${msg}</span></div>`;
   }
 
-  // ── OPERATIONS: KPI row ────────────────────────────────────────
+  // ── OPERATIONS: KPI row (cycle-anchored, §5.2) ─────────────────
   function renderOpsKpis() {
     const f = filteredEvents();
-    const now = countByType(eventsInAge(f, 0, WIN));
-    const prior = countByType(eventsInAge(f, WIN, WIN * 2));
-    const vs = 'vs prior 30 days';
+    const cycle = state.cycle;
+    const vs = 'vs same point last cycle';
+    let now, prior, priorAvailable;
+    if (cycle) {
+      const csTs = new Date(cycle.csIso).getTime();
+      now = countByType(eventsInInstantWindow(f, csTs, null));
+      priorAvailable = cycle.psLocal != null;
+      if (priorAvailable) {
+        const psTs = new Date(cycle.psIso).getTime();
+        const priorEndTs = localMidnightTs(addDaysLocal(cycle.psLocal, cycle.Nc));
+        prior = countByType(eventsInInstantWindow(f, psTs, priorEndTs));
+      }
+    } else {
+      now = countByType([]);
+      priorAvailable = false;
+    }
+    const priorFor = key => priorAvailable ? prior[key] : null;
     const tiles = [
-      kpiTile('Reserves', now.reserve, deltaHtml(now.reserve, prior.reserve, vs)),
-      kpiTile('Cancels', now.cancel, deltaHtml(now.cancel, prior.cancel, vs, { mode: 'cancel' })),
-      kpiTile('New Subscriptions', now.subscribe, deltaHtml(now.subscribe, prior.subscribe, vs)),
-      kpiTile('Catalog Views', now.catalog_view, deltaHtml(now.catalog_view, prior.catalog_view, vs)),
-      kpiTile('Logins', now.login, deltaHtml(now.login, prior.login, vs)),
+      kpiTile('Reserves', now.reserve, deltaHtml(now.reserve, priorFor('reserve'), vs)),
+      kpiTile('Cancels', now.cancel, deltaHtml(now.cancel, priorFor('cancel'), vs, { mode: 'cancel' })),
+      kpiTile('New Subscriptions', now.subscribe, deltaHtml(now.subscribe, priorFor('subscribe'), vs)),
+      kpiTile('Catalog Views', now.catalog_view, deltaHtml(now.catalog_view, priorFor('catalog_view'), vs)),
+      kpiTile('Logins', now.login, deltaHtml(now.login, priorFor('login'), vs)),
     ];
     document.getElementById('kpi-ops').innerHTML = tiles.join('');
   }
@@ -1377,8 +1752,9 @@
 
   // ── Render everything from cached state (no refetch) ───────────
   function renderAll() {
-    document.getElementById('analytics-subtitle').textContent =
-      `Last 30 days · ${monthLabel(state.currentMonth) || 'current'} catalog`;
+    document.getElementById('analytics-subtitle').textContent = state.cycle
+      ? `Day ${state.cycle.N} of the ${monthLabel(state.currentMonth)} cycle`
+      : 'Customer activity & engagement';
     document.getElementById('warn-banner').hidden = state.hideAdmin;
 
     // Win-back is a shared dependency of three panels — compute once.
@@ -1387,6 +1763,7 @@
     const m = execMetrics();
     renderEngagementHero(m);
     renderExecKpis(m);
+    renderOverlay();
     renderFunnel();
     renderWhatChanged(m);
     renderSubOpportunity();
