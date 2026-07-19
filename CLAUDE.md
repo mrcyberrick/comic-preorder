@@ -543,9 +543,11 @@ F85 cross-month root fix) closed 2026-07-15 — no longer listed here. See
 
 The analytics cycle-alignment session (cycle-anchored deltas on Executive +
 Operations KPIs, "This Cycle vs Last" overlay chart, New Customers tile)
-closed 2026-07-19 — **live on staging**, no longer listed here. V1–V5 all
-green; merged ff-only (`d6ee227`). See `docs/analytics-cycle-alignment.md`
-for the full closed scope. Not yet promoted to production.
+closed 2026-07-19 — **live on production**, no longer listed here. V1–V5
+all green; merged ff-only to staging (`d6ee227`); promoted via PR #90
+(`e250281`) 2026-07-19; post-deploy write-smoke passed (reserve → correct
+prod `tenant_id` → cancel → row deleted). See
+`docs/analytics-cycle-alignment.md` for the full closed scope.
 
 The Analytics v2 engagement dashboard (full redesign of `analytics.html`,
 ungated) closed 2026-07-16 — no longer listed here. See
