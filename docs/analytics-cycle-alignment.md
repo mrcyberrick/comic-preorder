@@ -213,9 +213,14 @@ On https://staging.pulllist.pages.dev/analytics.html as admin:
       `cycle_start`)
 - [ ] Hero + KPI deltas read "vs same point last cycle"; any unavailable
       baseline shows "—", not 0
-- [ ] Overlay: current + prior lines plausible (prior line's burst sits at
-      the same day offset as the current cycle's known import burst);
-      deadline marker on the correct day; table fallback matches the lines
+- [ ] Overlay: current + prior lines plausible (non-degenerate day-to-day
+      shape, not all zero/flat). Burst timing is **not** expected to align
+      to the same day offset across cycles — the notify-customers email
+      that usually drives the visible spike can be suppressed on a given
+      import (confirmed against real staging data 2026-07-19: June's
+      cycle_start day-1 burst vs July's day-13/day-20 bursts), so the chart's
+      job is a stable anchor, not a guaranteed aligned spike; deadline
+      marker on the correct day; table fallback matches the lines
 - [ ] New Customers tile present; count sane vs known recent signups
 - [ ] Admin toggle ON→OFF changes the overlay and all cycle KPIs; staff
       banner still appears/disappears correctly (`a151896` regression)
