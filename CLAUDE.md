@@ -520,12 +520,6 @@ approval.
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
-### Planned — next session (plan committed 2026-07-19, not started)
-- **Analytics cycle alignment** — cycle-anchored deltas (fixes the
-  monthly-cycle confound in the engagement score), "This Cycle vs Last"
-  overlay chart, New Customers tile. Client-only, single-file
-  (`analytics.html`). Plan: `docs/analytics-cycle-alignment.md`.
-
 ### Deferred — separate future session
 - **Prod legacy API key retirement (F86)** — a coordinated `config.js`
   anon-key migration (new publishable key, both branches, deploy, verify live
@@ -546,6 +540,12 @@ carried forward.
 The `import.js` maintenance session (F75 key rotation, F78 historical dedup,
 F85 cross-month root fix) closed 2026-07-15 — no longer listed here. See
 `docs/import-js-maintenance-f75-f78-f85.md` for the full closed scope.
+
+The analytics cycle-alignment session (cycle-anchored deltas on Executive +
+Operations KPIs, "This Cycle vs Last" overlay chart, New Customers tile)
+closed 2026-07-19 — **live on staging**, no longer listed here. V1–V5 all
+green; merged ff-only (`d6ee227`). See `docs/analytics-cycle-alignment.md`
+for the full closed scope. Not yet promoted to production.
 
 The Analytics v2 engagement dashboard (full redesign of `analytics.html`,
 ungated) closed 2026-07-16 — no longer listed here. See

@@ -1,6 +1,6 @@
 # Analytics — Cycle-Aligned Comparisons + Cycle Overlay
 
-**Status:** Planned — 2026-07-19. Not started.
+**Status:** Complete — 2026-07-19. Merged to staging ff-only (`d6ee227`); V3 checklist correction doc commit (`fa2cff6`). V1–V5 all green.
 **Target:** staging only (standard flow; prod promotion is a separate explicit request)
 **Predecessor state:** the live `analytics.html` is the **3-tier redesign**
 (Executive / Operations / Customer Intelligence), commits `fa8d4a5` +
@@ -281,15 +281,15 @@ planned-session pointer, `/wrap-up`.
 
 ## 8. Completion criteria
 
-- [ ] All deltas on Executive + Operations KPIs are cycle-anchored; no
+- [x] All deltas on Executive + Operations KPIs are cycle-anchored; no
       trailing-window comparison remains except panels listed OUT in § 3
-- [ ] Overlay card live with deadline marker, table fallback, empty states
-- [ ] New Customers tile live
-- [ ] Metric-definitions panel matches every changed formula (including the
+- [x] Overlay card live with deadline marker, table fallback, empty states
+- [x] New Customers tile live
+- [x] Metric-definitions panel matches every changed formula (including the
       `prevPrevStart*` approximation label)
-- [ ] V1–V5 green
-- [ ] No schema/RLS/Edge Function/`_log()` changes in the diff
-- [ ] Merged to staging ff-only; pushed; this doc flipped to Complete;
+- [x] V1–V5 green
+- [x] No schema/RLS/Edge Function/`_log()` changes in the diff
+- [x] Merged to staging ff-only; pushed; this doc flipped to Complete;
       CLAUDE.md pointer updated
 
 ## 9. Rollback
