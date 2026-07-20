@@ -1,12 +1,12 @@
 # Subscription Reserved-Suggestions — one-click subscribe from your own reservations
 
-**Status:** **Complete — 2026-07-19, staging only.** Implemented (`5451406`),
-amended per Rick's V5 feedback (`a3995fa`, § 4c: always-on suggestions,
-Popular dropped, admin read-only view). V1–V5 all green under the amended
-matrix (post-amendment full suite: 30 unit + 39 Playwright, 0 failures;
-spec 11 = 7 tests incl. the two inverted V5-amendment cases; V5 = Rick's
-live pass, § 6). **Prod promotion is not part of this closure** — separate
-explicit `/promote-prod` request when desired.
+**Status:** **Complete — live in production, 2026-07-19.** Implemented
+(`5451406`), amended per Rick's V5 feedback (`a3995fa`, § 4c: always-on
+suggestions, Popular dropped, admin read-only view). V1–V5 all green under
+the amended matrix (post-amendment full suite: 30 unit + 39 Playwright,
+0 failures; spec 11 = 7 tests incl. the two inverted V5-amendment cases;
+V5 = Rick's live pass, § 6). Promoted the same day at Rick's explicit
+request via PR #91 — see § Production promotion below.
 **Target:** staging only. Prod promotion is OUT — separate explicit request via
 `/promote-prod` after staging sign-off.
 **Origin:** Rick's request 2026-07-19; follow-on to the subscription-promotion
@@ -361,7 +361,59 @@ V4 full-suite re-run required; V5 re-check by Rick after deploy.
 - [x] Out-of-scope discoveries filed, not fixed inline (none found; session
       notes below record process lessons only)
 
-### Session notes (2026-07-19 execution)
+### Production promotion (2026-07-19)
+
+Rick requested promotion via `/promote-prod` the same session, after V5
+closure. Followed the skill:
+- Merge `staging` → PR branch with `git checkout main -- config.js` (prod
+  credentials preserved; `config.js` confirmed absent from the PR diff).
+- F59 check clean — `subscriptions.html` differs as expected;
+  `app.js`/`mylist.html`/`arrivals.html`/`admin.html` correctly identical
+  (feature never touched them).
+- Merge-base check: the two Phase-4 migration SQL files that appear as
+  deletions in the raw `main..staging` diff are main-only additions
+  outside the merge-base — merge leaves them untouched (verified via
+  `git cat-file -e` against the merge-base before merging).
+- PR #91 → merged by Rick → `5167ab4` on `main`. True merge commit
+  (`47263b2`, parents = main tip + staging tip) preserved for future
+  merge-bases. Process note: the first commit attempt hit the PowerShell
+  5.1 embedded-double-quote native-arg bug (same as earlier in the
+  session) and left an empty pushed branch; caught because
+  `git checkout -b` had also silently dropped `MERGE_HEAD` — merge redone
+  properly with a `-F` message file after verifying parents.
+- Prod deploy verified live via `curl -L` DOM-marker fetch
+  (`reserved-suggestions` container + impersonation tooltip string both
+  present at https://pulllist.app/subscriptions.html).
+- Post-deploy write-smoke: Rick, as a real user on prod — passed
+  ("Green, pass").
+- Bundling check: `main..staging` carried only this feature + doc-only
+  commits. The shelf-copy feature, previously believed unpromoted, was
+  confirmed already live on prod (PR #89) — the stale local memory note
+  was corrected.
+
+### Post-close fix: mobile clipping (2026-07-19)
+
+Rick reported post-promotion that the Subscribe button was cut off on
+mobile at https://pulllist.app/subscriptions.html. Root cause: the
+suggestion row's fixed-width actions cluster (`flex-shrink: 0`) overflowed
+the flex row on narrow screens and was clipped by `.popular-series-list`'s
+`overflow: hidden`. This was V1's known soft spot — 375 px was "folded
+into V5" and the visual pass missed it.
+
+Fix (`282dd0b`): `@media (max-width: 640px)` — rows `flex-wrap: wrap`,
+name shrinks (`min-width: 0`, `overflow-wrap: anywhere`), publisher
+hidden, actions cluster right-aligned; applied to `.search-result-row`
+too (same latent clipping pattern on the same page).
+
+Verification: new spec 11 test 9 (375 px viewport — zero horizontal
+overflow, every subscribe button's bounding box within viewport width,
+end-to-end tap). The test **failed against the pre-fix deployed page
+(button right edge at 525 px — reproducing the report) and passed 8/8
+after the fix deployed**; full-page 375 px screenshot visually inspected
+(worst case: long series name + format badge wraps cleanly). Pre-push
+full suite: 39/40 with the only failure being this new test against the
+pre-fix deployment, per the deploy-sequencing precedent. Prod promotion
+of the fix: pending Rick's phone check on staging.
 
 - **Deploy-verification gotcha:** `staging.pulllist.pages.dev` answers
   `/subscriptions.html` with an **HTTP 308** redirect to the extensionless
