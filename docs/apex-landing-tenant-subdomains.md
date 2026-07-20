@@ -1,14 +1,20 @@
-# Apex Landing Page + Founding-Tenant Subdomain (PLAN)
+# Apex Marketing Page + Universal Login (PLAN)
+
+*(Formerly "Apex Landing + Founding-Tenant Subdomain." Re-centered 2026-07-20: the **marketing page
+drives this development**; provisioning the founding tenant's own subdomain is **deprioritized/
+deferred** — the founding tenant simply stays on the apex.)*
 
 **Status:** **Planning — not started.** Standalone sub-deploy; **not** during the F86 legacy-key
 quiet-window watch, and **not** bundled with any other work. Its own session, full
 staging→prod discipline.
-**Type:** Front-door / hosting + tenant-resolution change (customer-impacting on the founding
-production URL). Standalone, ahead of Phase 6 — a satisfied precursor to Phase 6's public
-front door, **not** gated on the Phase 6 wildcard-DNS/TLS spike (see § Why not blocked on Phase 6).
-**Author context:** Written 2026-07-20 in response to Rick's goal — *"potential SaaS customers land
-on the apex (`pulllist.app`) landing page; individual store customers land on their tenant login
-page mapped to their slug as a subdomain."*
+**Type:** Front-door change — add a marketing page + keep a universal login on the apex. **Low
+customer impact** (the apex never stops accepting logins). Standalone, ahead of Phase 6 — a
+satisfied precursor to Phase 6's public front door, **not** gated on the Phase 6 wildcard-DNS/TLS
+spike (see § Why not blocked on Phase 6).
+**Author context:** Written 2026-07-20 (Rick). Goal evolved over the session to the **Hybrid tiering
+model** (see § Strategic direction): apex = marketing + universal login (free tier); branded
+`<slug>.pulllist.app` = premium, provisioned per paying tenant. The founding subdomain is no longer
+a driving deliverable — the **final marketing page is what drives this work**.
 **Predecessors reused:** 5.2 (slug→id RPC + `tenantSlugFromHostname()`), 5.3 (`Branding.apply()`),
 5.5 (one-manual-custom-domain provisioning pattern for `comicstore.pulllist.app`).
 **Next free finding ID at planning:** **F91**.
@@ -23,17 +29,20 @@ page mapped to their slug as a subdomain."*
 
 ## Goal
 
-Turn `pulllist.app` (the apex) into a **platform marketing landing page** for prospective store
-owners, and move each store's customer front door to **`<slug>.pulllist.app`** — including the
-founding tenant, which moves to **`rjbookstop.pulllist.app`** (prod) exactly the way tenant 2
-already lives at `comicstore.pulllist.app`.
+Turn `pulllist.app` (the apex) into a **platform marketing page for prospective store owners that
+also carries a universal sign-in** for existing customers. **The marketing page is the deliverable
+that drives this work.** Branded per-store subdomains (`<slug>.pulllist.app`) stay a **premium**
+option, provisioned per paying tenant the manual way — `comicstore.pulllist.app` is the existing
+example. **The founding tenant keeps living on the apex; giving it its own subdomain is deferred**
+(deprioritized 2026-07-20 — it adds migration/redirect work for little near-term value, and the apex
+already serves the founding tenant well).
 
 End state (**Hybrid** — chosen 2026-07-20; see § Strategic direction):
 - `pulllist.app/` → platform marketing **plus a universal sign-in** that works for every tenant
   (a customer signs in here and lands in their own store via the profile branch). The **free-tier**
   front door.
-- `rjbookstop.pulllist.app/` → Ray & Judy's branded login (today's `index.html` behavior). The
-  **premium** branded front door.
+- `rjbookstop.pulllist.app/` → **deferred** (a *future* premium branded front door for the founding
+  tenant; not built now — founding stays on the apex).
 - `comicstore.pulllist.app/` → tenant 2 branded login (already live — unchanged).
 - Existing founding customers (bookmarks, printed URL, outstanding magic links pointed at
   `pulllist.app/...`) **keep working unchanged** — the apex never stops accepting logins, so there
@@ -93,11 +102,12 @@ apex-marketing-vs-tenant-login distinction **must be driven client-side by
 ## Why not blocked on Phase 6
 
 Phase 6's gating **wildcard**-DNS/TLS spike exists because *self-service signup* needs **arbitrary
-new slugs** to serve instantly with zero manual DNS. This work does not have that problem — it
-provisions **one known subdomain** (`rjbookstop.pulllist.app`), a single manual Cloudflare Pages
-custom domain, identical to what 5.5 did for `comicstore`. No wildcard is required. This can
-therefore run as a focused standalone sub-deploy now; it becomes a satisfied precursor when
-Phase 6 opens (Phase 6's public `/signup` lives on the apex this work creates).
+new slugs** to serve instantly with zero manual DNS. The marketing-page + universal-login work does
+not touch that at all — it's client-side presentation on the apex. And premium subdomains, when a
+paying tenant wants one, are provisioned the **manual** way (one Cloudflare custom domain, exactly as
+5.5 did for `comicstore`) — no wildcard required, low volume. So this can run as a focused standalone
+sub-deploy now; it becomes a satisfied precursor when Phase 6 opens (Phase 6's public `/signup` lives
+on the apex this work creates).
 
 ---
 
@@ -179,13 +189,13 @@ redirect base URL is now an **optional premium enhancement**, not a prerequisite
 
 ---
 
-## Staging-vs-prod asymmetry (carried from 5.5)
+## Staging-vs-prod asymmetry (carried from 5.5 — only relevant if a subdomain is provisioned)
 
-A per-tenant custom domain **cannot be minted on `*.pages.dev`**, so the live founding subdomain
-is **prod-only**. Staging verification uses the `?t=raysandjudys` query path + a
-`tenantSlugFromHostname()` host-parse unit check + the apex-vs-subdomain presentation branch
-exercised via a host stub — **not** a live `raysandjudys.pulllist.app`. Note this asymmetry in the
-Deploy Log, same as 5.5 S1.
+The marketing-page + universal-login work is testable **entirely on staging** (it's apex / host-branch
+presentation — use a host stub + `?t=`). Separately, **if** a premium subdomain is ever provisioned,
+a per-tenant custom domain **cannot be minted on `*.pages.dev`**, so a live subdomain is **prod-only**;
+staging covers it via the `tenantSlugFromHostname()` host-parse unit check + a host stub, not a live
+`<slug>.pulllist.app`. Note this asymmetry in the Deploy Log, same as 5.5 S1.
 
 ---
 
@@ -197,29 +207,29 @@ Deploy Log, same as 5.5 S1.
 | S1 | **Per-tenant auth-redirect base URL — optional premium (deferrable)** | Make invite/recovery/magic-link redirect base per-tenant (option (a) or (b)); staging EF deploy → verify; prod EF deploy → verify. Bundle with F72 body-branding. **Not required for the free-tier apex** — defer unless bundling premium email this session. |
 | S2 | **Apex marketing + universal login (hostname-aware `index.html`)** | Build the apex marketing page **with a persistent universal sign-in**; branch presentation by host; keep the full auth-token path on both branches. Staging-verify both branches via host stub + `?t=`. |
 | S3 | **Optional premium redirect (skippable)** | *(Premium only.)* Apex app-paths → tenant subdomain, token/query preserved (client-side or CF Redirect Rule per verified mechanics). The free tier keeps working at the apex without it. |
-| S4 | **Provision `rjbookstop.pulllist.app`** | Manual CF custom domain + TLS (5.5 procedure); confirm Active + HTTPS + resolves to founding via the subdomain path. Prod-only. |
+| S4 | **(Deferred) Provision `rjbookstop.pulllist.app`** | *Deprioritized 2026-07-20 — founding stays on the apex.* If/when wanted: manual CF custom domain + TLS (5.5 procedure). Not part of the driving marketing-page work. The same manual flow provisions any *premium* tenant's subdomain. |
 | S5 | **Supersede the 5.2 invariant + specs** | Update 5.2 doc + `technical-reference.md`; rewrite the founding-invariant / isolation Playwright specs to the new contract; full suite green. |
 | S6 | **Prod promotion + soak + closeout** | Standard workflow (F59 diff assertion, `config.js` checkout, post-deploy write-smoke on the founding subdomain); short soak; verify an outstanding-magic-link redirect end-to-end; tick completion criteria. |
 
-Order under the Hybrid is low-risk: the apex **keeps** login throughout, so S4 (provisioning the
-branded subdomain) never removes a working login path — there is no "flip" that can break
-outstanding links. S1 (per-tenant redirect URLs) and F72 email branding are **premium enhancements**
-that can land any time, before or after S4. The one real sequencing note: S2 (apex marketing +
-universal login) should be verified green before S4, so the branded subdomain launches against a
-known-good front door.
+Order under the Hybrid is low-risk: the apex **keeps** login throughout, so nothing "flips" and no
+outstanding link can break. With the founding subdomain deferred, the **driving work is essentially
+just S2 (apex marketing + universal login)** plus the spec/doc updates (S5). S1, S3, and S4 are
+deferred/premium and can land any time later, independently.
 
 ---
 
 ## In scope
 
-- Apex **marketing + universal sign-in** (free-tier front door) via a hostname-aware `index.html`
-  presentation branch.
-- Provision one manual custom domain `rjbookstop.pulllist.app` (+ TLS) — the founding tenant's
-  branded (premium-equivalent) front door.
-- Partial supersession of the 5.2 founding-apex invariant + updated Playwright specs.
+- **The apex marketing page + a universal sign-in** (free-tier front door), via a hostname-aware
+  `index.html` presentation branch. **This is the driving deliverable.**
+- Partial supersession of the 5.2 founding-apex invariant + updated Playwright specs (the apex root
+  now shows marketing pre-login).
 
-**Premium enhancements (in scope only if bundled this session; otherwise deferred):** per-tenant
-auth-redirect base URL + F72 email branding; optional apex→subdomain redirect for premium tenants.
+**Deferred / not driving this work:**
+- Provisioning the founding subdomain `rjbookstop.pulllist.app` — deprioritized; founding stays on
+  the apex. (The manual 5.5 flow provisions any *premium* tenant's subdomain when one signs up.)
+- Premium enhancements: per-tenant auth-redirect base URL + F72 email branding; optional
+  apex→subdomain redirect. In scope only if explicitly bundled.
 
 ## Out of scope (stop and ask before touching)
 
@@ -262,21 +272,20 @@ auth-redirect base URL + F72 email branding; optional apex→subdomain redirect 
 - [ ] Apex `pulllist.app/` serves **marketing + a universal sign-in** that authenticates any
       tenant's customer into their own store (profile-resolved); `comicstore.pulllist.app` unchanged
       and green.
-- [ ] `rjbookstop.pulllist.app` live (custom domain Active, TLS issued) and resolves to the founding
-      tenant with founding branding.
 - [ ] Existing founding front-door still works: an outstanding `pulllist.app/index.html?token_hash=…`
       completes auth at the apex, and `pulllist.app/catalog.html` loads for an authenticated founding
-      customer (no forced migration).
+      customer (no forced migration; **founding remains on the apex**).
 - [ ] 5.2 founding-apex invariant contract revised (partial supersession) in the 5.2 doc +
       `technical-reference.md`; no stale/contradictory "apex → founding app" claim remains (grep-swept).
 - [ ] Playwright founding-invariant / tenant-isolation specs updated to the revised contract and
       green; full suite green.
-- [ ] Post-deploy write-smoke on `rjbookstop.pulllist.app` (reserve → correct founding `tenant_id`
-      → cancel) clean; short soak clean.
+- [ ] Post-deploy write-smoke on the apex as the founding tenant (reserve → correct founding
+      `tenant_id` → cancel) clean; short soak clean.
 - [ ] F72 disposition updated; no new finding filed for the single-`APP_BASE_URL` behavior
       (confirmed intentional).
-- [ ] Any premium enhancements attempted (per-tenant redirect URLs, F72 email branding,
-      apex→subdomain redirect) verified — or explicitly deferred with a note.
+- [ ] Deferred items noted: founding subdomain (`rjbookstop.pulllist.app`) and premium enhancements
+      (per-tenant redirect URLs, F72 email branding, apex→subdomain redirect) — built only if
+      explicitly bundled, else explicitly deferred.
 - [ ] This plan's status → Complete; `CLAUDE.md` updated; Phase 6 stub notes the satisfied precursor.
 
 ---
@@ -297,7 +306,8 @@ auth-redirect base URL + F72 email branding; optional apex→subdomain redirect 
 
 ---
 
-**Last updated:** 2026-07-20 (revised to the **Hybrid tiering model** — apex = marketing + universal
-login (free tier), branded subdomain = premium; per-tenant redirect dependency downgraded from
-blocking to optional; single-`APP_BASE_URL` confirmed not-a-defect, no F91; Status: Planning — not
-started; not during the F86 watch)
+**Last updated:** 2026-07-20 (re-centered on the **marketing page as the driver**; founding
+subdomain **deprioritized/deferred** — founding stays on the apex. Earlier same-day: adopted the
+Hybrid tiering model (apex = marketing + universal login = free tier; branded subdomain = premium);
+per-tenant redirect downgraded blocking→optional; single-`APP_BASE_URL` confirmed not-a-defect, no
+F91. Status: Planning — not started; not during the F86 watch)
