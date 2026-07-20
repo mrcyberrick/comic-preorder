@@ -203,6 +203,24 @@
       margin-top: 2px;
     }
 
+    /* Narrow screens: the fixed-width actions cluster otherwise overflows
+       the row and is clipped by .popular-series-list's overflow:hidden. */
+    @media (max-width: 640px) {
+      .popular-series-row,
+      .search-result-row { flex-wrap: wrap; }
+      .popular-series-name {
+        flex: 1 1 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .popular-series-publisher { display: none; }
+      .popular-series-actions,
+      .search-result-actions {
+        flex-shrink: 1;
+        margin-left: auto;
+      }
+    }
+
     /* ── Confirm Modal ────────────────────────────────────────── */
     .confirm-modal {
       max-width: 320px;
