@@ -28,12 +28,43 @@ owners, and move each store's customer front door to **`<slug>.pulllist.app`** �
 founding tenant, which moves to **`rjbookstop.pulllist.app`** (prod) exactly the way tenant 2
 already lives at `comicstore.pulllist.app`.
 
-End state:
-- `pulllist.app/` → marketing landing (no tenant app; no login form).
-- `rjbookstop.pulllist.app/` → Ray & Judy's login (today's `index.html` behavior).
-- `comicstore.pulllist.app/` → tenant 2 login (already live — unchanged).
+End state (**Hybrid** — chosen 2026-07-20; see § Strategic direction):
+- `pulllist.app/` → platform marketing **plus a universal sign-in** that works for every tenant
+  (a customer signs in here and lands in their own store via the profile branch). The **free-tier**
+  front door.
+- `rjbookstop.pulllist.app/` → Ray & Judy's branded login (today's `index.html` behavior). The
+  **premium** branded front door.
+- `comicstore.pulllist.app/` → tenant 2 branded login (already live — unchanged).
 - Existing founding customers (bookmarks, printed URL, outstanding magic links pointed at
-  `pulllist.app/...`) keep working via a backward-compat redirect to the founding subdomain.
+  `pulllist.app/...`) **keep working unchanged** — the apex never stops accepting logins, so there
+  is no forced migration and no broken links.
+
+---
+
+## Strategic direction — subdomain as a premium tier (Rick, 2026-07-20)
+
+The Hybrid is chosen deliberately as a **product tiering model**, not just a layout:
+- **Free tier → apex.** Free tenants have no subdomain; their customers use the apex universal
+  login (platform-branded pre-login; the tenant's own branding still applies *in-app* post-login
+  via 5.3 `Branding.apply()`).
+- **Premium tier → branded subdomain.** `<slug>.pulllist.app` — branded from first paint,
+  marketing-free, the URL the shop promotes to its own customers — plus, as premium extras,
+  per-tenant branded email links + sender identity (F72). A standard SaaS "custom/branded domain =
+  paid plan" lever (Substack, Notion, Calendly, …).
+- **Price on value, not cost.** Per Phase 6's own analysis a `*.pulllist.app` subdomain via a
+  wildcard cert is ~free — so the premium justification is the *branded, marketing-free customer
+  experience*, not cost-recovery.
+- **It defers the hard infra.** Premium = low volume = keep provisioning subdomains the **manual**
+  way (the 5.5 / comicstore custom-domain add); the Phase 6 wildcard-DNS/TLS + self-serve spike can
+  wait until self-serve volume justifies it.
+- **Free-tier-as-lead-gen (decide consciously).** Free tenants' customers see the apex platform
+  pitch — a viral/acquisition surface and an upgrade nudge, at the cost of showing a free shop's
+  customers "start your own shop." Deliberate call, not a defect.
+
+**Out of scope here (deferred):** billing / plan enforcement / an upgrade flow — Phase 6 explicitly
+defers billing. Until it exists, "premium" = a **manual, high-touch upsell** (operator provisions
+the subdomain via the comicstore flow). This plan builds the *tier-agnostic front-door foundation*;
+the paywall/tiering layer is later work.
 
 ---
 
@@ -70,24 +101,24 @@ Phase 6 opens (Phase 6's public `/signup` lives on the apex this work creates).
 
 ---
 
-## 🚩 Blocking dependency — per-tenant auth-redirect base URL (extends F72)
+## Auth-redirect base URL — optional under the Hybrid (a premium branded-email feature)
 
-**This is the real prerequisite, and it must land first or in lockstep.** Today the invite /
-recovery / magic-link emails redirect to a **single per-project** `APP_BASE_URL` secret
-(prod = `https://pulllist.app`, set in 5.2 S5, F67). If this plan removes auth-completion from the
-apex, a founding magic link pointing at `pulllist.app/index.html` would land on a marketing page
-with no way to finish auth. Two complementary fixes address this, and the plan should do **both**:
-- **(i) Per-tenant redirect base URL** so *new* links target the customer's own subdomain
-  (founding → `rjbookstop.pulllist.app`, comicstore → `comicstore.pulllist.app`).
-- **(ii) Preserve apex auth-completion** so *any* token that lands on the apex (outstanding links,
-  or a tenant piloted before its subdomain exists) still completes and forwards to the resolved
-  tenant. See approach decision #2.
+**No longer blocking — the Hybrid keeps the apex a login surface, so nothing breaks.** Today the
+invite / recovery / magic-link emails redirect to a **single per-project** `APP_BASE_URL` secret
+(prod = `https://pulllist.app`, set in 5.2 S5, F67). Because the apex **retains** universal login
+under the Hybrid, those links keep working exactly as today — the earlier "blocking dependency"
+framing (from a draft where the apex *stopped* serving login) no longer applies. A per-tenant
+redirect base URL is now an **optional premium enhancement**, not a prerequisite:
+- **(i) Per-tenant redirect base URL** so a *premium* tenant's links target their own branded
+  subdomain (founding → `rjbookstop.pulllist.app`, comicstore → `comicstore.pulllist.app`) instead
+  of the apex. Ships with premium email branding; not needed for the free-tier apex experience.
+- **(ii) Apex auth-completion is inherent** — the apex still runs the token handler, so outstanding
+  links and pre-subdomain piloting keep working with zero new work.
 
 - **Relation to F72:** F72 tracks the *email body branding* gap (`register-customer`'s
-  founding-branded copy/`from` name). The **redirect-target** need here is adjacent but distinct
-  — same "emails aren't tenant-aware" root, different symptom. Sequence them together; F72's
-  body-branding half can ride along or stay deferred, but the **redirect-URL half is required for
-  this work**.
+  founding-branded copy/`from` name). The redirect-target and body-branding halves share the same
+  "emails aren't tenant-aware" root. Under the Hybrid **both are premium features**, bundled with
+  the branded subdomain — neither is required for the free-tier apex experience.
 - **The current single-`APP_BASE_URL` behavior is NOT a defect (corrected 2026-07-20 after Rick's
   review — an earlier draft wrongly flagged it as a candidate F91; no finding is filed).** Tenant 2
   (`comicstore`) invite/reset emails already redirect to the apex, not `comicstore.pulllist.app` —
@@ -115,30 +146,34 @@ with no way to finish auth. Two complementary fixes address this, and the plan s
 2. **`index.html` becomes hostname-aware** (one file, per the one-project fact):
    - On a **tenant subdomain** (`tenantSlugFromHostname()` returns a slug) → render today's
      login / invite / recovery / magic-link flow, **unchanged in behavior**.
-   - On the **apex** (`pulllist.app` / `www.pulllist.app`) → render the **marketing landing** —
-     **but still run the auth-token handler first**: if the URL carries an invite / recovery /
-     magic-link token, complete it and forward to the resolved tenant's subdomain; show marketing
-     only when there is no token. Preserves pre-subdomain piloting (fix (ii) above) and covers
-     every outstanding link.
+   - On the **apex** (`pulllist.app` / `www.pulllist.app`) → render **marketing + a universal
+     sign-in** (the free-tier front door): platform pitch for prospective shops plus a persistent
+     login that works for every tenant. Still run the auth-token handler first, so invite /
+     recovery / magic-link tokens landing on the apex complete normally (covers outstanding links
+     and pre-subdomain piloting). The apex **keeps** login — it does not become login-less.
    - Lead recommendation: keep the auth-token handling code path intact and branch *presentation*
      by host, so no auth logic is lost. (Alternative: split marketing into `index.html` and move
      login to `login.html`; rejected as lead because it repoints every magic link twice and
      duplicates the auth flow — but revisit if the marketing page grows heavy.)
-3. **Apex deep app-paths redirect to the founding subdomain (backward-compat).** A request to
-   `pulllist.app/catalog.html`, `/mylist.html`, `/index.html?token_hash=…` etc. → 301/redirect to
-   `rjbookstop.pulllist.app/<same path + query>`, preserving tokens. **(verify at execution)**
-   Cloudflare `_redirects` matches on **path, not host**, and all hosts share one project — so a
-   host-scoped redirect needs either a **zone-level Cloudflare Redirect Rule** or a **client-side
-   redirect in `app.js`** (apex + app-page → founding subdomain, preserving `location.search` /
-   `location.hash`). Lead recommendation: client-side redirect (fully in our control, token-safe);
-   confirm the CF-mechanics claim before choosing.
-4. **The 5.2 founding-apex invariant is deliberately superseded.** 5.2 made "`pulllist.app`
-   resolves to the founding tenant, identically to today" a hard invariant. This work intentionally
-   reverses it: the apex serves marketing and resolves to **no** tenant app. Record the supersession
-   explicitly in 5.2's doc + `technical-reference.md`; update the Playwright founding-invariant /
-   tenant-isolation specs to assert the **new** contract (apex → marketing; founding →
-   `rjbookstop.pulllist.app`). The `FOUNDING_TENANT` default in `resolve()` stays as a harmless
-   safety fallback.
+3. **Apex deep app-paths keep working; a subdomain redirect is optional (premium polish).** Because
+   the apex retains universal login and resolves authenticated users by profile, a founding customer
+   hitting `pulllist.app/catalog.html` or an outstanding `pulllist.app/index.html?token_hash=…`
+   **still works** with no redirect — nothing breaks. Optionally, a *premium* tenant may want its
+   customers pushed to the branded subdomain: a host-scoped redirect (apex app-path →
+   `<slug>.pulllist.app`, preserving `location.search` / `location.hash`) via a **zone-level
+   Cloudflare Redirect Rule** or a **client-side redirect in `app.js`**. Note (**verify at
+   execution**): Cloudflare `_redirects` matches on **path, not host**, and all hosts share one
+   project, so `_redirects` alone cannot do a host-scoped redirect. Lead recommendation: skip for the
+   free tier; add client-side for premium.
+4. **The 5.2 founding-apex invariant is *partially* superseded.** 5.2 made "`pulllist.app` resolves
+   to the founding tenant, identically to today" a hard invariant. Under the Hybrid the apex no
+   longer *presents as* the founding tenant's app (pre-login it shows platform marketing/branding),
+   but it **still accepts founding — and every tenant's — logins**, each resolving to its own tenant
+   by profile. So the change is narrower than a full reversal: apex → marketing + universal login;
+   the founding tenant additionally gets a branded home at `rjbookstop.pulllist.app`. Record the
+   revised contract in 5.2's doc + `technical-reference.md`; update the Playwright founding-invariant
+   / tenant-isolation specs accordingly. The `FOUNDING_TENANT` default in `resolve()` stays as a
+   harmless safety fallback.
 5. **Branding unchanged in mechanism** — `Branding.apply()` (5.3) already brands by resolved
    tenant; on `rjbookstop.pulllist.app` it renders founding branding exactly as the apex does today.
 
@@ -159,34 +194,41 @@ Deploy Log, same as 5.5 S1.
 | #   | Title | Notes |
 |-----|-------|-------|
 | S0 | **Readiness gate (no writes)** | Re-read resolver + allowlist from disk; confirm founding slug resolves via RPC on both envs; confirm Cloudflare access to the `pulllist.app` Pages project; confirm `comicstore` custom domain still Active (regression baseline). (No finding to file — the single-`APP_BASE_URL` behavior is intentional; see § Blocking dependency.) |
-| S1 | **Per-tenant auth-redirect base URL (the blocking dependency)** | Make invite/recovery/magic-link redirect base per-tenant (option (a) or (b)); staging EF deploy → verify a founding link targets the founding host; then prod EF deploy → verify. Optionally resolve F72 body-branding in the same window. |
-| S2 | **Marketing landing + hostname-aware `index.html`** | Build the apex marketing page; branch presentation by host; preserve the full auth-token path on the subdomain branch. Staging-verify both branches via host stub + `?t=`. |
-| S3 | **Backward-compat redirect** | Apex deep app-paths → founding subdomain, token/query preserved (client-side or CF Redirect Rule per the verified mechanics). |
+| S1 | **Per-tenant auth-redirect base URL — optional premium (deferrable)** | Make invite/recovery/magic-link redirect base per-tenant (option (a) or (b)); staging EF deploy → verify; prod EF deploy → verify. Bundle with F72 body-branding. **Not required for the free-tier apex** — defer unless bundling premium email this session. |
+| S2 | **Apex marketing + universal login (hostname-aware `index.html`)** | Build the apex marketing page **with a persistent universal sign-in**; branch presentation by host; keep the full auth-token path on both branches. Staging-verify both branches via host stub + `?t=`. |
+| S3 | **Optional premium redirect (skippable)** | *(Premium only.)* Apex app-paths → tenant subdomain, token/query preserved (client-side or CF Redirect Rule per verified mechanics). The free tier keeps working at the apex without it. |
 | S4 | **Provision `rjbookstop.pulllist.app`** | Manual CF custom domain + TLS (5.5 procedure); confirm Active + HTTPS + resolves to founding via the subdomain path. Prod-only. |
 | S5 | **Supersede the 5.2 invariant + specs** | Update 5.2 doc + `technical-reference.md`; rewrite the founding-invariant / isolation Playwright specs to the new contract; full suite green. |
 | S6 | **Prod promotion + soak + closeout** | Standard workflow (F59 diff assertion, `config.js` checkout, post-deploy write-smoke on the founding subdomain); short soak; verify an outstanding-magic-link redirect end-to-end; tick completion criteria. |
 
-Order matters: the apex must **retain auth-completion** (fix (ii), built in S2) before S4 makes the
-apex marketing-first — that is the hard safety gate, since a founding magic link landing on the
-apex after S4 must still find a token handler. Per-tenant redirect URLs (fix (i), S1) are a
-clean-first-hop improvement and should also precede S4, but (ii) is the non-negotiable gate.
+Order under the Hybrid is low-risk: the apex **keeps** login throughout, so S4 (provisioning the
+branded subdomain) never removes a working login path — there is no "flip" that can break
+outstanding links. S1 (per-tenant redirect URLs) and F72 email branding are **premium enhancements**
+that can land any time, before or after S4. The one real sequencing note: S2 (apex marketing +
+universal login) should be verified green before S4, so the branded subdomain launches against a
+known-good front door.
 
 ---
 
 ## In scope
 
-- Provision one manual custom domain `rjbookstop.pulllist.app` (+ TLS).
-- Per-tenant auth-redirect base URL (invite/recovery/magic-link) — the blocking dependency.
-- Apex marketing landing page + hostname-aware `index.html` presentation branch.
-- Backward-compat redirect for apex deep app-paths → founding subdomain (token/query preserved).
-- Deliberate supersession of the 5.2 founding-apex invariant + updated Playwright specs.
+- Apex **marketing + universal sign-in** (free-tier front door) via a hostname-aware `index.html`
+  presentation branch.
+- Provision one manual custom domain `rjbookstop.pulllist.app` (+ TLS) — the founding tenant's
+  branded (premium-equivalent) front door.
+- Partial supersession of the 5.2 founding-apex invariant + updated Playwright specs.
+
+**Premium enhancements (in scope only if bundled this session; otherwise deferred):** per-tenant
+auth-redirect base URL + F72 email branding; optional apex→subdomain redirect for premium tenants.
 
 ## Out of scope (stop and ask before touching)
 
 - **Wildcard `*.pulllist.app` DNS/TLS + public `/signup`** — that is Phase 6. This work adds
   exactly one manual custom domain and a static marketing page, no self-serve provisioning.
-- **F72 email *body* branding** — may ride S1's window but is not required; the redirect-URL half
-  is the only non-negotiable piece.
+- **Billing / plan enforcement / upgrade flow** — deferred (Phase 6 defers billing). "Premium" is a
+  manual operator upsell until then (see § Strategic direction).
+- **F72 email *body* branding + per-tenant redirect URLs** — premium enhancements; deferred unless
+  explicitly bundled into this session. Not required for the free-tier apex experience.
 - **Marketing-site content/design system beyond a first landing page** (copy, SEO, analytics
   pixels, multi-page marketing site) — scope the first landing page only; expansions are separate.
 - **F86 legacy-key work** — unrelated; this sub-deploy does not run during that watch.
@@ -196,13 +238,16 @@ clean-first-hop improvement and should also precede S4, but (ii) is the non-nego
 
 ## Risks
 
-- **R1 — Founding customer disruption (highest).** `pulllist.app` is the production URL on record
-  (bookmarks, printed material, phone-answered site). If the backward-compat redirect (S3) or the
-  per-tenant magic-link URL (S1) is wrong, live logins and outstanding invite/reset links break.
-  Mitigation: S1 before S4; verify an end-to-end outstanding-link redirect at S6; short soak.
-- **R2 — Cloudflare host-scoped redirect mechanics unverified.** `_redirects` is path-only; the
-  host-scoped redirect needs a zone Redirect Rule or client-side handling. Mitigation: verify CF
-  behavior at execution; lead toward the client-side redirect we fully control.
+- **R1 — Founding customer disruption (much reduced under the Hybrid).** `pulllist.app` is the
+  production URL on record. The Hybrid keeps the apex a login surface, so existing bookmarks,
+  printed URLs, and outstanding invite/reset links **keep working unchanged** — the main disruption
+  vector of the earlier (login-less-apex) design is gone. Residual risk is only in the `index.html`
+  presentation refactor itself. Mitigation: S2 verifies both host branches green; short soak;
+  write-smoke at S6.
+- **R2 — Cloudflare host-scoped redirect mechanics unverified (only if the optional premium redirect
+  is built).** `_redirects` is path-only; a host-scoped redirect needs a zone Redirect Rule or
+  client-side handling. Mitigation: verify CF behavior at execution; lead toward the client-side
+  redirect we fully control. Skippable for the free tier.
 - **R3 — One-project/all-hosts confusion.** Any "put a file at the apex" instinct is wrong; the
   apex/subdomain split is client-side only. Mitigation: stated up front here; specs assert both
   branches from the same deployed file set.
@@ -214,26 +259,25 @@ clean-first-hop improvement and should also precede S4, but (ii) is the non-nego
 
 ## Completion criteria (finalized at plan open)
 
-- [ ] `rjbookstop.pulllist.app` live (custom domain Active, TLS issued) and resolves to the
-      founding tenant with founding branding.
-- [ ] `pulllist.app/` serves the marketing landing (no login form); `comicstore.pulllist.app`
-      unchanged and green.
-- [ ] Per-tenant auth-redirect base URL live: a founding invite/recovery/magic-link email targets
-      `rjbookstop.pulllist.app` and `verifyOtp` succeeds; a comicstore link targets
-      `comicstore.pulllist.app`.
-- [ ] Backward-compat redirect verified: `pulllist.app/catalog.html` and an outstanding
-      `pulllist.app/index.html?token_hash=…` both land correctly on the founding subdomain,
-      token/query preserved.
-- [ ] 5.2 founding-apex invariant formally superseded in the 5.2 doc + `technical-reference.md`;
-      no stale "apex → founding" claim remains (grep-swept).
-- [ ] Playwright founding-invariant / tenant-isolation specs rewritten to the new contract and
+- [ ] Apex `pulllist.app/` serves **marketing + a universal sign-in** that authenticates any
+      tenant's customer into their own store (profile-resolved); `comicstore.pulllist.app` unchanged
+      and green.
+- [ ] `rjbookstop.pulllist.app` live (custom domain Active, TLS issued) and resolves to the founding
+      tenant with founding branding.
+- [ ] Existing founding front-door still works: an outstanding `pulllist.app/index.html?token_hash=…`
+      completes auth at the apex, and `pulllist.app/catalog.html` loads for an authenticated founding
+      customer (no forced migration).
+- [ ] 5.2 founding-apex invariant contract revised (partial supersession) in the 5.2 doc +
+      `technical-reference.md`; no stale/contradictory "apex → founding app" claim remains (grep-swept).
+- [ ] Playwright founding-invariant / tenant-isolation specs updated to the revised contract and
       green; full suite green.
-- [ ] Post-deploy write-smoke on `rjbookstop.pulllist.app` (reserve → correct founding
-      `tenant_id` → cancel) clean; short soak clean.
+- [ ] Post-deploy write-smoke on `rjbookstop.pulllist.app` (reserve → correct founding `tenant_id`
+      → cancel) clean; short soak clean.
 - [ ] F72 disposition updated; no new finding filed for the single-`APP_BASE_URL` behavior
       (confirmed intentional).
-- [ ] This plan's status → Complete; `CLAUDE.md` updated; Phase 6 stub notes the satisfied
-      precursor.
+- [ ] Any premium enhancements attempted (per-tenant redirect URLs, F72 email branding,
+      apex→subdomain redirect) verified — or explicitly deferred with a note.
+- [ ] This plan's status → Complete; `CLAUDE.md` updated; Phase 6 stub notes the satisfied precursor.
 
 ---
 
@@ -253,6 +297,7 @@ clean-first-hop improvement and should also precede S4, but (ii) is the non-nego
 
 ---
 
-**Last updated:** 2026-07-20 (plan drafted, then corrected the single-`APP_BASE_URL`
-mischaracterization — it is intentional working behavior, not a defect; no F91 filed; Status:
-Planning — not started; not during the F86 watch)
+**Last updated:** 2026-07-20 (revised to the **Hybrid tiering model** — apex = marketing + universal
+login (free tier), branded subdomain = premium; per-tenant redirect dependency downgraded from
+blocking to optional; single-`APP_BASE_URL` confirmed not-a-defect, no F91; Status: Planning — not
+started; not during the F86 watch)
