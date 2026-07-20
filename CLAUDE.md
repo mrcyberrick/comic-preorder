@@ -566,10 +566,12 @@ filing decision, not part of this closure.
 The subscription reserved-suggestions feature (always-on "Series you're
 already reading" one-click subscribe list with Undo on `subscriptions.html`;
 Popular section removed; admin impersonation sees a read-only list) closed
-2026-07-19 — **staging only, all V1–V5 green; prod promotion not yet
-requested.** Subscribe paths on the page now carry `source` attribution
-(`reserved_suggestion` / `series_search`). `app_settings.popular_series`
-is now unused by the app (left in place, no DB change). See
+2026-07-19 — **live in production**, all V1–V5 green; promoted via PR #91
+(`5167ab4`) at Rick's explicit request the same session; post-deploy
+write-smoke passed. Subscribe paths on the page now carry `source`
+attribution (`reserved_suggestion` / `series_search`).
+`app_settings.popular_series` is now unused by the app (left in place, no
+DB change, both environments). See
 `docs/subscription-reserved-suggestions.md` for the full closed scope.
 
 The subscription promotion feature (catalog banner + post-reserve subscribe
