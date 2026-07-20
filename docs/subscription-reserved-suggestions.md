@@ -391,7 +391,29 @@ closure. Followed the skill:
   confirmed already live on prod (PR #89) — the stale local memory note
   was corrected.
 
-### Session notes (2026-07-19 execution)
+### Post-close fix: mobile clipping (2026-07-19)
+
+Rick reported post-promotion that the Subscribe button was cut off on
+mobile at https://pulllist.app/subscriptions.html. Root cause: the
+suggestion row's fixed-width actions cluster (`flex-shrink: 0`) overflowed
+the flex row on narrow screens and was clipped by `.popular-series-list`'s
+`overflow: hidden`. This was V1's known soft spot — 375 px was "folded
+into V5" and the visual pass missed it.
+
+Fix (`282dd0b`): `@media (max-width: 640px)` — rows `flex-wrap: wrap`,
+name shrinks (`min-width: 0`, `overflow-wrap: anywhere`), publisher
+hidden, actions cluster right-aligned; applied to `.search-result-row`
+too (same latent clipping pattern on the same page).
+
+Verification: new spec 11 test 9 (375 px viewport — zero horizontal
+overflow, every subscribe button's bounding box within viewport width,
+end-to-end tap). The test **failed against the pre-fix deployed page
+(button right edge at 525 px — reproducing the report) and passed 8/8
+after the fix deployed**; full-page 375 px screenshot visually inspected
+(worst case: long series name + format badge wraps cleanly). Pre-push
+full suite: 39/40 with the only failure being this new test against the
+pre-fix deployment, per the deploy-sequencing precedent. Prod promotion
+of the fix: pending Rick's phone check on staging.
 
 - **Deploy-verification gotcha:** `staging.pulllist.pages.dev` answers
   `/subscriptions.html` with an **HTTP 308** redirect to the extensionless
