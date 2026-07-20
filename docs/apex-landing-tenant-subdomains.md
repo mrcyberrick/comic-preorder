@@ -74,25 +74,31 @@ Phase 6 opens (Phase 6's public `/signup` lives on the apex this work creates).
 
 **This is the real prerequisite, and it must land first or in lockstep.** Today the invite /
 recovery / magic-link emails redirect to a **single per-project** `APP_BASE_URL` secret
-(prod = `https://pulllist.app`, set in 5.2 S5). The moment the apex stops serving a login form,
-**every founding-customer magic link that points at `pulllist.app/index.html` lands on a
-marketing page with no way to finish auth.** So the auth-redirect base URL must become
-**per-tenant**: founding links → `rjbookstop.pulllist.app`, comicstore links →
-`comicstore.pulllist.app`.
+(prod = `https://pulllist.app`, set in 5.2 S5, F67). If this plan removes auth-completion from the
+apex, a founding magic link pointing at `pulllist.app/index.html` would land on a marketing page
+with no way to finish auth. Two complementary fixes address this, and the plan should do **both**:
+- **(i) Per-tenant redirect base URL** so *new* links target the customer's own subdomain
+  (founding → `rjbookstop.pulllist.app`, comicstore → `comicstore.pulllist.app`).
+- **(ii) Preserve apex auth-completion** so *any* token that lands on the apex (outstanding links,
+  or a tenant piloted before its subdomain exists) still completes and forwards to the resolved
+  tenant. See approach decision #2.
 
 - **Relation to F72:** F72 tracks the *email body branding* gap (`register-customer`'s
   founding-branded copy/`from` name). The **redirect-target** need here is adjacent but distinct
-  — same "emails aren't tenant-aware" root, different symptom (a broken login vs. wrong branding).
-  They should be sequenced together; F72's body-branding half can ride along or stay deferred, but
-  the **redirect-URL half is non-negotiable for this work**.
-- **Pre-existing latent defect discovered during planning (candidate F91):** tenant 2
-  (`comicstore`) customer invite/reset emails **already** redirect to `pulllist.app` (the single
-  `APP_BASE_URL`), not `comicstore.pulllist.app`. It "works" today only because auth is
-  user-identity based and `TenantContext` then resolves the tenant from the authenticated
-  `user_profiles.tenant_id` (profile branch, highest priority) even on the apex host — so the
-  customer lands logged-in but on the *founding-branded* apex host. Under this work that link would
-  land on marketing and break. **Recommend filing as F91 (or folding into F72) — Rick's call at
-  plan open.** Not filed unilaterally in this planning step.
+  — same "emails aren't tenant-aware" root, different symptom. Sequence them together; F72's
+  body-branding half can ride along or stay deferred, but the **redirect-URL half is required for
+  this work**.
+- **The current single-`APP_BASE_URL` behavior is NOT a defect (corrected 2026-07-20 after Rick's
+  review — an earlier draft wrongly flagged it as a candidate F91; no finding is filed).** Tenant 2
+  (`comicstore`) invite/reset emails already redirect to the apex, not `comicstore.pulllist.app` —
+  but this is **working, documented behavior**: `APP_BASE_URL` was introduced in 5.2 S5 only to
+  de-hardcode URLs *per project* (F67), and multi-tenant email was explicitly deferred (F72). It
+  has a genuinely useful property: because `TenantContext` resolves an authenticated user to their
+  own tenant via the `user_profiles.tenant_id` profile branch (highest priority) on **any** host, a
+  magic link landing on the apex still logs the user into the *correct* tenant. That means any
+  tenant's users can complete auth via the apex **before that tenant's subdomain exists** — exactly
+  the pre-subdomain piloting used for `comicstore`. **This plan must *preserve* that property (fix
+  (ii)), not break it** — which is why the apex change is a conscious design decision, not a bug fix.
 - **Design options for the base URL (verify at execution; settle at plan open):**
   - **(a)** EFs derive the base from the resolved tenant's slug: `https://<slug>.pulllist.app`
     (needs a canonical per-tenant host; slug is already in `tenants`). Lead recommendation —
@@ -109,7 +115,11 @@ marketing page with no way to finish auth.** So the auth-redirect base URL must 
 2. **`index.html` becomes hostname-aware** (one file, per the one-project fact):
    - On a **tenant subdomain** (`tenantSlugFromHostname()` returns a slug) → render today's
      login / invite / recovery / magic-link flow, **unchanged in behavior**.
-   - On the **apex** (`pulllist.app` / `www.pulllist.app`) → render the **marketing landing**.
+   - On the **apex** (`pulllist.app` / `www.pulllist.app`) → render the **marketing landing** —
+     **but still run the auth-token handler first**: if the URL carries an invite / recovery /
+     magic-link token, complete it and forward to the resolved tenant's subdomain; show marketing
+     only when there is no token. Preserves pre-subdomain piloting (fix (ii) above) and covers
+     every outstanding link.
    - Lead recommendation: keep the auth-token handling code path intact and branch *presentation*
      by host, so no auth logic is lost. (Alternative: split marketing into `index.html` and move
      login to `login.html`; rejected as lead because it repoints every magic link twice and
@@ -148,7 +158,7 @@ Deploy Log, same as 5.5 S1.
 
 | #   | Title | Notes |
 |-----|-------|-------|
-| S0 | **Readiness gate (no writes)** | Re-read resolver + allowlist from disk; confirm founding slug resolves via RPC on both envs; confirm Cloudflare access to the `pulllist.app` Pages project; confirm `comicstore` custom domain still Active (regression baseline); settle the F91-filing decision. |
+| S0 | **Readiness gate (no writes)** | Re-read resolver + allowlist from disk; confirm founding slug resolves via RPC on both envs; confirm Cloudflare access to the `pulllist.app` Pages project; confirm `comicstore` custom domain still Active (regression baseline). (No finding to file — the single-`APP_BASE_URL` behavior is intentional; see § Blocking dependency.) |
 | S1 | **Per-tenant auth-redirect base URL (the blocking dependency)** | Make invite/recovery/magic-link redirect base per-tenant (option (a) or (b)); staging EF deploy → verify a founding link targets the founding host; then prod EF deploy → verify. Optionally resolve F72 body-branding in the same window. |
 | S2 | **Marketing landing + hostname-aware `index.html`** | Build the apex marketing page; branch presentation by host; preserve the full auth-token path on the subdomain branch. Staging-verify both branches via host stub + `?t=`. |
 | S3 | **Backward-compat redirect** | Apex deep app-paths → founding subdomain, token/query preserved (client-side or CF Redirect Rule per the verified mechanics). |
@@ -156,8 +166,10 @@ Deploy Log, same as 5.5 S1.
 | S5 | **Supersede the 5.2 invariant + specs** | Update 5.2 doc + `technical-reference.md`; rewrite the founding-invariant / isolation Playwright specs to the new contract; full suite green. |
 | S6 | **Prod promotion + soak + closeout** | Standard workflow (F59 diff assertion, `config.js` checkout, post-deploy write-smoke on the founding subdomain); short soak; verify an outstanding-magic-link redirect end-to-end; tick completion criteria. |
 
-Order is load-bearing: **S1 (per-tenant redirect URL) must precede S4 (apex stops serving login)** —
-otherwise the first founding magic link after S4 breaks.
+Order matters: the apex must **retain auth-completion** (fix (ii), built in S2) before S4 makes the
+apex marketing-first — that is the hard safety gate, since a founding magic link landing on the
+apex after S4 must still find a token handler. Per-tenant redirect URLs (fix (i), S1) are a
+clean-first-hop improvement and should also precede S4, but (ii) is the non-negotiable gate.
 
 ---
 
@@ -218,7 +230,8 @@ otherwise the first founding magic link after S4 breaks.
       green; full suite green.
 - [ ] Post-deploy write-smoke on `rjbookstop.pulllist.app` (reserve → correct founding
       `tenant_id` → cancel) clean; short soak clean.
-- [ ] F91 filed-or-folded per Rick's S0 decision; F72 disposition updated.
+- [ ] F72 disposition updated; no new finding filed for the single-`APP_BASE_URL` behavior
+      (confirmed intentional).
 - [ ] This plan's status → Complete; `CLAUDE.md` updated; Phase 6 stub notes the satisfied
       precursor.
 
@@ -232,11 +245,14 @@ otherwise the first founding magic link after S4 breaks.
   §§ S2/S3 (add `<slug>.pulllist.app` on the `pulllist.app` Pages project; TLS auto; no wildcard).
 - Branding-by-resolved-tenant: `docs/phase-5.3-per-tenant-branding.md` (`Branding.apply()`).
 - Email/redirect base URL secret: `docs/phase-5.2-slug-id-routing-rpc.md` § S5 (`APP_BASE_URL`).
-- Findings: `docs/technical-reference.md` § 13 — **F72** (email body branding, deferred);
-  candidate **F91** (comicstore emails already redirect to the apex). Next free ID: **F91**.
+- Findings: `docs/technical-reference.md` § 13 — **F72** (email body branding, deferred). No new
+  finding for the single-`APP_BASE_URL` behavior — it is intentional (see § Blocking dependency).
+  Next free ID unchanged: **F91**.
 - Phase 6 (successor front door this precedes): `docs/phase-6-self-service-signup.md`.
 - Anti-drift / plan-when-its-turn-comes / document-integrity: `CLAUDE.md`.
 
 ---
 
-**Last updated:** 2026-07-20 (plan drafted; Status: Planning — not started; not during the F86 watch)
+**Last updated:** 2026-07-20 (plan drafted, then corrected the single-`APP_BASE_URL`
+mischaracterization — it is intentional working behavior, not a defect; no F91 filed; Status:
+Planning — not started; not during the F86 watch)
