@@ -1,6 +1,10 @@
 # Apex Marketing Page — Design Reference
 
-**Status:** **Design approved (2026-07-20/21). Implementation NOT started.**
+**Status:** **Design approved (2026-07-20/21). Implemented on staging 2026-07-21** — see
+`docs/apex-landing-tenant-subdomains.md` § Deploy log → S2 for what was built, the execution
+decisions (sign-in overlay, `Sample dashboard` caption, `#contact` phone CTA, Bebas Neue display
+type, tenant-neutral apex copy), the deviations from the mockup, and the verification evidence.
+Not promoted to production (F86/F88 gate). The § 8 handoff prompt below is spent.
 **Purpose:** Durable capture of the design work done in the mockup sessions, so the visual
 direction, decisions, assets, and hard-won implementation gotchas survive to whenever the build
 actually happens. **Revisit this file when implementation opens** — the ready-to-use handoff

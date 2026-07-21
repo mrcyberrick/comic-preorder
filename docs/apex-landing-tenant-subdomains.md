@@ -279,16 +279,27 @@ deferred/premium and can land any time later, independently.
 
 ## Completion criteria (finalized at plan open)
 
-- [ ] Apex `pulllist.app/` serves **marketing + a universal sign-in** that authenticates any
+- [x] Apex `pulllist.app/` serves **marketing + a universal sign-in** that authenticates any
       tenant's customer into their own store (profile-resolved); `comicstore.pulllist.app` unchanged
-      and green.
-- [ ] Existing founding front-door still works: an outstanding `pulllist.app/index.html?token_hash=…`
+      and green. — **Built and verified on staging 2026-07-21 (S2).** Universal/profile resolution
+      proven by the tenant-isolation specs (tenant-B users authenticate via the apex host and land in
+      tenant B). `comicstore.pulllist.app` cannot be exercised on staging (prod-only custom domain —
+      the 5.5 asymmetry); its branch was verified by rendering the deployed file set under the real
+      hostname via request interception, and its unchanged render asserted. **Re-verify live at S6.**
+- [x] Existing founding front-door still works: an outstanding `pulllist.app/index.html?token_hash=…`
       completes auth at the apex, and `pulllist.app/catalog.html` loads for an authenticated founding
-      customer (no forced migration; **founding remains on the apex**).
+      customer (no forced migration; **founding remains on the apex**). — **Verified on staging
+      2026-07-21:** spec 01 (magic-link arrival on the apex host → `catalog.html`, tenant source
+      `profile`) green; live password sign-in through the apex overlay landed on `catalog.html`
+      resolved to the founding tenant; an authenticated apex visit still forwards to the app.
 - [ ] 5.2 founding-apex invariant contract revised (partial supersession) in the 5.2 doc +
       `technical-reference.md`; no stale/contradictory "apex → founding app" claim remains (grep-swept).
 - [ ] Playwright founding-invariant / tenant-isolation specs updated to the revised contract and
-      green; full suite green.
+      green; full suite green. — **Green half done (S2, 2026-07-21):** full suite 40/40 green against
+      the deployed staging change, including tenant isolation (F15/F20). **No spec needed changing** —
+      every spec authenticates via magic link on the apex host and asserts post-login app state, which
+      the Hybrid preserves exactly. The "updated to the revised contract" half (asserting the apex now
+      shows marketing pre-login) is still **S5** work.
 - [ ] Post-deploy write-smoke on the apex as the founding tenant (reserve → correct founding
       `tenant_id` → cancel) clean; short soak clean.
 - [ ] F72 disposition updated; no new finding filed for the single-`APP_BASE_URL` behavior
@@ -297,6 +308,90 @@ deferred/premium and can land any time later, independently.
       (per-tenant redirect URLs, F72 email branding, apex→subdomain redirect) — built only if
       explicitly bundled, else explicitly deferred.
 - [ ] This plan's status → Complete; `CLAUDE.md` updated; Phase 6 stub notes the satisfied precursor.
+
+---
+
+## Deploy log
+
+### S2 — Apex marketing + universal login — **Complete on staging 2026-07-21**
+
+**Branch:** `feature/apex-marketing-page` → `--ff-only` → `staging` (`250bb9a`), pushed; CF Pages
+auto-deployed `https://staging.pulllist.pages.dev/`. **Not promoted to production** (gated on
+F86/F88 per § Status).
+
+**Files:** `index.html` (+321/−6), `apex.css` (new, 381 lines), `assets/hero.jpg` (new, 135 KB),
+`assets/pulllist-logo.png` (new, 23 KB). No `config.js`, no `app.js`, no Edge Function, no DB.
+
+**How the split works.** A pre-paint inline script in `<head>` sets `data-front-door` on `<html>`;
+`app.js` re-asserts it from the canonical `tenantSlugFromHostname()` the moment it loads, so
+`NON_TENANT_HOSTS` remains the single source of truth and the head copy only prevents a flash. All
+apex CSS is namespaced `.ax-*` / `--ax-*` and scoped to `:root[data-front-door="apex"]`, so a tenant
+subdomain renders exactly as before. **With JS disabled the page degrades to today's login card**
+(marketing is hidden until the apex is positively identified).
+
+**Auth integrity.** The token block is byte-identical — the diff removes only 6 presentation lines.
+Callsite audit before/after: `db.auth.setSession` ×1, `db.auth.verifyOtp` ×2, `token_hash` read ×1,
+`access_token` read ×1 — unchanged. One *new* read-only site: the head script's detection regex,
+which opens the sign-in panel before first paint so an invite/recovery/magic-link token never lands
+behind marketing. `#signin` is also a deep link into the panel.
+
+**Execution decisions (Rick, in session):**
+- **Sign-in presentation** — sticky-header `Sign in` opening a full-screen overlay, plus an
+  "Already have an account? Sign in →" line in the hero. Chosen over an inline sign-in band so the
+  approved hero composition is untouched. Overlay uses `inert` on the background, Esc/backdrop close,
+  focus-in on open and focus-restore on close.
+- **Hero stats card** — kept, with a `Sample dashboard` caption added. Unlabelled figures on a public
+  page would read as real platform metrics; the design reference calls them illustrative.
+- **CTA destination** — `Start free` / `Get started` anchor to a new `#contact` section showing the
+  shop phone **973-586-9182**. Self-service signup is Phase 6; a `mailto:` was declined.
+- **Display type** — **Bebas Neue** (already loaded by `style.css`), not the mockup's
+  `system-ui` weight-900 stopgap. The design reference asks for an embedded condensed grotesque;
+  Bebas is the app's own display face, so the marketing page and the app read as one product at zero
+  extra network cost. Body stays IBM Plex Sans; mono utility stays the system stack.
+- **Apex-branch copy is tenant-neutral.** Under a universal login the founding shop's name must not
+  greet another tenant's invited customer, so the shop logo, `— Monthly Pre-Orders` tagline, shop
+  footer and the invite banner's "Ray & Judy's Book Stop has set up an account for you" are all
+  tenant-branch-only; the apex shows the PULLLIST mark and neutral wording. The tenant branch keeps
+  the original strings verbatim.
+- **Hero is a CSS `background-image`, not an `<img>`** — so a tenant subdomain, where the marketing
+  block is `display:none`, never downloads the 135 KB photo. `object-position` → `background-position`
+  keeps the design reference's three crop knobs (62% / 80% / 85%) exactly.
+
+**Deviations from the mockup** (all deliberate, all noted): the unused `.releases` cover-carousel CSS
+was dropped (already removed from the markup for copyright); `Explore all features →` and the `FAQ`
+nav item were dropped as having no destination; the fake `EN ▾` language chrome was dropped; the six
+feature tiles are a 3×2 grid (`auto-fit` gave a ragged 4+2 at full width); the dev-note placeholder
+under the Branded price reads `Pricing on request`.
+
+**Verification.**
+- *Real-browser, both branches, local tree* — 36 checks green via request interception under the real
+  hostnames `pulllist.app`, `www.pulllist.app`, `staging.pulllist.pages.dev`, `comicstore.pulllist.app`.
+  Each host's branch was cross-checked against `app.js`'s own `tenantSlugFromHostname()` in-page, so
+  the head script and the canonical resolver are proven to agree. Harness:
+  `scripts/playwright/apex-verify.mjs` (local-only).
+- *Real-browser, deployed staging* — 19 checks green including a **live password sign-in through the
+  apex overlay** with a throwaway founding-tenant user → `catalog.html`, `TenantContext.source() ===
+  'profile'`, correct founding `tenant_id`; user deleted and absence confirmed by live SELECT
+  (`[]`). Harness: `scripts/playwright/apex-live-verify.mjs` (local-only).
+- *No horizontal overflow* asserted at 1440 and 390 px on both branches, with the overlay open and
+  closed — `scrollWidth === clientWidth` every time. Screenshots inspected at both widths.
+- *Full smoke suite* — 40/40 Playwright + 30/30 import unit tests green **after** the deploy
+  (exit 0), including tenant isolation F15/F20. Synthetic tenant torn down by `globalTeardown`.
+
+**Two defects found by screenshot inspection and fixed before the merge** (both invisible to
+assertions, per the "verify CSS in a real browser" rule): the founding shop's logo leaked onto the
+platform sign-in panel because the card's inline `style="display:flex"` out-ranked the hide rule
+(fixed with `!important` + `display: revert`); and the mobile header wrapped both buttons onto two
+lines each while hero microcopy sat on bright sky (fixed with `white-space: nowrap`, hiding the
+header's marketing CTA ≤620 px, and a full vertical scrim at ≤620 px).
+
+**Known cosmetic nit, not fixed:** the sign-in card's pre-existing "Don't have an account? Contact
+the shop and we'll get you set up." is ambiguous on the apex ("which shop?"). Left as-is — it is
+pre-existing copy and out of this step's scope. Worth a copy pass at S5/S6.
+
+**Left for later steps:** S5 (supersede the 5.2 founding-apex invariant in the 5.2 doc +
+`technical-reference.md`, grep-sweep, add specs asserting the marketing branch) and S6 (prod
+promotion + write-smoke + soak) — **S6 stays blocked on F86/F88.** S1/S3/S4 remain deferred/premium.
 
 ---
 
