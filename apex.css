@@ -1,0 +1,381 @@
+/* ================================================================
+   PULLLIST — apex marketing page ("comic-noir")
+   ================================================================
+   Loaded by index.html only. Every rule is scoped to
+   :root[data-front-door="apex"] or to an .ax-* class that exists
+   only inside .ax-site, so a tenant subdomain (<slug>.pulllist.app)
+   renders exactly as it did before this file existed.
+
+   Cloudflare Pages serves EVERY hostname from one project, so the
+   apex-vs-subdomain split is client-side only — see the head script
+   in index.html and tenantSlugFromHostname() in app.js.
+
+   Tokens are namespaced --ax-* on purpose: Branding.apply() rewrites
+   --accent from the resolved tenant, and the platform marketing page
+   must not repaint itself in a tenant's brand color.
+
+   Design source of truth: docs/apex-marketing-page-design.md
+   ================================================================ */
+
+:root[data-front-door="apex"] {
+  --ax-bg:       #0B0908;
+  --ax-bg2:      #0F0B0A;
+  --ax-surface:  #16100E;
+  --ax-surface2: #1E1613;
+  --ax-line:     #2A201C;
+  --ax-line2:    #3B2C26;
+  --ax-ink:      #F6EFEA;
+  --ax-slate:    #B7A79D;
+  --ax-muted:    #7C6C62;
+  --ax-red:      #E8321C;
+  --ax-red-br:   #FF3A29;
+  --ax-red-deep: #A81C0D;
+  --ax-red-tint: rgba(232,50,28,0.12);
+  --ax-red-glow: rgba(232,50,28,0.55);
+
+  /* Display + body are the app's own faces (already loaded by style.css):
+     Bebas Neue is the condensed display grotesque the design reference
+     calls for, and IBM Plex Sans keeps the marketing page and the app
+     visibly the same product. No additional font request. */
+  --ax-display: var(--font-display);
+  --ax-body:    var(--font-body);
+  --ax-mono:    ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Menlo, Consolas, monospace;
+
+  --ax-radius:  14px;
+}
+
+/* Marketing markup stays hidden unless the host script has positively
+   identified the apex. If that script never runs, index.html degrades to
+   the plain sign-in page it has always been. */
+.ax-site { display: none; }
+:root[data-front-door="apex"] .ax-site { display: block; }
+
+/* Branch-specific copy inside the shared sign-in card.
+   !important is load-bearing here: the card's markup carries inline
+   style="display:flex" attributes, which otherwise out-rank these rules and
+   leak the founding shop's logo onto the platform sign-in panel.
+   `revert` restores each element's UA default, so a <span> variant stays
+   inline mid-sentence while a <div> variant becomes a block. */
+.ax-when-apex { display: none !important; }
+:root[data-front-door="apex"] .ax-when-apex   { display: revert !important; }
+:root[data-front-door="apex"] .ax-when-tenant { display: none !important; }
+
+.ax-site {
+  font-family: var(--ax-body);
+  color: var(--ax-ink);
+  background: var(--ax-bg);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.ax-site a { color: inherit; text-decoration: none; }
+.ax-inner { max-width: 1200px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 36px); }
+/* scroll-margin keeps in-page anchors clear of the sticky header */
+.ax-band  { padding: clamp(52px, 8vw, 96px) 0; scroll-margin-top: 86px; }
+
+.ax-eyebrow {
+  font-family: var(--ax-mono); font-size: 0.72rem; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ax-red-br); font-weight: 600;
+}
+.ax-display {
+  font-family: var(--ax-display);
+  font-weight: 400;              /* Bebas Neue ships a single weight */
+  text-transform: uppercase;
+  letter-spacing: 0.012em;
+  line-height: 0.9;
+}
+.ax-site :focus-visible { outline: 2px solid var(--ax-red-br); outline-offset: 3px; border-radius: 3px; }
+
+/* ── buttons ─────────────────────────────────────────────────── */
+.ax-btn {
+  font-family: var(--ax-body); font-weight: 700; font-size: 0.86rem;
+  letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;
+  border-radius: 11px; padding: 14px 22px; cursor: pointer;
+  border: 1px solid transparent; display: inline-flex; align-items: center; gap: 9px;
+  transition: transform .12s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.ax-btn-primary {
+  background: linear-gradient(180deg, var(--ax-red-br), var(--ax-red)); color: #fff;
+  box-shadow: 0 14px 30px -12px var(--ax-red-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.ax-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -12px var(--ax-red-glow); }
+.ax-btn-dark { background: var(--ax-surface2); color: var(--ax-ink); border-color: var(--ax-line2); }
+.ax-btn-dark:hover { border-color: var(--ax-red); color: #fff; }
+.ax-btn-ghost {
+  background: transparent; color: var(--ax-ink); border-color: var(--ax-line2);
+  font-size: 0.8rem; padding: 11px 18px;
+}
+.ax-btn-ghost:hover { border-color: var(--ax-red); color: #fff; }
+
+/* ── header ──────────────────────────────────────────────────── */
+.ax-top {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(11,9,8,0.72); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--ax-line);
+}
+.ax-top-in {
+  display: flex; align-items: center; gap: 14px;
+  max-width: 1280px; margin: 0 auto; padding: 12px clamp(16px,4vw,36px);
+}
+.ax-logo-mark {
+  width: 141px; height: 54px; flex: none;
+  background: center/contain no-repeat url("assets/pulllist-logo.png");
+}
+.ax-top .ax-spacer { flex: 1; }
+.ax-navpill {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--ax-surface); border: 1px solid var(--ax-line2);
+  border-radius: 999px; padding: 5px;
+}
+.ax-navpill a {
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--ax-slate); padding: 8px 15px; border-radius: 999px;
+}
+.ax-navpill a:hover { color: #fff; }
+.ax-acts { display: flex; align-items: center; gap: 10px; }
+
+/* ── hero ────────────────────────────────────────────────────── */
+.ax-hero {
+  position: relative; min-height: clamp(560px, 84vh, 800px);
+  display: flex; align-items: center; overflow: hidden;
+  border-bottom: 1px solid var(--ax-line); background: #0a0706;
+}
+.ax-hero > .ax-inner { width: 100%; }
+/* The photo is a background rather than an <img> so a tenant subdomain,
+   where .ax-site is display:none, never downloads it.
+   object-position → background-position; the three crop values below are
+   the only tuning knobs (design reference § 5.4). */
+.ax-hero-photo {
+  position: absolute; inset: 0; z-index: 0;
+  background: 62% center/cover no-repeat url("assets/hero.jpg");
+}
+.ax-scrim {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(8,5,4,0.92) 0%, rgba(8,5,4,0.62) 30%, rgba(8,5,4,0.06) 56%, transparent 72%),
+    linear-gradient(180deg, transparent 60%, rgba(8,5,4,0.82) 100%);
+}
+.ax-hero-content { position: relative; z-index: 4; max-width: 600px; padding: clamp(20px,4vw,44px) 0; }
+.ax-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--ax-mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ax-red-br); border: 1px solid var(--ax-line2); background: rgba(232,50,28,0.18);
+  border-radius: 999px; padding: 7px 14px; margin-bottom: 24px; backdrop-filter: blur(4px);
+}
+.ax-hero h1 {
+  font-size: clamp(3rem, 7.6vw, 6.2rem); margin: 0 0 20px;
+  text-wrap: balance; text-shadow: 0 3px 30px rgba(0,0,0,0.65);
+}
+.ax-hero h1 .ax-r { color: var(--ax-red-br); text-shadow: 0 0 34px var(--ax-red-glow); }
+.ax-hero .ax-sub {
+  color: #EADED5; font-size: clamp(1rem, 1.4vw, 1.16rem); max-width: 42ch;
+  margin: 0 0 30px; text-shadow: 0 2px 14px rgba(0,0,0,0.7);
+}
+.ax-cta-row { display: flex; flex-wrap: wrap; gap: 13px; margin-bottom: 18px; }
+.ax-microtrust { font-family: var(--ax-mono); font-size: 0.72rem; color: #CDBCB1; margin: 0; }
+.ax-signin-line { font-family: var(--ax-mono); font-size: 0.76rem; color: #CDBCB1; margin: 8px 0 0; }
+.ax-signin-line button {
+  font: inherit; color: var(--ax-red-br); font-weight: 700;
+  background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ax-signin-line button:hover { color: #fff; }
+
+/* sample-data card under the headline */
+.ax-stats {
+  margin-top: 26px; width: min(360px, 100%);
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 16px; align-items: center;
+  background: linear-gradient(180deg, rgba(30,22,19,0.8), rgba(16,11,10,0.85));
+  border: 1px solid var(--ax-line2); border-radius: 14px; padding: 14px 16px;
+  backdrop-filter: blur(10px); box-shadow: 0 24px 50px -20px rgba(0,0,0,0.85);
+}
+.ax-stats .ax-lab {
+  grid-column: 1 / -1; font-family: var(--ax-mono); font-size: 0.58rem;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--ax-muted);
+}
+.ax-stats .ax-big { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ax-stats .ax-delta { font-family: var(--ax-mono); font-size: 0.68rem; color: var(--ax-red-br); font-weight: 600; align-self: center; }
+.ax-stats .ax-mini {
+  grid-column: 1 / -1; display: flex; gap: 18px;
+  margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--ax-line);
+}
+.ax-stats .ax-mini div { font-size: 0.68rem; color: var(--ax-slate); }
+.ax-stats .ax-mini b { display: block; font-family: var(--ax-mono); font-size: 0.92rem; color: var(--ax-ink); font-weight: 700; }
+.ax-stats .ax-caption {
+  grid-column: 1 / -1; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--ax-line);
+  font-family: var(--ax-mono); font-size: 0.56rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ax-muted);
+}
+
+/* ── integration strip ───────────────────────────────────────── */
+.ax-strip { border-top: 1px solid var(--ax-line); border-bottom: 1px solid var(--ax-line); background: var(--ax-bg2); }
+.ax-strip-in {
+  padding: 26px clamp(16px,4vw,36px); display: flex; flex-wrap: wrap;
+  align-items: center; gap: 14px 30px; justify-content: center; text-align: center;
+}
+.ax-strip .ax-t { font-family: var(--ax-mono); font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ax-muted); }
+.ax-chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.ax-chip {
+  font-weight: 700; letter-spacing: 0.02em; color: var(--ax-ink);
+  border: 1px solid var(--ax-line2); border-radius: 10px; padding: 9px 16px; font-size: 0.9rem;
+}
+.ax-chip small {
+  display: block; font-family: var(--ax-mono); font-weight: 500; font-size: 0.58rem;
+  letter-spacing: 0.1em; color: var(--ax-muted); text-transform: uppercase;
+}
+.ax-strip .ax-more { font-size: 0.82rem; color: var(--ax-slate); max-width: 46ch; }
+
+/* ── features ────────────────────────────────────────────────── */
+.ax-h2 { font-size: clamp(2rem, 4.4vw, 3.1rem); margin: 14px 0 14px; text-wrap: balance; }
+.ax-lede { color: var(--ax-slate); font-size: 1rem; max-width: 54ch; margin: 0 0 36px; }
+/* Six tiles: 3x2 reads as a block, 4+2 reads as a mistake. */
+.ax-fitems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px 30px; }
+.ax-fitem .ax-ic {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: linear-gradient(180deg, var(--ax-red), var(--ax-red-deep));
+  display: grid; place-items: center; font-size: 1.05rem; color: #fff;
+  margin-bottom: 11px; box-shadow: 0 10px 22px -10px var(--ax-red-glow);
+}
+.ax-fitem h3 { font-size: 0.98rem; font-weight: 600; margin: 0 0 5px; }
+.ax-fitem p { color: var(--ax-slate); font-size: 0.85rem; margin: 0; }
+
+/* ── how it works ────────────────────────────────────────────── */
+.ax-how { background: var(--ax-bg2); border-top: 1px solid var(--ax-line); }
+.ax-steps { display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(18px,3vw,32px); }
+.ax-step { background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); padding: 24px; }
+.ax-step .ax-num { font-family: var(--ax-mono); font-size: 0.86rem; font-weight: 700; color: var(--ax-red-br); }
+.ax-step .ax-rule { height: 2px; background: var(--ax-line2); margin: 12px 0 16px; position: relative; }
+.ax-step .ax-rule::before { content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 32px; background: var(--ax-red); }
+.ax-step h3 { font-size: 1.08rem; font-weight: 600; margin: 0 0 9px; }
+.ax-step p { color: var(--ax-slate); font-size: 0.9rem; margin: 0; }
+
+/* ── pricing ─────────────────────────────────────────────────── */
+.ax-pricing { text-align: center; }
+.ax-pricing .ax-lede { margin: 0 auto 34px; }
+.ax-plans { display: grid; grid-template-columns: repeat(2,1fr); gap: 18px; max-width: 720px; margin: 0 auto; text-align: left; }
+.ax-plan { border: 1px solid var(--ax-line2); border-radius: var(--ax-radius); padding: 26px; background: var(--ax-surface); }
+.ax-plan.ax-pro { border-color: var(--ax-red); box-shadow: 0 0 40px -20px var(--ax-red-glow); }
+.ax-plan .ax-pname { font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ax-slate); }
+.ax-plan.ax-pro .ax-pname { color: var(--ax-red-br); }
+.ax-plan .ax-amt { font-family: var(--ax-display); font-size: 2.6rem; letter-spacing: 0.01em; line-height: 1.05; margin: 10px 0 2px; }
+.ax-plan .ax-amt small { font-family: var(--ax-body); font-size: 0.85rem; font-weight: 500; color: var(--ax-muted); }
+.ax-plan .ax-pdesc { color: var(--ax-slate); font-size: 0.9rem; margin: 12px 0 0; }
+.ax-plan .ax-ph { font-family: var(--ax-mono); font-size: 0.66rem; color: var(--ax-muted); margin: 12px 0 0; }
+
+/* ── contact / closing ───────────────────────────────────────── */
+.ax-closing { text-align: center; position: relative; }
+.ax-closing::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 100% at 50% 0%, var(--ax-red-tint), transparent 70%);
+}
+.ax-closing > .ax-inner { position: relative; }
+.ax-closing .ax-h2 { margin: 14px 0 18px; }
+.ax-closing .ax-lede { margin: 0 auto 28px; }
+.ax-closing .ax-cta-row { justify-content: center; margin-bottom: 0; }
+.ax-phone { font-family: var(--ax-display); font-size: clamp(2.2rem, 6vw, 3.4rem); letter-spacing: 0.02em; color: var(--ax-ink); display: inline-block; }
+.ax-phone:hover { color: var(--ax-red-br); }
+.ax-contact-note { font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ax-muted); margin: 10px 0 26px; }
+
+/* ── footer ──────────────────────────────────────────────────── */
+.ax-foot { border-top: 1px solid var(--ax-line); padding: 30px clamp(16px,4vw,36px); }
+.ax-foot-in { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.ax-foot .ax-logo-mark { width: 106px; height: 40px; }
+.ax-foot .ax-tag { color: var(--ax-muted); font-size: 0.82rem; }
+.ax-foot .ax-spacer { flex: 1; }
+.ax-foot .ax-note { font-family: var(--ax-mono); font-size: 0.66rem; color: var(--ax-muted); }
+
+/* ================================================================
+   Sign-in overlay (apex only)
+   The .login-page / .login-card markup is shared with the tenant
+   branch; here it becomes a modal over the marketing page. Every
+   rule below is gated on data-front-door="apex", so the tenant
+   branch keeps the full-page login card from style.css untouched.
+   ================================================================ */
+:root[data-front-door="apex"] .login-page {
+  display: none;
+  position: fixed; inset: 0; z-index: 200;
+  min-height: 0; padding: 20px;
+  background: rgba(6,4,4,0.86);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+:root[data-front-door="apex"][data-signin="open"] .login-page { display: flex; }
+:root[data-front-door="apex"][data-signin="open"] body { overflow: hidden; }
+
+:root[data-front-door="apex"] .login-card {
+  position: relative;
+  max-width: 420px;
+  background: var(--ax-surface);
+  border: 1px solid var(--ax-line2);
+  border-radius: 16px;
+  box-shadow: 0 40px 90px -30px rgba(0,0,0,0.9);
+  margin: auto;
+}
+:root[data-front-door="apex"] .ax-authmark {
+  width: 158px; height: 60px; margin: 0 auto 18px;
+  background: center/contain no-repeat url("assets/pulllist-logo.png");
+}
+:root[data-front-door="apex"] .login-logo { display: none; }
+:root[data-front-door="apex"] .login-tagline {
+  font-family: var(--ax-mono); font-size: 0.66rem; letter-spacing: 0.16em; color: var(--ax-muted);
+}
+:root[data-front-door="apex"] .login-card h2 { color: var(--ax-slate); }
+:root[data-front-door="apex"] .login-card .form-group input:focus {
+  border-color: var(--ax-red); box-shadow: 0 0 0 3px rgba(232,50,28,0.18);
+}
+:root[data-front-door="apex"] .login-card .btn-primary { background: var(--ax-red); }
+:root[data-front-door="apex"] .login-card .btn-primary:hover { background: var(--ax-red-br); }
+
+.ax-authclose {
+  display: none;
+  position: absolute; top: 10px; right: 10px;
+  width: 34px; height: 34px; border-radius: 9px;
+  background: transparent; border: 1px solid var(--ax-line2); color: var(--ax-slate);
+  font-size: 1.1rem; line-height: 1; cursor: pointer;
+}
+:root[data-front-door="apex"] .ax-authclose { display: block; }
+.ax-authclose:hover { border-color: var(--ax-red); color: var(--ax-ink); }
+.ax-authclose:focus-visible { outline: 2px solid var(--ax-red-br); outline-offset: 2px; }
+
+/* ── responsive ──────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .ax-fitems { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 900px) {
+  .ax-navpill { display: none; }
+  .ax-hero { min-height: 640px; }
+  .ax-hero-photo { background-position: 80% center; }
+  .ax-scrim {
+    background:
+      linear-gradient(90deg, rgba(8,5,4,0.94) 0%, rgba(8,5,4,0.76) 34%, rgba(8,5,4,0.3) 62%, transparent 84%),
+      linear-gradient(180deg, transparent 50%, rgba(8,5,4,0.62) 100%);
+  }
+  .ax-steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .ax-fitems, .ax-plans { grid-template-columns: 1fr; }
+  .ax-hero-photo { background-position: 85% center; }
+  /* Narrow enough that the headline column sits over the figure, so the
+     scrim becomes a full vertical wash rather than a left-edge gradient —
+     the copy has to stay readable over the bright sky behind it. */
+  .ax-scrim {
+    background:
+      linear-gradient(180deg, rgba(8,5,4,0.88) 0%, rgba(8,5,4,0.50) 38%, rgba(8,5,4,0.86) 100%),
+      linear-gradient(90deg, rgba(8,5,4,0.58) 0%, rgba(8,5,4,0.12) 62%, transparent 100%);
+  }
+  .ax-logo-mark { width: 116px; height: 44px; }
+  .ax-btn { padding: 13px 18px; font-size: 0.8rem; }
+  .ax-acts { gap: 8px; }
+  /* Sign in is the control existing customers need; the marketing CTA
+     repeats twice further down the page, so it yields the header space. */
+  .ax-acts .ax-btn-primary { display: none; }
+  .ax-foot-in { flex-direction: column; align-items: flex-start; }
+}
+
+/* ── motion ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .ax-reveal { animation: ax-rise .7s cubic-bezier(.2,.7,.2,1) both; }
+}
+@keyframes ax-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
