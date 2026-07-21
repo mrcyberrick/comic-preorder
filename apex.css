@@ -227,24 +227,63 @@
 /* ── features ────────────────────────────────────────────────── */
 .ax-h2 { font-size: clamp(2rem, 4.4vw, 3.1rem); margin: 14px 0 14px; text-wrap: balance; }
 .ax-lede { color: var(--ax-slate); font-size: 1rem; max-width: 54ch; margin: 0 0 36px; }
-/* Six tiles: 3x2 reads as a block, 4+2 reads as a mistake. */
-.ax-fitems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px 30px; }
-.ax-fitem .ax-ic {
-  width: 40px; height: 40px; border-radius: 10px;
-  background: linear-gradient(180deg, var(--ax-red), var(--ax-red-deep));
-  display: grid; place-items: center; font-size: 1.05rem; color: #fff;
-  margin-bottom: 11px; box-shadow: 0 10px 22px -10px var(--ax-red-glow);
+/* Six tiles: 3x2 reads as a block, 4+2 reads as a mistake.
+   Carded to match the how-it-works steps, so both grids read as one system. */
+.ax-fitems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.ax-fitem {
+  background: var(--ax-surface);
+  border: 1px solid var(--ax-line);
+  border-radius: var(--ax-radius);
+  padding: 24px;
+  transition: transform .18s ease, border-color .18s ease,
+              background .18s ease, box-shadow .18s ease;
 }
-.ax-fitem h3 { font-size: 0.98rem; font-weight: 600; margin: 0 0 5px; }
+.ax-fitem:hover {
+  transform: translateY(-3px);
+  border-color: rgba(232,50,28,0.45);
+  background: var(--ax-surface2);
+  box-shadow: 0 18px 40px -24px rgba(0,0,0,0.9);
+}
+.ax-fitem .ax-ic {
+  width: 42px; height: 42px; border-radius: 11px;
+  background: linear-gradient(180deg, var(--ax-red), var(--ax-red-deep));
+  display: grid; place-items: center; color: #fff;
+  margin-bottom: 14px; box-shadow: 0 10px 22px -10px var(--ax-red-glow);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+/* Icons are stroked with currentColor — CSS var() does not resolve inside SVG
+   presentation attributes (design reference § 5.6), currentColor does. */
+.ax-fitem .ax-ic svg { width: 21px; height: 21px; display: block; }
+.ax-fitem:hover .ax-ic {
+  transform: scale(1.06);
+  box-shadow: 0 14px 30px -10px var(--ax-red-glow);
+}
+.ax-fitem h3 { font-size: 1rem; font-weight: 600; margin: 0 0 6px; }
 .ax-fitem p { color: var(--ax-slate); font-size: 0.85rem; margin: 0; }
 
 /* ── how it works ────────────────────────────────────────────── */
 .ax-how { background: var(--ax-bg2); border-top: 1px solid var(--ax-line); }
 .ax-steps { display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(18px,3vw,32px); }
-.ax-step { background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); padding: 24px; }
+.ax-step {
+  background: var(--ax-surface); border: 1px solid var(--ax-line);
+  border-radius: var(--ax-radius); padding: 24px;
+  transition: transform .18s ease, border-color .18s ease,
+              background .18s ease, box-shadow .18s ease;
+}
+.ax-step:hover {
+  transform: translateY(-3px);
+  border-color: rgba(232,50,28,0.45);
+  background: var(--ax-surface2);
+  box-shadow: 0 18px 40px -24px rgba(0,0,0,0.9);
+}
 .ax-step .ax-num { font-family: var(--ax-mono); font-size: 0.86rem; font-weight: 700; color: var(--ax-red-br); }
 .ax-step .ax-rule { height: 2px; background: var(--ax-line2); margin: 12px 0 16px; position: relative; }
-.ax-step .ax-rule::before { content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 32px; background: var(--ax-red); }
+/* The red segment runs the rule on hover — the step completing, not decoration. */
+.ax-step .ax-rule::before {
+  content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 32px;
+  background: var(--ax-red); transition: width .3s cubic-bezier(.2,.7,.2,1);
+}
+.ax-step:hover .ax-rule::before { width: 100%; }
 .ax-step h3 { font-size: 1.08rem; font-weight: 600; margin: 0 0 9px; }
 .ax-step p { color: var(--ax-slate); font-size: 0.9rem; margin: 0; }
 
@@ -271,9 +310,18 @@
 .ax-closing .ax-h2 { margin: 14px 0 18px; }
 .ax-closing .ax-lede { margin: 0 auto 28px; }
 .ax-closing .ax-cta-row { justify-content: center; margin-bottom: 0; }
-.ax-phone { font-family: var(--ax-display); font-size: clamp(2.2rem, 6vw, 3.4rem); letter-spacing: 0.02em; color: var(--ax-ink); display: inline-block; }
-.ax-phone:hover { color: var(--ax-red-br); }
-.ax-contact-note { font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ax-muted); margin: 10px 0 26px; }
+/* Mono, not the display face: an address has to be read and copied, and Bebas
+   is uppercase-only — which would mangle it. */
+.ax-email {
+  font-family: var(--ax-mono);
+  font-size: clamp(1.05rem, 3.6vw, 1.7rem);
+  letter-spacing: 0.01em; color: var(--ax-ink);
+  display: inline-block; word-break: break-word;
+  border-bottom: 2px solid rgba(232,50,28,0.5); padding-bottom: 5px;
+  transition: color .18s ease, border-color .18s ease;
+}
+.ax-email:hover { color: var(--ax-red-br); border-bottom-color: var(--ax-red-br); }
+.ax-contact-note { font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ax-muted); margin: 16px 0 28px; }
 
 /* ── footer ──────────────────────────────────────────────────── */
 .ax-foot { border-top: 1px solid var(--ax-line); padding: 30px clamp(16px,4vw,36px); }
@@ -378,4 +426,12 @@
 @keyframes ax-rise {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ax-fitem, .ax-step, .ax-fitem .ax-ic, .ax-btn,
+  .ax-step .ax-rule::before, .ax-email { transition: none; }
+  .ax-fitem:hover, .ax-step:hover, .ax-fitem:hover .ax-ic,
+  .ax-btn-primary:hover { transform: none; }
+  /* Hover still reads through color and the rule, just without movement. */
+  .ax-step:hover .ax-rule::before { width: 100%; }
 }
