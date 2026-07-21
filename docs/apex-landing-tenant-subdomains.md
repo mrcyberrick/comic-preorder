@@ -342,8 +342,11 @@ behind marketing. `#signin` is also a deep link into the panel.
   focus-in on open and focus-restore on close.
 - **Hero stats card** — kept, with a `Sample dashboard` caption added. Unlabelled figures on a public
   page would read as real platform metrics; the design reference calls them illustrative.
-- **CTA destination** — `Start free` / `Get started` anchor to a new `#contact` section showing the
-  shop phone **973-586-9182**. Self-service signup is Phase 6; a `mailto:` was declined.
+- **CTA destination** — `Start free` / `Get started` anchor to a new `#contact` section.
+  Self-service signup is Phase 6. *(Revised in the same session, `b38cde3`: the phone number was
+  removed in favour of **pulllist@mrcyberrick.us**, set in mono because an address must be readable
+  and copyable and Bebas is uppercase-only. Location stays town-level — **no street address is
+  recorded anywhere in the repo**, so none was invented.)*
 - **Display type** — **Bebas Neue** (already loaded by `style.css`), not the mockup's
   `system-ui` weight-900 stopgap. The design reference asks for an embedded condensed grotesque;
   Bebas is the app's own display face, so the marketing page and the app read as one product at zero
@@ -384,6 +387,18 @@ platform sign-in panel because the card's inline `style="display:flex"` out-rank
 (fixed with `!important` + `display: revert`); and the mobile header wrapped both buttons onto two
 lines each while hero microcopy sat on bright sky (fixed with `white-space: nowrap`, hiding the
 header's marketing CTA ≤620 px, and a full vertical scrim at ≤620 px).
+
+**Follow-up pass (`b38cde3`, same session — Rick's review of the deployed page).** The six feature
+tiles were bare icon+text and read as one undivided block next to the carded how-it-works steps, and
+neither grid responded to the pointer. Changes: tiles became separated cards on the step card's
+treatment, so both grids read as one system; the unicode glyphs (`↻ ✦ ★ ▤ ✉ ▣`) were replaced with
+six stroked SVG icons that each depict the feature (import-to-tray, window + cursor, repeat cycle,
+clipboard + check, envelope, shield + check), stroked with `currentColor` since `var()` does not
+resolve in SVG presentation attributes; both grids now lift 3 px on hover with a warmed surface and
+a red border, the feature icon tile scaling and its glow growing. The how-it-works step adds one
+content-linked touch — the red segment under the step number runs the full rule width on hover
+(32 px → 305 px, asserted). `prefers-reduced-motion: reduce` drops every transform while keeping the
+colour and rule changes. Re-verified: 46 local checks + 19 live checks + 40/40 smoke, all green.
 
 **Known cosmetic nit, not fixed:** the sign-in card's pre-existing "Don't have an account? Contact
 the shop and we'll get you set up." is ambiguous on the apex ("which shop?"). Left as-is — it is
