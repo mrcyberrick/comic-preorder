@@ -4,8 +4,9 @@
 drives this development**; provisioning the founding tenant's own subdomain is **deprioritized/
 deferred** — the founding tenant simply stays on the apex.)*
 
-**Status:** **Planning — not started.** Standalone sub-deploy; **not** bundled with any other
-work. Its own session, full staging→prod discipline.
+**Status:** **In progress** (opened 2026-07-21) — **S2 (apex marketing + universal login) executing on
+staging.** Standalone sub-deploy; **not** bundled with any other work. Its own session, full
+staging→prod discipline.
 **F86 gating (revised 2026-07-21, Rick — supersedes the earlier "not during the F86 watch" line):**
 the **staging build MAY proceed during the F86 legacy-key watch.** It is staging-side static
 frontend (`index.html`/CSS/assets) and shares no surface with the production key toggle — different
