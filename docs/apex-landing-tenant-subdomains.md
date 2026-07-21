@@ -292,6 +292,10 @@ deferred/premium and can land any time later, independently.
 
 ## References
 
+- **Approved design for S2 + ready-to-use implementation handoff prompt:**
+  `docs/apex-marketing-page-design.md` (design decisions, palette/type, assets, implementation
+  gotchas; § 8 holds the handoff prompt). Visual source of truth:
+  `docs/mockups/apex-marketing-page-draft.html` (opens offline).
 - Tenant resolution + RPC + `tenantSlugFromHostname()`: `docs/phase-5.2-slug-id-routing-rpc.md`;
   `app.js` `TenantContext` (re-read from disk at execution).
 - One-manual-custom-domain provisioning pattern (comicstore): `docs/phase-5.5-second-tenant-onboarding.md`
