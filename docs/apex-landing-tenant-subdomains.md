@@ -400,6 +400,19 @@ content-linked touch — the red segment under the step number runs the full rul
 (32 px → 305 px, asserted). `prefers-reduced-motion: reduce` drops every transform while keeping the
 colour and rule changes. Re-verified: 46 local checks + 19 live checks + 40/40 smoke, all green.
 
+**Design-review pass (`b247796`, same session).** Rick removed the founding shop's
+name/location from the contact block — on a *platform* page it read as PULLLIST's own address, and
+no founding-shop string now remains anywhere in the marketing markup (asserted). A review at
+1440/1180/834/390 then found: (a) **a regression from that removal** — the removed line was carrying
+the gap, so the Sign in button touched the email's underline (spacing moved onto `.ax-email`, and the
+≥16 px clearance is now asserted rather than eyeballed); (b) how-it-works collapsed to one column at
+900 px, leaving three near-empty full-width cards with the rule stretched across dead space — now
+collapses at 780 px so tablet keeps three columns; (c) the integration strip was one row of three
+fragments with the closing sentence wrapping ragged — now a centred stacked statement; (d) pricing
+cards were the only card grid ignoring the pointer — same hover, with the Branded card brightening
+its red edge; (e) the footer was decorative — now two rows, wordmark + real nav (including sign-in)
+over the tagline and payments disclaimer. No horizontal overflow at any of the four widths.
+
 **Known cosmetic nit, not fixed:** the sign-in card's pre-existing "Don't have an account? Contact
 the shop and we'll get you set up." is ambiguous on the apex ("which shop?"). Left as-is — it is
 pre-existing copy and out of this step's scope. Worth a copy pass at S5/S6.
