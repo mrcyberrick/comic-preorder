@@ -208,9 +208,11 @@
 
 /* ── integration strip ───────────────────────────────────────── */
 .ax-strip { border-top: 1px solid var(--ax-line); border-bottom: 1px solid var(--ax-line); background: var(--ax-bg2); }
+/* Stacked, not strung across one line: as a row the label, chips and closing
+   sentence read as three unrelated fragments, and the sentence wraps ragged. */
 .ax-strip-in {
-  padding: 26px clamp(16px,4vw,36px); display: flex; flex-wrap: wrap;
-  align-items: center; gap: 14px 30px; justify-content: center; text-align: center;
+  padding: 30px clamp(16px,4vw,36px); display: flex; flex-direction: column;
+  align-items: center; gap: 15px; text-align: center;
 }
 .ax-strip .ax-t { font-family: var(--ax-mono); font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ax-muted); }
 .ax-chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
@@ -222,7 +224,7 @@
   display: block; font-family: var(--ax-mono); font-weight: 500; font-size: 0.58rem;
   letter-spacing: 0.1em; color: var(--ax-muted); text-transform: uppercase;
 }
-.ax-strip .ax-more { font-size: 0.82rem; color: var(--ax-slate); max-width: 46ch; }
+.ax-strip .ax-more { font-size: 0.82rem; color: var(--ax-slate); max-width: 52ch; }
 
 /* ── features ────────────────────────────────────────────────── */
 .ax-h2 { font-size: clamp(2rem, 4.4vw, 3.1rem); margin: 14px 0 14px; text-wrap: balance; }
@@ -291,8 +293,23 @@
 .ax-pricing { text-align: center; }
 .ax-pricing .ax-lede { margin: 0 auto 34px; }
 .ax-plans { display: grid; grid-template-columns: repeat(2,1fr); gap: 18px; max-width: 720px; margin: 0 auto; text-align: left; }
-.ax-plan { border: 1px solid var(--ax-line2); border-radius: var(--ax-radius); padding: 26px; background: var(--ax-surface); }
+.ax-plan {
+  border: 1px solid var(--ax-line2); border-radius: var(--ax-radius);
+  padding: 26px; background: var(--ax-surface);
+  transition: transform .18s ease, border-color .18s ease,
+              background .18s ease, box-shadow .18s ease;
+}
+/* Same hover as the feature tiles and steps — all three card grids behave alike. */
+.ax-plan:hover {
+  transform: translateY(-3px); background: var(--ax-surface2);
+  border-color: rgba(232,50,28,0.45);
+  box-shadow: 0 18px 40px -24px rgba(0,0,0,0.9);
+}
 .ax-plan.ax-pro { border-color: var(--ax-red); box-shadow: 0 0 40px -20px var(--ax-red-glow); }
+.ax-plan.ax-pro:hover {
+  border-color: var(--ax-red-br);
+  box-shadow: 0 0 46px -18px var(--ax-red-glow), 0 18px 40px -24px rgba(0,0,0,0.9);
+}
 .ax-plan .ax-pname { font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ax-slate); }
 .ax-plan.ax-pro .ax-pname { color: var(--ax-red-br); }
 .ax-plan .ax-amt { font-family: var(--ax-display); font-size: 2.6rem; letter-spacing: 0.01em; line-height: 1.05; margin: 10px 0 2px; }
@@ -321,15 +338,26 @@
   transition: color .18s ease, border-color .18s ease;
 }
 .ax-email:hover { color: var(--ax-red-br); border-bottom-color: var(--ax-red-br); }
-.ax-contact-note { font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ax-muted); margin: 16px 0 28px; }
+/* The address is the CTA — it needs air under it before the Sign in button. */
+.ax-email { margin: 4px 0 32px; }
 
 /* ── footer ──────────────────────────────────────────────────── */
-.ax-foot { border-top: 1px solid var(--ax-line); padding: 30px clamp(16px,4vw,36px); }
-.ax-foot-in { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.ax-foot { border-top: 1px solid var(--ax-line); padding: 26px clamp(16px,4vw,36px) 30px; }
+.ax-foot-in { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.ax-foot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.ax-foot-row + .ax-foot-row { border-top: 1px solid var(--ax-line); padding-top: 16px; }
 .ax-foot .ax-logo-mark { width: 106px; height: 40px; }
 .ax-foot .ax-tag { color: var(--ax-muted); font-size: 0.82rem; }
 .ax-foot .ax-spacer { flex: 1; }
 .ax-foot .ax-note { font-family: var(--ax-mono); font-size: 0.66rem; color: var(--ax-muted); }
+/* A footer that can actually get you somewhere at the end of a long scroll. */
+.ax-footlinks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.ax-footlinks a, .ax-footlinks button {
+  font-family: var(--ax-mono); font-size: 0.7rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ax-slate);
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.ax-footlinks a:hover, .ax-footlinks button:hover { color: var(--ax-red-br); }
 
 /* ================================================================
    Sign-in overlay (apex only)
@@ -397,6 +425,10 @@
       linear-gradient(90deg, rgba(8,5,4,0.94) 0%, rgba(8,5,4,0.76) 34%, rgba(8,5,4,0.3) 62%, transparent 84%),
       linear-gradient(180deg, transparent 50%, rgba(8,5,4,0.62) 100%);
   }
+}
+/* Three steps stay side by side down to tablet — collapsing at 900 left three
+   near-empty full-width cards with the rule stretched across dead space. */
+@media (max-width: 780px) {
   .ax-steps { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
@@ -416,7 +448,8 @@
   /* Sign in is the control existing customers need; the marketing CTA
      repeats twice further down the page, so it yields the header space. */
   .ax-acts .ax-btn-primary { display: none; }
-  .ax-foot-in { flex-direction: column; align-items: flex-start; }
+  .ax-foot-row { align-items: flex-start; }
+  .ax-foot-row .ax-spacer { display: none; }
 }
 
 /* ── motion ──────────────────────────────────────────────────── */
@@ -428,9 +461,9 @@
   to   { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ax-fitem, .ax-step, .ax-fitem .ax-ic, .ax-btn,
+  .ax-fitem, .ax-step, .ax-plan, .ax-fitem .ax-ic, .ax-btn,
   .ax-step .ax-rule::before, .ax-email { transition: none; }
-  .ax-fitem:hover, .ax-step:hover, .ax-fitem:hover .ax-ic,
+  .ax-fitem:hover, .ax-step:hover, .ax-plan:hover, .ax-fitem:hover .ax-ic,
   .ax-btn-primary:hover { transform: none; }
   /* Hover still reads through color and the rule, just without movement. */
   .ax-step:hover .ax-rule::before { width: 100%; }
