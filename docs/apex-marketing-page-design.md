@@ -197,6 +197,9 @@ G7  Commit on feature/apex-marketing-page -> git merge --ff-only to staging -> p
 ENVIRONMENT FACTS:
 - Branch staging; feature branch feature/apex-marketing-page off staging.
 - Staging only (https://staging.pulllist.pages.dev/). No prod, no PR to main.
+- The staging build MAY run during the F86 legacy-key watch (different environment/layer).
+  The PRODUCTION PROMOTION is gated on F86/F88 closure — see the plan's § Status. If F86/F88
+  are still open, stop after G7 and report; do not promote.
 - PowerShell primary; no && chaining; Select-String not grep; quote paths containing parentheses.
 - Vanilla HTML/CSS/JS, no build step, no npm for the web app.
 - LOAD-BEARING: Cloudflare Pages serves EVERY hostname from ONE project; the apex-vs-subdomain

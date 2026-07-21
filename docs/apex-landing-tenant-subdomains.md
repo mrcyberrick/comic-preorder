@@ -4,9 +4,15 @@
 drives this development**; provisioning the founding tenant's own subdomain is **deprioritized/
 deferred** — the founding tenant simply stays on the apex.)*
 
-**Status:** **Planning — not started.** Standalone sub-deploy; **not** during the F86 legacy-key
-quiet-window watch, and **not** bundled with any other work. Its own session, full
-staging→prod discipline.
+**Status:** **Planning — not started.** Standalone sub-deploy; **not** bundled with any other
+work. Its own session, full staging→prod discipline.
+**F86 gating (revised 2026-07-21, Rick — supersedes the earlier "not during the F86 watch" line):**
+the **staging build MAY proceed during the F86 legacy-key watch.** It is staging-side static
+frontend (`index.html`/CSS/assets) and shares no surface with the production key toggle — different
+environment, different layer; staging keys were already rotated 2026-07-15. **The production
+promotion is gated on F86/F88 closure.** Rationale: F88 predicts the F86 toggle will 401 every Edge
+Function's auto-injected service-role key (broad function-layer outage). Do not put a freshly
+refactored prod login page into that window — one failure, one obvious cause.
 **Type:** Front-door change — add a marketing page + keep a universal login on the apex. **Low
 customer impact** (the apex never stops accepting logins). Standalone, ahead of Phase 6 — a
 satisfied precursor to Phase 6's public front door, **not** gated on the Phase 6 wildcard-DNS/TLS
@@ -241,7 +247,10 @@ deferred/premium and can land any time later, independently.
   explicitly bundled into this session. Not required for the free-tier apex experience.
 - **Marketing-site content/design system beyond a first landing page** (copy, SEO, analytics
   pixels, multi-page marketing site) — scope the first landing page only; expansions are separate.
-- **F86 legacy-key work** — unrelated; this sub-deploy does not run during that watch.
+- **F86 legacy-key work** — unrelated; never bundle it into this sub-deploy. (The *staging build*
+  may run during the F86 watch; only the **prod promotion** is gated — see § Status. Keeping Edge
+  Functions out of scope is doubly important here, since that is exactly the layer F88 says is
+  fragile around the toggle.)
 - Any `config.js` / import-script change; any second real tenant onboarding.
 
 ---
@@ -310,8 +319,10 @@ deferred/premium and can land any time later, independently.
 
 ---
 
-**Last updated:** 2026-07-20 (re-centered on the **marketing page as the driver**; founding
-subdomain **deprioritized/deferred** — founding stays on the apex. Earlier same-day: adopted the
+**Last updated:** 2026-07-21 (**F86 gating revised** — staging build may proceed during the watch;
+**prod promotion** gated on F86/F88 closure. Design captured in
+`docs/apex-marketing-page-design.md`. 2026-07-20: re-centered on the **marketing page as the
+driver**; founding subdomain **deprioritized/deferred** — founding stays on the apex; adopted the
 Hybrid tiering model (apex = marketing + universal login = free tier; branded subdomain = premium);
 per-tenant redirect downgraded blocking→optional; single-`APP_BASE_URL` confirmed not-a-defect, no
-F91. Status: Planning — not started; not during the F86 watch)
+F91. Status: Planning — not started)
