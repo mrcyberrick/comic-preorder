@@ -3,20 +3,300 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pull List — Sign In</title>
+  <title>PULLLIST — Your pre-order superpower</title>
+  <meta name="description" content="PULLLIST turns each month's distributor catalog into a pre-order storefront your comic or book shop's customers run themselves.">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="apex.css">
+  <script>
+  // ── Front-door branch (must run before first paint) ───────────
+  // Cloudflare Pages serves every hostname from ONE project, so all hosts
+  // get byte-identical files. The apex-vs-tenant split is client-side only.
+  //
+  //   <label>.pulllist.app  → tenant front door: today's branded sign-in
+  //   everything else       → apex front door: marketing + universal sign-in
+  //     (pulllist.app, www.pulllist.app, *.pages.dev, localhost)
+  //
+  // This mirrors tenantSlugFromHostname() in app.js. app.js re-asserts the
+  // decision from that canonical helper once it loads (see below), so this
+  // copy only exists to avoid a flash of the wrong front door.
+  (function () {
+    var root = document.documentElement;
+    var host = (location.hostname || '').toLowerCase();
+    var suffix = '.pulllist.app';
+    var isTenant = false;
+    if (host.length > suffix.length && host.slice(-suffix.length) === suffix) {
+      var label = host.slice(0, -suffix.length);
+      isTenant = !!label && label.indexOf('.') === -1 && label !== 'www';
+    }
+    root.setAttribute('data-front-door', isTenant ? 'tenant' : 'apex');
+
+    if (isTenant) {
+      document.title = 'Pull List — Sign In';
+    } else {
+      // An auth token in the URL, or an explicit #signin deep link, opens the
+      // sign-in panel immediately — an invite or magic link must never land
+      // behind the marketing page.
+      var raw = location.search + location.hash;
+      if (/[?&#](token_hash|access_token|type)=/.test(raw) || location.hash === '#signin') {
+        root.setAttribute('data-signin', 'open');
+      }
+      var pre = document.createElement('link');
+      pre.rel = 'preload'; pre.as = 'image'; pre.href = 'assets/hero.jpg';
+      document.head.appendChild(pre);
+    }
+  })();
+  </script>
 </head>
 <body>
 
+<!-- ══════════════════════════════════════════════════════════════
+     APEX MARKETING (rendered only when data-front-door="apex")
+     ══════════════════════════════════════════════════════════════ -->
+<div class="ax-site">
+
+  <header class="ax-top">
+    <div class="ax-top-in">
+      <a href="#" class="ax-logo-mark" role="img" aria-label="PULLLIST — comic preorder system"></a>
+      <span class="ax-spacer"></span>
+      <nav class="ax-navpill" aria-label="Primary">
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <span class="ax-spacer"></span>
+      <div class="ax-acts">
+        <button type="button" class="ax-btn ax-btn-ghost" data-signin-open>Sign in</button>
+        <a class="ax-btn ax-btn-primary" href="#contact">Get started</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="ax-hero">
+    <div class="ax-hero-photo" role="img"
+         aria-label="A caped figure on a rooftop above a city skyline at sunset"></div>
+    <div class="ax-scrim"></div>
+    <div class="ax-inner">
+      <div class="ax-hero-content ax-reveal">
+        <span class="ax-badge">⚡ Built for comic &amp; book shops</span>
+        <h1 class="ax-display">Your pre-order <span class="ax-r">superpower</span></h1>
+        <p class="ax-sub">
+          PULLLIST turns each month's distributor catalog into a pre-order storefront your customers
+          run themselves — so you stop retyping spreadsheets and start every release day with a pull
+          list that's already done.
+        </p>
+        <div class="ax-cta-row">
+          <a class="ax-btn ax-btn-primary" href="#contact">Start free →</a>
+          <a class="ax-btn ax-btn-dark" href="#how">▶ See how it works</a>
+        </div>
+        <p class="ax-microtrust">No card to start · reservations only · no POS to replace</p>
+        <p class="ax-signin-line">
+          Already have an account? <button type="button" data-signin-open>Sign in →</button>
+        </p>
+        <div class="ax-stats">
+          <div class="ax-lab">This week's pre-orders</div>
+          <div class="ax-big">1,248</div>
+          <div class="ax-delta">↑ 18.6% vs last week</div>
+          <div class="ax-mini">
+            <div><b>86</b>New releases</div>
+            <div><b>932</b>Customer orders</div>
+            <div><b>230</b>Bagged &amp; ready</div>
+          </div>
+          <div class="ax-caption">Sample dashboard</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ax-strip">
+    <div class="ax-strip-in">
+      <span class="ax-t">Reads the catalogs you already order</span>
+      <div class="ax-chips">
+        <span class="ax-chip">Lunar<small>Distribution</small></span>
+        <span class="ax-chip">PRH<small>Penguin Random House</small></span>
+      </div>
+      <span class="ax-more">— and every publisher in the book, priced and dated automatically.</span>
+    </div>
+  </section>
+
+  <section class="ax-band" id="features">
+    <div class="ax-inner">
+      <span class="ax-eyebrow">Built for comic &amp; book shops</span>
+      <h2 class="ax-display ax-h2">Powerful tools. Simple to use.</h2>
+      <p class="ax-lede">Everything you need to run monthly pre-orders, subscriptions, and release-day bagging — in one place.</p>
+      <!-- Icons are stroked with currentColor, never var() — CSS custom
+           properties do not resolve inside SVG presentation attributes. -->
+      <div class="ax-fitems">
+        <div class="ax-fitem">
+          <div class="ax-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M12 3v9"/><path d="m8.5 8.5 3.5 3.5 3.5-3.5"/>
+              <path d="M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14"/>
+            </svg>
+          </div>
+          <h3>Catalog in minutes</h3>
+          <p>Lunar + PRH imported, priced, and dated — the whole month ready fast.</p>
+        </div>
+        <div class="ax-fitem">
+          <div class="ax-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 8h18"/>
+              <path d="m10 11.4 5.4 2-2.2.9-.9 2.2z"/>
+            </svg>
+          </div>
+          <h3>Customers self-serve</h3>
+          <p>They reserve titles and the exact variant covers they want, online.</p>
+        </div>
+        <div class="ax-fitem">
+          <div class="ax-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M20 11a8 8 0 0 0-13.6-5.7L4.2 7.5"/><path d="M4 4.2v3.6h3.6"/>
+              <path d="M4 13a8 8 0 0 0 13.6 5.7l2.2-2.2"/><path d="M20 19.8v-3.6h-3.6"/>
+            </svg>
+          </div>
+          <h3>Series subscriptions</h3>
+          <p>Subscribe once; the standard cover is auto-reserved every month.</p>
+        </div>
+        <div class="ax-fitem">
+          <div class="ax-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M9 4.5H7.5A1.5 1.5 0 0 0 6 6v13a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V6a1.5 1.5 0 0 0-1.5-1.5H15"/>
+              <rect x="9" y="2.5" width="6" height="4" rx="1"/>
+              <path d="m9.4 12 1.4 1.4 2.9-2.9"/><path d="M9.4 16.6h5.2"/>
+            </svg>
+          </div>
+          <h3>Release-day lists</h3>
+          <p>A per-customer, printable bagging list every single week.</p>
+        </div>
+        <div class="ax-fitem">
+          <div class="ax-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <rect x="3" y="5" width="18" height="14" rx="2"/>
+              <path d="m3.6 6.6 8.4 5.9 8.4-5.9"/>
+            </svg>
+          </div>
+          <h3>Customer notifications</h3>
+          <p>Email your customers when the catalog's live or their books are in.</p>
+        </div>
+        <div class="ax-fitem">
+          <div class="ax-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M12 3 5 5.9v5.4c0 4.1 2.9 7.9 7 9.4 4.1-1.5 7-5.3 7-9.4V5.9L12 3Z"/>
+              <path d="m9.2 11.9 2 2 3.6-3.6"/>
+            </svg>
+          </div>
+          <h3>Your shop, your data</h3>
+          <p>Each shop's customers and orders stay fully isolated — your list is yours.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ax-band ax-how" id="how">
+    <div class="ax-inner">
+      <span class="ax-eyebrow">How it works</span>
+      <h2 class="ax-display ax-h2">Three steps a month. That's it.</h2>
+      <div class="ax-steps">
+        <div class="ax-step">
+          <div class="ax-num">01</div><div class="ax-rule"></div>
+          <h3>Import the month</h3>
+          <p>Drop in the Lunar and PRH catalogs. Every title is priced, dated, and ready to browse — no retyping.</p>
+        </div>
+        <div class="ax-step">
+          <div class="ax-num">02</div><div class="ax-rule"></div>
+          <h3>Customers reserve themselves</h3>
+          <p>They browse the month, reserve titles and variant covers, and subscribe to the series they never want to miss.</p>
+        </div>
+        <div class="ax-step">
+          <div class="ax-num">03</div><div class="ax-rule"></div>
+          <h3>Bag it on release day</h3>
+          <p>Every release day you get a per-customer bagging list — who gets what, already sorted and ready to check off.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ax-band ax-pricing" id="pricing">
+    <div class="ax-inner">
+      <span class="ax-eyebrow">Simple pricing</span>
+      <h2 class="ax-display ax-h2">Start free. Add your brand when you're ready.</h2>
+      <p class="ax-lede">No card to start. Reservations only — you never process payments through PULLLIST.</p>
+      <div class="ax-plans">
+        <div class="ax-plan">
+          <div class="ax-pname">Free</div>
+          <div class="ax-amt">$0<small> / month</small></div>
+          <p class="ax-pdesc">Everything above, on the shared <b>pulllist.app</b> front door. Import the month, take reservations, print bagging lists.</p>
+        </div>
+        <div class="ax-plan ax-pro">
+          <div class="ax-pname">Branded</div>
+          <div class="ax-amt">$—<small> / month</small></div>
+          <p class="ax-pdesc">Your own <b>yourshop.pulllist.app</b> address, your logo and colors, and customer emails from your shop.</p>
+          <p class="ax-ph">Pricing on request</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ax-band ax-closing" id="contact">
+    <div class="ax-inner">
+      <span class="ax-eyebrow">Ready when you are</span>
+      <h2 class="ax-display ax-h2">Next month can be the easy one.</h2>
+      <p class="ax-lede">Tell us about your shop and we'll get you set up.</p>
+      <a class="ax-email" href="mailto:pulllist@mrcyberrick.us?subject=PULLLIST%20%E2%80%94%20shop%20enquiry">pulllist@mrcyberrick.us</a>
+      <div class="ax-cta-row">
+        <button type="button" class="ax-btn ax-btn-dark" data-signin-open>Sign in</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="ax-foot">
+    <div class="ax-foot-in">
+      <div class="ax-foot-row">
+        <div class="ax-logo-mark" role="img" aria-label="PULLLIST"></div>
+        <span class="ax-spacer"></span>
+        <nav class="ax-footlinks" aria-label="Footer">
+          <a href="#how">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#contact">Contact</a>
+          <button type="button" data-signin-open>Sign in</button>
+        </nav>
+      </div>
+      <div class="ax-foot-row">
+        <span class="ax-tag">Pre-orders, minus the pain. Made for comic &amp; book shops.</span>
+        <span class="ax-spacer"></span>
+        <span class="ax-note">Reservations only — PULLLIST never processes payments.</span>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SIGN-IN — the tenant front door's whole page, and the apex's
+     overlay. One DOM, one auth path, both branches.
+     ══════════════════════════════════════════════════════════════ -->
 <div class="login-page">
   <div class="login-card">
 
-    <div style="display:flex;justify-content:center;margin-bottom:16px">
+    <button type="button" class="ax-authclose" data-signin-close aria-label="Close sign in">✕</button>
+
+    <div class="ax-when-tenant" style="display:flex;justify-content:center;margin-bottom:16px">
       <img data-tenant-logo src="bookstop_logo.png" alt="Ray &amp; Judy's Book Stop"
            style="height:72px;width:auto;object-fit:contain">
     </div>
+    <div class="ax-authmark ax-when-apex" role="img" aria-label="PULLLIST"></div>
     <div class="login-logo">PULL<span>LIST</span></div>
-    <div class="login-tagline"><span data-tenant-name>Ray &amp; Judy's Book Stop</span> — Monthly Pre-Orders</div>
+    <div class="login-tagline">
+      <span class="ax-when-apex">We'll take you to your shop</span>
+      <span class="ax-when-tenant"><span data-tenant-name>Ray &amp; Judy's Book Stop</span> — Monthly Pre-Orders</span>
+    </div>
 
     <!-- ── Invite Welcome Banner (shown when invite token detected) ── -->
     <div id="invite-banner" style="display:none;margin-bottom:24px;
@@ -31,13 +311,17 @@
         Welcome to your pull list!
       </div>
       <div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7">
-        Ray &amp; Judy's Book Stop has set up an account for you. Set your password below to get started —
+        <span class="ax-when-apex">Your shop has set up an account for you.</span><span
+              class="ax-when-tenant">Ray &amp; Judy's Book Stop has set up an account for you.</span>
+        Set your password below to get started —
         you can then browse the monthly catalog and reserve your titles.
       </div>
       <!-- Trust signals -->
       <div style="margin-top:12px;display:flex;flex-direction:column;gap:4px;
                   font-size:0.75rem;color:var(--text-muted)">
-        <div>✓ &nbsp;This invite was sent personally by Ray &amp; Judy's Book Stop</div>
+        <div>✓ &nbsp;This invite was sent personally by
+          <span class="ax-when-apex">your shop</span><span
+                class="ax-when-tenant">Ray &amp; Judy's Book Stop</span></div>
         <div>✓ &nbsp;Reservations only — you will never be charged through this site</div>
         <div>✓ &nbsp;Questions? Reply to the invite email or call the shop</div>
       </div>
@@ -93,7 +377,8 @@
       </p>
       <p style="margin-top:10px;font-size:0.78rem;color:var(--text-muted);
                 text-align:center;line-height:1.6">
-        Don't have an account? Contact the shop and<br>we'll get you set up.
+        <span class="ax-when-apex">Don't have an account? Your shop can<br>set one up for you.</span><span
+              class="ax-when-tenant">Don't have an account? Contact the shop and<br>we'll get you set up.</span>
       </p>
     </div>
 
@@ -115,7 +400,7 @@
   </div>
 
   <!-- Shop footer -->
-  <div style="position:fixed;bottom:20px;left:0;right:0;text-align:center;
+  <div class="ax-when-tenant" style="position:fixed;bottom:20px;left:0;right:0;text-align:center;
               font-size:0.72rem;color:var(--text-muted);letter-spacing:0.03em">
     <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &nbsp;·&nbsp; Pull List Pre-Order System
   </div>
@@ -124,6 +409,82 @@
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script>
+// ── Front-door reconciliation + apex sign-in overlay ────────────
+// Runs synchronously after app.js so the sign-in controls are live
+// immediately, without waiting on TenantContext's network round-trip.
+(function () {
+
+  // app.js owns the canonical host model (NON_TENANT_HOSTS + the
+  // <slug>.pulllist.app parse). Re-assert it over the head script's
+  // pre-paint guess so the allowlist has exactly one source of truth.
+  try {
+    document.documentElement.setAttribute(
+      'data-front-door', tenantSlugFromHostname() ? 'tenant' : 'apex');
+  } catch (_) { /* keep the pre-paint value */ }
+
+  const root  = document.documentElement;
+  const site  = document.querySelector('.ax-site');
+  const panel = document.querySelector('.login-page');
+
+  const SignIn = {
+    _trigger: null,
+    isApex() { return root.getAttribute('data-front-door') === 'apex'; },
+    isOpen() { return root.getAttribute('data-signin') === 'open'; },
+
+    open(trigger) {
+      if (!this.isApex()) return;               // tenant branch: already a page
+      this._trigger = trigger || null;
+      root.setAttribute('data-signin', 'open');
+      this._sync();
+      const inputs = Array.from(panel.querySelectorAll('input'));
+      const first  = inputs.find(el => el.offsetParent !== null);
+      (first || panel.querySelector('.ax-authclose'))?.focus();
+    },
+
+    close() {
+      if (!this.isApex()) return;
+      root.removeAttribute('data-signin');
+      this._sync();
+      if (this._trigger) { this._trigger.focus(); this._trigger = null; }
+    },
+
+    // Background is inert while the panel is open, so focus and screen
+    // readers stay inside the dialog.
+    _sync() {
+      if (!panel) return;
+      const open = this.isOpen();
+      if (site) site.inert = open;
+      if (open) {
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        panel.setAttribute('aria-label', 'Sign in to PULLLIST');
+      } else {
+        panel.removeAttribute('role');
+        panel.removeAttribute('aria-modal');
+        panel.removeAttribute('aria-label');
+      }
+    },
+  };
+  window.SignIn = SignIn;
+
+  document.addEventListener('click', (e) => {
+    const opener = e.target.closest('[data-signin-open]');
+    if (opener) { e.preventDefault(); SignIn.open(opener); return; }
+    if (e.target.closest('[data-signin-close]')) { e.preventDefault(); SignIn.close(); return; }
+    if (SignIn.isApex() && SignIn.isOpen() && e.target === panel) SignIn.close();  // backdrop
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && SignIn.isOpen()) SignIn.close();
+  });
+
+  // The head script may already have opened the panel for a token or a
+  // #signin deep link — bring the ARIA/inert state in line with the markup.
+  if (SignIn.isApex() && SignIn.isOpen()) SignIn._sync();
+
+})();
+</script>
 <script>
 (async () => {
 
@@ -142,6 +503,11 @@
   const refreshToken = hashParams.get('refresh_token');
   const type         = qParams.get('type') || hashParams.get('type');
   const hasInvite    = (tokenHash || accessToken) && type;
+
+  // On the apex the sign-in panel is an overlay — a token must never land
+  // behind the marketing page. (The head script normally has it open
+  // already; this is the belt-and-braces pass once the tokens are parsed.)
+  if (hasInvite) window.SignIn?.open();
 
   // ── Redirect if already logged in (no invite in URL) ───────
   if (!hasInvite) {

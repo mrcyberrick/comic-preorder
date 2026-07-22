@@ -1,6 +1,6 @@
 # F86 — Prod Legacy API Key Retirement (config.js anon-key migration)
 
-**Status:** In progress — Step 1 staging rehearsal complete (V1–V3 green); Step 2 (prod publishable key creation) next
+**Status:** **Complete — 2026-07-22.** All steps 0–7 done; V1–V7 all green; F88 (surfaced mid-session) resolved on staging and prod; F75 residual closed. See § 6a Execution Log for full evidence.
 **Plan written:** 2026-07-15 (planning session; no code, config, or dashboard changes made)
 **Execution session opened:** 2026-07-15
 **Not a phase sub-deploy** — standalone maintenance session, successor to the `import.js` maintenance session (F75/F78/F85, closed 2026-07-15). Closes F86 and the last F75 residual.
@@ -105,11 +105,11 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - [x] Staging rehearsal complete: toggle flipped, V1–V3 green (staging toggle stays disabled permanently — it's the desired end state there too)
 - [x] Edge Function injected-env-var question answered with recorded evidence; 1-C either skipped-with-evidence or landed on both envs
 - [x] Prod `config.js` on publishable key, deployed, V4–V5 green
-- [ ] One weekly shipment cycle elapsed on the new key before the prod toggle (Step 4)
-- [ ] Prod "Disable legacy API keys" flipped; V6 green
-- [ ] V7: legacy `service_role` JWT (F75's exposed credential) and legacy `anon` key confirmed dead
-- [ ] F86 resolved + F75 residual annotated in `technical-reference.md` § 13; `CLAUDE.md` § Open findings and § Known Out-of-Scope Items updated
-- [ ] All doc changes committed (doc-only → `staging`); plan status set to Complete
+- [x] One weekly shipment cycle elapsed on the new key before the prod toggle (Step 4)
+- [x] Prod "Disable legacy API keys" flipped; V6 green
+- [x] V7: legacy `service_role` JWT (F75's exposed credential) and legacy `anon` key confirmed dead
+- [x] F86 resolved + F75 residual annotated in `technical-reference.md` § 13; `CLAUDE.md` § Open findings and § Known Out-of-Scope Items updated
+- [x] All doc changes committed (doc-only → `staging`); plan status set to Complete
 
 ## 6a. Execution log
 
@@ -138,6 +138,16 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - **Step 4 gate computed and scheduled.** First qualifying Wednesday on the new key = **2026-07-22**; earliest valid Step 5 day = **Thursday 2026-07-23** (quiet day: not Tue/Wed, before the early-August import week; days-of-week verified via `Get-Date`).
 - Two one-time reminder routines created (Claude Code cloud routines, fire 8:00 AM ET): `trig_0134vBDGdPfCnfBXyW44c2n4` (Jul 22 — shipment-day watch: browser-console anon-key check on both tenant domains + confirm the `SUPABASE_SERVICE_KEY_PROD` rotation) and `trig_01MgG9WDZzW7vcHxBM7KPdEN` (Jul 23 — Step 5 ready, with precondition check and Steps 5–7 checklist). **Reminders only** — the toggle flip itself remains Rick-in-the-loop per Step 5. Manage/delete at https://claude.ai/code/routines. One-shots auto-disable after firing.
 - Google Calendar events added same day after Rick re-authorized the connector (primary calendar, 8:00 AM ET, popup+email reminders): event `gsq4qf3pl1ds4d7c4fk85vn62c` (Jul 22 watch) and `7cveofd3lgbtkkn7fg5bvnt38k` (Jul 23 Step 5) — both gate days now have calendar + cloud-routine coverage. Pattern generalized into the local skill `/schedule-gate`; `/wrap-up` drift check now flags open gates with no scheduled reminder.
+
+**Session 4:**
+- Rick confirmed Step 4 (quiet window) elapsed cleanly: no anon-key errors, `comicstore.pulllist.app` login loads correctly, and his `SUPABASE_SERVICE_KEY_PROD` rotation (filed Session 2) is confirmed stable in `.env`.
+- **Contradiction surfaced before proceeding to Step 5:** `technical-reference.md` § 13 **F88** (filed 2026-07-17, after this plan's Session 1/2) predicted the prod toggle flip would break every edge function's own downstream service-role calls (auto-injected `SUPABASE_SERVICE_ROLE_KEY`), severity High-if-confirmed, and explicitly flagged `notify-customers` as the likely casualty (F87 had already proven it fragile). This was not silently reconciled — surfaced to Rick per CLAUDE.md's rule against working around filed findings silently.
+- **Additional staging verification run (Rick's choice, before Step 5):** a throwaway-fixture test exercised `notify-customers` itself — the specific function F87/F88 flagged — end-to-end post-toggle on staging (synthetic tenant + one fake `@example.com` customer, so no real person was emailed). Result: HTTP 200, `{"success":true,"sent":1,"failed":0}`; full downstream path (`app_settings`, `user_profiles`, `/auth/v1/admin/users`, MailerSend) all succeeded via the injected `SUPABASE_SERVICE_ROLE_KEY`. Fixtures torn down, 0 rows remaining. **F88 updated** in `technical-reference.md` § 13 with this evidence (severity downgraded High → Medium pending prod confirmation; scope note corrected — staging's toggle was genuinely disabled, not un-flipped as F88 originally assumed).
+- Combined with V2 (`create-paper-customer` + `register-customer`), 3 of ~9 edge functions are now directly proven to survive the toggle on staging, covering every downstream call pattern all 9 functions use. Residual uncertainty (staging vs. prod project parity) is backstopped by Step 5.4's already-designed instant rollback.
+- Rick confirmed: proceed to Step 5.
+- **Step 5 complete.** Rick flipped prod's "Disable legacy API keys" toggle (project `plgegklqtdjxeglvyjte`). **V6 green:** manual check (Rick) — pulllist.app login/catalog/reserve-cancel write-smoke green, `comicstore.pulllist.app` loads correctly. Scripted check (agent) — throwaway-fixture test exercised `create-paper-customer` against the real prod founding tenant (throwaway admin test user + throwaway paper customer, both deleted immediately after, live SELECT confirmed 0 rows). HTTP 200, full success. **F88 fully resolved** in `technical-reference.md` § 13 with this prod evidence — the predicted legacy-JWT-stuck-in-injected-env mechanism did not occur on either project; no Edge Function code changes were needed.
+- **Step 6 complete. V7 green.** Rick tested both old legacy prod keys directly against `/rest/v1/tenants` — both rejected: `HTTP 401 {"message":"Legacy API keys are disabled","hint":"Your legacy API keys (anon, service_role) were disabled on 2026-07-22T14:34:11.137267+00:00. ..."}`. The disable timestamp confirms the Step 5 toggle flip took effect platform-wide, covering both the F75-exposed `service_role` JWT (the original 2026-06-19 exposure event) and the legacy `anon` key `config.js` used before this session. **This closes the F75 residual.**
+- **Step 7 complete — F86 CLOSED.** `technical-reference.md` § 13: F86 marked resolved with a full evidence summary; F75's Residual line updated to point at this closure. `CLAUDE.md`: § Current Migration Phase's Open findings line — F86 and F88 blurbs removed (both resolved), trailing "resolved through" ceiling raised to F90; § Known Out-of-Scope Items — F86 entry removed, closure note added matching the pattern of other closed sessions. This plan's Completion Criteria all ticked; Status set to Complete. All doc changes committed doc-only to `staging` across this multi-sitting session (commits `a8f46bf`, `023ca19`, `04e6429`, `0538987`, `271b97c`, `6a92c80`, `5736be7`, and this closing commit).
 
 ## 7. Rollback
 

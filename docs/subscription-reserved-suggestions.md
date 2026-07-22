@@ -412,8 +412,15 @@ end-to-end tap). The test **failed against the pre-fix deployed page
 after the fix deployed**; full-page 375 px screenshot visually inspected
 (worst case: long series name + format badge wraps cleanly). Pre-push
 full suite: 39/40 with the only failure being this new test against the
-pre-fix deployment, per the deploy-sequencing precedent. Prod promotion
-of the fix: pending Rick's phone check on staging.
+pre-fix deployment, per the deploy-sequencing precedent.
+
+**Fix promoted to production 2026-07-19** — PR #92 (`33f7b3f` on `main`;
+PR branch created *before* merging staging this time, avoiding the
+`MERGE_HEAD` drop from PR #91's flow). Verified live on prod via
+`curl -L` marker fetch; Rick confirmed the mobile view is good on his
+phone. Write-smoke not repeated for this CSS-only diff (no JS behavior
+change; the feature's write path was smoke-tested at PR #91 the same
+day).
 
 - **Deploy-verification gotcha:** `staging.pulllist.pages.dev` answers
   `/subscriptions.html` with an **HTTP 308** redirect to the extensionless

@@ -133,13 +133,32 @@ isolation.
 active tenant before any call that needs it. Resolution order:
 
 1. Authenticated user's `user_profiles.tenant_id` (looked up on page load).
-2. `?t=<slug>` query parameter (persisted to `sessionStorage` for the tab).
-3. Founding tenant fallback.
+2. Subdomain — `<slug>.pulllist.app` via `tenantSlugFromHostname()` (5.2).
+3. `?t=<slug>` query parameter (persisted to `sessionStorage` for the tab).
+4. `sessionStorage` slug from earlier in the tab.
+5. Founding tenant fallback.
 
-The slug-to-id mapping for unauthenticated lookups is hard-coded in
-`TENANT_SLUG_MAP` because the `tenants` table is not readable by anon. This
-is acknowledged scaffolding; the comment in `app.js` notes it will be
-replaced with an RPC once a second tenant exists.
+Unauthenticated slug→id lookups go through the `resolve_tenant_by_slug`
+SECURITY DEFINER RPC (5.2 S1; extended to 4 columns in 5.3), because the
+`tenants` table is not readable by anon. The former hard-coded
+`TENANT_SLUG_MAP` was **removed at 5.2 S6 (2026-06-15)**; the RPC is the sole
+anon slug source and `FOUNDING_TENANT` (supplied per-branch by `config.js`)
+is the only remaining hardcoded fallback.
+
+`tenantSlugFromHostname()` returns `null` for every non-tenant host —
+`pulllist.app`, `www.pulllist.app`, `localhost`, `127.0.0.1`, and **any**
+`*.pages.dev` host — so those all fall through to the founding default.
+
+**Front-door presentation (2026-07-21, `docs/apex-landing-tenant-subdomains.md`
+S2) is a separate axis from resolution.** `index.html` branches on the same
+host signal: a tenant subdomain renders the branded login; every other host
+renders the apex front door — platform marketing plus a **universal**
+sign-in that authenticates any tenant's customer into their own store via
+the profile branch. This does **not** change resolution: the apex still
+resolves to the founding tenant for anonymous visitors, and an authenticated
+user always resolves to their own tenant by profile on any host. Cloudflare
+Pages serves every hostname from one project, so the split is client-side
+only — there is no per-host file.
 
 **In the import script** (`import-staging.js`), tenant_id is a top-level
 constant `TENANT_ID = '72e29f67-...'`. Catalog upserts, shipment upserts,
@@ -1133,11 +1152,11 @@ before any API call that needs `tenant_id`.
 ```javascript
 TenantContext.resolve()       // → { id, slug, display_name }
 TenantContext.current()       // → cached resolved tenant; throws if not resolved
-TenantContext.source()        // → 'profile' | 'query' | 'session' | 'default'
+TenantContext.source()        // → 'profile' | 'subdomain' | 'query' | 'session' | 'default'
 ```
 
-Resolution order: authenticated profile → `?t=<slug>` query param →
-sessionStorage → founding tenant fallback.
+Resolution order: authenticated profile → subdomain (`tenantSlugFromHostname()`)
+→ `?t=<slug>` query param → sessionStorage → founding tenant fallback.
 
 ### 10.2 `Auth`
 
@@ -2325,7 +2344,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 #### F75 — Service-role keys hardcoded in local import scripts, surfaced into a CLI transcript
 - **Status:** filed 2026-06-19, **resolved 2026-07-15** (sanitized past-tense entry replacing the placeholder — no key values, no exploitable specifics; full historical detail remains in the local-only operator note).
 - **Fix:** (1) both scripts refactored to load credentials via `loadDotEnv()`/`requireEnv()` from a gitignored `.env`, hard-failing on a missing var and asserting `SUPABASE_URL` targets the correct project — landed 2026-07-08 (scripts repo `c2e37c6`). (2) Staging current-generation key rotated 2026-07-15: new key created, verified via a `--no-write` dry run against staging, old key deleted. (3) Prod: a new current-generation key was created and verified via a `--no-write` dry run against prod — both scripts now authenticate with current-generation keys, not the original hardcoded literals.
-- **Residual:** the prod legacy `service_role` JWT (the actual credential from the original 2026-06-19 exposure event) could not be disabled — Supabase's prod project only exposes a single combined toggle covering both the legacy `service_role` and the legacy `anon` key that `config.js` depends on. The JWT stays live/unused pending a coordinated future `config.js` migration. Tracked as **F86** — this is not a reopening of F75; the exposure risk this finding tracked (hardcoded literals + an unrotated key) is closed, and F86 tracks the separate platform-level cleanup constraint.
+- **Residual:** the prod legacy `service_role` JWT (the actual credential from the original 2026-06-19 exposure event) could not be disabled — Supabase's prod project only exposes a single combined toggle covering both the legacy `service_role` and the legacy `anon` key that `config.js` depends on. The JWT stays live/unused pending a coordinated future `config.js` migration. Tracked as **F86** — this is not a reopening of F75; the exposure risk this finding tracked (hardcoded literals + an unrotated key) is closed, and F86 tracks the separate platform-level cleanup constraint. **Residual closed 2026-07-22:** F86's coordinated migration disabled prod's legacy keys entirely; the exposed `service_role` JWT is now confirmed dead (`401 "Legacy API keys are disabled"` against a live endpoint). See F86 below for the full resolution.
 - **Where:** `import.js` / `import-staging.js` (scripts repo, credential loading); Supabase dashboard (key rotation, both envs). New findings are numbered from **F76**.
 
 #### F76 — Shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (distributor-agnostic)
@@ -2420,11 +2439,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** scripts repo `import.js` / `import-staging.js` — `buildCarryForwardMap()` + `matchSubscriptions()` (new pure functions) called from `autoReserveSubscriptions()`; previously manifested in `admin.html` This Week bagging list (`renderThisWeek`, which correctly renders one row per preorder — no web-app defect, then or now).
 
 #### F86 — Prod legacy API keys (anon + service_role) can only be disabled as a single unit — blocks full F75 remediation without a coordinated `config.js` migration
-- **Status:** filed 2026-07-15 (surfaced during the `import.js` maintenance session, F75 prod step), **open — deferred**, residual/follow-on to F75.
-- **Severity:** Low–Medium — bounded residual risk, not a new exposure. The legacy `service_role` JWT from F75's original 2026-06-19 exposure event remains technically valid, but no script or code path uses it anymore (the new current-generation `sb_secret_` key created and verified this session is what `import.js` actually authenticates with going forward).
-- **Detail:** F75's prod remediation created a new current-generation `sb_secret_` key for `import.js` (verified via `--no-write` dry run against prod — correct project guard passed, catalog + subscription reads/simulated-writes succeeded). The final step — disabling the old legacy `service_role` JWT — turned out not to be independently possible: live-checked in the Supabase dashboard (prod project `plgegklqtdjxeglvyjte`, Settings → API Keys), there is only **one** toggle, "Disable legacy API keys," covering **both** the `anon` (public) and `service_role` (secret) legacy keys together. No per-key revoke exists. `config.js` in production still uses the legacy `anon` key (never migrated to a new-generation publishable key), so flipping that toggle would break the live app at pulllist.app immediately.
-- **Disposition:** legacy `service_role` JWT deliberately left live/unused rather than risk prod. Full retirement requires a coordinated future session: generate a new publishable key, update `config.js` on both `staging` and `main` branches, deploy, verify the live app, then disable legacy keys. Out of scope for the `import.js` maintenance session, whose plan explicitly puts `config.js` changes OUT — see `docs/import-js-maintenance-f75-f78-f85.md`.
-- **Where:** Supabase dashboard prod project settings (platform config, not repo code); `config.js` is the future migration target, not touched this session.
+- **Status:** filed 2026-07-15, **resolved 2026-07-22** — coordinated migration executed end-to-end across a multi-sitting F86 execution session; full runbook + evidence: `docs/f86-anon-key-migration.md`.
+- **Severity:** Low–Medium as filed (bounded residual risk, not a new exposure) — closed cleanly, no incident.
+- **Detail (as filed):** F75's prod remediation created a new current-generation `sb_secret_` key for `import.js`, but could not disable the old legacy `service_role` JWT — prod's Supabase dashboard exposes only **one** combined "Disable legacy API keys" toggle covering both the `anon` (public, `config.js`-consumed) and `service_role` (secret) legacy keys together. Flipping it while `config.js` still used the legacy `anon` key would have broken the live app.
+- **Resolution:** (1) staging rehearsal — flipped staging's toggle first (staging's `config.js` was already on a publishable key), full Playwright suite green pre- and post- a 24h soak (amended from a planned 48h at Rick's call, confirmed genuinely elapsed), and a throwaway-fixture exercise of `create-paper-customer` + `register-customer` proved the platform-injected `SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_ANON_KEY` env vars kept working post-toggle — no Edge Function code migration needed. (2) Prod `config.js` migrated from the legacy `anon` JWT to a new publishable key (Rick created the key and edited the one line himself; agent verified the diff shape only, never read the value) via PR #80 → `main`, live-verified (login/catalog/reserve-cancel write-smoke, both tenant domains). (3) A full weekly shipment cycle elapsed cleanly on the new key. (4) **F88** surfaced mid-session (edge functions' own downstream service-role calls might break) — verified false on both staging (`notify-customers`, the function F87 had already proven fragile) and prod (`create-paper-customer` against the real founding tenant) before and immediately after the toggle flip; see F88 below. (5) Rick flipped prod's toggle; live verification green on both tenant domains. (6) Confirmed dead: both the F75-exposed legacy `service_role` JWT and the legacy `anon` key now return `401 "Legacy API keys are disabled"` against a live prod endpoint (disable timestamp `2026-07-22T14:34:11 UTC`) — **this closes the F75 residual below.**
+- **Where:** Supabase dashboard prod project settings; `config.js` (`main`, one-line value change, PR #80 `415f742`); no Edge Function code changes.
 
 #### F87 — `notify-customers` rejects the import script's service-role call after the F75 key rotation → monthly catalog email silently not sent ("Invalid auth")
 - **Status:** filed 2026-07-17; **resolved 2026-07-17.** Capability-probe fix deployed to staging (`notify-customers` v23) and prod (v33), both with `--no-verify-jwt` (verify_jwt-off preserved). Admin-API probes on both envs confirmed the gate: real service key → 200, forged `role=service_role` token → 401, garbage → 401. Prod July catalog email **sent successfully** on the import re-run. Landed on staging in `1772a4b`; source promoted to `main` via PR #87. Regression from F75; related to F86 (the legacy JWT being left live is why the function's *own* service calls are unaffected).
@@ -2438,13 +2457,14 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `supabase/functions/notify-customers/index.ts` — the caller-auth block (`isServiceRole`, ~lines 17-42 post-fix). Related: F75 (root — key rotation), F86 (legacy keys still live).
 
 #### F88 — Disabling prod legacy API keys (F86 Step 5) will break every edge function's *own* service-role calls (the auto-injected `SUPABASE_SERVICE_ROLE_KEY` is the legacy JWT)
-- **Status:** filed 2026-07-17; **open — verification required before the F86 legacy-key disable** (tentatively scheduled ~2026-07-23). Predicted platform behavior, **not yet verified**. Related: F86 (same toggle; the `config.js` anon side), F87 (same function/auth surface — this would silently re-break the fix), F75 (key-rotation origin). Surfaced while implementing F87.
-- **Severity:** High **if confirmed** — flipping the F86 toggle would 401 the service calls inside all ~9 prod edge functions (customer notification blast, invites, paper-customer create/claim, approve, send-my-list, reset-password, register-tenant/customer), i.e. a broad outage of the function layer. No data corruption; functions fail closed.
+- **Status:** filed 2026-07-17; **resolved — prod-confirmed 2026-07-22 (F86 Step 5, V6)**. Predicted failure mode did not reproduce on staging or prod.
+- **Severity:** High if confirmed; **did not materialize.** No data corruption; the prod toggle flip caused no function-layer outage.
 - **Predicted root cause:** every edge function reads `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')` — Supabase's auto-injected **legacy** `service_role` JWT — for its own privileged REST/Auth-admin calls (confirmed example: `notify-customers` lines ~80-83 read `app_settings`/`user_profiles`, ~116-119 recipients, ~126-129 `/auth/v1/admin/users`). F86's single "Disable legacy API keys" toggle disables the legacy `anon` + `service_role` JWTs together. New-generation secret keys are injected under a **different** variable (e.g. `SB_SECRET_KEY`) rather than replacing `SUPABASE_SERVICE_ROLE_KEY`, so once legacy keys are off the auto-injected env is expected to point at a now-dead key → those calls start returning 401. Distinct from F86's existing scope (the `config.js` **anon/client** side); this is the **service-role/server** side.
 - **Interaction with F87:** F87 fixed only caller *detection* (probe the admin API with the presented `sb_secret_` key). The function's *downstream* service calls still ride the legacy-JWT env, so the F86 toggle would silently re-break the July catalog email fixed 2026-07-17.
-- **Scope:** prod (all edge functions). Staging appears unaffected today (its legacy JWT looks still live — F75 rotated only the current-generation `sb_secret_` import key there, not the auto-injected env); verify staging too before using it as the test bed.
-- **Fix / next step (do BEFORE the F86 toggle):** verify what `SUPABASE_SERVICE_ROLE_KEY` resolves to inside a deployed edge function once legacy keys are off (dashboard test on staging first, and/or Supabase's key-migration docs). If it stays the dead legacy JWT, give each function an explicit `sb_secret_` service key as a function secret, update every function to read that instead of the auto-injected legacy env, redeploy, and re-test one function end-to-end — then the F86 toggle is safe. Sequence this into the F86 remediation session.
-- **Where:** all `supabase/functions/*/index.ts` (each reads `SUPABASE_SERVICE_ROLE_KEY`); `notify-customers` is the confirmed example.
+- **Staging verification (2026-07-17, F86 execution session — corrects this finding's original "staging appears unaffected... its legacy JWT looks still live" assumption):** staging's legacy-key toggle was in fact genuinely and durably disabled at the time of filing (flipped in the F86 session's Step 1.1, confirmed via a Playwright suite re-run 24h+ later with no intervening re-enable) — it was not an un-flipped toggle. Two independent tests against the real deployed staging functions, both post-toggle: (1) `create-paper-customer` + `register-customer` (F86 plan V2) — both HTTP 200, exercising `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')` against `/auth/v1/admin/users` (POST) and `/rest/v1/user_profiles` (POST/DELETE). (2) `notify-customers` itself (this finding's flagged example) — a throwaway-fixture test (synthetic tenant + one non-admin customer with a fake `@example.com` address, so no real person was emailed) exercised its full downstream path: `app_settings` read, `user_profiles` read, `/auth/v1/admin/users?per_page=1000` read, MailerSend send — all via the same injected `SUPABASE_SERVICE_ROLE_KEY`. Result: HTTP 200, `{"success":true,"sent":1,"failed":0}`. All test fixtures torn down, live SELECT confirmed 0 rows remaining. **Conclusion: on staging, the auto-injected `SUPABASE_SERVICE_ROLE_KEY` continues to authenticate successfully post-toggle** — the predicted "new-gen keys land under a different var, legacy env goes dead" mechanism did not manifest for any of the 3 functions tested (covering every downstream call pattern — `/rest/v1/*` GET/POST/DELETE and `/auth/v1/admin/*` GET/POST — that all 9 functions use).
+- **Prod verification (2026-07-22, F86 Step 5, V6):** Rick flipped prod's "Disable legacy API keys" toggle (project `plgegklqtdjxeglvyjte`). Manual live check: pulllist.app login/catalog/reserve/cancel write-smoke green; `comicstore.pulllist.app` loads correctly. Scripted check: a throwaway-fixture test exercised `create-paper-customer` against the **real prod founding tenant** (not a synthetic one) — same pattern as the staging V2 test: throwaway admin test user → session token → real deployed function call. Result: HTTP 200, paper customer created successfully via the function's own injected `SUPABASE_SERVICE_ROLE_KEY`. Both test fixtures deleted immediately after; live SELECT confirmed 0 rows remaining.
+- **Conclusion:** the predicted mechanism (new-gen secret keys landing under a separate env var, leaving `SUPABASE_SERVICE_ROLE_KEY` pointed at a dead legacy JWT) did not occur on either project. Whatever Supabase does internally when legacy keys are disabled, the auto-injected `SUPABASE_SERVICE_ROLE_KEY` continued to authenticate successfully on both staging and prod. No Edge Function code changes were needed (F86 plan's Step 1-C contingency was correctly skipped).
+- **Where:** all `supabase/functions/*/index.ts` (each reads `SUPABASE_SERVICE_ROLE_KEY`); `notify-customers` and `create-paper-customer` are the two confirmed examples (staging + prod respectively).
 
 #### F89 — Paper→app conversion is unmeasurable: a successful claim deletes the paper rows and no event records it
 
@@ -2465,6 +2485,31 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Scope:** staging + prod (same retention design).
 - **Fix direction (future session):** a small per-tenant monthly rollup table (e.g. `analytics_monthly`: `tenant_id`, `catalog_month`, `new_signups`, `mau`, `paper_count`, `claims`, `reserve_events`, `reserved_value_usd`) written by the import scripts at month-close via service-role **before** the purge, with admin-read RLS. Unlocks 12-month trend lines in `analytics.html`. Schema + RLS + `import.js`/`import-staging.js` + doc changes → own sub-deploy-style session with Rick-in-the-loop DB steps.
 - **Where:** new table (schema TBD), `import.js` / `import-staging.js`, later a trend panel in `analytics.html`.
+
+#### F91 — GoTrue Admin API intermittently rejects new-generation `sb_secret_` keys with a JWT-parse error, breaking Playwright auth fixtures
+
+- **Status:** filed 2026-07-22, **open — deferred to a future test-infrastructure session.** Discovered during the apex-marketing sub-deploy's S5.3 gate (`docs/apex-landing-tenant-subdomains.md`); unrelated to that sub-deploy's actual diff (an `index.html` copy change + a new committed Playwright spec, both of which were unaffected across every run).
+- **Severity:** Medium — test-infrastructure reliability, not a live application defect. No customer/data impact, but it makes the local Playwright smoke suite an unreliable gate (`CLAUDE.md`'s Definition of Done requires full-suite-green) and will recur for any future session running the suite until resolved.
+- **Symptom:** `scripts/playwright/fixtures/auth.ts`'s `createUser()` and `generateMagicLink()` call Supabase's GoTrue Admin API directly (`POST /auth/v1/admin/users`, `POST /auth/v1/admin/generate_link`) using `SUPABASE_SERVICE_KEY` as both the `apikey` and `Bearer` header. Two consecutive full local smoke-suite runs (`run-smoke.ps1`) each produced intermittent `403` errors: `{"code":403,"error_code":"bad_jwt","msg":"invalid JWT: unable to parse or verify signature, token is unverifiable: error while executing keyfunc: unrecognized JWT kid <nil> for algorithm ES256"}`. A different specific test failed on each run (specs 07/09/10/11 on run 1; specs 04/07/09/10/11 on run 2) — never the same test twice, and run 2 had strictly more failures than run 1 (worsening, not settling).
+- **Diagnosis (verified, not theorized):** a local format-only check (no secret value exposed) confirmed `SUPABASE_SERVICE_KEY` in `scripts/.env` is the new-generation `sb_secret_`-prefixed key (41 chars, not JWT-shaped) corresponding to the Supabase dashboard's "magic_link_tooling" named secret key — i.e., the fixture is correctly wired to the intended, current key; this is not a stale/wrong credential. Yet GoTrue's error explicitly describes JWT parsing/kid-lookup failure, meaning GoTrue is attempting to verify the presented `sb_secret_` token as a JWT rather than recognizing it as an opaque API key, and intermittently failing that attempt. This is consistent with F88's finding that Edge Functions' auto-injected `SUPABASE_SERVICE_ROLE_KEY` (which stays JWT-shaped under the hood per F88's own investigation) is what reliably authenticates against `/auth/v1/admin/*` — a manually-configured new-generation secret key used directly against those same endpoints, as this fixture does, is evidently a different and less reliable code path on Supabase's side.
+- **Scope:** local `scripts/playwright` suite only (`fixtures/auth.ts`). Does not affect the deployed app, any Edge Function, or the import scripts (`IMPORT_SERVICE_KEY` is a separate `sb_secret_` key, "import_staging_2026_07", used only for PostgREST/RPC calls via `import.js`/`import-staging.js`, never GoTrue Admin API calls).
+- **Fix direction (future session):** either (a) confirm with Supabase support/docs whether new-generation `sb_secret_` keys are supported at all against GoTrue Admin endpoints (vs. only PostgREST/Storage), or (b) revert `fixtures/auth.ts` to a legacy-format `service_role` JWT specifically for these two admin-API calls if `sb_secret_` keys are confirmed unsupported there, or (c) add retry-with-backoff in the fixture if this proves to be a transient edge-node propagation issue rather than a hard incompatibility.
+- **Where:** `scripts/playwright/fixtures/auth.ts` (`createUser`, `generateMagicLink`); `scripts/.env` (`SUPABASE_SERVICE_KEY` / "magic_link_tooling").
+
+#### F92 — `technical-reference.md` carries pre-Phase-5 claims outside the tenant-resolution contract
+
+- **Status:** filed 2026-07-22 (apex-marketing sub-deploy, S5.7), **open — deferred to a dedicated `technical-reference.md` re-audit session.** S5 fixed the tenant-resolution contract (§ 3.1, § 10.1 — the `TENANT_SLUG_MAP` / subdomain / `source()` enum drift, see the entries above them), but the same document carries other stale claims outside that specific contract, deliberately left unfixed there to keep S5 scoped — this finding gives them a real owner. Related: F81 (project-memory precedent for this exact failure mode — a stale reference doc trusted as current).
+- **Severity:** Medium — documentation drift in the canonical reference document. No live defect; the risk is a future session trusting a stale snapshot instead of verifying against live state.
+- **Inventory (all verified 2026-07-22):**
+  - Header, line 5: "Last verified: post Phase 3.8 soak, May 2026" — two phases and roughly 15 sub-deploys stale; the doc is the canonical reference, so the date understates both its authority and its risk.
+  - § 1, ~line 26: "No second tenant exists yet" — `comicstore` has been live on prod since Phase 5.5 (2026-07-15).
+  - § 1, ~line 31: "GH Pages warm until 5.5 closes" — 5.5 closed; Rick's 2026-07-15 call was to keep GH Pages warm and revisit retirement in a future session, not tied to any phase boundary.
+  - § 2, Hosting row (~line 97): "(GH Pages warm until 5.5)" — same stale claim.
+  - § 3, ~lines 113–115: "one founding tenant …; no second tenant has been onboarded" — same as § 1.
+  - § 1, ~lines 77–79: "the import script hard-codes `TENANT_ID` to the founding tenant" — both `import.js` and `import-staging.js` have been `.env`-driven and credential-free since 2026-07-08.
+  - § 3.1, ~lines 144–149: "tenant_id is a top-level constant `TENANT_ID = '72e29f67-...'`" — same as above.
+- **Fix direction (future session):** a dedicated re-audit — live-DB pass across every section, refreshed "last verified" line, all stale claims above corrected in one sweep. Not a drive-by edit alongside an unrelated front-door sub-deploy.
+- **Where:** `docs/technical-reference.md` (header line 5; § 1 around lines 26, 31, 77–79; § 2 around line 97; § 3 around lines 113–115; § 3.1 around lines 144–149).
 
 ---
 
