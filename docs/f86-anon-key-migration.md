@@ -106,7 +106,7 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - [x] Edge Function injected-env-var question answered with recorded evidence; 1-C either skipped-with-evidence or landed on both envs
 - [x] Prod `config.js` on publishable key, deployed, V4–V5 green
 - [x] One weekly shipment cycle elapsed on the new key before the prod toggle (Step 4)
-- [ ] Prod "Disable legacy API keys" flipped; V6 green
+- [x] Prod "Disable legacy API keys" flipped; V6 green
 - [ ] V7: legacy `service_role` JWT (F75's exposed credential) and legacy `anon` key confirmed dead
 - [ ] F86 resolved + F75 residual annotated in `technical-reference.md` § 13; `CLAUDE.md` § Open findings and § Known Out-of-Scope Items updated
 - [ ] All doc changes committed (doc-only → `staging`); plan status set to Complete
@@ -145,6 +145,7 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - **Additional staging verification run (Rick's choice, before Step 5):** a throwaway-fixture test exercised `notify-customers` itself — the specific function F87/F88 flagged — end-to-end post-toggle on staging (synthetic tenant + one fake `@example.com` customer, so no real person was emailed). Result: HTTP 200, `{"success":true,"sent":1,"failed":0}`; full downstream path (`app_settings`, `user_profiles`, `/auth/v1/admin/users`, MailerSend) all succeeded via the injected `SUPABASE_SERVICE_ROLE_KEY`. Fixtures torn down, 0 rows remaining. **F88 updated** in `technical-reference.md` § 13 with this evidence (severity downgraded High → Medium pending prod confirmation; scope note corrected — staging's toggle was genuinely disabled, not un-flipped as F88 originally assumed).
 - Combined with V2 (`create-paper-customer` + `register-customer`), 3 of ~9 edge functions are now directly proven to survive the toggle on staging, covering every downstream call pattern all 9 functions use. Residual uncertainty (staging vs. prod project parity) is backstopped by Step 5.4's already-designed instant rollback.
 - Rick confirmed: proceed to Step 5.
+- **Step 5 complete.** Rick flipped prod's "Disable legacy API keys" toggle (project `plgegklqtdjxeglvyjte`). **V6 green:** manual check (Rick) — pulllist.app login/catalog/reserve-cancel write-smoke green, `comicstore.pulllist.app` loads correctly. Scripted check (agent) — throwaway-fixture test exercised `create-paper-customer` against the real prod founding tenant (throwaway admin test user + throwaway paper customer, both deleted immediately after, live SELECT confirmed 0 rows). HTTP 200, full success. **F88 fully resolved** in `technical-reference.md` § 13 with this prod evidence — the predicted legacy-JWT-stuck-in-injected-env mechanism did not occur on either project; no Edge Function code changes were needed. **Next: Step 6** — PAUSE → Rick proves both prod legacy keys (the F75-exposed `service_role` JWT and the legacy `anon` key) are now rejected.
 
 ## 7. Rollback
 
