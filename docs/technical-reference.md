@@ -2477,6 +2477,21 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Fix direction (future session):** either (a) confirm with Supabase support/docs whether new-generation `sb_secret_` keys are supported at all against GoTrue Admin endpoints (vs. only PostgREST/Storage), or (b) revert `fixtures/auth.ts` to a legacy-format `service_role` JWT specifically for these two admin-API calls if `sb_secret_` keys are confirmed unsupported there, or (c) add retry-with-backoff in the fixture if this proves to be a transient edge-node propagation issue rather than a hard incompatibility.
 - **Where:** `scripts/playwright/fixtures/auth.ts` (`createUser`, `generateMagicLink`); `scripts/.env` (`SUPABASE_SERVICE_KEY` / "magic_link_tooling").
 
+#### F92 — `technical-reference.md` carries pre-Phase-5 claims outside the tenant-resolution contract
+
+- **Status:** filed 2026-07-22 (apex-marketing sub-deploy, S5.7), **open — deferred to a dedicated `technical-reference.md` re-audit session.** S5 fixed the tenant-resolution contract (§ 3.1, § 10.1 — the `TENANT_SLUG_MAP` / subdomain / `source()` enum drift, see the entries above them), but the same document carries other stale claims outside that specific contract, deliberately left unfixed there to keep S5 scoped — this finding gives them a real owner. Related: F81 (project-memory precedent for this exact failure mode — a stale reference doc trusted as current).
+- **Severity:** Medium — documentation drift in the canonical reference document. No live defect; the risk is a future session trusting a stale snapshot instead of verifying against live state.
+- **Inventory (all verified 2026-07-22):**
+  - Header, line 5: "Last verified: post Phase 3.8 soak, May 2026" — two phases and roughly 15 sub-deploys stale; the doc is the canonical reference, so the date understates both its authority and its risk.
+  - § 1, ~line 26: "No second tenant exists yet" — `comicstore` has been live on prod since Phase 5.5 (2026-07-15).
+  - § 1, ~line 31: "GH Pages warm until 5.5 closes" — 5.5 closed; Rick's 2026-07-15 call was to keep GH Pages warm and revisit retirement in a future session, not tied to any phase boundary.
+  - § 2, Hosting row (~line 97): "(GH Pages warm until 5.5)" — same stale claim.
+  - § 3, ~lines 113–115: "one founding tenant …; no second tenant has been onboarded" — same as § 1.
+  - § 1, ~lines 77–79: "the import script hard-codes `TENANT_ID` to the founding tenant" — both `import.js` and `import-staging.js` have been `.env`-driven and credential-free since 2026-07-08.
+  - § 3.1, ~lines 144–149: "tenant_id is a top-level constant `TENANT_ID = '72e29f67-...'`" — same as above.
+- **Fix direction (future session):** a dedicated re-audit — live-DB pass across every section, refreshed "last verified" line, all stale claims above corrected in one sweep. Not a drive-by edit alongside an unrelated front-door sub-deploy.
+- **Where:** `docs/technical-reference.md` (header line 5; § 1 around lines 26, 31, 77–79; § 2 around line 97; § 3 around lines 113–115; § 3.1 around lines 144–149).
+
 ---
 
 *End of document.*
