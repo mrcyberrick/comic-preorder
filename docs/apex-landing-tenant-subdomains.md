@@ -441,6 +441,71 @@ pre-existing copy and out of this step's scope. Worth a copy pass at S5/S6.
 promotion + write-smoke + soak) — **S6 stays blocked on F86/F88.** S1/S3/S4 remain deferred/premium.
 *(F86/F88 both closed 2026-07-22 — S6 unblocked; see § Status.)*
 
+### S5 — Supersede the 5.2 invariant + add front-door coverage — **Complete on staging 2026-07-22**
+
+**Branch:** `feature/apex-invariant-supersession` → `--ff-only` → `staging`, pushed. Rebased twice
+mid-session onto two doc-only commits that landed on `staging` first (F91, F92 — see below), keeping
+history linear for the ff-only merge.
+
+**Files:** `index.html` (S5.2, +2/−1 — see deviation note below), `docs/phase-5.2-slug-id-routing-rpc.md`
+(S5.4, supersession banner), `docs/technical-reference.md` (S5.5, § 3.1/§ 10.1 tenant-resolution
+contract), plus the two `F91`/`F92` doc-only commits landed directly on `staging`.
+`scripts/playwright/tests/12-apex-front-door.spec.ts` (S5.3, new — local-only, never committed to
+any repo).
+
+**Deviations from the runbook, all verified against disk/live state, none blocking:**
+
+1. **S5.2 verify-count arithmetic.** The runbook predicted `ax-when-tenant → 7 lines (was 6)` and
+   `git diff --stat → +3/-1`. Actual, re-counted from disk against the byte-exact `old_str`/`new_str`
+   substitution: `ax-when-tenant` → **6 lines** (baseline 5: 290/298/315/324/402, +1 new — matching the
+   runbook's own footnote math, which the main verify line contradicted) and diff → **+2/-1** (the
+   given `old_str`/`new_str` is unambiguously a 1-line-removed/2-line-added substitution). The edit
+   itself matches the specified blocks byte-for-byte; only the runbook's predicted counts were off.
+   `ax-when-apex → 5 (was 4)` and `'Contact the shop' → 1 line` both matched exactly as predicted.
+2. **S5.3 gate — baseURL serves the *deployed* build, not local disk.** Finding 3 in the runbook's
+   planning notes assumed marketing assertions needed no host stub since `staging.pulllist.pages.dev`
+   is in `NON_TENANT_HOSTS`. True for branch *detection*, but S5.3 runs *before* S5.8's merge/deploy —
+   so the live site still served the pre-S5.2 copy, and the spec's "Your shop can" assertion failed
+   against real deployed content that didn't yet exist there. Fixed by extending the spec's request
+   interception (already used for the tenant branch, lifted from `apex-verify.mjs`) to *all* relevant
+   hosts including `staging.pulllist.pages.dev`, so the pre-merge gate tests local disk state
+   consistently for both branches — matching how S2's own `apex-verify.mjs` worked. All 4 new tests
+   green after the fix, repeatedly.
+3. **F91 — GoTrue Admin API intermittently rejects new-gen `sb_secret_` keys (unrelated to this
+   diff).** Two full `run-smoke.ps1` runs each surfaced intermittent `bad_jwt`/"unrecognized kid"
+   403s from Supabase's Admin API in the shared `fixtures/auth.ts`, hitting a different spec each
+   time (07/09/10/11 on run 1; 04/07/09/10/11 on run 2 — worsening, not settling). Spec 12 (this
+   session's actual deliverable) passed clean in every run, all 4+ times it was executed. Confirmed
+   via a format-only check (no secret value exposed) that `SUPABASE_SERVICE_KEY` is correctly the
+   new-gen `sb_secret_` "magic_link_tooling" key (not a stale credential) — the GoTrue Admin API
+   itself is what intermittently mishandles that key format, consistent with F88's finding that only
+   Edge Functions' JWT-shaped auto-injected key reliably authenticates against those endpoints. Rick's
+   call: file it (F91) and proceed once every failure across all runs traced to this one filed cause —
+   verified via an isolated re-run of every previously-failed spec (0 non-F91 failures). **This bumped
+   the F-number sequence:** F91 was reserved in this plan's § Status for S5.7's tech-reference-drift
+   finding; since the GoTrue issue was discovered first and had to be filed to unblock the S5.3 gate,
+   it claimed F91, and S5.7's finding became **F92** instead. Full entries: `technical-reference.md`
+   § 13 F91/F92.
+
+**Verification:**
+- S5.0 pre-flight: all gates green (clean tree, F90 confirmed highest before either new finding,
+  `TENANT_SLUG_MAP` → 0 in `app.js`, `_source = 'subdomain'` → 1, 11 pre-existing specs confirmed).
+- S5.3 gate: full suite run 3 times total (2 full + 1 isolated re-run of every affected spec). Spec
+  12 (4 tests) green every time. Every non-12 failure traced to F91 (confirmed via isolated re-run:
+  4 failures, all `bad_jwt`, 0 other error types). Treated as gate-satisfied per Rick's explicit call.
+- S5.5 grep verify: `TENANT_SLUG_MAP` → 2 lines total (not the predicted 1) — the second hit
+  (`technical-reference.md` F71 entry, "Why pre-existing") is past-tense historical narrative about
+  an already-resolved finding, not a live-contract claim; does not describe the map as currently
+  existing. `'subdomain'` → 1 line and `tenantSlugFromHostname` → 3 lines both matched exactly.
+- S5.6 R4 grep-sweep: re-ran both patterns fresh (not trusting the plan's prior list). Every hit
+  beyond the two already revised in S5.4/S5.5 is dated/historical — deploy-log rows, ticked
+  completion-criteria, dated verification notes from sub-deploys 5.1–5.5 (all closed 2026-06-14 →
+  2026-07-15, predating this work) — describing what was verified *then*, not a claim about today's
+  apex presentation. No additional live-contract claim found requiring revision.
+
+**Left for S5.8/S6:** ff-only merge to staging + push + re-run smoke against the deployed build (S5.8,
+next); S6 prod promotion + 24h soak + closeout, per plan.
+
 ---
 
 ## S5 / S6 Runbook (written 2026-07-22; execute in a fresh CLI session)
