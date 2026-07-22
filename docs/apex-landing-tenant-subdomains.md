@@ -506,6 +506,57 @@ any repo).
 **Left for S5.8/S6:** ff-only merge to staging + push + re-run smoke against the deployed build (S5.8,
 next); S6 prod promotion + 24h soak + closeout, per plan.
 
+### S6.1–S6.4 — Prod promotion + post-deploy verification — **Complete 2026-07-22**
+
+**S5.8:** ff-only merge `feature/apex-invariant-supersession` → `staging` (`b888a72`), pushed; re-ran
+`run-smoke.ps1` against the deployed staging build — exit 0 (5 flaky specs, all the same filed F91
+signature; spec 12 clean).
+
+**S6.1:** `/preflight` clean (branch/gh/node/`.env`/Playwright suite/Supabase reachability all PASS).
+F86/F88 re-confirmed resolved in `technical-reference.md` § 13 (paranoia check, no change expected or
+found).
+
+**S6.2:** `git merge staging --no-commit --no-ff` into `main`; `config.js` checked out from `main`
+(preserved). F59 assertion: `index.html` differs from `main` (required); `app.js`/`mylist.html`/
+`arrivals.html`/`admin.html` identical to `main` — expected, since this sub-deploy touches only
+`index.html`. `apex.css`, `assets/hero.jpg`, `assets/pulllist-logo.png` all present in the merge.
+Two other doc files (`f86-anon-key-migration.md`, `subscription-reserved-suggestions.md`) rode along
+as modified — these are prior doc-only `staging` commits from earlier sessions not yet promoted,
+picked up naturally by this promotion; not scope creep from this session. Committed
+(`63e4683`); pushed `feat/apex-marketing-prod`.
+
+**S6.3:** PR #93 opened (`feat/apex-marketing-prod → main`). `config.js` confirmed absent from the
+diff both before and after merge (`gh pr view 93 --json files`). Rick merged — merge commit
+`0f2aec64fc4e442b913c9942356e4a01b3453c23`, **2026-07-22T17:13:46Z**. (Note: a second PR, #94,
+titled "Staging," merged one minute earlier with an identical file list — apparently GitHub's own
+compare-branches prompt used directly; harmless, since #93 landed the same content as a no-op on
+top. Confirmed final `main` HEAD matches expectations: `config.js` untouched across both merges,
+`index.html`/`apex.css`/assets all present.)
+
+**S6.4 — all 4 checks green:**
+1. **Apex live:** `https://pulllist.app/` — `data-front-door` present, `apex.css` 200. Real-browser
+   inspection (screenshots, 1440px + 390px, sign-in overlay open): marketing renders correctly, no
+   founding-shop string, no horizontal overflow, new S5.2 sign-up-hint copy ("Your shop can set one
+   up for you") renders correctly in the overlay.
+2. **Tenant branch live (its first real test):** `https://comicstore.pulllist.app/` — unchanged
+   branded login (own accent color, "THE COMIC STORE — MONTHLY PRE-ORDERS" tagline), marketing
+   hidden, `Contact the shop` copy intact. No regression.
+3. **Outstanding magic link:** Rick confirmed live, green — sign-in panel opened immediately, auth
+   completed, landed resolved to the founding tenant.
+4. **Write-smoke:** automated (Rick's call, given F91's risk to the same GoTrue Admin API call
+   shape — approved proceeding with a one-retry guard). Reserved a real prod catalog item
+   (`51 #5 (OF 8)`, 2026-07 catalog month) as a throwaway founding-tenant test user; confirmed the
+   `preorders` row landed with the correct founding `tenant_id` (`20941129-…`); cancelled via
+   `Preorders.cancel()`; confirmed the row gone; deleted the test user + profile. Neither GoTrue
+   Admin API call (create user, generate magic link) hit F91 this run — passed clean on the first
+   attempt, no retry needed.
+
+**S6.5:** 24-hour soak armed at merge time (2026-07-22T17:13:46Z → elapses 2026-07-23T17:13:46Z).
+Reminders scheduled via `/schedule-gate`: a one-time Claude Code routine (`trig_01DJwFAnVu1BxVMyZWsrhdBN`,
+fires 2026-07-23T17:20:00Z) and a Google Calendar event (2026-07-23 1:15–1:30 PM ET, popup + email).
+Both fire ~6 minutes past the true 24h mark by design (buffer, not the skill's default 8am ET slot,
+which would have fired ~5 hours early against this merge's actual timestamp).
+
 ---
 
 ## S5 / S6 Runbook (written 2026-07-22; execute in a fresh CLI session)
