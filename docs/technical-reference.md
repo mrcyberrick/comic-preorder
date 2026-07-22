@@ -133,13 +133,32 @@ isolation.
 active tenant before any call that needs it. Resolution order:
 
 1. Authenticated user's `user_profiles.tenant_id` (looked up on page load).
-2. `?t=<slug>` query parameter (persisted to `sessionStorage` for the tab).
-3. Founding tenant fallback.
+2. Subdomain — `<slug>.pulllist.app` via `tenantSlugFromHostname()` (5.2).
+3. `?t=<slug>` query parameter (persisted to `sessionStorage` for the tab).
+4. `sessionStorage` slug from earlier in the tab.
+5. Founding tenant fallback.
 
-The slug-to-id mapping for unauthenticated lookups is hard-coded in
-`TENANT_SLUG_MAP` because the `tenants` table is not readable by anon. This
-is acknowledged scaffolding; the comment in `app.js` notes it will be
-replaced with an RPC once a second tenant exists.
+Unauthenticated slug→id lookups go through the `resolve_tenant_by_slug`
+SECURITY DEFINER RPC (5.2 S1; extended to 4 columns in 5.3), because the
+`tenants` table is not readable by anon. The former hard-coded
+`TENANT_SLUG_MAP` was **removed at 5.2 S6 (2026-06-15)**; the RPC is the sole
+anon slug source and `FOUNDING_TENANT` (supplied per-branch by `config.js`)
+is the only remaining hardcoded fallback.
+
+`tenantSlugFromHostname()` returns `null` for every non-tenant host —
+`pulllist.app`, `www.pulllist.app`, `localhost`, `127.0.0.1`, and **any**
+`*.pages.dev` host — so those all fall through to the founding default.
+
+**Front-door presentation (2026-07-21, `docs/apex-landing-tenant-subdomains.md`
+S2) is a separate axis from resolution.** `index.html` branches on the same
+host signal: a tenant subdomain renders the branded login; every other host
+renders the apex front door — platform marketing plus a **universal**
+sign-in that authenticates any tenant's customer into their own store via
+the profile branch. This does **not** change resolution: the apex still
+resolves to the founding tenant for anonymous visitors, and an authenticated
+user always resolves to their own tenant by profile on any host. Cloudflare
+Pages serves every hostname from one project, so the split is client-side
+only — there is no per-host file.
 
 **In the import script** (`import-staging.js`), tenant_id is a top-level
 constant `TENANT_ID = '72e29f67-...'`. Catalog upserts, shipment upserts,
@@ -1133,11 +1152,11 @@ before any API call that needs `tenant_id`.
 ```javascript
 TenantContext.resolve()       // → { id, slug, display_name }
 TenantContext.current()       // → cached resolved tenant; throws if not resolved
-TenantContext.source()        // → 'profile' | 'query' | 'session' | 'default'
+TenantContext.source()        // → 'profile' | 'subdomain' | 'query' | 'session' | 'default'
 ```
 
-Resolution order: authenticated profile → `?t=<slug>` query param →
-sessionStorage → founding tenant fallback.
+Resolution order: authenticated profile → subdomain (`tenantSlugFromHostname()`)
+→ `?t=<slug>` query param → sessionStorage → founding tenant fallback.
 
 ### 10.2 `Auth`
 
