@@ -1,6 +1,6 @@
 # F86 — Prod Legacy API Key Retirement (config.js anon-key migration)
 
-**Status:** In progress — Step 1 staging rehearsal complete (V1–V3 green); Step 2 (prod publishable key creation) next
+**Status:** **Complete — 2026-07-22.** All steps 0–7 done; V1–V7 all green; F88 (surfaced mid-session) resolved on staging and prod; F75 residual closed. See § 6a Execution Log for full evidence.
 **Plan written:** 2026-07-15 (planning session; no code, config, or dashboard changes made)
 **Execution session opened:** 2026-07-15
 **Not a phase sub-deploy** — standalone maintenance session, successor to the `import.js` maintenance session (F75/F78/F85, closed 2026-07-15). Closes F86 and the last F75 residual.
@@ -108,8 +108,8 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - [x] One weekly shipment cycle elapsed on the new key before the prod toggle (Step 4)
 - [x] Prod "Disable legacy API keys" flipped; V6 green
 - [x] V7: legacy `service_role` JWT (F75's exposed credential) and legacy `anon` key confirmed dead
-- [ ] F86 resolved + F75 residual annotated in `technical-reference.md` § 13; `CLAUDE.md` § Open findings and § Known Out-of-Scope Items updated
-- [ ] All doc changes committed (doc-only → `staging`); plan status set to Complete
+- [x] F86 resolved + F75 residual annotated in `technical-reference.md` § 13; `CLAUDE.md` § Open findings and § Known Out-of-Scope Items updated
+- [x] All doc changes committed (doc-only → `staging`); plan status set to Complete
 
 ## 6a. Execution log
 
@@ -146,7 +146,8 @@ Let prod run on the publishable key through **at least one weekly shipment cycle
 - Combined with V2 (`create-paper-customer` + `register-customer`), 3 of ~9 edge functions are now directly proven to survive the toggle on staging, covering every downstream call pattern all 9 functions use. Residual uncertainty (staging vs. prod project parity) is backstopped by Step 5.4's already-designed instant rollback.
 - Rick confirmed: proceed to Step 5.
 - **Step 5 complete.** Rick flipped prod's "Disable legacy API keys" toggle (project `plgegklqtdjxeglvyjte`). **V6 green:** manual check (Rick) — pulllist.app login/catalog/reserve-cancel write-smoke green, `comicstore.pulllist.app` loads correctly. Scripted check (agent) — throwaway-fixture test exercised `create-paper-customer` against the real prod founding tenant (throwaway admin test user + throwaway paper customer, both deleted immediately after, live SELECT confirmed 0 rows). HTTP 200, full success. **F88 fully resolved** in `technical-reference.md` § 13 with this prod evidence — the predicted legacy-JWT-stuck-in-injected-env mechanism did not occur on either project; no Edge Function code changes were needed.
-- **Step 6 complete. V7 green.** Rick tested both old legacy prod keys directly against `/rest/v1/tenants` — both rejected: `HTTP 401 {"message":"Legacy API keys are disabled","hint":"Your legacy API keys (anon, service_role) were disabled on 2026-07-22T14:34:11.137267+00:00. ..."}`. The disable timestamp confirms the Step 5 toggle flip took effect platform-wide, covering both the F75-exposed `service_role` JWT (the original 2026-06-19 exposure event) and the legacy `anon` key `config.js` used before this session. **This closes the F75 residual.** **Next: Step 7** — findings closeout.
+- **Step 6 complete. V7 green.** Rick tested both old legacy prod keys directly against `/rest/v1/tenants` — both rejected: `HTTP 401 {"message":"Legacy API keys are disabled","hint":"Your legacy API keys (anon, service_role) were disabled on 2026-07-22T14:34:11.137267+00:00. ..."}`. The disable timestamp confirms the Step 5 toggle flip took effect platform-wide, covering both the F75-exposed `service_role` JWT (the original 2026-06-19 exposure event) and the legacy `anon` key `config.js` used before this session. **This closes the F75 residual.**
+- **Step 7 complete — F86 CLOSED.** `technical-reference.md` § 13: F86 marked resolved with a full evidence summary; F75's Residual line updated to point at this closure. `CLAUDE.md`: § Current Migration Phase's Open findings line — F86 and F88 blurbs removed (both resolved), trailing "resolved through" ceiling raised to F90; § Known Out-of-Scope Items — F86 entry removed, closure note added matching the pattern of other closed sessions. This plan's Completion Criteria all ticked; Status set to Complete. All doc changes committed doc-only to `staging` across this multi-sitting session (commits `a8f46bf`, `023ca19`, `04e6429`, `0538987`, `271b97c`, `6a92c80`, `5736be7`, and this closing commit).
 
 ## 7. Rollback
 
