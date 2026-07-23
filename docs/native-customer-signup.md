@@ -51,8 +51,9 @@ retire the external MailerLite form + webhook. Keep MailerSend as the transactio
 - `rjbookstop.pulllist.app/` → the founding tenant's branded login **plus a "Create account" path**
   that self-registers a customer directly (pending account + magic link + MailerSend "browse while we
   review" email), resolving the tenant from the host — no MailerLite, no webhook, no per-tenant secret.
-- `rjbookstop.com` → Rick's public front door; **redirects or links to** the subdomain's signup. (Rick's
-  external-domain config; outside the repo.)
+- `rjbookstop.com` → Rick's **separate Brevo marketing funnel** (its own project, **no PULLLIST data
+  connection**). Not wired to `register-customer`; at most a plain **link** to the
+  `rjbookstop.pulllist.app` signup as one of the shop's services. See § Adjacent.
 - MailerLite is retired for founding; `register-customer`'s webhook path is left dead/harmless or removed.
 
 **Interim (during the build):** self-service is admin-only — the login card's existing "Contact the
@@ -62,8 +63,9 @@ shop and we'll get you set up" copy already routes customers to `invite-customer
 
 ## Settled decisions (Rick, 2026-07-23)
 
-1. **Native, skip Brevo.** The MailerLite form "just triggers signup" (no marketing-list value), so a
-   Brevo migration would be throwaway scaffolding. Go straight to native; no external signup platform.
+1. **Native signup, no external signup platform.** The MailerLite form "just triggered signup," so
+   nothing of value is lost by removing it — signup goes fully native. **Brevo is not wired to PULLLIST**;
+   it is Rick's separate rjbookstop.com marketing funnel (§ Adjacent), decoupled from this work.
 2. **Founding front door = `rjbookstop.pulllist.app`** (a provisioned custom subdomain), **not**
    rjbookstop.com-on-the-app. Cheapest unblock, auto-resolves, zero resolver change — see § Why the
    subdomain is the cheap unblock. rjbookstop.com stays external and points at it.
@@ -146,7 +148,7 @@ F72). Founding-first sidesteps it.
 | S2 | **Native signup endpoint** | Adapt `register-customer` for the direct-POST path: tenant from `slug`, Turnstile + honeypot + dedup, MailerSend email unchanged (founding-branded — correct for founding). Deploy staging → verify with a throwaway signup, torn down (live SELECT = 0 rows). |
 | S3 | **"Create account" UI on the branded login** | Add the signup form to `index.html`'s **tenant branch** (founding login). Wire Turnstile. Staging-verify via host stub / `?t=` / request interception (comicstore-style — no live tenant host on `*.pages.dev`). Real-browser check at desktop + mobile widths (per the CSS-in-real-browser rule). |
 | S4 | **Prod promotion + write-smoke + soak** | Standard flow (F59 diff assertion, `config.js` checkout). Live end-to-end: self-register a throwaway founding customer on `rjbookstop.pulllist.app` → pending row with correct founding `tenant_id` → magic link works → admin approves → tear down. 24-hour soak. |
-| S5 | **Retire MailerLite for founding + docs** | Remove/disable the dead webhook path; update `register-customer` contract in `technical-reference.md` (§ 3.6 EF inventory, § 13 F34/F72 notes) + `CLAUDE.md`; rotate the exposed webhook secret (now dead config); confirm rjbookstop.com points at the subdomain (Rick's external step). |
+| S5 | **Retire MailerLite for founding + docs** | Remove/disable the dead webhook path; update `register-customer` contract in `technical-reference.md` (§ 3.6 EF inventory, § 13 F34/F72 notes) + `CLAUDE.md`; rotate the exposed webhook secret (now dead config). (rjbookstop.com's Brevo funnel is Rick's separate track — see § Adjacent — at most an optional link to the signup, not a wiring.) |
 
 ---
 
@@ -162,7 +164,24 @@ F72). Founding-first sidesteps it.
 - **Phase 6 self-service *tenant* signup** and the wildcard-DNS/TLS spike — different surface entirely.
 - **F72 multi-tenant email branding** itself — deferred; this workstream stays within founding branding.
 - Any `config.js` / import-script change; billing; the apex marketing page (its own closed work).
-- Restoring or migrating MailerLite/Brevo — explicitly not the direction.
+- rjbookstop.com's Brevo marketing funnel — Rick's **separate project**, decoupled from PULLLIST (no
+  `register-customer` / webhook wiring). Out of scope here; see § Adjacent. (Migrating MailerLite *into*
+  PULLLIST is explicitly not the direction — signup goes native.)
+
+---
+
+## Adjacent / out-of-band (Rick's separate track — not this workstream)
+
+- **rjbookstop.com → a Brevo marketing funnel.** Rick is migrating rjbookstop.com to Brevo as its **own
+  project, with no PULLLIST data connection at this time** — a lead-generation funnel exposing potential
+  customers to Ray & Judy's Book Stop services. It is **not** the account-creation trigger MailerLite
+  was; native signup owns that now. The only (optional, non-integration) touchpoint is a plain **link**
+  from the funnel to the `rjbookstop.pulllist.app` signup.
+- **Future: automated weekly-shipment customer emails.** Rick's forward note — the Brevo platform may
+  later drive automated weekly-shipment emails, developed as part of `import.js`. **Yet to be developed;
+  not scoped here.** Caveat for whoever picks it up: per-customer "your reserved book arrived" mail needs
+  PULLLIST reservation data, for which there is no PULLLIST→Brevo path today; a general "this week's
+  shipment is in" broadcast to the funnel list would not. Settle that distinction when it's scoped.
 
 ---
 
@@ -195,8 +214,9 @@ F72). Founding-first sidesteps it.
       tenant isolation (F15/F20).
 - [ ] Prod write-smoke green: live self-register → correct founding `tenant_id` → magic link → admin
       approve → torn down; 24-hour soak elapsed and clean.
-- [ ] MailerLite retired for founding: webhook path removed/dead, exposed secret rotated to dead config,
-      rjbookstop.com pointing at the subdomain (Rick).
+- [ ] MailerLite retired for founding: webhook path removed/dead, exposed secret rotated to dead config.
+      (rjbookstop.com's Brevo funnel is Rick's separate track — an optional link to the signup, not a
+      wiring; see § Adjacent.)
 - [ ] Docs updated: `register-customer` contract in `technical-reference.md`; `CLAUDE.md` Edge Function
       notes; F72 disposition re-confirmed (comicstore native signup still gated on it); any finding filed
       from F93.
