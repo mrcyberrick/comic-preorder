@@ -221,10 +221,19 @@ F72). Founding-first sidesteps it.
 ---
 
 ## Completion criteria (finalized at plan open)
-- [ ] `rjbookstop.pulllist.app` provisioned, TLS active, resolves to founding, renders branded login.
-- [ ] Native signup endpoint live: throwaway self-registration creates a founding-tenant pending row +
-      magic link + MailerSend email; abuse gate (Turnstile + honeypot + dedup) verified; fixtures torn
-      down (live SELECT = 0 rows).
+- [x] `rjbookstop.pulllist.app` provisioned, TLS active, resolves to founding — **Rick confirmed Active +
+      SSL enabled 2026-07-23; HTTP 200 + valid TLS + byte-identical static bundle to the apex confirmed
+      by curl.** Renders branded login — **pending Rick's live-browser check** (curl can't execute the
+      JS that sets `data-front-door`/branding; this needs a real browser per the CSS-in-real-browser rule).
+- [x] Native signup endpoint live (S2, staging, 2026-07-23): `register-customer` adapted in place
+      (`feature/native-customer-signup`, `458dbc0`) — throwaway self-registration created a founding-tenant
+      pending row (`tenant_id` = `72e29f67-…`, correct); resubmit hit `already_exists` dedup; honeypot
+      absorbed silently with zero rows created; legacy webhook path unchanged (bogus secret still 401).
+      Turnstile verified against Cloudflare's documented "always passes" test keypair (Rick approved) —
+      **real widget keys still needed from Rick for S3's live UI**, at which point `TURNSTILE_SECRET_KEY`
+      swaps from the test value to the real one. Fixtures torn down; live SELECT = 0 rows (both test
+      emails). Magic-link + MailerSend tail is byte-identical shared code with the already-proven webhook
+      path (`provisionPendingCustomer`), not independently re-verified.
 - [ ] "Create account" UI on the founding branded login, real-browser-verified desktop + mobile, no
       horizontal overflow; JS-disabled degradation unchanged.
 - [ ] Auth-callsite count in `index.html` unchanged before/after; full Playwright suite green incl.
@@ -238,6 +247,69 @@ F72). Founding-first sidesteps it.
       notes; F72 disposition re-confirmed (comicstore native signup still gated on it); any finding filed
       from F93.
 - [ ] This plan's status → Complete; `CLAUDE.md` updated.
+
+---
+
+## Deploy log
+
+### S0 — Readiness gate — Complete 2026-07-23
+
+`resolve_tenant_by_slug('rjbookstop')` live on prod and `resolve_tenant_by_slug('raysandjudys')` live
+on staging both resolved correctly; `comicstore.pulllist.app` → 200 OK (regression baseline intact).
+
+### S1 — Provision `rjbookstop.pulllist.app` — Domain/TLS complete 2026-07-23; live-browser check pending
+
+Rick added the custom domain via the Cloudflare dashboard (comicstore procedure, no wildcard);
+confirmed **Active** with **SSL enabled**. Verified by curl: HTTP 200, valid TLS, byte-identical static
+bundle to `pulllist.app` (Cloudflare Pages serves one file set to every host, per the load-bearing
+architectural fact). **Still needed:** Rick to open it in a real browser and confirm it renders the
+founding branded login (not apex marketing) — curl can't execute the JS that sets
+`data-front-door`/branding.
+
+### S2 — Native signup endpoint — Complete on staging 2026-07-23
+
+**Branch:** `feature/native-customer-signup` (off `staging`, not yet merged). **Commit:** `458dbc0`.
+
+**Files:** `supabase/functions/register-customer/index.ts` (+287/−172) — refactored the shared
+account-create/profile-insert/magic-link/MailerSend tail into `provisionPendingCustomer()`, called
+verbatim by both the untouched legacy MailerLite webhook path (`?secret=`) and the new native
+direct-POST path (`{email, name, slug, turnstileToken, honeypot}`, no `?secret=`). Added
+`verifyTurnstile()` (Cloudflare siteverify call). No rate-limit table (per Gate 1a decision).
+
+**Incident during this step (filed F93):** the Supabase CLI silently used workdir `C:\Users\richa`
+instead of this repo for `deploy`/`list`/`download` — that directory is a separate, stale
+(February 2026, pre-multitenancy) local Supabase project linked to the **production** project ref.
+Two early `deploy` calls (without `--workdir`) pushed that stale code to **staging**, overwriting the
+correct F34-resolved baseline; caught via behavioral testing, fixed within the session by redeploying
+with an explicit `--workdir "<repo path>"` and byte-verifying the result matched the repo source. All
+`--project-ref` values used were staging throughout — production was never touched. Full detail:
+`technical-reference.md` § 13 F93. Mitigation adopted for the rest of this workstream: every Supabase
+CLI function command passes an explicit `--workdir`.
+
+**Verification (staging, `puoaiyezsreowpwxzxhj`):**
+- Legacy webhook path unchanged: bogus `?secret=` → 401 `Unauthorized`, same as before the edit.
+- Native path: no body → 400 `Invalid request body`; missing fields → 400 `email, name, and slug are
+  required`; unset `TURNSTILE_SECRET_KEY` → 503 (fails closed, does not silently skip verification).
+- Honeypot filled → 200 `{success:true}`, **zero rows created** (confirmed by live SELECT on
+  `user_profiles`).
+- `TURNSTILE_SECRET_KEY` set to Cloudflare's publicly-documented "always passes" test value
+  (`1x0000...AA` — not a real secret; Rick approved setting this on staging) to exercise the full path
+  without a live browser solving a real challenge.
+- Full valid signup → `200 {success:true, user_id}`; live SELECT confirmed the `user_profiles` row:
+  `status=pending`, `is_admin=false`, `tenant_id=72e29f67-…` (correct founding tenant, staging).
+- Resubmit with the same email → `200 {success:true, note:"already_exists"}` — dedup confirmed, no
+  duplicate row.
+- Teardown: `auth.users` DELETE via GoTrue Admin API hit the filed **F91** intermittent `bad_jwt`
+  rejection on the first attempt; succeeded on retry (200, then 404 on further retries confirming
+  gone). Live SELECT for both test emails (`s2-throwaway-test-…@example.com`, `bot-test@example.com`)
+  → `[]`, zero rows.
+- Magic-link generation + MailerSend send were **not** independently re-verified — that code is
+  byte-identical shared logic with the already-proven webhook path (`provisionPendingCustomer`), not
+  new behavior introduced by S2.
+
+**Left for S3:** real Turnstile widget (site key + secret key) from Rick — `TURNSTILE_SECRET_KEY` on
+staging needs to swap from the test value to the real one before/at S3; the "Create account" UI on
+`index.html`'s tenant branch, wired to the real site key (hardcoded per Gate 1 decision).
 
 ---
 
