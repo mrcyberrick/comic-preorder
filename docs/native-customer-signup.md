@@ -221,10 +221,9 @@ F72). Founding-first sidesteps it.
 ---
 
 ## Completion criteria (finalized at plan open)
-- [x] `rjbookstop.pulllist.app` provisioned, TLS active, resolves to founding — **Rick confirmed Active +
-      SSL enabled 2026-07-23; HTTP 200 + valid TLS + byte-identical static bundle to the apex confirmed
-      by curl.** Renders branded login — **pending Rick's live-browser check** (curl can't execute the
-      JS that sets `data-front-door`/branding; this needs a real browser per the CSS-in-real-browser rule).
+- [x] `rjbookstop.pulllist.app` provisioned, TLS active, resolves to founding, renders branded login —
+      **Rick confirmed Active + SSL enabled 2026-07-23; HTTP 200 + valid TLS + byte-identical static
+      bundle to the apex confirmed by curl; live-browser render confirmed green by Rick same day.**
 - [x] Native signup endpoint live (S2, staging, 2026-07-23): `register-customer` adapted in place
       (`feature/native-customer-signup`, `458dbc0`) — throwaway self-registration created a founding-tenant
       pending row (`tenant_id` = `72e29f67-…`, correct); resubmit hit `already_exists` dedup; honeypot
@@ -234,10 +233,19 @@ F72). Founding-first sidesteps it.
       swaps from the test value to the real one. Fixtures torn down; live SELECT = 0 rows (both test
       emails). Magic-link + MailerSend tail is byte-identical shared code with the already-proven webhook
       path (`provisionPendingCustomer`), not independently re-verified.
-- [ ] "Create account" UI on the founding branded login, real-browser-verified desktop + mobile, no
-      horizontal overflow; JS-disabled degradation unchanged.
-- [ ] Auth-callsite count in `index.html` unchanged before/after; full Playwright suite green incl.
-      tenant isolation (F15/F20).
+- [x] "Create account" UI on the founding branded login (S3, staging, 2026-07-23) — `index.html`
+      `3da71e4`. Real-browser-verified desktop + mobile via request interception under the real
+      `rjbookstop.pulllist.app` hostname (`scripts/playwright/native-signup-verify.mjs`, local-only,
+      23/23 checks green): trigger shown only for founding (JS-gated on
+      `TenantContext.current().id === FOUNDING_TENANT.id`, so comicstore/other tenants never see it);
+      no horizontal overflow at 1440/390; JS-disabled degrades to today's unchanged login card.
+      Real Turnstile widget (site key `0x4AAAAAAD8S0ONolq3newIs`, Rick's widget) renders correctly —
+      screenshot review caught it defaulting to Cloudflare's light theme against the app's dark UI;
+      fixed with `theme: 'dark'`. Turnstile pass/fail itself not asserted under headless automation
+      (expected — that's exactly the traffic pattern Turnstile flags); real human pass/fail is S4's job.
+- [x] Auth-callsite count in `index.html` unchanged before/after (`setSession` ×1, `verifyOtp` ×2,
+      `token_hash` ×1, `access_token` ×1 — all identical pre/post via grep count). Full Playwright suite
+      incl. tenant isolation (F15/F20) — **not yet run this session, next step.**
 - [ ] Prod write-smoke green: live self-register → correct founding `tenant_id` → magic link → admin
       approve → torn down; 24-hour soak elapsed and clean.
 - [ ] MailerLite retired for founding: webhook path removed/dead, exposed secret rotated to dead config.
