@@ -541,9 +541,14 @@
   // ── Native signup — founding tenant only (F72 gates non-founding email
   //    branding; see docs/native-customer-signup.md). ax-when-tenant alone
   //    fires for ANY tenant subdomain (comicstore too), so reveal the
-  //    "Create one" trigger only when the resolved tenant is specifically
-  //    founding.
-  if (TenantContext.current()?.id === FOUNDING_TENANT.id) {
+  //    "Create one" trigger only when the HOSTNAME itself is specifically
+  //    the founding subdomain. Deliberately not TenantContext.current().id:
+  //    that falls back to FOUNDING_TENANT whenever resolve_tenant_by_slug()
+  //    misses (e.g. any tenant slug absent from this env's DB — comicstore
+  //    doesn't exist on staging, would otherwise misreport as founding here),
+  //    which would also incorrectly surface founding's signup on a broken or
+  //    unresolvable non-founding subdomain in production.
+  if (tenantSlugFromHostname() === FOUNDING_TENANT.slug) {
     const contactEl = document.getElementById('tenant-no-account-contact');
     const signupEl  = document.getElementById('tenant-no-account-signup');
     if (contactEl) contactEl.style.display = 'none';
