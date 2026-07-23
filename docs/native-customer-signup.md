@@ -1,6 +1,7 @@
 # Native In-App Customer Self-Registration (PLAN)
 
-**Status:** **Planning — not started.** Standalone pre-Phase-6 workstream; its own session, full
+**Status:** **In progress** (opened 2026-07-23).
+Standalone pre-Phase-6 workstream; its own session, full
 staging→prod discipline. **Not** a phase sub-deploy (Phase 5 closed 2026-07-15; Phase 6 not started).
 **Author context:** Written 2026-07-23 (Rick + planning session) after the founding tenant's MailerLite
 self-registration path broke (see § Trigger). Direction and the two gating decisions were settled with
@@ -9,6 +10,11 @@ Rick in the opening session — see § Settled decisions.
 (`docs/apex-landing-tenant-subdomains.md` S6.5 — armed 2026-07-22T17:13:46Z, elapses
 2026-07-23T17:13:46Z / ~1:13 PM ET). This work edits `index.html` (the tenant login branch the apex
 work just shipped); do not touch that file while it is soaking.
+**Cleared 2026-07-23T21:41Z** — soak window fully clock-elapsed (~4.5h past); Rick confirmed no
+login-related issues on either `pulllist.app` or `comicstore.pulllist.app` during the soak. Note:
+`apex-landing-tenant-subdomains.md` § Status / § S6.6 closeout had not yet been formally ticked at
+the time this gate was checked — Rick's live confirmation was taken as satisfying the gate rather
+than blocking on that paperwork; the apex plan's own closeout remains a separate, outstanding task.
 **Next free finding ID at planning:** **F93** (verify before filing — enumerate `#### F<n>` in
 `technical-reference.md` § 13).
 
@@ -70,6 +76,17 @@ shop and we'll get you set up" copy already routes customers to `invite-customer
    rjbookstop.com-on-the-app. Cheapest unblock, auto-resolves, zero resolver change — see § Why the
    subdomain is the cheap unblock. rjbookstop.com stays external and points at it.
 3. **Interim = admin invites**, no Brevo bridge.
+4. **Abuse gate = Turnstile + honeypot + dedup, no rate-limit table for now** (confirmed at plan open,
+   2026-07-23). Matches the plan's lead recommendation in § The hard design question. A `signup_attempts`
+   table is added later only if abuse actually shows up in practice, not built speculatively.
+5. **Endpoint shape = adapt `register-customer` in place** (confirmed at plan open, 2026-07-23). A
+   direct-POST `{email, name, slug, turnstileToken, honeypot}` branch is added alongside the existing
+   MailerLite webhook shape; tenant resolves from the posted `slug` instead of `?secret=`. The MailerLite
+   webhook path stays present but harmlessly dead until § S5 removes it. No new `signup` function.
+6. **Turnstile public site key is hardcoded in `index.html`** (confirmed at plan open, 2026-07-23) —
+   Turnstile site keys are designed to be embedded client-side, like the Supabase anon key; no
+   `config.js` edit needed. The `TURNSTILE_SECRET_KEY` stays server-side only, set by Rick as a Supabase
+   Edge Function secret (unchanged from the original plan).
 
 ---
 
