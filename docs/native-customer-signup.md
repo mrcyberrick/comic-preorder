@@ -177,11 +177,11 @@ F72). Founding-first sidesteps it.
   customers to Ray & Judy's Book Stop services. It is **not** the account-creation trigger MailerLite
   was; native signup owns that now. The only (optional, non-integration) touchpoint is a plain **link**
   from the funnel to the `rjbookstop.pulllist.app` signup.
-- **Future: automated weekly-shipment customer emails.** Rick's forward note — the Brevo platform may
-  later drive automated weekly-shipment emails, developed as part of `import.js`. **Yet to be developed;
-  not scoped here.** Caveat for whoever picks it up: per-customer "your reserved book arrived" mail needs
-  PULLLIST reservation data, for which there is no PULLLIST→Brevo path today; a general "this week's
-  shipment is in" broadcast to the funnel list would not. Settle that distinction when it's scoped.
+- **Future: weekly-shipment broadcast emails (not transactional).** Rick's forward note — the Brevo
+  platform may later drive automated weekly-shipment emails, developed as part of `import.js`. **Confirmed
+  scope (Rick, 2026-07-23): a mailing-list broadcast** ("this week's shipment is in") to the funnel list,
+  **not** per-customer transactional mail — so it needs **no PULLLIST→Brevo data path** and stays fully
+  within Brevo's separate track. **Yet to be developed; not scoped here.**
 
 ---
 
