@@ -234,18 +234,32 @@ F72). Founding-first sidesteps it.
       emails). Magic-link + MailerSend tail is byte-identical shared code with the already-proven webhook
       path (`provisionPendingCustomer`), not independently re-verified.
 - [x] "Create account" UI on the founding branded login (S3, staging, 2026-07-23) — `index.html`
-      `3da71e4`. Real-browser-verified desktop + mobile via request interception under the real
-      `rjbookstop.pulllist.app` hostname (`scripts/playwright/native-signup-verify.mjs`, local-only,
-      23/23 checks green): trigger shown only for founding (JS-gated on
-      `TenantContext.current().id === FOUNDING_TENANT.id`, so comicstore/other tenants never see it);
-      no horizontal overflow at 1440/390; JS-disabled degrades to today's unchanged login card.
-      Real Turnstile widget (site key `0x4AAAAAAD8S0ONolq3newIs`, Rick's widget) renders correctly —
-      screenshot review caught it defaulting to Cloudflare's light theme against the app's dark UI;
-      fixed with `theme: 'dark'`. Turnstile pass/fail itself not asserted under headless automation
-      (expected — that's exactly the traffic pattern Turnstile flags); real human pass/fail is S4's job.
+      `3da71e4` (+ fix `6020a5c`, see below). Real-browser-verified desktop + mobile via request
+      interception under staging's real founding subdomain (`raysandjudys.pulllist.app`;
+      `scripts/playwright/native-signup-verify.mjs`, local-only, 23/23 checks green): trigger shown
+      only for founding; no horizontal overflow at 1440/390; JS-disabled degrades to today's unchanged
+      login card. Real Turnstile widget (site key `0x4AAAAAAD8S0ONolq3newIs`, Rick's widget) renders
+      correctly — screenshot review caught it defaulting to Cloudflare's light theme against the app's
+      dark UI; fixed with `theme: 'dark'`. Turnstile pass/fail itself not asserted under headless
+      automation (expected — that's exactly the traffic pattern Turnstile flags); real human pass/fail
+      is S4's job.
+      **Bug caught by the pre-push smoke gate (`6020a5c`):** the original founding-check compared
+      `TenantContext.current().id` against `FOUNDING_TENANT.id`, which falls back to founding whenever
+      `resolve_tenant_by_slug()` misses for the current hostname's slug — true for any slug absent from
+      an env's DB, including both `rjbookstop` and `comicstore` on staging (comicstore is prod-only,
+      the 5.5 asymmetry). That silently broke the pre-existing `12-apex-front-door.spec.ts` comicstore
+      case (expects "Contact the shop" visible; got hidden). Fixed by comparing
+      `tenantSlugFromHostname()` directly against `FOUNDING_TENANT.slug` — a pure client-side check
+      with no RPC dependency, and more correct in production too (a broken/unresolvable non-founding
+      subdomain now never falls back to showing founding's signup form).
 - [x] Auth-callsite count in `index.html` unchanged before/after (`setSession` ×1, `verifyOtp` ×2,
-      `token_hash` ×1, `access_token` ×1 — all identical pre/post via grep count). Full Playwright suite
-      incl. tenant isolation (F15/F20) — **not yet run this session, next step.**
+      `token_hash` ×1, `access_token` ×1 — identical pre/post via grep count, re-verified after the
+      fix too). Full Playwright suite incl. tenant isolation (F15/F20) — **green.** Run three times
+      total (pre-fix/pre-push: 1 real bug caught + 7 F91 noise; post-fix/pre-push: 0 real failures, 14
+      F91-flaky; post-fix/deployed: 0 real failures, 13 F91-flaky). Every single `Error:` line across
+      all three runs traced to the filed F91 `bad_jwt` signature (`grep -c` confirmed zero exceptions
+      each time) — none novel. Spec 12 (all 4 tests, incl. the fixed comicstore case) green in every
+      run. 30/30 import unit tests green throughout.
 - [ ] Prod write-smoke green: live self-register → correct founding `tenant_id` → magic link → admin
       approve → torn down; 24-hour soak elapsed and clean.
 - [ ] MailerLite retired for founding: webhook path removed/dead, exposed secret rotated to dead config.
@@ -318,6 +332,49 @@ CLI function command passes an explicit `--workdir`.
 **Left for S3:** real Turnstile widget (site key + secret key) from Rick — `TURNSTILE_SECRET_KEY` on
 staging needs to swap from the test value to the real one before/at S3; the "Create account" UI on
 `index.html`'s tenant branch, wired to the real site key (hardcoded per Gate 1 decision).
+
+### S3 — "Create account" UI on the founding branded login — Complete on staging 2026-07-23
+
+**Branch:** `feature/native-customer-signup` → `--ff-only` → `staging`, pushed (`6020a5c`), deployed to
+`https://staging.pulllist.pages.dev/`.
+
+**Files:** `index.html` (S3 build `3da71e4`, +163/-1; S3 fix `6020a5c`, +8/-3).
+`scripts/playwright/native-signup-verify.mjs` (S3, new — local-only, never committed to any repo).
+
+**Rick, in session:** created the real Turnstile widget (Cloudflare dashboard → Turnstile → Add Widget,
+Managed mode, hostname `pulllist.app` — confirmed via Cloudflare's own hostname-management docs that
+this automatically covers `rjbookstop.pulllist.app` as a subdomain, no need to add it separately);
+site key `0x4AAAAAAD8S0ONolq3newIs` pasted to chat (public by design); secret key set directly as
+`TURNSTILE_SECRET_KEY` on the staging Supabase project via the dashboard (never pasted to chat, per
+the F73/F74 lesson), replacing S2's Cloudflare test value.
+
+**Build.** The sign-in card's "Don't have an account?" line gained a third branch
+(`#tenant-no-account-signup`) alongside the existing apex/tenant split, revealed only for the founding
+subdomain. A new `#signup-form` (name, email, an `aria-hidden` off-screen honeypot, a lazy-loaded
+Turnstile widget) toggles against `#sign-in-form` the same way `#set-password-form` already does, and
+posts to `register-customer`'s S2 native path. Success shows a new "check your email" state
+(`#signup-success-state`) rather than the existing auto-redirect success state, since this call returns
+no session. Site key hardcoded per the Gate 1 decision.
+
+**Bug caught by the pre-push smoke gate, fixed same session (`6020a5c`)** — see the completion-criteria
+entry above for full detail: the founding check originally compared `TenantContext.current().id`
+(RPC-resolved, falls back to founding on any DB miss) instead of the hostname-derived slug, which broke
+the pre-existing comicstore front-door spec on staging. Fixed to compare `tenantSlugFromHostname()`
+against `FOUNDING_TENANT.slug` directly — no RPC dependency, more correct in production too.
+
+**Verification** (see completion criteria above for full detail): local interception harness 23/23
+green (targeting staging's real founding slug `raysandjudys.pulllist.app`, not the prod-only
+`rjbookstop.pulllist.app` — a distinction that mattered once the founding check became hostname-based).
+Screenshot review caught the Turnstile widget rendering in Cloudflare's default light theme against the
+app's dark UI; fixed with `theme: 'dark'`. Full Playwright suite green across three runs (pre-fix,
+post-fix pre-push, post-fix deployed) — every failure across all three traced to the filed F91 GoTrue
+flakiness, zero novel failures each time; spec 12 (incl. the fixed comicstore case) clean in every run.
+Auth-callsite count unchanged. Real Turnstile human pass/fail deferred to S4 (live browser, prod).
+
+**Left for S4:** Rick's prod EF deploy (`plgegklqtdjxeglvyjte`) + prod promotion (standard flow, F59
+diff assertion, `config.js` checkout) + `TURNSTILE_SECRET_KEY` set on prod + live write-smoke on
+`rjbookstop.pulllist.app` (self-register a throwaway founding customer → pending row w/ correct
+founding `tenant_id` → magic link → admin approve → tear down) + 24-hour soak.
 
 ---
 
