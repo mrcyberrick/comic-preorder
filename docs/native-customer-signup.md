@@ -397,6 +397,56 @@ diff assertion, `config.js` checkout) + `TURNSTILE_SECRET_KEY` set on prod + liv
 `rjbookstop.pulllist.app` (self-register a throwaway founding customer → pending row w/ correct
 founding `tenant_id` → magic link → admin approve → tear down) + 24-hour soak.
 
+### S4 — Prod EF deploy + promotion + live write-smoke — Complete 2026-07-24; soak in progress
+
+**Rick, in session:** created the real Turnstile widget hostname config (`pulllist.app`, confirmed by
+Cloudflare's docs to cover `rjbookstop.pulllist.app`); set `TURNSTILE_SECRET_KEY` on **both** staging
+and prod via the Supabase dashboard (edited the existing S2 test-value secret in place); merged
+PR #95.
+
+**S4a — Edge Function:** `register-customer` deployed to prod (`plgegklqtdjxeglvyjte`) via
+`supabase functions deploy --no-verify-jwt --workdir <repo>` (F93 mitigation); byte-verified via
+download+diff against the repo source (identical). All required secrets pre-confirmed present via
+`supabase secrets list` before deploying. Non-mutating behavioral checks on the live prod function
+matched staging exactly: webhook path unchanged (bogus secret → 401); native path missing fields →
+400; honeypot → silent 200, no account.
+
+**S4b — Static site promotion:** `staging` → `main` via the standard `/promote-prod` flow. F59 check:
+`index.html`, `_headers`, `supabase/functions/register-customer/index.ts` differ from `main` (expected);
+`app.js`/`mylist.html`/`arrivals.html`/`admin.html` identical to `main` (expected — this workstream
+touched none of them). `docs/apex-landing-tenant-subdomains.md` rode along modified (a prior session's
+doc-only staging commits not yet promoted — same pattern as that work's own S6.2 note, not scope creep
+here). `config.js` confirmed absent from the PR #95 diff both before and after. Rick merged
+(`3bc3319`, **2026-07-24T01:07:18Z**) — this is the soak anchor. Deploy confirmed live within ~10s via
+curl (both `index.html`'s `signup-form` marker and the updated CSP header); `comicstore.pulllist.app`
+regression-checked (200 OK, unaffected).
+
+**S4c — Live write-smoke (prod, real human, real Turnstile):**
+- First attempt hit a 500 from `register-customer` itself; a retry immediately after succeeded
+  end-to-end. Several further attempts in the same normal browser window got stuck on Turnstile's own
+  "Verifying..." state, surfacing Cloudflare's "Verification failed" prompt — `register-customer`'s
+  abuse gate correctly refused every one of these client-side (no fetch sent without a token; confirmed
+  via live SELECT that the failed attempts created zero rows). Incognito Chrome and a private Brave tab
+  both succeeded. Root cause not conclusively identified (candidates: Cloudflare edge-propagation
+  timing after the CSP/widget went live vs. Brave-specific fingerprinting protection, which stays active
+  in private windows unlike a normal extension — weakened by Chrome incognito also needing a retry).
+  **Filed as F94** (informational — no code defect, monitor during the soak).
+- The successful signup (`test_user3@mrcyberrick.us`) verified end-to-end: pending row landed with
+  `status=pending`, `tenant_id=20941129-c35a-476d-ae21-44b8f77af89c` (correct founding tenant, prod),
+  `is_admin=false`; magic link worked (Rick confirmed browsing access); admin approved via admin.html
+  (`status` → `active`, confirmed by live SELECT); Rick logged in on the new account and saw the welcome
+  state.
+- Teardown: a broad query for every founding-tenant profile created today found exactly one row
+  (dedup correctly absorbed the repeated retries under the same email) — deleted via GoTrue Admin API
+  (200 on first attempt); live SELECT confirmed `[]`, zero rows.
+
+**S4d — 24-hour soak armed at merge time** (2026-07-24T01:07:18Z → elapses 2026-07-25T01:07:18Z).
+Reminders scheduled via `/schedule-gate`: a one-time cloud routine (`trig_01S1aNrcVAaHW8YqdzYHc2wo`,
+fires 2026-07-25T01:15:00Z — an ~8-minute buffer past the true 24h mark, matching the apex-work
+precedent rather than the skill's default 8am ET slot, which would have landed ~11 hours late against
+this merge's actual evening-ET timestamp) and a Google Calendar event (2026-07-24 9:07–9:22 PM ET,
+popup + email).
+
 ---
 
 ## References
