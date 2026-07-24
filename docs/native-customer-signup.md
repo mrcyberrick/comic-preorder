@@ -374,7 +374,14 @@ security headers. Fixed: added `https://challenges.cloudflare.com` to `script-sr
 directive carrying the same origin (the widget renders in an iframe; with no `frame-src` at all it
 falls back to `default-src 'self'`, which would have blocked the iframe next), and to `connect-src` as
 a precaution. Verified live: `curl -I https://staging.pulllist.pages.dev/` shows the updated CSP header
-deployed. **Awaiting Rick's retry** to confirm the widget now completes for a real human.
+deployed. **Rick retried and confirmed the fix**: `api.js` loads, the widget mounts and renders
+correctly (dark theme). The widget itself then returned Turnstile client error **110200 ("domain not
+authorized")** — expected, not a bug: the widget's Hostname Management only has `pulllist.app`
+registered (covers `rjbookstop.pulllist.app` as a subdomain, per Cloudflare's own docs), and
+`staging.pulllist.pages.dev` is an unrelated Cloudflare-owned domain, not a subdomain of it. **Rick's
+call: defer the real human-pass/fail test to S4 on prod**, where `rjbookstop.pulllist.app` is already
+covered by the widget's hostname config — the originally-planned path (plan § R4). Everything short of
+that one platform-scoped step is now confirmed working end-to-end on staging.
 
 **Verification** (see completion criteria above for full detail): local interception harness 23/23
 green (targeting staging's real founding slug `raysandjudys.pulllist.app`, not the prod-only
