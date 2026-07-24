@@ -27,14 +27,23 @@
 # - script-src 'unsafe-inline' is required by the per-page inline <script>
 #   blocks and inline onerror handlers (no-build architecture). The value of
 #   this policy is blocking *external* script origins — with the Supabase
-#   bundle self-hosted, no third-party script host is allowed at all.
+#   bundle self-hosted, no third-party script host is allowed at all, with
+#   one deliberate exception: https://challenges.cloudflare.com (Turnstile's
+#   api.js, native-customer-signup S3). frame-src carries the same origin —
+#   the widget itself renders in an iframe from there; with no frame-src
+#   directive it would fall back to default-src 'self' and the iframe would
+#   be blocked exactly like the script was (caught live on staging 2026-07-23:
+#   Rick's real-browser signup test hit "script-src" blocked before this fix).
+#   connect-src also carries it as a precaution against Turnstile's own
+#   background requests, even with pre-clearance off (Cloudflare's own CSP
+#   guidance flags connect-src as pre-clearance-relevant; harmless either way).
 # - style-src/font-src allow the Google Fonts import in style.css.
 # - connect-src lists BOTH Supabase projects so this file merges cleanly
 #   between the staging and main branches (config.js picks the live one).
 # - img-src https: covers distributor cover CDNs (PRH, Lunar, misc);
 #   data: covers the inline SVG cover placeholder.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://plgegklqtdjxeglvyjte.supabase.co https://puoaiyezsreowpwxzxhj.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://plgegklqtdjxeglvyjte.supabase.co https://puoaiyezsreowpwxzxhj.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
