@@ -378,8 +378,54 @@
       <p style="margin-top:10px;font-size:0.78rem;color:var(--text-muted);
                 text-align:center;line-height:1.6">
         <span class="ax-when-apex">Don't have an account? Your shop can<br>set one up for you.</span><span
-              class="ax-when-tenant">Don't have an account? Contact the shop and<br>we'll get you set up.</span>
+              class="ax-when-tenant" id="tenant-no-account-contact">Don't have an account? Contact the shop and<br>we'll get you set up.</span><span
+              class="ax-when-tenant" id="tenant-no-account-signup" style="display:none">Don't have an account?
+          <a href="#" id="open-signup-link" style="color:var(--accent);text-decoration:underline">Create one →</a></span>
       </p>
+    </div>
+
+    <!-- ── Create Account Form (native self-registration — founding tenant only,
+         F72 gates non-founding tenant email branding; shown/hidden via JS after
+         TenantContext resolves, see the final script block) ── -->
+    <div id="signup-form" style="display:none">
+      <h2>Create your account</h2>
+      <div id="signup-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label for="signup-name">Full Name</label>
+        <input type="text" id="signup-name" placeholder="Jane Doe" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label for="signup-email">Email Address</label>
+        <input type="email" id="signup-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <!-- Honeypot — real users never see or fill this; bots that autofill every
+           field trip it, and register-customer absorbs the submission silently. -->
+      <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+        <label for="signup-hp">Leave this field blank</label>
+        <input type="text" id="signup-hp" name="signup-hp" tabindex="-1" autocomplete="off">
+      </div>
+      <div id="signup-turnstile" style="margin:14px 0"></div>
+      <button id="btn-signup" class="btn btn-primary btn-full" style="margin-top:8px">
+        Create Account
+      </button>
+      <p style="margin-top:16px;font-size:0.75rem;color:var(--text-muted);
+                text-align:center;line-height:1.6">
+        Already have an account?
+        <a href="#" id="switch-to-signin-from-signup"
+           style="color:var(--accent);text-decoration:underline">Sign in instead</a>
+      </p>
+    </div>
+
+    <!-- ── Signup Success State ── -->
+    <div id="signup-success-state" style="display:none;text-align:center;padding:16px 0">
+      <div style="font-size:2.5rem;margin-bottom:12px">📬</div>
+      <div style="font-size:1rem;font-weight:600;color:var(--text-primary);margin-bottom:8px">
+        Check your email
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6">
+        We sent a link to <span id="signup-success-email" style="color:var(--text-primary)"></span> —
+        use it to browse the catalog while your account is reviewed.
+      </div>
     </div>
 
     <!-- ── Success State ── -->
@@ -492,6 +538,23 @@
   await TenantContext.resolve();
   Branding.apply(TenantContext.current());
 
+  // ── Native signup — founding tenant only (F72 gates non-founding email
+  //    branding; see docs/native-customer-signup.md). ax-when-tenant alone
+  //    fires for ANY tenant subdomain (comicstore too), so reveal the
+  //    "Create one" trigger only when the HOSTNAME itself is specifically
+  //    the founding subdomain. Deliberately not TenantContext.current().id:
+  //    that falls back to FOUNDING_TENANT whenever resolve_tenant_by_slug()
+  //    misses (e.g. any tenant slug absent from this env's DB — comicstore
+  //    doesn't exist on staging, would otherwise misreport as founding here),
+  //    which would also incorrectly surface founding's signup on a broken or
+  //    unresolvable non-founding subdomain in production.
+  if (tenantSlugFromHostname() === FOUNDING_TENANT.slug) {
+    const contactEl = document.getElementById('tenant-no-account-contact');
+    const signupEl  = document.getElementById('tenant-no-account-signup');
+    if (contactEl) contactEl.style.display = 'none';
+    if (signupEl)  signupEl.style.display  = 'inline';
+  }
+
   // ── Parse URL for tokens (query params AND hash fragment) ──
   const qParams     = new URLSearchParams(window.location.search);
   const hashParams  = new URLSearchParams(window.location.hash.substring(1));
@@ -524,6 +587,8 @@
   const setPasswordForm  = document.getElementById('set-password-form');
   const signInForm       = document.getElementById('sign-in-form');
   const successState     = document.getElementById('success-state');
+  const signupForm         = document.getElementById('signup-form');
+  const signupSuccessState = document.getElementById('signup-success-state');
 
   // ── Invite / Recovery flow ─────────────────────────────────
   if (hasInvite) {
@@ -769,6 +834,108 @@
   btnLogin?.addEventListener('click', doLogin);
   passwordEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   emailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') passwordEl.focus(); });
+
+  // ── Create Account (native signup, founding tenant only) ────
+  const TURNSTILE_SITE_KEY   = '0x4AAAAAAD8S0ONolq3newIs';
+  const signupNameEl         = document.getElementById('signup-name');
+  const signupEmailEl        = document.getElementById('signup-email');
+  const signupHpEl           = document.getElementById('signup-hp');
+  const btnSignup             = document.getElementById('btn-signup');
+  const signupErrorEl        = document.getElementById('signup-error');
+  const signupSuccessEmailEl = document.getElementById('signup-success-email');
+  let turnstileWidgetId = null;
+
+  function loadTurnstile(cb) {
+    if (window.turnstile) { cb(); return; }
+    let script = document.getElementById('cf-turnstile-script');
+    if (!script) {
+      script = document.createElement('script');
+      script.id    = 'cf-turnstile-script';
+      script.src   = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener('load', cb, { once: true });
+  }
+
+  document.getElementById('open-signup-link')?.addEventListener('click', e => {
+    e.preventDefault();
+    signInForm.style.display = 'none';
+    signupForm.style.display = 'block';
+    loadTurnstile(() => {
+      if (turnstileWidgetId === null) {
+        turnstileWidgetId = window.turnstile.render('#signup-turnstile', { sitekey: TURNSTILE_SITE_KEY, theme: 'dark' });
+      }
+    });
+  });
+
+  document.getElementById('switch-to-signin-from-signup')?.addEventListener('click', e => {
+    e.preventDefault();
+    signupForm.style.display = 'none';
+    signInForm.style.display = 'block';
+  });
+
+  async function doSignup() {
+    const name     = signupNameEl.value.trim();
+    const email    = signupEmailEl.value.trim();
+    const honeypot = signupHpEl.value;
+
+    if (!name || !email) {
+      signupErrorEl.textContent   = 'Please enter your name and email.';
+      signupErrorEl.style.display = 'block';
+      return;
+    }
+
+    const token = (window.turnstile && turnstileWidgetId !== null)
+      ? window.turnstile.getResponse(turnstileWidgetId) : '';
+    if (!token) {
+      signupErrorEl.textContent   = 'Please complete the verification.';
+      signupErrorEl.style.display = 'block';
+      return;
+    }
+
+    btnSignup.disabled    = true;
+    btnSignup.textContent = 'Creating account…';
+    signupErrorEl.style.display = 'none';
+
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/register-customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({
+          name, email, honeypot,
+          slug:           TenantContext.current().slug,
+          turnstileToken: token,
+        }),
+      });
+      const result = await resp.json().catch(() => ({}));
+
+      if (!resp.ok || result.error) {
+        signupErrorEl.textContent   = result.error || 'Something went wrong. Please try again.';
+        signupErrorEl.style.display = 'block';
+        btnSignup.disabled    = false;
+        btnSignup.textContent = 'Create Account';
+        if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+        return;
+      }
+
+      signupSuccessEmailEl.textContent = email;
+      signupForm.style.display         = 'none';
+      signupSuccessState.style.display = 'block';
+
+    } catch (err) {
+      signupErrorEl.textContent   = 'Network error. Please try again.';
+      signupErrorEl.style.display = 'block';
+      btnSignup.disabled    = false;
+      btnSignup.textContent = 'Create Account';
+      if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+    }
+  }
+
+  btnSignup?.addEventListener('click', doSignup);
+  signupEmailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doSignup(); });
+  signupNameEl?.addEventListener('keydown', e => { if (e.key === 'Enter') signupEmailEl.focus(); });
 
 })();
 </script>
