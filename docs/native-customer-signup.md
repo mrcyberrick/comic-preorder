@@ -362,6 +362,20 @@ entry above for full detail: the founding check originally compared `TenantConte
 the pre-existing comicstore front-door spec on staging. Fixed to compare `tenantSlugFromHostname()`
 against `FOUNDING_TENANT.slug` directly — no RPC dependency, more correct in production too.
 
+**Second bug, caught by Rick's real-browser test on deployed staging, fixed same session (`58905a4`).**
+The site's CSP (`_headers`, A11 2026-07 review) locks `script-src` to `'self' 'unsafe-inline'` only —
+Turnstile's `api.js` was outright blocked (`Refused to load the script... violates... script-src`).
+**The local interception harnesses are structurally blind to this class of bug**: `route.fulfill()`
+replaces the entire HTTP response including headers with a locally-controlled minimal set, bypassing
+`_headers` entirely — the widget rendered perfectly in every automated check while being completely
+broken on the real deployed site. Real-browser verification against the actual deployment is load-
+bearing beyond CSS (the project's existing rule, two prior incidents) — this is the same lesson for
+security headers. Fixed: added `https://challenges.cloudflare.com` to `script-src`, a new `frame-src`
+directive carrying the same origin (the widget renders in an iframe; with no `frame-src` at all it
+falls back to `default-src 'self'`, which would have blocked the iframe next), and to `connect-src` as
+a precaution. Verified live: `curl -I https://staging.pulllist.pages.dev/` shows the updated CSP header
+deployed. **Awaiting Rick's retry** to confirm the widget now completes for a real human.
+
 **Verification** (see completion criteria above for full detail): local interception harness 23/23
 green (targeting staging's real founding slug `raysandjudys.pulllist.app`, not the prod-only
 `rjbookstop.pulllist.app` — a distinction that mattered once the founding check became hostname-based).
