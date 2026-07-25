@@ -306,6 +306,27 @@
       font-size: 0.85rem;
       color: var(--success);
     }
+
+    /* Secondary group: reserved titles the import cannot track (price $0.00) */
+    .recon-subhead {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 10px 16px 8px;
+      border-top: 1px solid var(--border);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .recon-subhead-count {
+      font-weight: 600;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-secondary);
+    }
     .recon-note {
       padding: 10px 16px;
       border-top: 1px solid var(--border);
@@ -1043,14 +1064,25 @@
 
       // Match on any catalog_id in the group (the shipment may have resolved
       // to either month's row) OR the shared upc/item_code — the F76 key.
-      const exceptions = reserved
+      const unmatched = reserved
         .filter(({ catalog: c, catalogIds }) =>
           !([...catalogIds].some(id => shipCatalogIds.has(id)) ||
             (c.upc       && shipUpcs.has(c.upc))      ||
             (c.item_code && shipItemCodes.has(c.item_code))))
         .sort((a, b) => (a.catalog.title || '').localeCompare(b.catalog.title || ''));
 
-      const matched = reserved.length - exceptions.length;
+      // A zero-price title can never appear in weekly_shipment: the import
+      // drops Retail = 0.00 lines from the Lunar code invoice as promos and
+      // freebies (import.js normalizeShipment, Format B). Absence therefore
+      // proves nothing about whether it arrived, so calling it a short is a
+      // false alarm — split these out and label them rather than flagging
+      // them. Null price is left in the exception list: that's a metadata
+      // gap, not a declared freebie, and hiding it could mask a real short.
+      const isZeroPrice = (c) => c.price_usd != null && Number(c.price_usd) === 0;
+      const exceptions = unmatched.filter(({ catalog: c }) => !isZeroPrice(c));
+      const untracked  = unmatched.filter(({ catalog: c }) =>  isZeroPrice(c));
+
+      const matched = reserved.length - unmatched.length;
 
       // With no shipment imported there is nothing to compare against, so the
       // matched/exception counts are not yet meaningful — render them as "—"
@@ -1097,14 +1129,14 @@
         return;
       }
 
-      if (!exceptions.length) {
+      if (!exceptions.length && !untracked.length) {
         panel.innerHTML = stats +
           `<div class="recon-clear">&#10003; Every reserved title for this week arrived in the shipment.</div>`;
         return;
       }
 
       const names = await getProfileNames();
-      const rows = exceptions.map(({ catalog: c, qty, userIds }) => {
+      const renderRows = (list) => list.map(({ catalog: c, qty, userIds }) => {
         const who = [...userIds].map(id => names.get(id) || 'Unknown').sort().join(', ');
         const code = c.item_code || c.upc || '';
         return `
@@ -1118,10 +1150,23 @@
           </div>`;
       }).join('');
 
-      panel.innerHTML = stats +
-        `<div class="recon-body">${rows}</div>` +
-        `<div class="recon-note">Reserved for this week but absent from the imported shipment &mdash;
-          check the invoice for shorts, or a distributor rejection at order time.</div>`;
+      let body = exceptions.length
+        ? `<div class="recon-body">${renderRows(exceptions)}</div>` +
+          `<div class="recon-note">Reserved for this week but absent from the imported shipment &mdash;
+            check the invoice for shorts, or a distributor rejection at order time.</div>`
+        : `<div class="recon-clear">&#10003; Every priced reserved title for this week arrived in the shipment.</div>`;
+
+      if (untracked.length) {
+        body +=
+          `<div class="recon-subhead">Not tracked by the shipment import` +
+          `<span class="recon-subhead-count">${untracked.length} title${untracked.length !== 1 ? 's' : ''}</span></div>` +
+          `<div class="recon-body">${renderRows(untracked)}</div>` +
+          `<div class="recon-note">Priced $0.00, so the import excludes them from the shipment
+            (promos, freebies, catalog bundles). Their absence is expected and proves nothing either
+            way &mdash; check these against the invoice by hand.</div>`;
+      }
+
+      panel.innerHTML = stats + body;
     }
 
     await loadStoreWeek(new Date());
