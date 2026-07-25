@@ -12,6 +12,9 @@
       .nav, .toolbar, .btn, #toast-container,
       .page-header p, #admin-impersonation-banner,
       #store-week-nav,
+      /* Reconciliation is internal staff data (carries customer names) — it
+         never prints, on either the personal list or the public store poster. */
+      #recon-panel,
       .site-footer { display: none !important; }
 
       body { background: white; color: black; font-family: Arial, sans-serif; }
@@ -229,6 +232,87 @@
       opacity: 1;
       border-color: var(--accent);
     }
+
+    /* ── Shipment reconciliation (admin store view only) ───── */
+    .recon-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .recon-stats {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+    }
+    .recon-stat-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .recon-stat-value {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text-primary);
+    }
+    .recon-stat-value.ok   { color: var(--success); }
+    .recon-stat-value.flag { color: var(--warning); }
+
+    /* Exception list — reserved but absent from the shipment */
+    .recon-body { border-top: 1px solid var(--border); }
+    .recon-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .recon-row:last-child { border-bottom: none; }
+    .recon-row-title {
+      flex: 1;
+      min-width: 0;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .recon-row-who {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      font-weight: 400;
+      display: block;
+      margin-top: 2px;
+    }
+    .recon-row-code {
+      font-family: monospace;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .recon-row-qty {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      min-width: 42px;
+      text-align: right;
+    }
+    .recon-clear {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--success);
+    }
+    .recon-note {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -298,6 +382,13 @@
     <button class="btn btn-secondary btn-sm" id="btn-store-next" title="Next week">Next &rarr;</button>
     <span id="store-week-label" style="font-size:0.85rem;color:var(--text-secondary);margin-left:4px"></span>
   </div>
+
+  <!-- Shipment reconciliation (admin, own view only) — same gate as the
+       "Print Store Report" button. Compares the week's weekly_shipment
+       against every customer's reservations for the same week and lists
+       titles that were expected but did not arrive. Hidden by default;
+       shown by runStoreManagerView(). Never printed (customer names). -->
+  <div class="recon-panel" id="recon-panel" style="display:none"></div>
 
   <div id="arrivals-container">
     <div class="empty-state">
@@ -815,20 +906,36 @@
 
       container.innerHTML = '<div class="empty-state"><p style="color:var(--text-muted)">Loading…</p></div>';
 
-      const { data, error } = await db
-        .from('weekly_shipment')
-        .select(`
-          id, distributor, upc, item_code, title, price_usd, quantity, cover_url, on_sale_date,
-          catalog:catalog_id (
-            id, title, series_name, publisher, cover_url, price_usd, distributor, variant_type
-          )
-        `)
-        .gte('on_sale_date', start)
-        .lte('on_sale_date', end)
-        .order('on_sale_date')
-        .order('title');
+      // Shipment (what physically arrived) and reservations (what was
+      // expected) are fetched together so the reconciliation below always
+      // describes the same week. The preorders query is store-wide — every
+      // customer, across all catalog months — mirroring admin.html's
+      // renderThisWeek(); This Week is cross-month by definition.
+      const [shipRes, preRes] = await Promise.all([
+        db.from('weekly_shipment')
+          .select(`
+            id, distributor, upc, item_code, title, price_usd, quantity, cover_url, on_sale_date,
+            catalog:catalog_id (
+              id, title, series_name, publisher, cover_url, price_usd, distributor, variant_type
+            )
+          `)
+          .gte('on_sale_date', start)
+          .lte('on_sale_date', end)
+          .order('on_sale_date')
+          .order('title'),
+        db.from('preorders')
+          .select(`
+            id, user_id, quantity,
+            catalog!inner (
+              id, distributor, item_code, upc, title, price_usd, on_sale_date
+            )
+          `)
+          .gte('catalog.on_sale_date', start)
+          .lte('catalog.on_sale_date', end),
+      ]);
 
-      const shipment = error ? [] : (data || []);
+      const shipment  = shipRes.error ? [] : (shipRes.data || []);
+      const preorders = preRes.error  ? [] : (preRes.data  || []);
 
       const monLabel = new Date(wy, wm - 1, wd).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
       const sunLabel = new Date(wy, wm - 1, wd + 6).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -856,9 +963,140 @@
       }
 
       renderStoreReport(shipment);
+      await renderReconciliation(shipment, preorders, preRes.error);
       btnStore.disabled = shipment.length === 0;
       btnStore.style.opacity = shipment.length === 0 ? '0.5' : '';
       btnStore.title = shipment.length === 0 ? 'No shipment to print for this week' : '';
+    }
+
+    // ── Shipment reconciliation ─────────────────────────────
+    // Nested inside the store-manager view for the same reason loadStoreWeek
+    // is: it only ever runs here, and `profileNameCache` must be initialized
+    // before the first loadStoreWeek() call below. At IIFE scope the `let`
+    // would sit in its temporal dead zone — runStoreManagerView() is invoked
+    // from an early-return branch above, long before that line evaluates.
+
+    // Customer names for the exception list. Fetched once and cached — the
+    // roster doesn't change between week navigations. RLS scopes this to the
+    // admin's own tenant (same query admin.html uses to build its profileMap).
+    let profileNameCache = null;
+    async function getProfileNames() {
+      if (profileNameCache) return profileNameCache;
+      const { data } = await db.from('user_profiles').select('id, full_name');
+      profileNameCache = new Map((data || []).map(u => [u.id, u.full_name]));
+      return profileNameCache;
+    }
+
+    // A reservation is "covered" by the shipment when its catalog_id, upc, OR
+    // item_code appears on any shipment row — the F76 key, identical to
+    // isCoveredByShipment() in the customer path above. catalog_id alone
+    // under-matches (shipment rows can carry a null catalog_id with a valid
+    // upc/item_code), which inflates the exception count with false positives.
+    async function renderReconciliation(shipment, preorders, loadError) {
+      const panel = document.getElementById('recon-panel');
+      panel.style.display = '';
+
+      if (loadError) {
+        panel.innerHTML = `<div class="recon-note">Could not load reservations for this week — reconciliation unavailable.</div>`;
+        return;
+      }
+
+      const shipCatalogIds = new Set(shipment.map(s => s.catalog?.id).filter(Boolean));
+      const shipUpcs       = new Set(shipment.map(s => s.upc).filter(Boolean));
+      const shipItemCodes  = new Set(shipment.map(s => s.item_code).filter(Boolean));
+
+      // Collapse per-customer preorder rows into one entry per catalog title,
+      // summing quantity and collecting who reserved it.
+      const byTitle = new Map();
+      preorders.forEach(p => {
+        const c = p.catalog;
+        if (!c) return;
+        if (!byTitle.has(c.id)) byTitle.set(c.id, { catalog: c, qty: 0, userIds: new Set() });
+        const agg = byTitle.get(c.id);
+        agg.qty += p.quantity || 1;
+        agg.userIds.add(p.user_id);
+      });
+      const reserved = [...byTitle.values()];
+
+      const exceptions = reserved
+        .filter(({ catalog: c }) =>
+          !((c.id        && shipCatalogIds.has(c.id)) ||
+            (c.upc       && shipUpcs.has(c.upc))      ||
+            (c.item_code && shipItemCodes.has(c.item_code))))
+        .sort((a, b) => (a.catalog.title || '').localeCompare(b.catalog.title || ''));
+
+      const matched = reserved.length - exceptions.length;
+
+      // With no shipment imported there is nothing to compare against, so the
+      // matched/exception counts are not yet meaningful — render them as "—"
+      // rather than a misleading "0 matched / N missing".
+      const pending = !shipment.length;
+      const matchedTxt   = pending ? '&mdash;' : matched;
+      const exceptionTxt = pending ? '&mdash;' : exceptions.length;
+      const exceptionCls = pending ? '' : (exceptions.length ? 'flag' : 'ok');
+
+      const stats = `
+        <div class="recon-stats">
+          <div>
+            <div class="recon-stat-label">In shipment</div>
+            <div class="recon-stat-value">${shipment.length}</div>
+          </div>
+          <div>
+            <div class="recon-stat-label">Reserved</div>
+            <div class="recon-stat-value">${reserved.length}</div>
+          </div>
+          <div>
+            <div class="recon-stat-label">Matched</div>
+            <div class="recon-stat-value ${pending ? '' : 'ok'}">${matchedTxt}</div>
+          </div>
+          <div>
+            <div class="recon-stat-label">Not in shipment</div>
+            <div class="recon-stat-value ${exceptionCls}">${exceptionTxt}</div>
+          </div>
+        </div>`;
+
+      if (!reserved.length) {
+        panel.innerHTML = stats +
+          `<div class="recon-note">No reservations on this week's on-sale dates — nothing to reconcile.</div>`;
+        return;
+      }
+
+      // No shipment imported yet (common when previewing next week via the
+      // week nav). Every reservation would technically be "not in shipment",
+      // but the cause is a missing import, not a short — flagging them all
+      // would be alarming and wrong. Say so instead of listing exceptions.
+      if (!shipment.length) {
+        panel.innerHTML = stats +
+          `<div class="recon-note">No shipment imported for this week yet — nothing to reconcile against.
+            Reconciliation becomes meaningful once the weekly invoice is imported.</div>`;
+        return;
+      }
+
+      if (!exceptions.length) {
+        panel.innerHTML = stats +
+          `<div class="recon-clear">&#10003; Every reserved title for this week arrived in the shipment.</div>`;
+        return;
+      }
+
+      const names = await getProfileNames();
+      const rows = exceptions.map(({ catalog: c, qty, userIds }) => {
+        const who = [...userIds].map(id => names.get(id) || 'Unknown').sort().join(', ');
+        const code = c.item_code || c.upc || '';
+        return `
+          <div class="recon-row">
+            <div class="recon-row-title">
+              ${escapeHtml(c.title || '—')}
+              <span class="recon-row-who">${escapeHtml(who)}</span>
+            </div>
+            ${code ? `<span class="recon-row-code">${escapeHtml(code)}</span>` : ''}
+            <span class="recon-row-qty">&times;&nbsp;${qty}</span>
+          </div>`;
+      }).join('');
+
+      panel.innerHTML = stats +
+        `<div class="recon-body">${rows}</div>` +
+        `<div class="recon-note">Reserved for this week but absent from the imported shipment &mdash;
+          check the invoice for shorts, or a distributor rejection at order time.</div>`;
     }
 
     await loadStoreWeek(new Date());
