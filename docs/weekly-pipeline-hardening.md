@@ -21,6 +21,14 @@ two send-test observations (V4, V5) and one real-browser check.** Written 2026-0
 
 **Outstanding before this plan can be marked Complete:** V4, V5, `BREVO_LIST_ID` restore,
 the real-browser signup check, and marking F96 resolved. See § Completion criteria.
+
+**Gate scheduled (2026-07-26):** V4/V5 need a real send and must land before the **first
+unattended cron run of the rewritten send script, Tue 2026-07-28 22:00 UTC**. Reminder set for
+**Mon 2026-07-27, 8:00 AM ET** — routine `trig_01Lz3CREyTTUEWYUDhvuSg7w` (one-shot,
+auto-disables after firing) plus Google Calendar event `k4kf2te64k8laoopi9r23us9es`
+(popup at time, email 60 min prior). Monday chosen deliberately: it avoids Tue/Wed
+(shipment + bagging) and leaves a full day of slack before the cron. Verified
+`(Get-Date '2026-07-27').DayOfWeek` = Monday rather than assuming it.
 **Target:** the weekly newsletter pipeline only. **No PULLLIST app code, schema, or deploy is touched.**
 **Repos involved:** private scripts repo (`github.com/mrcyberrick/comic-preorder-scripts`, working tree
 `C:\Users\richa\…\catalogs\scripts\`) and the separate public publish target
