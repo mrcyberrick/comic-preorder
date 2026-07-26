@@ -1,6 +1,26 @@
 # Weekly Pull-Feed Pipeline Hardening (PLAN)
 
-**Status:** Planning — not started. Written 2026-07-25.
+**Status:** **Executed 2026-07-26 — all three items shipped and live; closure gated on the
+two send-test observations (V4, V5) and one real-browser check.** Written 2026-07-25.
+
+| Item | State | Commit |
+|---|---|---|
+| S1 CTA → founding subdomain | **Live and verified on the served page** | `4582c12` (scripts) |
+| S2 single-commit publish | **Live and verified: 1 commit, 1 build, 1 deploy** | `b727912` (scripts) |
+| S3 send-status assertion | **Deployed; 9/9 stubbed scenarios pass. Not yet observed on a real suspended send (V4)** | `34074c3e` (weekly-pull-feed) |
+
+**Also landed this session** (both discovered *by* running the gates, not planned):
+- `604cfaec` (weekly-pull-feed) — `branches: [main]` on `deploy-pages.yml`; V2 prerequisite,
+  since that workflow really does deploy and would have published a scratch branch live.
+- `808cae4` (scripts) — the feed week defaulted to *today's* week rather than the upcoming
+  shipment, so a bare `--publish` would have replaced next week's newsletter with
+  already-shipped titles. Found at V2. Rick approved fixing it in-session.
+- **F100 filed** (`e864475`, comic-preorder staging) — F98's recorded mechanism was wrong.
+  Two independent Pages publishers race; the cancelled Actions runs F98 blamed were a
+  symptom. S2's single commit neutralizes it. CODE.GS also formally retired (Rick's call).
+
+**Outstanding before this plan can be marked Complete:** V4, V5, `BREVO_LIST_ID` restore,
+the real-browser signup check, and marking F96 resolved. See § Completion criteria.
 **Target:** the weekly newsletter pipeline only. **No PULLLIST app code, schema, or deploy is touched.**
 **Repos involved:** private scripts repo (`github.com/mrcyberrick/comic-preorder-scripts`, working tree
 `C:\Users\richa\…\catalogs\scripts\`) and the separate public publish target
@@ -101,21 +121,55 @@ situation this plan exists to end.
 
 ## Completion criteria
 
-- [ ] S1: generated `newsletter-email.html` contains **zero** `https://pulllist.app` hrefs and three
-      `https://rjbookstop.pulllist.app` hrefs.
+- [x] S1: generated `newsletter-email.html` contains **zero** `https://pulllist.app` hrefs and three
+      `https://rjbookstop.pulllist.app` hrefs. **Verified 2026-07-26 on the LIVE served page**
+      (`mrcyberrick.us/weekly-pull-feed/newsletter-email.html`): 0 apex, 3 founding-subdomain.
+      `newsletter.html` and `rss.xml` also carry zero apex hrefs.
 - [ ] S1: the CTA, header, and hero all resolve to the founding tenant login, and that page shows the
       **"Create one →"** signup affordance in a real browser (per the CSS-in-real-browser rule).
-- [ ] S2: one import produces **exactly one** commit on `weekly-pull-feed` and **one** Pages build —
-      no cancelled `Upload optimized thumbnail` runs in the workflow list.
-- [ ] S2: **all** `<img src>` URLs in the published email return HTTP 200 with **no** manual
-      `pages/builds` rebuild. Verify by resolving every image, not by spot-check — the failure mode is
-      a contiguous tail, so checking the first few proves nothing.
+      **Partial:** `https://rjbookstop.pulllist.app` returns 200 and its served markup contains
+      `Create one →` (and *not* the apex-only "can set one up for you" wording). The real-browser
+      visibility check is **still owed and is Rick's step** — the local Playwright suite must never
+      run against production, and the CSS rule explicitly forbids folding this into a manual pass.
+- [x] S2: one import produces **exactly one** commit on `weekly-pull-feed` and **one** Pages build.
+      **Verified 2026-07-26** on the live publish of week 2026-07-27 (commit `24c3035b`): exactly 1
+      commit added to `main`, 1 legacy Pages build, 1 deployment, 0 cancelled runs.
+      *Criterion reworded per F100* — "no cancelled `Upload optimized thumbnail` runs in the workflow
+      list" counted the wrong artifact, since those runs were a symptom rather than the cause. The
+      assertion that matters is **one deployment of the tip commit** via `/deployments` plus one
+      `/pages/builds` entry.
+- [x] S2: **all** `<img src>` URLs in the published email return HTTP 200 with **no** manual
+      `pages/builds` rebuild. **Verified 2026-07-26: 30/30 resolved 200**, every one, no rebuild.
+      **Caveat, stated honestly:** that publish added **0 new thumbnails** (all 29 cached), so it did
+      not re-create and then defeat the 404-tail scenario — it had nothing new to serve. The
+      36-new-thumb case was proven at tree level on the V2 scratch branch, which was never served.
+      The structural argument covers the gap (one commit ⇒ one build ⇒ no ordering window), but the
+      first import that brings genuinely new covers is the true end-to-end confirmation.
 - [ ] S3: a deliberately-suspended campaign (e.g. re-blocklist the test contact) makes the GitHub
       Action **fail**, and GitHub emails the failure. Confirmed by observation, not by reading code.
+      **Owed — needs the Brevo UI.** Logic proven locally against a stubbed fetch (9/9 scenarios:
+      `suspended`/`draft` → exit 1, zero-recipients → exit 1 with `sendNow` never called, unreadable
+      → exit 1, unknown status → exit 1). What is unobserved is the real API's status value and that
+      GitHub actually emails the failure.
 - [ ] S3: a healthy send still passes and reports the campaign status it observed.
-- [ ] `BREVO_LIST_ID` restored to **7**; test list 8 emptied or deleted.
+      **Owed.** Note `queued`-forever and transient-502 both pass locally, so R2's false-alarm risk
+      is addressed in code.
+- [x] `BREVO_LIST_ID` restored to **7**; test list 8 emptied or deleted. **Currently 7** — it was
+      never switched, because V4/V5 have not run. Must be re-checked after they do.
 - [ ] F96 and F98 marked resolved with the date in `technical-reference.md` § 13 and `CLAUDE.md`.
-- [ ] `docs/weekly-pipeline-consolidation-plan.md` updated to describe the single-commit publish.
+      **F98 resolved 2026-07-26** (fix live and verified). **F96 stays open** — its fix is deployed
+      but the detection gap it tracks is only *closed* once V4 shows the Action going red.
+- [x] `docs/weekly-pipeline-consolidation-plan.md` updated to describe the single-commit publish.
+
+### Added at execution — worth carrying forward
+
+- [x] **V2 must run before any live publish.** It caught four things a diff review would not:
+      the wrong-week default, a stale-replica ref read that aborted a successful publish, the
+      unreachable no-commit path, and the dual-publisher hazard. The scratch-branch rehearsal
+      earned its place in the plan.
+- [ ] **Next Tuesday (2026-07-28 22:00 UTC) is the first unattended run of the new send script.**
+      If S3 misbehaves it fails closed — no delivery, red Action — which is the intended posture but
+      still a missed week. Running V5 before then is the cheap insurance.
 
 ---
 
