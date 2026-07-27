@@ -153,17 +153,38 @@ situation this plan exists to end.
       36-new-thumb case was proven at tree level on the V2 scratch branch, which was never served.
       The structural argument covers the gap (one commit ⇒ one build ⇒ no ordering window), but the
       first import that brings genuinely new covers is the true end-to-end confirmation.
-- [ ] S3: a deliberately-suspended campaign (e.g. re-blocklist the test contact) makes the GitHub
-      Action **fail**, and GitHub emails the failure. Confirmed by observation, not by reading code.
-      **Owed — needs the Brevo UI.** Logic proven locally against a stubbed fetch (9/9 scenarios:
-      `suspended`/`draft` → exit 1, zero-recipients → exit 1 with `sendNow` never called, unreadable
-      → exit 1, unknown status → exit 1). What is unobserved is the real API's status value and that
-      GitHub actually emails the failure.
-- [ ] S3: a healthy send still passes and reports the campaign status it observed.
-      **Owed.** Note `queued`-forever and transient-502 both pass locally, so R2's false-alarm risk
-      is addressed in code.
-- [x] `BREVO_LIST_ID` restored to **7**; test list 8 emptied or deleted. **Currently 7** — it was
-      never switched, because V4/V5 have not run. Must be re-checked after they do.
+- [ ] **V4 — S3 negative gate.** A zero-valid-recipient state makes the GitHub Action **fail**, and
+      GitHub emails the failure. Confirmed by observation, not by reading code.
+      **Action-red half OBSERVED 2026-07-27** (run `30275663163`, list 8 emptied per Option A):
+      guard printed `List 8 ("test - Weekly Pull List"): 0 subscriber(s), 0 blocklisted`, then
+      `ERROR: List 8 has 0 valid recipients … The list is empty. (F96)`, `exit code 1`, run
+      conclusion **failure**. Grep for `Creating campaign|Campaign created|sendNow accepted`
+      returned **0 matches** — it aborted before creating anything, so `sendNow` was never reached.
+      Under the old script this identical state produced a *green* run and silent non-delivery.
+      **Still owed: confirmation that GitHub actually emailed the failure** — the red run is the
+      alarm, the email is the alarm *reaching a human*, and only Rick's inbox can prove that.
+      *Method note:* Option A (empty the list) was used instead of re-blocklisting. The guard fires
+      on `subscribers === 0` alone — `blocklisted` only selects the explanatory string — so both
+      routes exercise the identical branch, and Option A leaves no account-level flag that could
+      silently persist and re-create the original outage.
+- [x] **V5 — S3 positive gate.** A healthy send still passes and reports the status it observed.
+      **Verified 2026-07-27** (run `30271641770`): `List 7…`→ list 8 showed `1 subscriber(s), 0
+      blocklisted`; campaign **21** created; `sendNow accepted`; poll ran
+      `queued → queued → queued → in_process → sent`, then `Campaign 21 confirmed SENT`.
+      Rick confirmed inbox arrival, subject *"This Week's Comic Previews - July 27, 2026"*, with the
+      CTA opening `rjbookstop.pulllist.app`. Independently re-verified on the sent email: **0 apex /
+      3 founding** hrefs and **30/30 images HTTP 200**.
+      **R2 vindicated:** three consecutive `queued` reads preceded `sent` — a single read straight
+      after `sendNow` would have seen a non-terminal status and failed a healthy send. The polling
+      design is load-bearing, not defensive padding.
+- [x] `BREVO_LIST_ID` restored to **7**; test list 8 emptied or deleted. **Re-verified after the
+      gates, 2026-07-27:** switched to 8 for V5/V4, restored to **7** and confirmed via
+      `gh variable list`. List 8 is empty (Rick emptied it for V4 Option A).
+      **Additional check not originally in the plan:** a `DRY_RUN=true` dispatch against list 7
+      (run `30275745271`) confirmed **`List 7 ("rjbookstop - Weekly Pull List"): 1 subscriber(s),
+      0 blocklisted`** — so Tuesday's cron will clear the pre-send guard rather than fail closed on
+      an empty target. Worth keeping: restoring the variable proves *where* the send points, not
+      that the destination is healthy. That dry run left draft campaign **22** in Brevo; delete it.
 - [ ] F96 and F98 marked resolved with the date in `technical-reference.md` § 13 and `CLAUDE.md`.
       **F98 resolved 2026-07-26** (fix live and verified). **F96 stays open** — its fix is deployed
       but the detection gap it tracks is only *closed* once V4 shows the Action going red.
@@ -175,9 +196,12 @@ situation this plan exists to end.
       the wrong-week default, a stale-replica ref read that aborted a successful publish, the
       unreachable no-commit path, and the dual-publisher hazard. The scratch-branch rehearsal
       earned its place in the plan.
-- [ ] **Next Tuesday (2026-07-28 22:00 UTC) is the first unattended run of the new send script.**
+- [x] **Next Tuesday (2026-07-28 22:00 UTC) is the first unattended run of the new send script.**
       If S3 misbehaves it fails closed — no delivery, red Action — which is the intended posture but
       still a missed week. Running V5 before then is the cheap insurance.
+      **Insurance taken 2026-07-27**, ~32 hours ahead of the cron: V5 exercised the full healthy
+      path end to end against the real Brevo API, and V4 exercised the abort path. Both behaved as
+      designed, so the unattended run is no longer the first real exercise of this code.
 
 ---
 
