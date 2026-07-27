@@ -1,13 +1,15 @@
 # Weekly Pull-Feed Pipeline Hardening (PLAN)
 
-**Status:** **Executed 2026-07-26 — all three items shipped and live; closure gated on the
-two send-test observations (V4, V5) and one real-browser check.** Written 2026-07-25.
+**Status:** **COMPLETE — 2026-07-27.** All three items shipped and live; every completion
+criterion ticked; V4 and V5 both observed against the live Brevo API, and the real-browser
+signup check confirmed. Written 2026-07-25, executed 2026-07-26, closed 2026-07-27 —
+~32 hours ahead of the first unattended cron run (Tue 2026-07-28 22:00 UTC).
 
 | Item | State | Commit |
 |---|---|---|
 | S1 CTA → founding subdomain | **Live and verified on the served page** | `4582c12` (scripts) |
 | S2 single-commit publish | **Live and verified: 1 commit, 1 build, 1 deploy** | `b727912` (scripts) |
-| S3 send-status assertion | **Deployed; 9/9 stubbed scenarios pass. Not yet observed on a real suspended send (V4)** | `34074c3e` (weekly-pull-feed) |
+| S3 send-status assertion | **Live and verified both directions 2026-07-27: V4 red + GitHub email, V5 healthy send delivered** | `34074c3e` (weekly-pull-feed) |
 
 **Also landed this session** (both discovered *by* running the gates, not planned):
 - `604cfaec` (weekly-pull-feed) — `branches: [main]` on `deploy-pages.yml`; V2 prerequisite,
@@ -19,8 +21,10 @@ two send-test observations (V4, V5) and one real-browser check.** Written 2026-0
   Two independent Pages publishers race; the cancelled Actions runs F98 blamed were a
   symptom. S2's single commit neutralizes it. CODE.GS also formally retired (Rick's call).
 
-**Outstanding before this plan can be marked Complete:** V4, V5, `BREVO_LIST_ID` restore,
-the real-browser signup check, and marking F96 resolved. See § Completion criteria.
+**All closure items done 2026-07-27:** V5 (run `30271641770`, campaign 21 delivered),
+V4 (run `30275663163`, Action red + GitHub failure email), `BREVO_LIST_ID` restored to **7**
+and its target re-verified healthy, real-browser signup check confirmed, F96 marked resolved.
+See § Completion criteria for the evidence behind each.
 
 **Gate scheduled (2026-07-26):** V4/V5 need a real send and must land before the **first
 unattended cron run of the rewritten send script, Tue 2026-07-28 22:00 UTC**. Reminder set for
@@ -133,12 +137,14 @@ situation this plan exists to end.
       `https://rjbookstop.pulllist.app` hrefs. **Verified 2026-07-26 on the LIVE served page**
       (`mrcyberrick.us/weekly-pull-feed/newsletter-email.html`): 0 apex, 3 founding-subdomain.
       `newsletter.html` and `rss.xml` also carry zero apex hrefs.
-- [ ] S1: the CTA, header, and hero all resolve to the founding tenant login, and that page shows the
+- [x] S1: the CTA, header, and hero all resolve to the founding tenant login, and that page shows the
       **"Create one →"** signup affordance in a real browser (per the CSS-in-real-browser rule).
-      **Partial:** `https://rjbookstop.pulllist.app` returns 200 and its served markup contains
-      `Create one →` (and *not* the apex-only "can set one up for you" wording). The real-browser
-      visibility check is **still owed and is Rick's step** — the local Playwright suite must never
-      run against production, and the CSS rule explicitly forbids folding this into a manual pass.
+      **Verified 2026-07-27 by Rick in a real browser**, from the delivered V5 email: the CTA points
+      to `rjbookstop.pulllist.app` and **"Create one" renders as expected**. Machine-side support:
+      the page returns 200 and its served markup contains `Create one →` (and *not* the apex-only
+      "can set one up for you" wording). The human check was genuinely load-bearing — the affordance
+      ships as `style="display:none"` and is revealed client-side once `TenantContext` resolves the
+      host, so served markup alone never proved visibility.
 - [x] S2: one import produces **exactly one** commit on `weekly-pull-feed` and **one** Pages build.
       **Verified 2026-07-26** on the live publish of week 2026-07-27 (commit `24c3035b`): exactly 1
       commit added to `main`, 1 legacy Pages build, 1 deployment, 0 cancelled runs.
@@ -153,7 +159,7 @@ situation this plan exists to end.
       36-new-thumb case was proven at tree level on the V2 scratch branch, which was never served.
       The structural argument covers the gap (one commit ⇒ one build ⇒ no ordering window), but the
       first import that brings genuinely new covers is the true end-to-end confirmation.
-- [ ] **V4 — S3 negative gate.** A zero-valid-recipient state makes the GitHub Action **fail**, and
+- [x] **V4 — S3 negative gate.** A zero-valid-recipient state makes the GitHub Action **fail**, and
       GitHub emails the failure. Confirmed by observation, not by reading code.
       **Action-red half OBSERVED 2026-07-27** (run `30275663163`, list 8 emptied per Option A):
       guard printed `List 8 ("test - Weekly Pull List"): 0 subscriber(s), 0 blocklisted`, then
@@ -161,8 +167,10 @@ situation this plan exists to end.
       conclusion **failure**. Grep for `Creating campaign|Campaign created|sendNow accepted`
       returned **0 matches** — it aborted before creating anything, so `sendNow` was never reached.
       Under the old script this identical state produced a *green* run and silent non-delivery.
-      **Still owed: confirmation that GitHub actually emailed the failure** — the red run is the
-      alarm, the email is the alarm *reaching a human*, and only Rick's inbox can prove that.
+      **GitHub emailed the failure — confirmed 2026-07-27** in Rick's inbox: *"Send Weekly Newsletter
+      / send — Failed in 12 seconds."* This was held as a blocker deliberately: the red run is the
+      alarm, the email is the alarm *reaching a human*, and a red Action nobody is told about is
+      still a silent failure — the exact defect class F96 documents.
       *Method note:* Option A (empty the list) was used instead of re-blocklisting. The guard fires
       on `subscribers === 0` alone — `blocklisted` only selects the explanatory string — so both
       routes exercise the identical branch, and Option A leaves no account-level flag that could
@@ -185,9 +193,14 @@ situation this plan exists to end.
       0 blocklisted`** — so Tuesday's cron will clear the pre-send guard rather than fail closed on
       an empty target. Worth keeping: restoring the variable proves *where* the send points, not
       that the destination is healthy. That dry run left draft campaign **22** in Brevo; delete it.
-- [ ] F96 and F98 marked resolved with the date in `technical-reference.md` § 13 and `CLAUDE.md`.
-      **F98 resolved 2026-07-26** (fix live and verified). **F96 stays open** — its fix is deployed
-      but the detection gap it tracks is only *closed* once V4 shows the Action going red.
+- [x] F96 and F98 marked resolved with the date in `technical-reference.md` § 13 and `CLAUDE.md`.
+      **F98 resolved 2026-07-26** (fix live and verified). **F96 resolved 2026-07-27** — V4 showed
+      the Action going red *and* GitHub delivering the failure notice, V5 showed a healthy send still
+      passing. The § 13 entry records one residual rather than glossing it: the post-send status
+      assertion has never been observed rejecting a genuinely *suspended* campaign, because that
+      state is unreachable once the pre-send guard exits first. Closure rests on the pre-send guard
+      — the one proven live, and the one that would have caught this exact outage — plus the
+      live healthy-path poll and 9/9 stubbed scenarios.
 - [x] `docs/weekly-pipeline-consolidation-plan.md` updated to describe the single-commit publish.
 
 ### Added at execution — worth carrying forward
