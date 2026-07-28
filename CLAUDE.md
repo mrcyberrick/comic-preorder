@@ -570,6 +570,25 @@ ungated) closed 2026-07-16 — no longer listed here. See
 candidate (admin-logging doc/code contradiction) remains a separate open
 filing decision, not part of this closure.
 
+The catalog info-card reserve-sync fix (`catalog.html` + `style.css`; four
+defects on the modal reserve path) closed 2026-07-27 — **live in
+production**, promoted via PR #99 (`d08d10d`) at Rick's explicit request the
+same session; production build verified serving all four changes; Rick
+confirmed green in a real browser both on staging and post-deploy. Three of
+the four shared one root cause — `toggleReserve()` assumed its `btn`
+argument always lived in a grid card, so the modal call site silently lost
+the `Qty:` badge (`closest('.comic-card')` → null), and the card's reserved
+state was patched on a 300 ms `setTimeout` race that lost whenever the
+round-trip ran long. Replaced with `syncCardState()` / `syncModalState()`,
+which repaint each surface from `reservedIds` after the write settles. The
+fourth was the native number-input spinner drawn over the custom `−`/`+`
+controls, hidden via CSS scoped to `.qty-stepper`. **No plan doc** — this was
+a direct bug-fix request outside any sub-deploy. **Note for anyone touching
+this path: it has zero Playwright coverage** (no spec references
+`#modal-reserve`, `#modal-qty`, or `.reserved-indicator`), which is why the
+defects shipped unnoticed and why a green suite does not exercise it; see
+F103.
+
 The subscription reserved-suggestions feature (always-on "Series you're
 already reading" one-click subscribe list with Undo on `subscriptions.html`;
 Popular section removed; admin impersonation sees a read-only list) closed

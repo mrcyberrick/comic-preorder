@@ -2667,7 +2667,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F103 — Playwright `seedCatalogRow()` dates seeds by the calendar month while the catalog page scopes to the newest month *in data*, so founding-tenant seeds are invisible whenever the imported catalog runs ahead of the wall clock
 
-- **Status:** filed 2026-07-27 (surfaced running the smoke suite to verify the `catalog.html` info-card reserve fix, commit `fdb5f52`). **Open — deferred to a future test-infrastructure session.** Unrelated to that commit's diff; see *Not caused by the change under test* below.
+- **Status:** filed 2026-07-27 (surfaced running the smoke suite to verify the `catalog.html` info-card reserve fix, commit `fdb5f52` — since promoted to production 2026-07-28 via PR #99, `d08d10d`). **Open — deferred to a future test-infrastructure session.** Unrelated to that commit's diff; see *Not caused by the change under test* below.
 - **Severity:** Low–Medium — test-infrastructure only, staging only, no live application defect and no production exposure. Raised above Low because the failure mode is a **red suite that looks like a product regression**: four specs fail with "element(s) not found" on a card that was seeded successfully, which invites exactly the wrong diagnosis, and it will recur on most runs.
 - **Symptom:** 4 failures (8 including retries) in the 2026-07-27 run, all the same shape — `expect(locator).toBeVisible()` timing out on a `.comic-card` / `.col-title` matching a just-seeded title:
   - `02-catalog-reserve-mylist` → `reserve from catalog shows row in mylist` (line 30, *before* the reserve click on line 32)
