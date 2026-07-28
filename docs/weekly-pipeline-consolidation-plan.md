@@ -61,7 +61,7 @@ cutover risk. What changes is who writes those files:
 |---|---|---|
 | Sheet + CsvImporter.gs + manual Drive upload | **Nothing** — eliminated. The producer reads `weekly_shipment` (title, cover_url, on_sale_date) directly | Promo rows already excluded by the import's `Retail = 0.00` filter |
 | Code.gs `buildNewsletter()` | `build-pull-feed.js` in the private scripts repo — Node, reuses `.env` (service key + a new `GITHUB_TOKEN_PULL_FEED`), ports the three template builders + thumbnail cache/purge logic ~verbatim | Run after the weekly import (or prompted by `import.js` post-shipment: "Publish weekly feed? (y/n)"); later schedulable |
-| Brevo send | **Unchanged** — GitHub Action `send-newsletter.yml` (cron Tue 22:00 UTC) runs `scripts/send-brevo-campaign.js`: reads committed `newsletter-email.html`, fail-closed stale guard (`pull-feed-generated: YYYY-MM-DD` stamp, `STALE_MAX_DAYS=6`), `workflow_dispatch` dry-run creates a Brevo draft. New producer must commit the same file + stamp before Tuesday evening — the weekend/Monday weekly import satisfies this naturally | |
+| Brevo send | **Unchanged** — GitHub Action `send-newsletter.yml` (cron Tue 22:00 UTC) runs `scripts/send-brevo-campaign.js`: reads committed `newsletter-email.html`, fail-closed stale guard (`pull-feed-generated: YYYY-MM-DD` stamp, `STALE_MAX_DAYS=6`), `workflow_dispatch` dry-run creates a Brevo draft. New producer must commit the same file + stamp before Tuesday evening — the weekend/Monday weekly import satisfies this naturally. **Revised 2026-07-26 (F96 fix):** no longer trusts `sendNow`'s 2xx. It now aborts *before* sending if the target list has 0 valid recipients, and *after* sending polls `GET /emailCampaigns/{id}` and exits non-zero unless the status is `sent`/`inProcess`/`queued` — so a suspended campaign turns the Action red instead of passing green | |
 | Printed store sheet (Google Sheet printout) | **Replaced in-app (Rick, 2026-07-09):** an admin-only tailored printable report surfaced on `arrivals.html` (This Week) — full week's `weekly_shipment` (title, qty, cover), print-CSS like the existing admin bagging list. Receiving works from this instead of the Sheet printout | Pairs with § 9 #5 store-packet email later; admin gating via existing `is_admin` profile check |
 
 ## 3. Migration strategy — revised 2026-07-09 (build complete)
@@ -150,12 +150,41 @@ any customer-facing page — additive outputs only, so the risk profile is low.
    shipment upsert succeeded; no shipment files → no publish. Fail-soft
    (publish failure warns, never fails the import; skips with a warning if
    the token is absent; `[no-write]` aware). Duplication
-   protection is inherent: fixed-path artifacts updated via SHA-based GitHub
-   Contents API upsert, MD5-keyed thumbnails skipped when cached, orphan
-   purge reconciles — a same-week re-run rewrites identical outputs. The
-   refreshed `pull-feed-generated` stamp is harmless (the Brevo guard checks
-   staleness only). Standalone `node build-pull-feed.js` retained for manual
-   re-publish.
+   protection is inherent: MD5-keyed thumbnails skipped when cached, orphan
+   purge reconciles — a same-week re-run re-uploads nothing and purges
+   nothing. The refreshed `pull-feed-generated` stamp is harmless (the Brevo
+   guard checks staleness only). Standalone `node build-pull-feed.js`
+   retained for manual re-publish.
+
+   **Publish shape — revised 2026-07-26 (F98 fix, live):** the publish is
+   **one Git Data API commit**, not per-file Contents API commits. Blobs →
+   one tree (built on `base_tree`, so untouched paths are inherited) → one
+   commit → one ref update, covering the three artifacts and every
+   thumbnail add/remove together. Orphan purges are `sha: null` entries in
+   that same tree, so a thumbnail swap is atomic with the newsletter that
+   references it.
+
+   This replaced ~30 commits per import. Each of those triggered a Pages
+   deploy, and the deploys had no ordering guarantee: on 2026-07-25 a
+   deployment of a mid-burst commit landed 76 s *after* the tip had already
+   been deployed, so the live site served a partial tree and the last 10 of
+   30 thumbnails 404'd in an already-delivered newsletter (F98; corrected
+   mechanism in F100). One commit ⇒ one deploy ⇒ no race. A
+   `verifyPublishedTree()` post-condition asserts every referenced file is
+   in the committed tree and every purged path is gone.
+
+   Two behaviours worth knowing: the "no commit if unchanged" path almost
+   never fires, because `rss.xml` stamps `<pubDate>`/`<lastBuildDate>` with
+   the build time (the newsletters themselves come out byte-identical
+   across back-to-back runs); and the target week now defaults to the
+   **latest loaded shipment** (`max(on_sale_date)`), not to today — a bare
+   `--publish` used to target the week containing today, i.e.
+   already-shipped comics. `--week=YYYY-MM-DD` always wins.
+
+   **Two Pages publishers still exist** (built-in legacy builder + the
+   repo's own `deploy-pages.yml`), both deploying the same
+   `github-pages` environment. Harmless while publishing is single-commit —
+   both deploy an identical tree — but unresolved; see F100.
    **Setup prerequisite (Rick, one-time):** mint a fine-grained GitHub PAT
    scoped to contents:write on `weekly-pull-feed` only (same scoping rule as
    the Apps Script token) and add it to the scripts `.env` as
