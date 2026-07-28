@@ -2,7 +2,14 @@
 
 **Environment:** staging Supabase project `puoaiyezsreowpwxzxhj.supabase.co`
 **Founding tenant UUID:** `72e29f67-39f7-42bc-a4d5-d6f992f9d790` (slug `raysandjudys`)
-**Last verified:** post Phase 3.8 soak, May 2026.
+**Last verified:** **2026-07-28** — partial. § 4.2 (`app_settings` PK), § 4.10
+(`weekly_shipment` unique index + distributor mapping), and § 13 statuses were
+verified against the live production database and the live import scripts on
+this date. **Every other section still dates to the post Phase 3.8 soak,
+May 2026** and is two phases plus ~15 sub-deploys stale. Treat an unverified
+section as a snapshot, not as authority: for production-touching work the live
+database wins. Remaining stale claims are enumerated in § 13 **F92**, which
+owns the full re-audit.
 
 This document is the canonical schema and architecture reference for the
 PULLLIST staging environment. Production diverges from staging until Phase 4
@@ -23,12 +30,20 @@ for this document.
 PULLLIST is a comic pre-order system for independent bookstores. The staging
 deployment serves a single founding tenant, Ray & Judy's Book Stop, with the
 schema fully shaped for multi-tenancy after Phases 1, 2, and 3 (sub-deploys
-3.1–3.8) of the migration program. No second tenant exists yet; the multi-tenancy
-plumbing is exercised only by the founding tenant in production traffic.
+3.1–3.8) of the migration program. **A second tenant is live:** `comicstore`
+(`comicstore.pulllist.app`) was onboarded to production on **2026-07-15** at the
+close of Phase 5.5, and is pilot/seeded — it holds no shipment rows and has not
+run an import (verified 2026-07-28). The multi-tenancy plumbing is therefore
+exercised by two tenants, though only the founding tenant carries real customer
+traffic. *(Corrected 2026-07-28; this previously read "No second tenant exists
+yet" — see § 13 F92.)*
 
 The application is a static Cloudflare Pages site (vanilla HTML/CSS/JS, no build
-step) that talks directly to a Supabase project. (Migrated from GitHub Pages in 5.1;
-GH Pages warm until 5.5 closes.) Eight Deno-based Supabase
+step) that talks directly to a Supabase project. (Migrated from GitHub Pages in 5.1.
+The legacy GH Pages surface is **still kept warm as a rollback target** — Rick's
+call at 5.5 S6, 2026-07-15, was to keep it and revisit retirement in a future
+session, so it is no longer tied to any phase boundary; the original "warm until
+5.5 closes" framing is obsolete.) Eight Deno-based Supabase
 Edge Functions handle email-sending and privileged operations that need the
 service-role key. A local Node.js script imports monthly distributor catalogs
 and weekly shipment invoices.
@@ -74,9 +89,13 @@ Tenant scoping flows through three independent mechanisms in lockstep:
 2. **Web app** (`app.js`): the `TenantContext` module resolves the active
    tenant before any other API call. `app.js` writes pass `tenant_id`
    explicitly (Phase 3.2).
-3. **Server-side helpers**: the import script hard-codes `TENANT_ID` to the
-   founding tenant; tenant-aware Edge Functions read `FOUNDING_TENANT_ID`
-   from a Supabase secret.
+3. **Server-side helpers**: the import scripts load `TENANT_ID` from the
+   scripts folder's gitignored `.env` (`IMPORT_TENANT_ID[_PROD]`), and hard-fail
+   on a missing var or a `SUPABASE_URL` pointing at the wrong project;
+   tenant-aware Edge Functions read `FOUNDING_TENANT_ID` from a Supabase secret.
+   *(Corrected 2026-07-28 — this said the import script "hard-codes `TENANT_ID`
+   to the founding tenant", true until the scripts were made credential-free on
+   2026-07-08. See § 13 F92.)*
 
 The mechanisms agree only by convention. The findings in
 [Section 13](#13-findings--known-issues) include several places where one
@@ -94,7 +113,7 @@ mechanism diverges from the others.
 | Edge Functions | Deno runtime on Supabase, hand-written TypeScript |
 | Email | MailerSend (transactional) and MailerLite (subscriber webhooks) |
 | Import | Node.js, run from local scripts folder, never committed |
-| Hosting | Cloudflare Pages — prod: `https://pulllist.app/`; staging: `https://staging.pulllist.pages.dev/` (GH Pages warm until 5.5) |
+| Hosting | Cloudflare Pages — prod: `https://pulllist.app/`; staging: `https://staging.pulllist.pages.dev/` (legacy GH Pages still warm as a rollback target, not tied to a phase gate — Rick's call 2026-07-15) |
 
 `pgcrypto` provides `gen_random_uuid()` (used by newer tables); `uuid-ossp`
 provides `uuid_generate_v4()` (used by `catalog` and `preorders`, predating
@@ -110,9 +129,13 @@ extension and is not used directly.
 ## 3. Multi-tenancy model
 
 The schema treats every customer-facing table as tenant-scoped via a
-`tenant_id uuid NOT NULL` column. There is one founding tenant
-(`72e29f67-39f7-42bc-a4d5-d6f992f9d790`); no second tenant has been
-onboarded.
+`tenant_id uuid NOT NULL` column. The founding tenant on staging is
+`72e29f67-39f7-42bc-a4d5-d6f992f9d790` (`raysandjudys`); on production it is
+`20941129-c35a-476d-ae21-44b8f77af89c` (`rjbookstop`). **A second production
+tenant, `comicstore`, has been onboarded** (2026-07-15, Phase 5.5) and is
+pilot/seeded. *(Corrected 2026-07-28 — this previously read "no second tenant
+has been onboarded" and named only the staging UUID while implying it was the
+sole founding tenant. See § 13 F92.)*
 
 ### 3.1 Tenant resolution
 
@@ -196,18 +219,33 @@ Deleting a tenant cascades to every dependent row. There is no per-row
 
 ### 3.3 The `auth.users` ↔ `user_profiles` relationship
 
-`user_profiles.id` is the same UUID as `auth.users.id` by convention but
-**there is no foreign key between them**. This is intentional — the paper
-customer flow (`is_paper = true`) creates `user_profiles` rows for walk-in
-customers who never log in, and the placeholder auth user is sometimes
-deleted before the corresponding profile, or vice versa. A FK with CASCADE
-in either direction would break the paper-customer flow.
+`user_profiles.id` is the same UUID as `auth.users.id`, and **a foreign key
+enforces it**: `user_profiles_id_fkey`, `ON DELETE CASCADE`, present on both
+environments (prod since before 2026-06-10; staging added 2026-06-11 under F64
+item 7).
+
+⚠️ **Corrected 2026-07-28.** This section previously asserted the opposite —
+"**there is no foreign key between them**" — and justified it as *intentional*,
+on the grounds that the paper-customer flow (`is_paper = true`) creates profiles
+for walk-ins who never log in, with placeholder auth users sometimes deleted out
+of order, so "a FK with CASCADE in either direction would break the
+paper-customer flow." **That rationale is contradicted by the live schema**, which
+has carried exactly such a CASCADE FK on production for months without breaking
+the paper flow. Enforcement was proven on staging 2026-07-25 (insert with an
+unmatched `id` → `23503`) while reproducing F95. Treat the old paragraph as
+describing an intent that the schema does not implement; **do not restore it, and
+do not use it as a reason to avoid adding FKs.** Whether the paper-customer flow
+has a latent problem under CASCADE is a real question this correction does *not*
+answer — see F92 and the `claim-paper-customer` note below.
 
 Two implications:
 
-- `auth.users` deletion does not automatically remove `user_profiles`. The
-  `claim-paper-customer` Edge Function explicitly deletes both rows when
-  merging a paper account into a real account.
+- `auth.users` deletion **does** cascade to `user_profiles` via the FK above.
+  The `claim-paper-customer` Edge Function nonetheless deletes both rows
+  explicitly when merging a paper account into a real account — belt-and-braces
+  now rather than the sole mechanism. *(Previously this bullet claimed deletion
+  "does not automatically remove `user_profiles`", which followed from the
+  no-FK premise and is wrong for the same reason.)*
 - The `Preorders.getAll` admin query in `app.js` joins
   `auth_users:user_id ( email )` via PostgREST — this works because
   PostgREST infers the relationship from the by-convention UUID matching,
@@ -645,8 +683,10 @@ session) takes a meaningful action.
 
 ### 4.9 `user_profiles`
 
-Per-user profile row. `id` matches `auth.users.id` by convention but is
-not enforced by FK (Section 3.3).
+Per-user profile row. `id` matches `auth.users.id` and **is enforced by FK**
+(`user_profiles_id_fkey`, `ON DELETE CASCADE`). *(Corrected 2026-07-28; this
+said "by convention but is not enforced by FK" — see the FKs block below and
+§ 13 F92.)*
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
@@ -668,7 +708,14 @@ not enforced by FK (Section 3.3).
 
 **FKs:**
 - `tenant_id` → `tenants.id` ON DELETE CASCADE
-- (No FK to `auth.users` — see Section 3.3)
+- `id` → `auth.users.id` ON DELETE CASCADE (`user_profiles_id_fkey`) — **present
+  and enforced on both environments.** Production has carried it since before
+  the 2026-06-10 `pg_dump` comparison; staging gained it 2026-06-11 under F64
+  item 7 (44 orphaned Playwright fixture rows were deleted first; verified
+  `confdeltype = c`). Enforcement re-confirmed on staging 2026-07-25 while
+  reproducing F95 — an insert with an `id` absent from `auth.users` is rejected
+  with `23503`. *(Corrected 2026-07-28; this entry previously read "(No FK to
+  `auth.users` — see Section 3.3)". See § 13 F92.)*
 
 **Indexes:**
 - `user_profiles_pkey` on `id`
@@ -730,9 +777,29 @@ step (Format A delivery invoice or Format B code invoice).
 - Either `item_code` or `upc` carries the catalog join key, not both.
   Format A (PRH delivery invoice) populates `upc` from the ISBN column;
   Format B (Lunar/PRH code invoice) populates `item_code` from the Code
-  column. Format A maps to `distributor = 'Lunar'`, Format B to
-  `distributor = 'PRH'`. (Confusingly, this is opposite to which
-  distributor *issued* the invoice — see Section 12.)
+  column. **Format A maps to `distributor = 'PRH'`, Format B to
+  `distributor = 'Lunar'`** — i.e. the label now matches the distributor
+  that issued the invoice.
+- ⚠️ **Corrected 2026-07-28. This bullet previously stated the mapping the
+  other way round** ("Format A maps to `Lunar`, Format B to `PRH`", with a
+  parenthetical noting it was "opposite to which distributor issued the
+  invoice"). That described **pre-F84** behavior. **F84 fixed the inversion
+  at the source on 2026-07-09** (scripts repo `01a90b6`) and this section was
+  never updated, so the canonical schema reference has carried a backwards
+  `distributor` mapping for ~3 weeks. Anyone filtering
+  `weekly_shipment.distributor` from this doc would have selected the wrong
+  rows. **Verified against the live parsers 2026-07-28:** `import.js:262-269`
+  (Format A, `distributor: 'PRH'`) and `import.js:296-301` (Format B,
+  `distributor: 'Lunar'`); the doc-comment block at `import.js:228-247`
+  agrees. Found while investigating F9, not by a targeted audit — see F92.
+- **Related naming trap (code, not schema):** `import.js`'s
+  `buildLunarShipmentRows` / `buildPrhShipmentRows` helpers and its
+  `lunarRows` / `prhRows` variables are still named for the **pre-F84**
+  mapping, so they read as inverted relative to the `distributor` values
+  their rows actually carry. The behavior is correct — every `on_conflict`
+  key and filter matches the real value — but do not "correct" those names
+  or the `distributor=eq.Lunar` DELETE without re-reading the parsers. See
+  F9 for the full check.
 - `catalog_id` is nullable because the import script upserts shipment rows
   even when no catalog match is found. Unmatched rows still display on
   arrivals.html using the invoice's title and cover-URL fallbacks.
@@ -2531,7 +2598,18 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F92 — `technical-reference.md` carries pre-Phase-5 claims outside the tenant-resolution contract
 
-- **Status:** filed 2026-07-22 (apex-marketing sub-deploy, S5.7), **open — deferred to a dedicated `technical-reference.md` re-audit session.** S5 fixed the tenant-resolution contract (§ 3.1, § 10.1 — the `TENANT_SLUG_MAP` / subdomain / `source()` enum drift, see the entries above them), but the same document carries other stale claims outside that specific contract, deliberately left unfixed there to keep S5 scoped — this finding gives them a real owner. Related: F81 (project-memory precedent for this exact failure mode — a stale reference doc trusted as current).
+- **Status:** filed 2026-07-22 (apex-marketing sub-deploy, S5.7). **Open — substantially reduced 2026-07-28; a live-DB pass is still owed.** Every inventory item that could be settled from repo evidence, established session facts, or the live import scripts was corrected on 2026-07-28 during the § 13 cleanup session (see **Swept 2026-07-28** below). What remains is the part that genuinely needs a database: a section-by-section verification of the schema tables against live `information_schema` / `pg_constraint` on **both** environments. The header's "Last verified" line now states this split explicitly rather than implying whole-document authority.
+- **Swept 2026-07-28 (all verified before editing, not assumed):**
+  - Header "Last verified: post Phase 3.8 soak, May 2026" → now states which sections were verified 2026-07-28 and that everything else remains May-2026 stale.
+  - § 1 "No second tenant exists yet" → corrected; `comicstore` live on prod since 2026-07-15, pilot/seeded, 0 shipment rows.
+  - § 1 + § 2 "GH Pages warm until 5.5 closes" → corrected; 5.5 closed and Rick's 2026-07-15 call untied it from any phase gate.
+  - § 1 "the import script hard-codes `TENANT_ID`" → corrected; `.env`-driven and hard-failing since 2026-07-08, verified against the live scripts.
+  - § 3 "no second tenant has been onboarded" → corrected, and the section now names **both** founding UUIDs (it previously gave only staging's while implying it was the sole one).
+  - § 3.3 + § 4.9 `user_profiles` ↔ `auth.users` FK → corrected in all three places. **This one was worse than filed:** § 3.3 did not merely omit the FK, it asserted there was none *and argued the absence was intentional* to protect the paper-customer flow. The live schema has carried a CASCADE FK on prod for months without breaking that flow, so the rationale is disproved, and the correction says so explicitly to stop it being restored.
+  - § 4.10 `weekly_shipment` distributor mapping → **corrected; it was backwards.** The doc said Format A → `Lunar` / Format B → `PRH`; the live parsers (`import.js:262-269`, `:296-301`) do the reverse. F84 fixed this inversion at the source on 2026-07-09 and the doc was never updated, so the canonical reference gave a wrong `distributor` filter for ~3 weeks. Found while investigating F9 — an unrelated question — which is exactly the discovery mode this finding exists to replace.
+  - § 4.2 `app_settings` PK, § 4.6 legacy `settings` PK, § 4.10 unique-index list → verified against live prod and corrected/confirmed under F6 and F9 the same day.
+- **Still owed (needs the live-DB pass):** every remaining § 4 table's columns, constraints, and index list; § 5–§ 12 generally; and confirmation that staging and prod agree per section. F64 is the precedent for why "both environments" matters — it catalogued eight divergences.
+- **Original status text:** open — deferred to a dedicated `technical-reference.md` re-audit session. S5 fixed the tenant-resolution contract (§ 3.1, § 10.1 — the `TENANT_SLUG_MAP` / subdomain / `source()` enum drift, see the entries above them), but the same document carries other stale claims outside that specific contract, deliberately left unfixed there to keep S5 scoped — this finding gives them a real owner. Related: F81 (project-memory precedent for this exact failure mode — a stale reference doc trusted as current).
 - **Severity:** Medium — documentation drift in the canonical reference document. No live defect; the risk is a future session trusting a stale snapshot instead of verifying against live state.
 - **Inventory (all verified 2026-07-22):**
   - Header, line 5: "Last verified: post Phase 3.8 soak, May 2026" — two phases and roughly 15 sub-deploys stale; the doc is the canonical reference, so the date understates both its authority and its risk.
