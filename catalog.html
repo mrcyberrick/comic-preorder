@@ -1004,6 +1004,60 @@
     return true;
   }
 
+  // ── Reserved-state rendering ──────────────────────────────
+  // Single source of truth for how a reserved item looks. Both surfaces are
+  // repainted from reservedIds after a write settles, so the grid card and the
+  // modal agree no matter which one was clicked. Previously toggleReserve()
+  // mutated whichever button it was handed and located the card badge via
+  // btn.closest('.comic-card') — which is null for the modal button, silently
+  // dropping the Qty badge — while the card button was patched on a 300ms
+  // setTimeout that lost the race whenever the round-trip ran long.
+  function syncCardState(catalogId) {
+    const card = grid.querySelector(`.comic-card[data-id="${catalogId}"]`);
+    if (!card) return;  // card not on the current page — nothing to repaint
+    const qty        = reservedIds.get(catalogId) || 0;
+    const isReserved = qty > 0;
+
+    // FOC-locked buttons are owned by the lock pass in attachGridEvents().
+    const cardBtn = card.querySelector('.btn-reserve');
+    if (cardBtn && !cardBtn.classList.contains('foc-locked')) {
+      cardBtn.textContent = isReserved ? '✓ Reserved' : '+ Reserve';
+      cardBtn.classList.toggle('reserved', isReserved);
+    }
+
+    const cover = card.querySelector('.comic-cover');
+    if (!cover) return;
+    let badge = cover.querySelector('.reserved-indicator');
+    if (isReserved) {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'reserved-indicator';
+        cover.appendChild(badge);
+      }
+      badge.textContent = 'Qty: ' + qty;
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  // Mirrors the reserved/unreserved branch of openModal() so the footer looks
+  // identical whether the modal was just opened or just acted on.
+  function syncModalState(catalogId) {
+    if (modalComicId !== catalogId) return;  // modal closed, or open on another item
+    const isReserved = reservedIds.has(catalogId);
+
+    const reserveBtn = document.getElementById('modal-reserve');
+    if (reserveBtn) {
+      reserveBtn.textContent = isReserved ? '✕ Cancel Reservation' : '+ Reserve';
+      reserveBtn.className   = isReserved ? 'btn btn-danger' : 'btn btn-primary';
+    }
+    // Stepper is meaningless next to a Cancel button — hide it while reserved.
+    // The input's value is deliberately left alone: openModal() seeds it, and
+    // preserving it means a failed reserve doesn't discard what the user typed.
+    const qtyWrap = document.getElementById('modal-qty-wrap');
+    if (qtyWrap) qtyWrap.style.display = isReserved ? 'none' : 'flex';
+  }
+
   // ── Reserve Toggle ────────────────────────────────────────
   // comic is the full catalog row — passed directly from the call site so
   // logging metadata is always available regardless of which page is loaded.
@@ -1024,10 +1078,6 @@
         const oldQty = reservedIds.get(catalogId) || 1;
         reservedIds.delete(catalogId);
         currentMonthQty -= oldQty;
-        btn.textContent = '+ Reserve';
-        btn.classList.remove('reserved');
-        const badge = btn.closest('.comic-card')?.querySelector('.reserved-indicator');
-        if (badge) badge.remove();
         toast('Reservation cancelled');
         updateReservedStat();
         UsageEvents.cancel(user.id, comicObj);
@@ -1039,15 +1089,6 @@
       } else {
         reservedIds.set(catalogId, quantity);
         currentMonthQty += quantity;
-        btn.textContent = '✓ Reserved';
-        btn.classList.add('reserved');
-        const cover = btn.closest('.comic-card')?.querySelector('.comic-cover');
-        if (cover && !cover.querySelector('.reserved-indicator')) {
-          const badge = document.createElement('div');
-          badge.className = 'reserved-indicator';
-          badge.textContent = 'Qty: ' + quantity;
-          cover.appendChild(badge);
-        }
         updateReservedStat();
         UsageEvents.reserve(user.id, comicObj);
         if (!maybeShowSubscribePrompt(comicObj)) {
@@ -1058,13 +1099,10 @@
 
     btn.disabled = false;
 
-    // Sync modal if open
-    if (modalComicId === catalogId) {
-      const modalBtn = document.getElementById('modal-reserve');
-      if (modalBtn) {
-        modalBtn.textContent = reservedIds.has(catalogId) ? '✓ Cancel Reservation' : '+ Reserve';
-      }
-    }
+    // Repaint both surfaces from reservedIds — no-ops for whichever one isn't
+    // present, so this is correct from either the card or the modal call site.
+    syncCardState(catalogId);
+    syncModalState(catalogId);
   }
 
   function updateReservedStat() {
@@ -1192,17 +1230,11 @@
       reserveBtn.title       = '';
     }
     if (!isPending && !focLocked) {
+      // toggleReserve() repaints the card and the modal itself once the write
+      // settles: no setTimeout guess at how long the round-trip takes.
       reserveBtn.onclick = () => {
-        const qty     = parseInt(qtyInput.value) || 1;
-        const cardBtn = grid.querySelector(`.btn-reserve[data-id="${catalogId}"]`);
+        const qty = parseInt(qtyInput.value) || 1;
         toggleReserve(catalogId, reserveBtn, qty, comic);
-        if (cardBtn) {
-          setTimeout(() => {
-            const nowReserved = reservedIds.has(catalogId);
-            cardBtn.textContent = nowReserved ? '\u2713 Reserved' : '+ Reserve';
-            cardBtn.classList.toggle('reserved', nowReserved);
-          }, 300);
-        }
       };
     }
 

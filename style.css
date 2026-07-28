@@ -990,6 +990,18 @@ button { cursor: pointer; font-family: var(--font-body); }
   border-color: var(--accent);
   color: var(--accent);
 }
+/* Hide the browser's native number spinner — the −/+ buttons are the control.
+   Scoped to .qty-stepper so other number inputs (admin) keep their spinners. */
+.qty-stepper input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.qty-stepper input[type="number"]::-webkit-outer-spin-button,
+.qty-stepper input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
 
 /* ── Toast Notifications ───────────────────────────────────── */
 #toast-container {
