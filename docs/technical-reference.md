@@ -1890,13 +1890,21 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   consistency.
 
 #### F9 — `weekly_shipment` unique key omits `tenant_id`
-- **Status:** open, dormant under one tenant
-- `(distributor, upc, on_sale_date)` is the unique key. Tenant 2's
-  shipment row with the same UPC and on_sale_date as tenant 1's would
-  silently overwrite via the import script's upsert.
-- **Fix:** rebuild as
-  `(tenant_id, distributor, upc, on_sale_date)`; update the import
-  script's `on_conflict` clause accordingly.
+- **Status:** **open — dormancy re-characterized 2026-07-28.** The old status read "dormant under one tenant", which stopped being true on **2026-07-15** when `comicstore` went live. It is still dormant, but for an **operational** reason rather than a structural one: tenant 2 does not import shipments. Verified on production 2026-07-28 — `rjbookstop` holds **754** `weekly_shipment` rows, `comicstore` holds **0**. That is a fact about current practice, not a property of the schema, and it stops protecting the moment tenant 2 (or tenant 3) runs a shipment import.
+- **Severity:** Medium-dormant. Unchanged mechanism, but see the split below — one of the two write paths fails silently and the other fails loudly, which matters more than the shared root cause.
+- **Live constraint state (production, verified 2026-07-28 via `pg_indexes`):** exactly one unique index besides the PK — `weekly_shipment_unique` on `(distributor, upc, on_sale_date)`. No `tenant_id` anywhere in it.
+- **The two write paths behave differently under a cross-tenant collision:**
+
+  | Path | Rows | Write method | Collision behavior |
+  |---|---|---|---|
+  | Format A (`distributor='PRH'`, always has `upc`) | `import.js` Lunar-named upsert, `~line 838` | `POST …?on_conflict=distributor,upc,on_sale_date` with `Prefer: resolution=merge-duplicates` | **Silent capture.** The payload carries `tenant_id`, so a merge UPDATEs founding's row and rewrites its `tenant_id` to the importing tenant. Identical mechanism to F6's `Settings.set()`. |
+  | Format B (`distributor='Lunar'`, `upc` optional) | `import.js` PRH-named delete-then-insert, `~line 862` | tenant-scoped `DELETE …&tenant_id=eq.${TENANT_ID}` then plain `POST` | **Loud 409** for rows with a non-null `upc` — the DELETE is correctly tenant-scoped, so the INSERT collides with the other tenant's row and the batch fails visibly (this is the F83 failure mode). Rows with `upc = null` are unconstrained entirely, since Postgres unique indexes treat NULLs as distinct. |
+
+- **Naming trap, checked and confirmed harmless 2026-07-28:** `buildLunarShipmentRows`/`buildPrhShipmentRows` and the `lunarRows`/`prhRows` variables are inverted relative to the `distributor` values their rows carry — `buildPrhShipmentRows` requires `item_code`, which only Format B sets, and Format B is tagged `'Lunar'`. Every `on_conflict` key and every filter nonetheless matches the actual distributor value, including the `distributor=eq.Lunar` DELETE. **This is a readability hazard from the pre-F84 labeling, not a defect** — verified against the parsers at `import.js:228-310` rather than inferred from the names. Do not "fix" it without re-reading those parsers.
+- **Corrects a claim made while investigating:** `import.js:46-48` states the table "needs TWO unique indexes", including `weekly_shipment_prh_unique` on `(distributor, item_code, on_sale_date)`. That header comment is **stale** — the second index does not exist on production and is not wanted. The code's own comment at `~line 855` explains why it was abandoned: PostgREST `on_conflict` cannot use partial indexes, and a full unique constraint on `item_code` fails because other rows carry `item_code = null`. Delete-then-insert replaced it. **§ 4.10 of this document is therefore correct as written** and needs no change — a suspected doc gap that verification disproved.
+- **Fix:** rebuild as `(tenant_id, distributor, upc, on_sale_date)` and update the Format A `on_conflict` clause in both `import.js` and `import-staging.js` to match. The Format B path needs no change — its DELETE is already tenant-scoped.
+- **This is a gated precondition, and F105 is about exactly this class of gate going unchecked.** It must land **before any second tenant runs a shipment import** — the same shape as F6's "must land before tenant 2", which was missed by 13 days because it lived in prose rather than in a checklist. Per F105's fix direction, this precondition belongs in `docs/tenant-onboarding-runbook.md` as a checkbox, not only here.
+- **Related:** **F6** — same capture mechanism, same class of gate, resolved 2026-07-28. **F105** — the process finding this precondition is the live test case for. **F83** — the Format B duplicate-UPC batch abort, which is the loud half of this table's collision behavior. **F7** — looks identical, closed won't-fix; the difference is that `reservation_history` has a `user_id` giving it transitive tenant scope and `weekly_shipment` has no such column.
 
 #### F13 — `reservation_history.user_id` cascades on auth user delete
 - **Status:** open, intent unclear
