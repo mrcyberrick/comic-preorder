@@ -1,0 +1,69 @@
+---
+name: deploy-staging
+description: Run the standard feature → staging deployment flow for PULLLIST — ff-only merge, JS syntax gate, push to origin staging, then the post-deploy Playwright smoke gate (the suite tests the deployed site, so it must run after the push). Use when a feature branch is ready to land on staging.
+---
+
+# /deploy-staging — Feature → staging flow
+
+Follow CLAUDE.md § Standard Deployment Workflow exactly. This skill encodes the
+gates; **any failed gate is a halt-and-report, never an improvise.**
+
+## Steps
+
+1. **Confirm scope** — state which feature branch / sub-deploy this lands and confirm
+   it maps to exactly one sub-deploy (one sub-deploy per session rule).
+
+2. **Syntax gate** — for every `.js` file changed on the branch:
+   `node --check <file>`. Halt on any error.
+
+3. **Commit state** — confirm the working tree is committed on the feature branch;
+   `config.js` must NOT appear in the diff (agent never edits it).
+
+4. **Merge ff-only**
+   ```powershell
+   git checkout staging
+   git pull origin staging
+   git merge --ff-only feature/<name>
+   ```
+   If ff-only fails, stop and report — do not create a merge commit.
+
+5. **Pre-push baseline** — *not* a gate on the code you are about to push
+   ```powershell
+   cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
+   .\run-smoke.ps1
+   ```
+   Stage **[1/2] `npm test`** runs against **local files** — a real pre-push gate
+   when `import.js` / `import-staging.js` changed; halt on failure there.
+   Stage **[2/2] Playwright** uses `baseURL = https://staging.pulllist.pages.dev/`
+   and tests the **deployed** site, so for `app.js` / `*.html` / `style.css` it
+   exercises the *previous* build and can say nothing about your change. Treat it
+   as a baseline (staging was already green ⇒ later failures are attributable),
+   never as evidence about the pending push.
+
+6. **Push**
+   ```powershell
+   git push origin staging
+   ```
+   Never run `git push staging staging:main` (retired as of 5.1).
+
+7. **Confirm the deploy, then run the real smoke gate**
+   Wait for CF Pages (~30–60s) and confirm the new bytes are actually served —
+   a stale build otherwise looks like a passing test run:
+   ```powershell
+   curl.exe -s -L "https://staging.pulllist.pages.dev/<changed-file>?cb=$(Get-Random)"
+   ```
+   Match a marker string your change introduced. **Note `-L`** — without it the
+   redirect returns an empty body that reads exactly like a stale build. Then:
+   ```powershell
+   .\run-smoke.ps1
+   ```
+   Any failure → halt and report; fix forward or revert the push. **Attribute
+   before blaming the diff:** F103 (fixture seeds the calendar month while the
+   catalog page scopes to the newest month in data), F91, and F95 are known
+   local-only test-infra defects that redden specs with no product regression.
+
+8. **Report** — remind the user to smoke test manually at
+   https://staging.pulllist.pages.dev/ and that promotion to prod is a separate,
+   explicit step (`/promote-prod`). **State whether the change is covered by any
+   spec** — green proves nothing about an uncovered path, and the catalog
+   info-card reserve path has no coverage at all (see F103).
