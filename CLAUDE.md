@@ -269,11 +269,14 @@ At the end of each session:
 
 ```
 comic-preorder/                    ← production repo (github.com/mrcyberrick/comic-preorder)
-  catalog.html
-  mylist.html
-  arrivals.html
-  subscriptions.html
-  admin.html
+  index.html                       ← sign-in / landing
+  catalog.html                     ← ┐
+  mylist.html                      ← │ the five nav+footer pages that must
+  arrivals.html                    ← │ stay in sync (see § Files That Must
+  subscriptions.html               ← │ Stay in Sync)
+  admin.html                       ← ┘
+  analytics.html                   ← admin-gated nav link; no shared nav block
+  forgot-password.html             ← linked from the index.html sign-in footer
   app.js
   style.css
   config.js                        ← tracked per branch; never edited by agent

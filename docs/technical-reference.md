@@ -1861,7 +1861,8 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 ### Low
 
 #### F7 — `reservation_history` unique key omits `tenant_id`
-- **Status:** open
+- **Status:** **closed won't-fix 2026-07-28** — cosmetic consistency only, no reachable defect. The entry's own analysis (below) establishes that cross-tenant collisions **cannot occur**: `reservation_history.user_id` scopes the key transitively through `user_profiles.tenant_id`, and one user belongs to exactly one tenant. Re-affirmed under two live tenants (`comicstore` onboarded 2026-07-15), which is the condition that would have activated it had the reasoning been wrong. Reopen only if a user is ever allowed to hold profiles in more than one tenant — that premise, not the index shape, is what this finding actually depends on.
+- **Distinguish from F9,** which looks identical but is **not** closed: `weekly_shipment` has no user column, so it has no transitive tenant scope and its collision is real.
 - `(user_id, series_name, distributor, catalog_month)` is the unique
   key. Tenant-scoping is implicit via `user_profiles.tenant_id` (one
   user belongs to one tenant), so cross-tenant collisions cannot
@@ -1921,7 +1922,8 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   every read.
 
 #### F28 — `toISOString()` used for date math in two places
-- **Status:** All callsites closed in phase 3.8 (2026-05-14). The two
+- **Status:** **resolved 2026-05-14 (Phase 3.8) — retained deliberately as a standing anti-pattern record, not an open defect.** Verdict line added 2026-07-28; the paragraph below previously carried the disposition with no status verdict, which left the entry ambiguous to anyone counting open findings.
+- All callsites closed in phase 3.8 (2026-05-14). The two
   date-math callsites (`NavBubble.load`, `mylist.html` past-item filter)
   now use `DateUtils.todayLocal()` and `DateUtils.weekRange()`. The four
   filename-label callsites (`mylist.html` export, three `admin.html`
@@ -1997,21 +1999,21 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   drop `uuid-ossp` once unused.
 
 #### F29 — Supabase 416 workaround pattern recurs
-- **Status:** doc-only
-- The count-first-then-fetch pattern is repeated in
+- **Status:** **informational — never a defect; closed as an observation 2026-07-28.** Verdict clarified from the bare "doc-only" label, which read as an unfinished disposition.
+- **Superseded in part by F82 (2026-07-08/09):** two of the three callsites named below — `Catalog.getPublishers()` and `Recommendations.getCatalogIds()` — no longer use the fixed count-first pattern at all. F82 replaced them with 1,000-row batch pagination that loops until a short read, because the fixed two-batch shape silently capped at 2,000 rows once the July 2026 catalog reached 2,776. The duplication this finding noted was therefore resolved by a correctness fix, not by the helper it proposed.
+- The count-first-then-fetch pattern was repeated in
   `Recommendations.getCatalogIds`, `Catalog.getPublishers`, and
   `catalog.html`'s catalog fetch. Not a bug; just noteworthy that the
-  pattern recurs without being encapsulated in a helper.
-- **Fix:** if a fourth instance appears, factor into a
-  `fetchWithRangeFallback` helper.
+  pattern recurred without being encapsulated in a helper.
+- **Fix (as filed):** if a fourth instance appears, factor into a
+  `fetchWithRangeFallback` helper. Still reasonable guidance for any *new*
+  paginated fetch; see F82 for the shape to copy.
 
 #### F32 — CLAUDE.md page inventory missing two pages
-- **Status:** confirmed
-- CLAUDE.md lists 6 HTML pages; the deployed staging actually has at
-  least 8: also `forgot-password.html` and `analytics.html`. Both are
-  referenced from production code (sign-in form footer link;
-  admin-gated nav link).
-- **Fix:** out of scope for this document. Update CLAUDE.md's page
+- **Status:** **resolved 2026-07-28** — CLAUDE.md § Repository Structure now lists all 8 HTML files, each annotated with why it is or is not part of the shared-nav set.
+- **Drifted further before it was fixed.** As filed the gap was 2 pages (6 listed / 8 real). By 2026-07-28 the block listed only **5** and the repo held **8** — `index.html` had joined `analytics.html` and `forgot-password.html` as unlisted. Verified by `ls *.html` against the block, not from memory.
+- **Deliberately not "just add three lines":** the same file's § Files That Must Stay in Sync correctly names exactly 5 pages, because only those carry the shared nav and footer blocks. Listing all 8 flat would have implied the nav invariant applies to `index.html`, `analytics.html`, and `forgot-password.html`, which it does not. The inventory now marks the five-page sync set explicitly so the two lists can no longer be read as contradicting each other.
+- **Original fix note (superseded):** out of scope for this document. Update CLAUDE.md's page
   inventory in a future session.
 
 #### F33 — `claim_paper_account()` SQL function is unused
@@ -2216,7 +2218,8 @@ Surfaced during the 4.8 H4 structural diff and H5 review (2026-06-10).
 - **Fix:** add `TO authenticated` to the 14 staging policies that lack it, bringing staging into parity with prod. Verify no functional regression (all existing tests pass after; anon-role access to affected tables should remain blocked by `current_tenant_id()` returning NULL).
 
 #### F64 — Pre-Phase-4 DDL structural divergences (prod vs staging)
-- **Status:** open — assessed per-item 2026-06-10 (Phase 4 completion audit): **no item blocks Phase 4 closure** (all 8 pre-date Phase 4 and none affects the migrated multi-tenant surface). Dispositions below. **Scheduled (2026-06-10 Phase 5 planning):** items 1–3/6/7 → 5.0 S2; item 4 → 5.0 S4 (with F66); item 5 → decision at 5.0 S3, DDL deferred to the parent § Deferred-DDL Register; item 8 → sub-deploy 5.2 (`phase-5.0-pre-phase-5-housekeeping.md`, `phase-5-second-tenant-onboarding.md`).
+- **Status:** **resolved 2026-07-28 — all 8 items closed; rollup line advanced.** Every item below reached a terminal disposition between 2026-06-11 and 2026-06-16 (items 1–3, 6, 7 on 06-11 at 5.0 S2; item 4 on 06-11 at 5.0 S4; item 8 no-op 06-15 at 5.2 S4; item 5 on 06-16 at 5.4 S0), but this parent status was never advanced from "open" — a bookkeeping residue, not outstanding work. No new verification was performed on 2026-07-28; this flip rests entirely on the per-item evidence already recorded below, each of which cites its own `pg_constraint` / `information_schema` check.
+- **Original assessment (2026-06-10, Phase 4 completion audit):** **no item blocks Phase 4 closure** (all 8 pre-date Phase 4 and none affects the migrated multi-tenant surface). Dispositions below. **Scheduled (2026-06-10 Phase 5 planning):** items 1–3/6/7 → 5.0 S2; item 4 → 5.0 S4 (with F66); item 5 → decision at 5.0 S3, DDL deferred to the parent § Deferred-DDL Register; item 8 → sub-deploy 5.2 (`phase-5.0-pre-phase-5-housekeeping.md`, `phase-5-second-tenant-onboarding.md`).
 - **Per-item dispositions (2026-06-10 assessment):**
   1. `catalog.price_usd` precision — **closed 2026-06-11 (5.0 S2).** Altered staging → `numeric(6,2)`. Note: required DROP + recreate of `admin_preorders` view (view depends on `price_usd`); view recreated with `security_invoker=true` and grants restored to SELECT-only for `authenticated`/`service_role` (Supabase default-privilege machinery auto-grants ALL on new views — REVOKE ALL then selective GRANT required). Verified: `information_schema.columns` precision `6,2`; view and grants confirmed.
   2. `catalog_distributor_check` — **closed 2026-06-11 (5.0 S2).** Constraint added to staging; pre-flight confirmed exactly `{Lunar, PRH}`; verified via `pg_constraint`.
@@ -2352,7 +2355,8 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `import.js` / `import-staging.js` (scripts repo, credential loading); Supabase dashboard (key rotation, both envs). New findings are numbered from **F76**.
 
 #### F76 — Shipment↔reservation match key is `catalog_id` OR `upc` OR `item_code` (distributor-agnostic)
-- **Status:** filed 2026-06-22, **fix landed on staging** (`feature/f76-arrivals-shipment-match-key`): `Preorders.getMy` now selects `catalog.upc`; `arrivals.html` `isReserved` and the orphan filter both match on `catalog_id OR upc OR item_code`.
+- **Status:** filed 2026-06-22, **resolved — live on production** (`feature/f76-arrivals-shipment-match-key`): `Preorders.getMy` now selects `catalog.upc`; `arrivals.html` `isReserved` and the orphan filter both match on `catalog_id OR upc OR item_code`.
+- **Prod status corrected 2026-07-28.** The line above read "fix landed on staging" long after the change had been promoted, understating deployment state in the opposite direction from F35/F36. Verified 2026-07-28: `git diff main staging -- arrivals.html app.js` returns empty, so `main` (production) and `staging` carry byte-identical copies of both files. Retained as **defense-in-depth** post-F84 — F84 fixed the inverted distributor labels at the source, which removes the *cause* of the null `catalog_id`, while this match key tolerates any that already exist or recur.
 - **Severity:** Medium (customer-facing display) — a reserved title could render twice on the This Week arrivals page (once in the store-shipment split, once as a false orphan), and admin reservation↔shipment reconciliation overcounted "reserved but not shipped."
 - **Root cause:** a title can be **catalogued under one distributor and shipped under another** (real channel split — e.g. CONAN THE BARBARIAN #32: `catalog.distributor = Lunar`, `weekly_shipment.distributor = PRH`, **same UPC**). The import wires `weekly_shipment.catalog_id` via *distributor + upc/item_code*, so cross-distributor titles get a **null `catalog_id`**. Any `catalog_id`-only reconciliation then falsely orphans them. Distributor must **not** be part of the match key (the two tables disagree on it for these titles); `upc` (Lunar) and `item_code` (PRH) mirror the import's own conflict keys (`import.js` §30-31).
 - **Secondary defect (fixed here):** `Preorders.getMy` did not select `catalog.upc`, so `arrivals.html`'s `myReservedUpcs` was always empty — the in-app UPC match was dead, leaving `isReserved` effectively `catalog_id`-only.
@@ -2512,7 +2516,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - § 3, ~lines 113–115: "one founding tenant …; no second tenant has been onboarded" — same as § 1.
   - § 1, ~lines 77–79: "the import script hard-codes `TENANT_ID` to the founding tenant" — both `import.js` and `import-staging.js` have been `.env`-driven and credential-free since 2026-07-08.
   - § 3.1, ~lines 144–149: "tenant_id is a top-level constant `TENANT_ID = '72e29f67-...'`" — same as above.
-  - **Added 2026-07-25 (found while reproducing F95 on staging):** § 4.9 `user_profiles` states "(No FK to `auth.users` — see Section 3.3)" and § 3.3 says the `id` match is "by convention but not enforced by FK". **Staging contradicts this:** inserting a `user_profiles` row with an `id` absent from `auth.users` is rejected with `{"code":"23503", "message":"insert or update on table \"user_profiles\" violates foreign key constraint \"user_profiles_id_fkey\""}`. The constraint exists and is enforced on staging; whether prod matches was not checked. Re-audit both environments and correct § 3.3 and § 4.9 together.
+  - **Added 2026-07-25 (found while reproducing F95 on staging):** § 4.9 `user_profiles` states "(No FK to `auth.users` — see Section 3.3)" and § 3.3 says the `id` match is "by convention but not enforced by FK". **Staging contradicts this:** inserting a `user_profiles` row with an `id` absent from `auth.users` is rejected with `{"code":"23503", "message":"insert or update on table \"user_profiles\" violates foreign key constraint \"user_profiles_id_fkey\""}`. The constraint exists and is enforced on staging. **Prod question answered 2026-07-28 without a live query — the answer was already inside § 13:** F64 item 7 records the 2026-06-10 `pg_dump` comparison as "prod has `FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE`; staging does not", and its disposition adds the FK to staging on 2026-06-11 (verified `confdeltype = c`). So **both** environments carry the constraint, and prod has carried it the longer of the two — the § 3.3 / § 4.9 "no FK" claim is wrong about production *more* squarely than about staging, not less. This sub-item needs only the § 3.3 + § 4.9 text correction; no environment audit remains for it. The other inventory items above are unaffected and still require the live pass.
 - **Fix direction (future session):** a dedicated re-audit — live-DB pass across every section, refreshed "last verified" line, all stale claims above corrected in one sweep. Not a drive-by edit alongside an unrelated front-door sub-deploy.
 - **Where:** `docs/technical-reference.md` (header line 5; § 1 around lines 26, 31, 77–79; § 2 around line 97; § 3 around lines 113–115; § 3.1 around lines 144–149).
 
