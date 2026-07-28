@@ -329,14 +329,20 @@ Canonical app-wide settings. Key/value with audit fields.
 | `tenant_id` | uuid | NO | — |
 
 **Constraints:**
-- PK: `key` — see F6 (no `tenant_id` in the PK; multi-tenant collision risk)
+- PK: `(tenant_id, key)` — **both environments, verified by `pg_constraint`**
+  (staging 2026-07-08, production 2026-07-28). F6 resolved. This section
+  previously read "PK: `key` — see F6"; that was correct at authoring time and
+  stale from 2026-07-08 onward.
 
 **FKs:**
 - `tenant_id` → `tenants.id` ON DELETE CASCADE
 
 **Indexes:**
-- `app_settings_pkey` on `key`
-- `idx_app_settings_tenant` on `tenant_id`
+- `app_settings_pkey` on `(tenant_id, key)`
+- `idx_app_settings_tenant` on `tenant_id` — **now redundant**, since the PK's
+  leading column is `tenant_id` and serves the same lookups. Dropping it is a
+  separate decision, deliberately not bundled into the F6 re-key; see
+  `docs/sql/f6-app-settings-pk-rekey.sql` § OPTIONAL.
 
 **Current keys in staging:**
 - `maintenance_mode` — `'true'` / `'false'`; checked by `app.js`
@@ -1800,7 +1806,10 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 ### Medium
 
 #### F6 — `app_settings` and `settings` PK on `key` alone
-- **Status:** **resolved on staging 2026-07-08** — `app_settings` PK re-keyed to `(tenant_id, key)` via `docs/sql/f6-app-settings-pk-rekey.sql` (Rick, SQL Editor). Verified post-DDL: `pg_constraint` shows `PRIMARY KEY (tenant_id, key)`; admin maintenance-mode toggle ON→OFF + order-deadline banner read passed (exercises `Settings.set()` upsert and `Settings.get()` through the new key). **Prod run pending** — same runbook against the prod project as part of 5.5 pre-flight; must land before tenant 2 onboards. The legacy `settings` table (empty, dead) intentionally left as-is; its drop and the redundant `idx_app_settings_tenant` drop remain separate decisions carried in the runbook.
+- **Status:** **resolved on both environments** — staging 2026-07-08, **production 2026-07-28**. `app_settings` PK re-keyed to `(tenant_id, key)` via `docs/sql/f6-app-settings-pk-rekey.sql` (Rick, SQL Editor, both runs). Verified post-DDL on each: `pg_constraint` returns `PRIMARY KEY (tenant_id, key)`. Staging additionally passed the app-level smoke (admin maintenance toggle ON→OFF + order-deadline banner read, exercising `Settings.set()` upsert and `Settings.get()` through the new key). **Prod app-level smoke owed** — DDL is confirmed, the functional pass is not yet recorded. The legacy `settings` table (empty, dead) intentionally left as-is; its drop and the now-redundant `idx_app_settings_tenant` drop remain separate decisions carried in the runbook.
+- **The prod gate was missed, and the miss is the more useful record here.** The runbook marked this "must land before tenant 2 onboards"; `comicstore` went live on production **2026-07-15** and the re-key did not run until **2026-07-28** — a 13-day window discovered by a findings-index audit, not by any alarm. **No damage occurred**, confirmed by the pre-DDL diagnostic: prod held 2 tenants, `rjbookstop` held both `maintenance_mode` and `order_deadline`, and `comicstore` held `(NONE)`. The collision never fired only because the pilot tenant never wrote a setting.
+- **Why it would have been silent had it fired.** `Settings.set()` (`app.js:601-610`) upserts with **no explicit `onConflict`**, so PostgREST resolves on the primary key. Under the old `(key)`-only PK a `comicstore` admin saving `maintenance_mode` would not have inserted a second row — it would have UPDATEd founding's row and rewritten its `tenant_id`, after which RLS hides that row from founding entirely. The setting is *captured*, not duplicated. Detection would then have depended on noticing an absence: `Settings.get()` (`app.js:591-598`) destructures only `{ data }` and discards `error`, returning `data?.value ?? null`, so `isMaintenanceMode()` reads `false` (maintenance silently un-engageable during an import) and the catalog's order-deadline banner just hides itself. No thrown error on any path.
+- **Pre-DDL guard added 2026-07-28, not in the original runbook:** a check for FKs referencing `app_settings` (`confrelid = 'public.app_settings'::regclass AND contype = 'f'`), since `DROP CONSTRAINT` fails if a dependent FK exists and F64 catalogued eight prod↔staging DDL divergences. Returned zero rows on prod. Worth keeping in any future PK re-key.
 - Both tables use `key` as the primary key, not `(tenant_id, key)`. Means
   one tenant can hold the value `'maintenance_mode'` and a second tenant
   cannot independently hold a different value for the same key.
