@@ -169,6 +169,15 @@ If any count is unexpected, investigate before announcing the new tenant. File a
 
 **This is a one-way step.** Once real customers write preorders, subscriptions, or reservation history under the new tenant, the clean §4.1 FK-ordered teardown no longer applies. Assess before proceeding.
 
+- [ ] **F9 shipment-import collision gate — ⚠️ the only item here that can damage a *different* tenant, and the only one whose trigger may arrive before go-live.** Check this **before this tenant's first shipment import**, whenever that happens — pilot or live. `weekly_shipment_unique` is `(distributor, upc, on_sale_date)` with no `tenant_id`. Two comic shops stock the same books on the same street date, so a shared `(upc, on_sale_date)` is near-certain rather than unlucky. On the Format A path (`distributor='PRH'`) the import upserts with `resolution=merge-duplicates` and the payload carries `tenant_id` — so a collision does not error, it **UPDATEs the other tenant's row and rewrites its `tenant_id`**, silently moving that row out of the tenant that owns it. Verify:
+
+  ```sql
+  SELECT indexdef FROM pg_indexes
+  WHERE schemaname = 'public' AND tablename = 'weekly_shipment'
+    AND indexname = 'weekly_shipment_unique';
+  ```
+
+  If the result does **not** contain `tenant_id`, F9 is unfixed: **do not run a shipment import for this tenant.** (Prod state as of 2026-07-28: unfixed — `(distributor, upc, on_sale_date)`. Dormant only because `comicstore` holds 0 shipment rows against founding's 754.) See `docs/technical-reference.md` § 13 F9.
 - [ ] **F72 email-branding decision:** `register-customer` sends founding-branded confirmation emails regardless of tenant. Confirm this is acceptable for the tenant's launch, OR wait for a dedicated multi-tenant email branding sub-deploy (Phase 6 / follow-on). Surfacing this to the tenant admin before go-live is required.
 - [ ] **MailerLite webhook configured** (Step 4) if the tenant uses webhook-based customer registration.
 - [ ] **Isolation spot-check green** (Step 6) against the pilot/seeded data.
@@ -218,6 +227,8 @@ After real customer writes: no clean teardown exists. Forward-fix only.
 - curl pattern (`--data-binary @file`; not `Invoke-RestMethod`): `CLAUDE.md` § Known Issues
 - F34 (`create-paper-customer` / `invite-customer` tenant resolution, fixed 2026-05-10): `docs/technical-reference.md` § 13 F34
 - F72 (`register-customer` email branding still founding-only): `docs/technical-reference.md` § 13 F72
+- F9 (`weekly_shipment` unique key omits `tenant_id` — silent cross-tenant row capture on shipment import): `docs/technical-reference.md` § 13 F9. Gated in Step 7; **trigger is the first shipment import, not go-live.**
+- F105 (why gates like F9 are written as checkboxes here rather than as prose in a finding): `docs/technical-reference.md` § 13 F105. The F6 precondition that motivated it was missed by 13 days because it lived only in a SQL comment.
 - Reserved slug denylist: `docs/technical-reference.md` § 11.3 (`register-tenant` contract)
 - Projects: prod `plgegklqtdjxeglvyjte`; staging `puoaiyezsreowpwxzxhj`
 - Founding tenant: `rjbookstop` / `20941129-c35a-476d-ae21-44b8f77af89c`
