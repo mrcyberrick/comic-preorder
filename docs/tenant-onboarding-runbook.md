@@ -177,7 +177,7 @@ If any count is unexpected, investigate before announcing the new tenant. File a
     AND indexname = 'weekly_shipment_unique';
   ```
 
-  If the result does **not** contain `tenant_id`, F9 is unfixed: **do not run a shipment import for this tenant.** (Prod state as of 2026-07-28: unfixed — `(distributor, upc, on_sale_date)`. Dormant only because `comicstore` holds 0 shipment rows against founding's 754.) See `docs/technical-reference.md` § 13 F9.
+  If the result does **not** contain `tenant_id`, F9 has regressed: **do not run a shipment import for this tenant.** (**Prod and staging state as of 2026-07-28: fixed** — `weekly_shipment_tenant_unique` on `(tenant_id, distributor, upc, on_sale_date)`, with the old `weekly_shipment_unique` constraint dropped on both. The check is kept as a standing guard, not because it is currently failing.) See `docs/technical-reference.md` § 13 F9.
 - [ ] **F72 email-branding decision:** `register-customer` sends founding-branded confirmation emails regardless of tenant. Confirm this is acceptable for the tenant's launch, OR wait for a dedicated multi-tenant email branding sub-deploy (Phase 6 / follow-on). Surfacing this to the tenant admin before go-live is required.
 - [ ] **MailerLite webhook configured** (Step 4) if the tenant uses webhook-based customer registration.
 - [ ] **Isolation spot-check green** (Step 6) against the pilot/seeded data.
@@ -227,7 +227,7 @@ After real customer writes: no clean teardown exists. Forward-fix only.
 - curl pattern (`--data-binary @file`; not `Invoke-RestMethod`): `CLAUDE.md` § Known Issues
 - F34 (`create-paper-customer` / `invite-customer` tenant resolution, fixed 2026-05-10): `docs/technical-reference.md` § 13 F34
 - F72 (`register-customer` email branding still founding-only): `docs/technical-reference.md` § 13 F72
-- F9 (`weekly_shipment` unique key omits `tenant_id` — silent cross-tenant row capture on shipment import): `docs/technical-reference.md` § 13 F9. Gated in Step 7; **trigger is the first shipment import, not go-live.**
+- F9 (`weekly_shipment` unique key omitted `tenant_id` — silent cross-tenant row capture on shipment import): **resolved 2026-07-28 on both environments.** `docs/technical-reference.md` § 13 F9. The Step 7 check remains as a standing regression guard; **its trigger is the first shipment import, not go-live.**
 - F105 (why gates like F9 are written as checkboxes here rather than as prose in a finding): `docs/technical-reference.md` § 13 F105. The F6 precondition that motivated it was missed by 13 days because it lived only in a SQL comment.
 - Reserved slug denylist: `docs/technical-reference.md` § 11.3 (`register-tenant` contract)
 - Projects: prod `plgegklqtdjxeglvyjte`; staging `puoaiyezsreowpwxzxhj`
