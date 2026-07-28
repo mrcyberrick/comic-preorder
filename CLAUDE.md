@@ -355,14 +355,25 @@ git checkout staging
 git pull origin staging
 git merge --ff-only feature/<description>
 
-# Run smoke tests before deploying
+# Optional pre-push baseline — see "Smoke-test ordering" below for why this
+# does NOT test your change. Its value is confirming staging was already green,
+# plus stage [1/2], which does run against local files.
 cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
 .\run-smoke.ps1
-# Stop if anything fails — do not push
 
 git push origin staging
 # CF Pages auto-deploys the staging preview at https://staging.pulllist.pages.dev/
 # (Do NOT run: git push staging staging:main — retired as of 5.1)
+
+# Wait for the build, then CONFIRM the new bytes are actually served before
+# trusting any test result (~30-60s; note -L, without it the redirect yields
+# an empty body that looks like a stale build):
+#   curl.exe -s -L "https://staging.pulllist.pages.dev/style.css?cb=$(Get-Random)"
+# and match a marker string your change introduced.
+
+# THEN run the authoritative smoke pass — this one exercises your change:
+.\run-smoke.ps1
+# Stop and fix (or revert the push) if anything fails.
 
 # Test at: https://staging.pulllist.pages.dev/
 # When staging tests pass, promote to production:
@@ -385,6 +396,44 @@ git push origin feat/<description>-prod
 # Post-deploy write-smoke: reserve one item through the live app as a test user, confirm
 # the row lands in prod preorders with correct tenant_id, then cancel it.
 ```
+
+### Smoke-test ordering (corrected 2026-07-28)
+
+**`run-smoke.ps1`'s two stages test different things, and only one of them can
+see unpushed work:**
+
+- **[1/2] `npm test`** — the scripts repo's import-script unit suite, run against
+  **local files**. Genuinely pre-push, and the stage that matters when the change
+  is to `import.js` / `import-staging.js`.
+- **[2/2] Playwright** — `baseURL` is `https://staging.pulllist.pages.dev/`
+  (`playwright.config.ts`), i.e. the **deployed** site. It loads the web app over
+  HTTP and **cannot see the working tree at all.**
+
+So for any change to `app.js` / `*.html` / `style.css`, a pre-push run exercises
+the **previous** build. This section previously read "Run smoke tests before
+deploying / Stop if anything fails — do not push", which cannot work as written
+for app changes: a green pre-push result says nothing about the code being pushed.
+
+Push first, confirm the new bytes are served, then run the suite. Keep the
+pre-push run if you want a baseline — knowing staging was already green makes a
+post-push failure attributable — but it is a baseline, not a gate.
+
+**This is the second time this was found.** `docs/subscription-promotion.md`
+§ "Deploy sequencing note (2026-07-17)" records the same discovery and Rick
+confirming the same resolution — push to staging first, then run the suite as
+the real gate. That note stayed in a feature plan doc and CLAUDE.md was never
+corrected, so the stale ordering survived here and in `/deploy-staging` and cost
+the rediscovery on 2026-07-27. The 2026-07-17 framing was also narrower than the
+truth: it read as applying to *genuinely new UI* whose specs did not exist yet.
+It applies to **every** web-app change, because the suite always loads the
+deployed build over HTTP — new specs or old.
+
+**Green is not the same as verified.** The suite only covers what has specs. The
+catalog **info-card** reserve path (`#modal-reserve`, `#modal-qty`,
+`.reserved-indicator`) has **no coverage at all**, which is how four defects
+shipped there unnoticed in July 2026. Check whether your change is actually
+covered before treating a pass as verification; if it isn't, a real-browser check
+is the only evidence you have. See F103.
 
 ---
 
