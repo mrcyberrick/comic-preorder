@@ -1847,8 +1847,11 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   Function does the work.
 
 #### F35 — `reset-password` uses wrong staging URL
-- **Status:** confirmed, **active in staging right now**
-- Line 1 of `reset-password/index.ts`:
+- **Status:** **resolved 2026-06-15 (5.2 S5, subsumed by F67)** — status line corrected 2026-07-28. It had read "confirmed, **active in staging right now**" for six weeks after the fix landed, presenting a closed defect as live.
+- **Verification (2026-07-28, against deployed source):** `reset-password/index.ts:1` now reads
+  `const FORGOT_PASSWORD_URL = ...Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'.../forgot-password.html`.
+  No `STAGING_BASE` constant remains anywhere in the file. `APP_BASE_URL` is set on both projects per F67 (staging → `https://staging.pulllist.pages.dev`, prod → `https://pulllist.app`), and F67 records the prod reset-password link verified live.
+- **The description below is the pre-F67 record and is retained as history, not as current state.** Line 1 of `reset-password/index.ts` **formerly** read:
   `STAGING_BASE = 'https://mrcyberrick.us/comic-preorder-staging'`. The
   actual staging URL is now `https://staging.pulllist.pages.dev/` (migrated 5.1).
   Customers who request a password reset via staging receive a 404 link.
@@ -1956,8 +1959,9 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Fix:** update the comment.
 
 #### F36 — `send-my-list` does not verify request user matches session user
-- **Status:** confirmed
-- The function checks that *some* session token is present, then trusts
+- **Status:** **resolved 2026-05-27 (Phase 4.1 — fixed under the duplicate filing F54)** — status line corrected 2026-07-28. It had read bare "confirmed" for fourteen months of calendar entries, leaving the canonical findings index advertising an open authorization bypass that had in fact been closed. F36 and F54 are the **same defect filed twice**; F54 carries the fix record.
+- **Verification (2026-07-28, against deployed source):** `send-my-list/index.ts:52–71` calls `/auth/v1/user` with the caller's JWT and returns 403 `"Forbidden — can only request your own list"` when `callerUser.id !== user_id`. An admin bypass was added later under F62 (admin "books are in" email) — an admin caller is permitted after an `is_admin` lookup, which is intended behavior, not a residual of this finding.
+- The function *formerly* checked that only *some* session token was present, then trusted
   the `user_id` from the request body. An authenticated user can call
   this with any other user's user_id; the email goes to that other user
   (not the caller), so it's an annoyance/spam attack rather than data
