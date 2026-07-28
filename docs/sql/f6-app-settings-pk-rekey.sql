@@ -43,9 +43,15 @@ FROM pg_constraint
 WHERE conrelid = 'public.app_settings'::regclass AND contype = 'p';
 -- Expected: PRIMARY KEY (tenant_id, key)
 
--- Post-DDL smoke (staging): flip maintenance_mode ON and OFF from the admin
--- panel and confirm the catalog banner reads the order_deadline — this
--- exercises Settings.set() upsert + Settings.get() through the new PK.
+-- Post-DDL smoke: flip maintenance_mode ON and OFF from the admin panel and
+-- confirm the catalog banner reads the order_deadline — this exercises
+-- Settings.set() upsert + Settings.get() through the new PK.
+--
+-- EXPECT NOT TO SEE THE HOLDING PAGE YOURSELF. checkMaintenanceMode()
+-- (app.js:720-721) starts with `if (isAdmin) return;` and never reads the
+-- setting, so an admin cannot observe maintenance mode from their own
+-- session. The toggle persisting ON is the pass condition, not the holding
+-- page appearing. (Raised as a false alarm during the prod run 2026-07-28.)
 
 -- ----------------------------------------------------------------------------
 -- OPTIONAL (separate decision, do NOT bundle into the transaction above):
