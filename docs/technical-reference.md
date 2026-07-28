@@ -527,7 +527,14 @@ unless you specifically know you need `settings`.
 | `tenant_id` | uuid | NO | — |
 
 **Constraints:**
-- PK: `key` — same multi-tenant collision risk as `app_settings` (F6)
+- PK: `key` — **still the original key-only shape.** F6 re-keyed `app_settings`
+  to `(tenant_id, key)` on both environments (staging 2026-07-08, prod
+  2026-07-28) but **deliberately excluded this table**, which is empty and dead
+  (F4 emptied it; prod rows dropped 2026-05-31). Re-keying a dead table was
+  judged pointless next to dropping it, and the drop is carried as a separate
+  decision in `docs/sql/f6-app-settings-pk-rekey.sql` § OPTIONAL. So F6 reads
+  "resolved" while this line still shows the old shape — that is intended, not
+  drift. If this table is ever revived it must be re-keyed first.
 
 **FKs:**
 - `tenant_id` → `tenants.id` ON DELETE CASCADE
@@ -2527,7 +2534,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - § 1, ~lines 77–79: "the import script hard-codes `TENANT_ID` to the founding tenant" — both `import.js` and `import-staging.js` have been `.env`-driven and credential-free since 2026-07-08.
   - § 3.1, ~lines 144–149: "tenant_id is a top-level constant `TENANT_ID = '72e29f67-...'`" — same as above.
   - **Added 2026-07-25 (found while reproducing F95 on staging):** § 4.9 `user_profiles` states "(No FK to `auth.users` — see Section 3.3)" and § 3.3 says the `id` match is "by convention but not enforced by FK". **Staging contradicts this:** inserting a `user_profiles` row with an `id` absent from `auth.users` is rejected with `{"code":"23503", "message":"insert or update on table \"user_profiles\" violates foreign key constraint \"user_profiles_id_fkey\""}`. The constraint exists and is enforced on staging. **Prod question answered 2026-07-28 without a live query — the answer was already inside § 13:** F64 item 7 records the 2026-06-10 `pg_dump` comparison as "prod has `FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE`; staging does not", and its disposition adds the FK to staging on 2026-06-11 (verified `confdeltype = c`). So **both** environments carry the constraint, and prod has carried it the longer of the two — the § 3.3 / § 4.9 "no FK" claim is wrong about production *more* squarely than about staging, not less. This sub-item needs only the § 3.3 + § 4.9 text correction; no environment audit remains for it. The other inventory items above are unaffected and still require the live pass.
-- **Fix direction (future session):** a dedicated re-audit — live-DB pass across every section, refreshed "last verified" line, all stale claims above corrected in one sweep. Not a drive-by edit alongside an unrelated front-door sub-deploy.
+  - **Added 2026-07-28 (found while closing F6 on production) — scope extends beyond this file.** Four references across two *closed feature-plan* docs cite F6's key-only `app_settings` PK as a **live** constraint. It is not: the PK is `(tenant_id, key)` on staging since 2026-07-08 and prod since 2026-07-28. None of the affected decisions change, but the stated reasoning is void and reads as current:
+    - `docs/subscription-promotion.md:65-66` — `app_settings` "was considered and **rejected** as the config home: its PK on `key` alone is the F6 multi-tenant collision trap". The decision to use `tenants.branding` stands on its own merits (banner content is public display data, and `branding` needs zero schema change), but the collision half of the rationale no longer applies. This is the reference most likely to mislead, since `branding` vs `app_settings` is a live architectural choice a future session could revisit.
+    - `docs/subscription-reserved-suggestions.md:225`, `:249`, `:302`, `:333` — the "F6 trap" is given as why a Playwright spec writing `popular_series` would clobber founding-tenant staging data, and therefore why that case was moved from the spec suite to a manual V5 check. **Under a per-tenant PK a synthetic-tenant spec can no longer collide with founding**, so the constraint that pushed it out of the suite is gone. Moot in practice — the Popular section and its `popular_series` read were removed 2026-07-19 — but recorded because the *reason* is what a future reader would carry forward.
+  - **Correctly excluded from this inventory, do not "fix":** § 4.6 (legacy `settings`) still documents a key-only PK, which is accurate — F6 deliberately left that dead table alone. `docs/production-baseline-2026-05-28.md:99` and the `phase-4.1-*` planning notes describe F6 as open, which is correct as-of-date for dated snapshots.
+- **Fix direction (future session):** a dedicated re-audit — live-DB pass across every section, refreshed "last verified" line, all stale claims above corrected in one sweep. Not a drive-by edit alongside an unrelated front-door sub-deploy. **Note the scope grew on 2026-07-28:** the last inventory item is in *other* documents, so the sweep is "claims about live state across `docs/**`", not this file alone.
 - **Where:** `docs/technical-reference.md` (header line 5; § 1 around lines 26, 31, 77–79; § 2 around line 97; § 3 around lines 113–115; § 3.1 around lines 144–149).
 
 #### F93 — Stray Supabase CLI workdir `C:\Users\richa\supabase` is linked to the PRODUCTION project ref and holds stale Feb-2026 pre-multitenancy Edge Function code — a silent-deploy-to-prod hazard
