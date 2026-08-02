@@ -580,6 +580,15 @@ approval.
 - **Partial fulfillment not representable** — product decision, deferred until
   product scoping
 
+### Pending — addressed in a scheduled session
+- **Test-infrastructure maintenance session (F91 + F95 + F103)** — plan:
+  `docs/test-infra-maintenance-f91-f95-f103.md` (written 2026-08-02, not yet
+  executed). Restores the local Playwright suite as a trustworthy Definition-of-Done
+  gate: F91 GoTrue-admin key flakiness, F95 orphaned staging test profiles
+  (87+ and growing), F103 the standing seed-month false-red. Staging-only,
+  local-only fixture edits. Do NOT make ad-hoc fixes to
+  `catalogs\scripts\playwright\fixtures\*` outside that session.
+
 ### Deferred — separate future session
 - **Analytics conversion instrumentation (F89)** — log claims/invites so
   paper→app conversion is measurable (Edge Function touch). See
