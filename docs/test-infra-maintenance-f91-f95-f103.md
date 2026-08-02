@@ -1,6 +1,6 @@
 # Test-Infrastructure Maintenance Session — F91 (GoTrue admin-key flakiness) + F95 (orphaned test profiles) + F103 (seed-month false-red)
 
-**Status:** Planning
+**Status:** Complete — 2026-08-02
 **Plan written:** 2026-08-02
 **Not a phase sub-deploy** — standalone maintenance session. Phase 5 closed 2026-07-15; Phase 6 not started.
 **Target surface:** the **local-only Playwright suite** at `catalogs\scripts\playwright\` — plus a one-time staging data cleanup (F95) and the findings closeout in this repo.
@@ -147,15 +147,17 @@ Only if V1–V3 are green and time remains. Add a spec covering the catalog info
 
 ## 7. Completion criteria
 
-- [ ] S0 baseline recorded, with F91-shaped and F103-shaped failures distinguished by signature
-- [ ] Rollback copies of both fixture files taken before any edit
-- [ ] **F91:** Supabase's current admin-endpoint contract established and recorded; remedy implemented; any legacy-key decision explicitly signed off by Rick, never defaulted into
-- [ ] **F95:** `deleteUser()` checks `res.ok` and throws; teardown ordering fixed in the fixture path *and* the spec `afterAll`s; staging orphans counted, deleted, re-counted to 0
-- [ ] **F103:** seed month data-derived with a no-rows fallback; `02`/`03`/`07` founding-tenant assertions pass without breaking synthetic-tenant ones
-- [ ] V1–V5 green
-- [ ] § 13 and `CLAUDE.md` updated; doc-only commit pushed to `staging`
-- [ ] Status update notes explicitly that the suite changes are **uncommitted and machine-local**
-- [ ] Any new defect filed from **F107** (verify the next free ID at execution — do not assume)
+- [x] S0 baseline recorded, with F91-shaped and F103-shaped failures distinguished by signature — baseline run (2026-08-02) was itself fully green (48/48); recorded as a data point, not proof either defect was already fixed (F91 is intermittent; F103 was latent because the calendar month coincided with the founding tenant's latest imported month that day)
+- [x] Rollback copies of both fixture files taken before any edit — scratchpad copies of `fixtures/auth.ts` and `fixtures/catalog.ts` taken before any edit
+- [x] **F91:** Supabase's current admin-endpoint contract established and recorded (docs silent on the specific admin-path interaction; `self-hosted-auth-keys` confirms the gateway-translation mechanism by design; `supabase-js#1568` reproduces the identical symptom unresolved) — remedy implemented is bounded retry (option c), not a legacy-key revert; no credential change was needed, so no Rick sign-off was required
+- [x] **F95:** `deleteUser()` checks `res.ok` and throws (and self-clears `preorders` first, which is what actually fixes the dominant per-test fixture-teardown path); teardown ordering also fixed in specs `06`/`07`/`10`/`11`/`13` (`04` was already correct; `09` had no bug); staging orphans counted (292), deleted, re-counted to 0 by Rick, held across 6 further full-suite runs
+- [x] **F103:** seed month data-derived with a no-rows fallback; `02`/`03`/`07` founding-tenant assertions passed without breaking synthetic-tenant ones, across all 6 runs
+- [x] V1–V5 green
+- [x] § 13 and `CLAUDE.md` updated; doc-only commit pushed to `staging`
+- [x] Status update notes explicitly that the suite changes are **uncommitted and machine-local**
+- [x] New defect filed as **F107** (verified F108 is next free after filing; a GoTrue `429` rate-limit observation under repeated-run gate-verification pressure, not reproduced under normal single-run conditions)
+
+**Residual, stated rather than glossed:** F103's fix could not be distinguished from "coincidentally not exercising the bug" by this session's own runs alone, since 2026-08-02's calendar month happened to equal the founding tenant's latest imported month — the fix's correctness rests on mirroring the app's own `getLatestMonth()` query and the explicit empty-tenant fallback, not on these runs having caught it red-handed. S4's optional info-card coverage was added (2 tests) but is not exhaustive (no FOC-locked-modal or admin-impersonation case) — noted in § 13 F103 rather than rounded up to complete coverage.
 
 ## 8. Rollback
 
