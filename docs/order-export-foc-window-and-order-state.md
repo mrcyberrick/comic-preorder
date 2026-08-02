@@ -47,20 +47,32 @@ When a title's FOC locks *before* the monthly order goes out (July: the 07/20 FO
 
 Nothing in the app models this today. Ad-hoc handling is entirely in Rick's head.
 
-### 2.4 `fulfilled` is already used to mean "ordered" — § 13 F102 understates this
+### 2.4 "Backordered" — the failure the FOC lock exists to prevent (Rick, 2026-08-02)
+
+A reservation whose FOC passed **without an order having been placed** is **Backordered**. This is the store's own term; use it in code, UI and docs rather than inventing a synonym.
+
+The FOC lock is already built and is deliberately hard (`isFocLocked` → `isFocPast`, `app.js:1358–1370`). Once FOC passes, the app blocks **both** new reservations **and cancellations** on that title — `catalog.html:1217–1218` treats an already-reserved locked title as *committed*, and `app.js:1436–1449` renders the locked state ("🔒 FOC Locked", disabled control, FOC badge).
+
+**That is what makes a backorder bad, and it is easy to miss:** the lock commits the *customer* independently of whether the *store* ordered. A backordered title is therefore one where the customer cannot back out and the book cannot arrive. Rick's stated intent is to **actively avoid** this state, not merely to report it after the fact.
+
+**Requirement (Rick, 2026-08-02):** notify admin users when a title is reserved whose FOC date falls **in the same month and/or precedes the order-deadline date** — i.e. while there is still time to place the ad-hoc order. See § 4.5.
+
+**Reuse, do not reimplement:** `isFocThisMonth(dateStr)` (`app.js:1375+`) already computes exactly the "FOC within the current calendar month, including today and later this month" condition, using local date parts. It is already in customer-side use at `catalog.html:601`. Reimplementing this date logic is how F28 (`toISOString()` UTC shift) happens again.
+
+### 2.5 `fulfilled` is already used to mean "ordered" — § 13 F102 understates this
 
 F102 says *"`fulfilled` is an **arrival** flag, not an order flag."* That is true of the **code**. It is **not** how the flag is used. Rick's actual practice:
 
 - A reserved title is treated as ordered when it is manually set via **"Mark Fulfilled"** on the By Distributor tab (`admin.html:666`, `:699` → `Preorders.setFulfilledByCatalogId`, `app.js:876`) — Rick's own words: *"not the best description of what is happening."*
 - Or when a new catalog is loaded, which resets My List.
 
-So the store *does* have an order record. It is mislabelled, and — the part that actually bites — **keyed wrong** (§ 2.5).
+So the store *does* have an order record. It is mislabelled, and — the part that actually bites — **keyed wrong** (§ 2.6).
 
 There are **no checks against an order invoice**, so rejected titles are never surfaced. Reconciliation currently runs off **shipping reports**; Rick's assessment is that **invoice reconciliation would be more accurate**, because a rejected title simply never ships and silence is indistinguishable from "not arrived yet." That is exactly how the MIDNIGHT X-MEN #2 UNKNOWNs went unnoticed.
 
 True fulfillment status only becomes meaningful with POS integration, which is a future version.
 
-### 2.5 Why renaming the flag would not have fixed anything
+### 2.6 Why renaming the flag would not have fixed anything
 
 `setFulfilledByCatalogId` marks rows against a specific `catalog_id`. When a distributor re-lists a title in a later catalog month it becomes a **new `catalog` row** (the upsert key is `(tenant_id, item_code, distributor, catalog_month)` — § 4.3) with **new `preorders` rows** attached. June's mark does not carry to July's rows.
 
@@ -68,9 +80,11 @@ True fulfillment status only becomes meaningful with POS integration, which is a
 
 This is the single most important technical constraint in this plan, and it is why § 13 F102's "per-reservation … `ordered_at`" hedge is the wrong half of its own suggestion — an `ordered_at` column on `preorders` inherits precisely the flaw F102 diagnoses in `fulfilled`.
 
-### 2.6 Scope decision (Rick, 2026-08-02)
+### 2.7 Scope decision (Rick, 2026-08-02)
 
-Invoice reconciliation is **out of this session** and filed as its own finding (**F108**) with its own future session. This session stops the duplicate-order bleed first. Ad-hoc orders get **flag + exclude** only — no dedicated ad-hoc export, no dashboard alarm — in this session.
+Invoice reconciliation is **out of this session** and filed as its own finding (**F108**) with its own future session. This session stops the duplicate-order bleed first.
+
+Ad-hoc orders get **flag + exclude** — no dedicated ad-hoc export button. **Amended the same session:** the backorder-risk notification (§ 2.4, § 4.5) **is** in scope, superseding the earlier "no dashboard alarm" call, because the FOC lock commits the customer and the notification is what makes that lock safe rather than merely strict.
 
 ---
 
@@ -108,7 +122,18 @@ Because § 2.2 rules out deriving the band, the cycle is **chosen**, from the FO
 - **Null `foc_date` rows are included** (they have no cutoff to be past — matching `:2168`) but listed in the attention panel so they are visible.
 - The export emits only the selected FOC dates.
 
-**Everything held back is surfaced, never silently dropped** — this is F101's own stated requirement, and it is what stops the fix from trading one silent failure for another. After generating, show a panel grouping excluded rows by reason: *outside selected cycle* / *already ordered* / *ad-hoc ordered* / *fulfilled*, with title, code, FOC date and copy count.
+**Everything held back is surfaced, never silently dropped** — this is F101's own stated requirement, and it is what stops the fix from trading one silent failure for another. After generating, show a panel grouping excluded rows by reason, with title, code, FOC date and copy count:
+
+| Bucket | Meaning | Urgency |
+|---|---|---|
+| **Backordered** | FOC **passed**, never ordered (§ 2.4) | **Already failed.** Customer is committed and cannot cancel; the book cannot arrive |
+| *At risk* | FOC not yet passed but locks before the monthly order | **Act now** — needs an ad-hoc order |
+| *Outside selected cycle* | FOC later than the ticked dates | None — returns on a later cycle |
+| *Already ordered* | in the ledger (§ 4.3) | Human call, quantity shown |
+| *Ad-hoc ordered* | ledger row, `order_type = 'adhoc'` | None — handled separately |
+| *Fulfilled* | existing `!p.fulfilled` filter | None |
+
+**Backordered and "outside selected cycle" must be visually distinct.** They are the difference between *never* and *not yet*, and collapsing them into one "held back" list is how a backorder goes unnoticed.
 
 ### 4.2 F102 — a code-keyed order ledger
 
@@ -142,19 +167,45 @@ Before generating, each code on the sheet is looked up in `order_submissions` fo
 
 **Auto-suppressing would have been wrong on the live instance.** MIDNIGHT X-MEN #1: 5 already on order, 7 reservations — the correct action was to order **2**, not 7 (what happened) and not 0 (what auto-suppression would have done). § 13 F102 reaches the same conclusion independently: *"surface it for a human call, not to auto-suppress or auto-reorder."*
 
-### 4.4 Ad-hoc orders — flag and exclude (§ 2.3, § 2.6)
+### 4.4 Ad-hoc orders — flag and exclude (§ 2.3, § 2.7)
 
 A ledger row with `order_type = 'adhoc'` excludes that code from the monthly export, and it appears in the held-back panel under *ad-hoc ordered*. No separate export button and no dashboard alarm this session — Rick's explicit call.
 
-### 4.5 The "Mark Fulfilled" relabel is a **decision gate, not a default**
+### 4.5 Backorder-risk notification (§ 2.4)
+
+The preventive half of this session. F101's FOC window stops the store ordering **too early**; this stops it failing to order **at all**.
+
+**Trigger — a reservation is at risk when its title's `foc_date` satisfies either:**
+- `isFocThisMonth(foc_date)` — FOC falls in the current calendar month (reuse `app.js:1375+`, do not reimplement); **or**
+- `foc_date <= app_settings.order_deadline` — FOC locks on or before the customer cutoff, so the monthly order will not cover it.
+
+Either condition means the FOC will lock before the monthly order goes out, so an **ad-hoc order is required**. Both are evaluated against unfulfilled reservations with no `order_submissions` row for that code.
+
+**Three states, and they must be told apart:**
+
+| State | Condition | What it means |
+|---|---|---|
+| **At risk** | trigger true, FOC **not** passed, not ordered | Actionable — place the ad-hoc order now |
+| **Backordered** | FOC **passed**, not ordered | Already failed — customer committed, cannot cancel, book cannot arrive |
+| *Cleared* | an `order_submissions` row exists for the code | Handled; drops off the list |
+
+**Where:** a persistent panel on the admin dashboard, visible without navigating to a tab, listing at-risk and backordered reservations with title, code, FOC date, **days remaining**, customer count and total copies — sorted soonest-FOC first. Backordered rows are visually distinct and sort to the top.
+
+**In-app, not email, in this session — and why.** Email means an Edge Function plus MailerSend, and the transactional sender identity is mid-reorganisation (F99: `noreply@mrcyberrick.us` on GoDaddy, consolidation onto `pulllist.app` pending an 2026-08-20 DMARC read; F72: per-tenant branding unresolved). Taking that dependency would couple a money-losing fix to an unrelated blocked workstream. A persistent in-app panel has no delivery dependency and cannot silently fail the way F96's send did.
+
+> **If Rick wants a pushed notification (email/SMS) rather than an in-app panel, that is a deliberate follow-on**, not a change the executing session makes — it inherits the F99/F72 sender-domain question. Record the request; do not build it here.
+
+**Coverage note:** this panel is new UI on a page with thin spec coverage. It needs a real-browser check (V6), not just a green suite.
+
+### 4.6 The "Mark Fulfilled" relabel is a **decision gate, not a default**
 
 The button is used to mean "ordered" (§ 2.4) while the code and the arrivals/shipment path treat `fulfilled` as arrival. Once a real order ledger exists these can finally be separated — but that changes what existing `fulfilled = true` rows mean, on production, in a live workflow.
 
 > **PAUSE → Rick.** Present the options (repoint the button to write order state and let `fulfilled` revert to arrival-only; or leave `fulfilled` untouched and add the order mark alongside it) **with** a statement of what happens to existing `fulfilled = true` rows under each. **Do not choose unilaterally, and do not migrate existing rows without explicit approval.**
 
-### 4.6 The feature is inert on day one unless the ledger is seeded
+### 4.7 The feature is inert on day one unless the ledger is seeded
 
-With an empty `order_submissions`, the duplicate check finds nothing and catches nothing. **The first real cycle after deploy is unprotected unless prior orders are loaded.** Hence S5 — at minimum the June and July archived order files. Stated plainly here because it is the difference between shipping a safeguard and shipping the *appearance* of one.
+With an empty `order_submissions`, the duplicate check finds nothing and catches nothing — **and every reservation looks un-ordered, so § 4.5's panel will over-report backorder risk on first run.** The first real cycle after deploy is unprotected unless prior orders are loaded. Hence S5 — at minimum the June and July archived order files. Stated plainly here because it is the difference between shipping a safeguard and shipping the *appearance* of one.
 
 ---
 
@@ -165,8 +216,9 @@ With an empty `order_submissions`, the duplicate check finds nothing and catches
 - `order_submissions` table + RLS + indexes (§ 4.2), staging then production.
 - Duplicate surfacing at export time (§ 4.3).
 - Ad-hoc flag + exclusion (§ 4.4).
-- The relabel decision (§ 4.5) — **presented**, applied only if approved.
-- Backfill of archived order files (§ 4.6 / S5) — non-blocking.
+- **Backorder-risk admin panel (§ 4.5)** — at-risk vs Backordered, in-app.
+- The relabel decision (§ 4.6) — **presented**, applied only if approved.
+- Backfill of archived order files (§ 4.7 / S5) — non-blocking.
 - Closeout: § 13 F101/F102, `CLAUDE.md` § Open findings.
 
 ### OUT — stop and ask
@@ -174,7 +226,9 @@ With an empty `order_submissions`, the duplicate check finds nothing and catches
 - **The reserved-titles report and the Paper Orders tab.** They stay month-scoped this session, which means they will **disagree with the export** — a known, accepted consequence, recorded in § 13 at closeout so it is not rediscovered as a bug. F101 flags the question; Rick scoped this session to the export path.
 - **F90 / F89.** F102's fix direction suggests pairing with F90's import-time snapshot. Not here — one session, one scope.
 - **F10** (`ON DELETE NO ACTION`). Untouched.
-- **Changing `fulfilled` semantics or migrating existing rows** without the § 4.5 approval.
+- **Pushed notifications (email/SMS) for backorder risk.** § 4.5 is in-app only; a push channel inherits the F99/F72 sender-domain question. Record the request, do not build it.
+- **Changing the FOC lock itself** (`isFocPast` / `isFocLocked`, `app.js:1358–1370`). This session makes the lock *safer* by warning before it bites; it does not alter when it bites or the committed-cannot-cancel behaviour.
+- **Changing `fulfilled` semantics or migrating existing rows** without the § 4.6 approval.
 - **The import scripts.** No import-side change is needed; if one appears necessary, that is a finding, not a scope expansion.
 - **`config.js`**, credentials, Edge Functions.
 
@@ -199,23 +253,29 @@ Intersect the archived order files in `Orders Archived/` against catalog `foc_da
 
 ### S3 — Exports
 1. Add the FOC-cycle selector and filtering (§ 4.1). Follow `admin.html:2161–2169` for null-FOC handling.
-2. Add the held-back panel — all four exclusion reasons, never a silent drop.
+2. Add the held-back panel — every bucket in § 4.1's table, never a silent drop. **Backordered must be visually distinct from "outside selected cycle."**
 3. Add the duplicate lookup and the "Already ordered" panel with per-title quantity control (§ 4.3). **Surface, never auto-suppress.**
 4. Ad-hoc exclusion (§ 4.4).
 5. **Gate V2 (inert-on-clean-slate):** with an empty ledger and all FOC dates selected, both exports must produce **byte-identical** output to the current build for the same data. This is the regression assertion that proves the change adds gates rather than altering the existing sheet.
 
-### S4 — The relabel decision
-> **PAUSE → Rick** per § 4.5. Present both options and the consequence for existing `fulfilled = true` rows. Implement only what is approved; if deferred, say so plainly and leave the label alone.
+### S3b — Backorder-risk panel (§ 4.5)
+1. Build the admin-dashboard panel. **Reuse `isFocThisMonth()` (`app.js:1375+`) — do not reimplement the date logic** (§ 2.4; F28 is the precedent for why). Read `app_settings.order_deadline` via `Settings.getOrderDeadline()` (`app.js:624`) for the second trigger condition.
+2. Render **At risk** and **Backordered** as visually distinct states, soonest-FOC first, Backordered on top. Show days remaining.
+3. A code with any `order_submissions` row clears from the list.
+4. **Gate V7 (backorder detection):** seed three staging reservations — (a) FOC later this month, unordered → **At risk**; (b) FOC already passed, unordered → **Backordered**; (c) FOC already passed **with** a ledger row → **absent**. All three must classify correctly. (c) is the one that proves the panel reads the ledger rather than only the date.
 
-### S5 — Seed the ledger (§ 4.6, non-blocking)
-Load the archived June and July order files into `order_submissions` (`order_type = 'monthly'`, `submitted_on` from the filename date). **Count and show the rows before inserting**, per the F95 precedent — a bad backfill would suppress or misreport real titles on the next cycle. If this is not reached, **say so explicitly in the status update**, because § 4.6 means the safeguard is blind until it happens.
+### S4 — The relabel decision
+> **PAUSE → Rick** per § 4.6. Present both options and the consequence for existing `fulfilled = true` rows. Implement only what is approved; if deferred, say so plainly and leave the label alone.
+
+### S5 — Seed the ledger (§ 4.7, non-blocking)
+Load the archived June and July order files into `order_submissions` (`order_type = 'monthly'`, `submitted_on` from the filename date). **Count and show the rows before inserting**, per the F95 precedent — a bad backfill would suppress or misreport real titles on the next cycle. If this is not reached, **say so explicitly in the status update**, because § 4.7 means both the duplicate check and § 4.5's panel are unreliable until it happens.
 
 ### S6 — Verification
 1. **Gate V3 (F101 reproduction):** seed a staging reservation whose FOC is two cycles out (the MIDNIGHT X-MEN #2 shape — `catalog_month` = current, `foc_date` ≈ +3 months). Assert it is **excluded** from the export and **appears** in the held-back panel under *outside selected cycle*.
 2. **Gate V4 (F102 reproduction):** record a ledger row for a code, then seed the same code re-listed in a later `catalog_month` with fresh reservations. Assert the export **flags** it with prior quantity, date and cycle, and does **not** auto-suppress it.
 3. **Gate V5 (ad-hoc):** mark a code `adhoc`; assert the monthly export excludes it and lists it as such.
 4. `/deploy-staging`. **Push first, confirm the new bytes are served, then run the suite** — `CLAUDE.md` § Smoke-test ordering.
-5. **Gate V6:** full `run-smoke.ps1` green **plus a real-browser check of the export UI**. The export path has **no Playwright coverage** — a green suite is not evidence here (`CLAUDE.md` § "Green is not the same as verified"; memory: `feedback_verify_css_visibility_real_browser`). Download both files and inspect them.
+5. **Gate V6:** full `run-smoke.ps1` green **plus a real-browser check of the export UI and the § 4.5 panel**. Both are new UI on paths with no Playwright coverage — a green suite is not evidence here (`CLAUDE.md` § "Green is not the same as verified"; memory: `feedback_verify_css_visibility_real_browser`). Download both export files and inspect them; confirm the panel renders At risk and Backordered distinguishably, including at mobile width.
 6. Tear down every seeded fixture; **verify with a live SELECT returning zero rows**, not "we ran the teardown."
 
 ### S7 — Closeout
@@ -236,8 +296,9 @@ Load the archived June and July order files into `order_submissions` (`order_typ
 | **V3** | A two-cycles-out title is excluded **and** listed in the held-back panel | Exclusion alone would trade one silent failure for another |
 | **V4** | A re-listed already-ordered code is **flagged with prior qty**, not auto-suppressed | Auto-suppression would have ordered 0 where 2 were correct |
 | **V5** | An `adhoc` code is excluded from the monthly export and shown as excluded | § 2.3 — the second route to the same duplicate failure |
-| **V6** | Full suite green **and** a real-browser export check with both files inspected | The export path has zero spec coverage |
-| **V7** | § 13 + `CLAUDE.md` updated; plan committed to `staging` | Document Integrity |
+| **V6** | Full suite green **and** a real-browser check of both exports and the § 4.5 panel | Both are new UI with zero spec coverage |
+| **V7** | At risk / Backordered / cleared-by-ledger all classify correctly | Proves the panel reads the ledger, not just the date |
+| **V8** | § 13 + `CLAUDE.md` updated; plan committed to `staging` | Document Integrity |
 
 ---
 
@@ -247,12 +308,13 @@ Load the archived June and July order files into `order_submissions` (`order_typ
 - [ ] S1 band measurement run; default preselection stated as derived-or-not, never invented
 - [ ] `order_submissions` live on staging with RLS; **V1** green by simulated-role test
 - [ ] Both exports FOC-filtered with an explicit multi-select cycle; **V2** byte-identical on a clean slate
-- [ ] Held-back panel shows all four exclusion reasons; nothing dropped silently
+- [ ] Held-back panel shows every bucket in § 4.1's table; **Backordered visually distinct from "outside selected cycle"**; nothing dropped silently
 - [ ] Duplicate surfacing live with per-title quantity control; **V4** confirms no auto-suppression
 - [ ] Ad-hoc flag + exclusion live; **V5** green
-- [ ] § 4.5 relabel decision **presented to Rick**; implemented only if approved, or recorded as deferred
-- [ ] S5 backfill done — or its absence stated explicitly, with § 4.6's consequence repeated
-- [ ] **V3**/**V6**/**V7** green; all seeded fixtures torn down and verified by SELECT
+- [ ] Backorder-risk panel live, reusing `isFocThisMonth()` rather than reimplementing it; **V7** green on all three states
+- [ ] § 4.6 relabel decision **presented to Rick**; implemented only if approved, or recorded as deferred
+- [ ] S5 backfill done — or its absence stated explicitly, with § 4.7's consequence repeated (the panel over-reports until it happens)
+- [ ] **V3**/**V6**/**V8** green; all seeded fixtures torn down and verified by SELECT
 - [ ] § 13 F101/F102 updated, incl. the accepted export ↔ reserved-titles-report divergence
 - [ ] Production promotion raised with Rick (not performed unasked)
 
@@ -263,7 +325,8 @@ Load the archived June and July order files into `order_submissions` (`order_typ
 - **Client:** `git revert` on `staging`. The exports are pure client code with no persisted state of their own.
 - **Schema:** `order_submissions` is **additive** — nothing existing reads or writes it, so leaving the table in place is a safe rollback for the client change. Dropping it is only necessary if the design is abandoned.
 - **Backfill (S5):** delete by `submitted_on` / `catalog_month`. Capture the inserted row list before inserting.
-- **The § 4.5 relabel:** if approved and applied, this is the only genuinely hard-to-reverse piece, because it changes what `fulfilled` means to the humans using it. If it is applied, record the pre-change `fulfilled = true` row set first.
+- **The § 4.6 relabel:** if approved and applied, this is the only genuinely hard-to-reverse piece, because it changes what `fulfilled` means to the humans using it. If it is applied, record the pre-change `fulfilled = true` row set first.
+- **The § 4.5 panel** is read-only — it writes nothing and can be reverted with the rest of the client change.
 
 ---
 
