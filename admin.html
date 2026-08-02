@@ -61,6 +61,22 @@
 
       /* Paper Orders: stack the two top panels on mobile */
       #paper-top-grid { grid-template-columns: 1fr !important; }
+
+      /* Order Builder / Mark Ordered modals: full-bleed padding, no fixed max-width squeeze */
+      #order-builder-overlay > div,
+      #mark-ordered-overlay > div {
+        padding: 20px 16px !important;
+        max-width: 100% !important;
+      }
+      #order-builder-generate,
+      #order-builder-cancel,
+      #mark-ordered-save,
+      #mark-ordered-cancel { width: 100%; justify-content: center; }
+      #order-builder-summary { flex: 1 1 100%; order: -1; margin-bottom: 4px; }
+
+      /* Backorder-risk panel rows: allow title to wrap instead of clipping */
+      .backorder-risk-row { flex-wrap: wrap; }
+      .backorder-risk-row > div:first-child { white-space: normal !important; }
     }
   </style>
 </head>
@@ -151,6 +167,10 @@
       <div class="stat-label">Fulfilled (excl. exports)</div>
     </div>
   </div>
+
+  <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
+  <div id="backorder-risk-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
+       border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Export Bar -->
   <div class="export-bar">
@@ -430,6 +450,85 @@
   </div>
 </div>
 
+<!-- Order Builder Modal (F101/F102) — shared shell for the Lunar and PRH
+     order-cycle selector, populated per-distributor by openOrderBuilder() -->
+<div id="order-builder-overlay" style="display:none;position:fixed;inset:0;z-index:200;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:28px;width:100%;max-width:760px;max-height:90vh;overflow-y:auto;position:relative;box-sizing:border-box">
+    <button id="order-builder-close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 id="order-builder-title" style="margin:0 0 4px;font-size:1.1rem">Order Builder</h2>
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.5">
+      Select the FOC cycle(s) you're ordering against this run. Everything held back is
+      listed below — nothing is dropped silently.
+    </p>
+
+    <div id="order-builder-cycles"></div>
+    <div id="order-builder-already-ordered"></div>
+    <div id="order-builder-heldback"></div>
+
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+      <span id="order-builder-summary" style="flex:1;font-size:0.8rem;color:var(--text-muted)"></span>
+      <button class="btn btn-ghost" id="order-builder-cancel">Cancel</button>
+      <button class="btn btn-primary" id="order-builder-generate">Generate &amp; Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mark Order Submitted Modal (F101/F102 write path into order_submissions) -->
+<div id="mark-ordered-overlay" style="display:none;position:fixed;inset:0;z-index:210;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:28px;width:100%;max-width:420px;margin:16px;position:relative;box-sizing:border-box">
+    <button id="mark-ordered-close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 4px;font-size:1.1rem">Mark Order Submitted</h2>
+    <p id="mark-ordered-subtitle" style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px"></p>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label for="mo-qty" style="display:block;font-size:0.78rem;font-weight:600;
+               color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">QUANTITY SUBMITTED</label>
+        <input id="mo-qty" type="number" min="1"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.78rem;font-weight:600;
+               color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">ORDER TYPE</label>
+        <div style="display:flex;gap:16px;font-size:0.88rem">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="mo-type" value="monthly" checked> Monthly cycle
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="mo-type" value="adhoc"> Ad-hoc
+          </label>
+        </div>
+      </div>
+      <div>
+        <label for="mo-date" style="display:block;font-size:0.78rem;font-weight:600;
+               color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">SUBMITTED ON</label>
+        <input id="mo-date" type="date"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="mark-ordered-cancel">Cancel</button>
+      <button class="btn btn-primary" id="mark-ordered-save">Save</button>
+    </div>
+
+    <div id="mark-ordered-result" style="display:none;margin-top:16px;padding:10px 14px;
+         border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
+  </div>
+</div>
+
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
@@ -445,6 +544,136 @@
 
   let allPreorders = [];
   let profileMap   = {};
+
+  // ── Order ledger (F101/F102 — order_submissions) ───────────
+  // order_submissions is written manually (not on export click) and read
+  // fresh whenever the Order Builder opens or the backorder-risk panel
+  // renders, so an admin action elsewhere on the page (marking an order)
+  // is reflected without a full reload. See docs/order-export-foc-window-
+  // and-order-state.md § 4.2/§ 4.3.
+  let orderLedger  = [];
+  let orderDeadline = null; // 'YYYY-MM-DD' or null — shared with the Order Deadline panel below
+
+  async function loadOrderLedger() {
+    const { data, error } = await db.from('order_submissions')
+      .select('id, distributor, order_code, item_code, title, quantity, order_type, foc_date, catalog_month, submitted_on, created_at')
+      .order('submitted_on', { ascending: false });
+    if (error) {
+      console.error('order_submissions load failed:', error.message);
+      orderLedger = [];
+      return;
+    }
+    orderLedger = data || [];
+  }
+
+  function ledgerMatchesFor(distributor, code) {
+    if (!code) return [];
+    return orderLedger.filter(r => r.distributor === distributor && r.order_code === code);
+  }
+
+  // The code actually submitted to each distributor — mirrors the fallback
+  // chains already used in the Lunar/PRH export line-builders below, so a
+  // ledger row (keyed on order_code) matches whichever code the export
+  // would have used to identify the same title.
+  function exportCode(c, distributor) {
+    return distributor === 'PRH'
+      ? (c.isbn || c.item_code || c.upc || '')
+      : (c.item_code || c.upc || c.isbn || '');
+  }
+
+  function daysUntilFoc(dateStr) {
+    if (!dateStr) return null;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const target = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    target.setHours(0, 0, 0, 0);
+    return Math.round((target - today) / 86400000);
+  }
+
+  // Group a set of { p } entries (p = preorder row with joined catalog) by
+  // catalog.id — one line per title with total copies and customer count.
+  // Deliberately separate from renderByDistributor's own groupByItem
+  // (closure-local there, and shaped for the fulfilled-toggle UI, not this).
+  function groupByCatalogId(entries) {
+    const map = new Map();
+    entries.forEach(({ p }) => {
+      const c = p.catalog || {};
+      if (!c.id) return;
+      if (!map.has(c.id)) map.set(c.id, { catalog: c, qty: 0, customers: new Set() });
+      const e = map.get(c.id);
+      e.qty += (p.quantity || 1);
+      e.customers.add(p.user_id);
+    });
+    return [...map.values()].sort((a, b) => (a.catalog.foc_date || '').localeCompare(b.catalog.foc_date || ''));
+  }
+
+  // Every distinct FOC date among a distributor's current-month unfulfilled
+  // reservations, with title/copy counts — the order-cycle checklist source.
+  // Includes past dates (flagged, unchecked by default) so "select all"
+  // can reproduce the pre-fix export exactly (V2).
+  function distinctFocDates(distributor) {
+    const rows = allPreorders.filter(p =>
+      p.catalog?.distributor === distributor && !p.fulfilled && p.catalog?.foc_date);
+    const map = new Map();
+    rows.forEach(p => {
+      const foc = p.catalog.foc_date;
+      if (!map.has(foc)) map.set(foc, { titles: new Set(), copies: 0 });
+      const entry = map.get(foc);
+      entry.titles.add(p.catalog.id);
+      entry.copies += (p.quantity || 1);
+    });
+    return [...map.entries()]
+      .map(([foc, v]) => ({ foc, titleCount: v.titles.size, copies: v.copies }))
+      .sort((a, b) => a.foc.localeCompare(b.foc));
+  }
+
+  // Classify a distributor's unfulfilled current-month reservations against
+  // the selected FOC cycle(s) and the order_submissions ledger. Buckets
+  // mirror docs/order-export-foc-window-and-order-state.md § 4.1's table.
+  // Precedence: ledger match (adhoc, then any-order) beats FOC classification
+  // — an already-ordered code is a human call regardless of which cycle its
+  // FOC falls in.
+  function classifyForExport(distributor, selectedFocDates) {
+    const rows = allPreorders.filter(p => p.catalog?.distributor === distributor && !p.fulfilled);
+    const buckets = {
+      included: [], noFoc: [], backordered: [], atRisk: [],
+      outsideCycle: [], alreadyOrdered: [], adhocOrdered: [],
+    };
+
+    rows.forEach(p => {
+      const c = p.catalog || {};
+      const code = exportCode(c, distributor);
+      const matches = ledgerMatchesFor(distributor, code);
+
+      if (matches.some(m => m.order_type === 'adhoc')) {
+        buckets.adhocOrdered.push({ p, matches });
+        return;
+      }
+      if (matches.length) {
+        buckets.alreadyOrdered.push({ p, matches });
+        return;
+      }
+      if (!c.foc_date) {
+        buckets.noFoc.push({ p });
+        buckets.included.push(p);
+        return;
+      }
+      if (selectedFocDates.has(c.foc_date)) {
+        buckets.included.push(p);
+        return;
+      }
+      if (isFocPast(c.foc_date)) {
+        buckets.backordered.push({ p });
+      } else if (isFocThisMonth(c.foc_date) || (orderDeadline && c.foc_date <= orderDeadline)) {
+        buckets.atRisk.push({ p });
+      } else {
+        buckets.outsideCycle.push({ p });
+      }
+    });
+
+    return buckets;
+  }
 
   // ── Load Data ─────────────────────────────────────────────
   let currentCatalogMonth = null;
@@ -470,6 +699,8 @@
         `)
         .order('created_at', { ascending: false }),
       db.from('user_profiles').select('id, full_name'),
+      loadOrderLedger(),
+      Settings.getOrderDeadline().then(v => { orderDeadline = v; }),
     ]);
 
     if (preordersRes.error) {
@@ -502,6 +733,7 @@
     renderByCustomer();
     renderByDistributor();
     renderAllItems();
+    renderBackorderRiskPanel();
   }
 
   await loadData();
@@ -530,6 +762,91 @@
         fulfilledWrap.style.display = 'none';
       }
     }
+  }
+
+  // ── Backorder-risk panel (F101 § 2.4/§ 4.5) ────────────────
+  // Persistent, tab-independent: a reservation whose title's FOC locks
+  // before the monthly order can go out (this calendar month, or on/before
+  // the customer order_deadline) and has no order_submissions row for its
+  // code needs an ad-hoc order placed NOW — once FOC passes with no order
+  // placed, the title is "Backordered": the customer is committed (the FOC
+  // lock blocks cancellation, catalog.html:1217-1218) and the book cannot
+  // arrive. Any ledger row (monthly or adhoc) clears a code from this list
+  // regardless of date — proven by V7(c).
+  function computeBackorderRisk() {
+    const rows = allPreorders.filter(p => !p.fulfilled && p.catalog?.foc_date);
+    const atRisk = [], backordered = [];
+
+    rows.forEach(p => {
+      const c = p.catalog;
+      const code = exportCode(c, c.distributor);
+      if (ledgerMatchesFor(c.distributor, code).length) return; // cleared
+
+      const past    = isFocPast(c.foc_date);
+      const trigger = past || isFocThisMonth(c.foc_date) || (orderDeadline && c.foc_date <= orderDeadline);
+      if (!trigger) return;
+
+      (past ? backordered : atRisk).push({ p });
+    });
+
+    return {
+      backordered: groupByCatalogId(backordered),
+      atRisk:      groupByCatalogId(atRisk),
+    };
+  }
+
+  function renderBackorderRiskPanel() {
+    const panel = document.getElementById('backorder-risk-panel');
+    if (!panel) return;
+
+    const { backordered, atRisk } = computeBackorderRisk();
+
+    if (!backordered.length && !atRisk.length) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      return;
+    }
+    panel.style.display = '';
+
+    const rowHtml = (entries, isBackordered) => entries.map(({ catalog: c, qty, customers }) => {
+      const days = daysUntilFoc(c.foc_date);
+      const daysLabel = isBackordered
+        ? `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`
+        : (days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} left`);
+      return `
+        <div class="backorder-risk-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+             border-radius:var(--radius);background:${isBackordered ? 'rgba(232,50,28,0.08)' : 'rgba(245,158,11,0.08)'};
+             border:1px solid ${isBackordered ? 'rgba(232,50,28,0.3)' : 'rgba(245,158,11,0.3)'}">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${escapeHtml(c.title || '')}
+              <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
+            </div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">
+              FOC ${formatDate(c.foc_date)} · ${daysLabel} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
+            </div>
+          </div>
+          <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+                       color:${isBackordered ? '#ff8070' : 'var(--warning)'}">
+            ${isBackordered ? 'Backordered' : 'At risk'}
+          </span>
+        </div>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="margin:0;font-size:0.95rem;font-family:var(--font-display);letter-spacing:0.03em">
+          ⚠ Backorder Risk — needs an ad-hoc order
+        </h3>
+        <span style="font-size:0.75rem;color:var(--text-muted)">
+          ${backordered.length ? `${backordered.length} backordered` : ''}${backordered.length && atRisk.length ? ' · ' : ''}${atRisk.length ? `${atRisk.length} at risk` : ''}
+        </span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${rowHtml(backordered, true)}
+        ${rowHtml(atRisk, false)}
+      </div>
+    `;
   }
 
   // ── By Customer ───────────────────────────────────────────
@@ -599,6 +916,17 @@
       return Object.values(map).sort((a, b) => (a.catalog?.foc_date || '').localeCompare(b.catalog?.foc_date || ''));
     }
 
+    // order_submissions ledger badge for this title, if any (F102 § 4.2)
+    function ledgerBadge(c) {
+      const matches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
+      if (!matches.length) return '';
+      const adhoc   = matches.some(m => m.order_type === 'adhoc');
+      const totalQty = matches.reduce((s, m) => s + (m.quantity || 0), 0);
+      return `<div class="col-sub" style="color:var(--accent);font-size:0.72rem">
+        \u{1F4CB} ${adhoc ? 'Ad-hoc ordered' : 'On order'} — ${totalQty} cop${totalQty===1?'y':'ies'}
+      </div>`;
+    }
+
     function renderDistTable(grouped) {
       if (!grouped.length) return `<div class="empty-state"><p>No reservations</p></div>`;
       return `
@@ -633,6 +961,7 @@
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
                   ${allFulfilled
                     ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.72rem">\u2713 Fulfilled — excluded from order exports</div>` : ''}
+                  ${ledgerBadge(c)}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
@@ -665,6 +994,12 @@
                         : 'Mark all copies of this title as fulfilled (in hand — skip in order exports)'}">
                     ${allFulfilled ? '\u2713 Fulfilled' : someFulfilled ? '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')' : 'Mark Fulfilled'}
                   </button>
+                  <button
+                    class="btn btn-sm mark-ordered-btn"
+                    data-catalog-id="${c.id}"
+                    title="Record that this title was submitted to a distributor (writes order_submissions)">
+                    Mark Ordered
+                  </button>
                 </td>
               </tr>
             `}).join('')}
@@ -686,6 +1021,12 @@
       container.parentNode.replaceChild(fresh, container);
 
       fresh.addEventListener('click', async e => {
+        const markOrderedBtn = e.target.closest('.mark-ordered-btn');
+        if (markOrderedBtn) {
+          openMarkOrderedModal(markOrderedBtn.dataset.catalogId);
+          return;
+        }
+
         const btn = e.target.closest('.fulfill-toggle-btn');
         if (!btn) return;
 
@@ -877,50 +1218,322 @@
       `all-preorders-${DateUtils.todayLocal()}${suffix}.csv`);
   });
 
-  // Lunar order-entry format:
-  //   [Product Code or UPC or ISBN], [Qty]  — one product per line, comma-delimited
-  //   Uses item_code (Lunar product code) as the primary identifier; falls
-  //   back to UPC then ISBN if item_code is absent.
-  document.getElementById('btn-export-lunar').addEventListener('click', () => {
-    const lunar         = allPreorders.filter(p => p.catalog?.distributor === 'Lunar');
-    const hadFulfilled  = lunar.some(p => p.fulfilled);
+  // Lunar/PRH order-entry format is unchanged (F101/F102 add a gate in
+  // FRONT of this, not a new format): [code],[qty] per line, comma-delimited,
+  // no header. Lunar falls back ItemCode → UPC → ISBN; PRH falls back
+  // ISBN → ItemCode → UPC. Both buttons now open the Order Builder (§ 4.1)
+  // instead of downloading immediately — the actual download happens from
+  // the "Generate & Download" button inside it, via generateOrderExport().
+  document.getElementById('btn-export-lunar').addEventListener('click', () => openOrderBuilder('Lunar'));
+  document.getElementById('btn-export-prh').addEventListener('click', () => openOrderBuilder('PRH'));
+
+  // ── Order Builder modal (F101/F102) ────────────────────────
+  const obOverlay   = document.getElementById('order-builder-overlay');
+  const obTitle     = document.getElementById('order-builder-title');
+  const obCycles    = document.getElementById('order-builder-cycles');
+  const obAlready   = document.getElementById('order-builder-already-ordered');
+  const obHeldback  = document.getElementById('order-builder-heldback');
+  const obSummary   = document.getElementById('order-builder-summary');
+
+  let builderDistributor   = null;
+  let builderSelectedDates = new Set();
+  let builderOverrides     = {}; // catalog_id -> { include: bool, qty: number }
+
+  async function openOrderBuilder(distributor) {
+    builderDistributor = distributor;
+    builderOverrides    = {};
+    await loadOrderLedger(); // fresh — an order may have been marked since page load
+
+    const dates       = distinctFocDates(distributor);
+    const todayStr    = DateUtils.todayLocal();
+    const futureDates = dates.filter(d => d.foc >= todayStr);
+    builderSelectedDates = new Set(futureDates.length ? [futureDates[0].foc] : []);
+
+    obTitle.textContent = `${distributor} Order Builder`;
+    renderOrderBuilder();
+    obOverlay.style.display = 'flex';
+  }
+
+  function closeOrderBuilder() {
+    obOverlay.style.display = 'none';
+  }
+
+  function renderOrderBuilder() {
+    const distributor = builderDistributor;
+    const dates        = distinctFocDates(distributor);
+    const todayStr      = DateUtils.todayLocal();
+
+    obCycles.innerHTML = dates.length ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin:0;letter-spacing:0.03em">ORDER CYCLE (FOC DATE)</h3>
+        <span style="font-size:0.75rem">
+          <a href="#" id="ob-select-all" style="color:var(--accent)">Select all</a> ·
+          <a href="#" id="ob-select-none" style="color:var(--accent)">None</a>
+        </span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;
+                  border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:16px">
+        ${dates.map(d => {
+          const past    = d.foc < todayStr;
+          const checked = builderSelectedDates.has(d.foc) ? 'checked' : '';
+          return `
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
+              <input type="checkbox" class="ob-cycle-cb" data-foc="${d.foc}" ${checked}>
+              ${formatDate(d.foc)} — ${d.titleCount} title${d.titleCount === 1 ? '' : 's'}, ${d.copies} cop${d.copies === 1 ? 'y' : 'ies'}
+              ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed</span>' : ''}
+            </label>`;
+        }).join('')}
+      </div>`
+      : `<div class="empty-state" style="padding:16px 0"><p>No unfulfilled ${distributor} reservations with an FOC date this month.</p></div>`;
+
+    obCycles.querySelectorAll('.ob-cycle-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) builderSelectedDates.add(cb.dataset.foc);
+        else builderSelectedDates.delete(cb.dataset.foc);
+        renderOrderBuilderResults();
+      });
+    });
+    obCycles.querySelector('#ob-select-all')?.addEventListener('click', e => {
+      e.preventDefault();
+      builderSelectedDates = new Set(dates.map(d => d.foc));
+      renderOrderBuilder();
+    });
+    obCycles.querySelector('#ob-select-none')?.addEventListener('click', e => {
+      e.preventDefault();
+      builderSelectedDates = new Set();
+      renderOrderBuilder();
+    });
+
+    renderOrderBuilderResults();
+  }
+
+  function renderOrderBuilderResults() {
+    const distributor = builderDistributor;
+    const buckets      = classifyForExport(distributor, builderSelectedDates);
+
+    // "Already ordered" — human call, never auto-suppressed (§ 4.3 / V4)
+    obAlready.innerHTML = buckets.alreadyOrdered.length ? `
+      <h3 style="font-size:0.85rem;font-weight:600;color:var(--warning);margin:0 0 8px;letter-spacing:0.03em">
+        ⚠ ALREADY ORDERED — ${buckets.alreadyOrdered.length} title${buckets.alreadyOrdered.length === 1 ? '' : 's'} (your call — not auto-suppressed)
+      </h3>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+        ${buckets.alreadyOrdered.map(({ p, matches }) => {
+          const c        = p.catalog || {};
+          const totalQty = allPreorders
+            .filter(x => x.catalog?.id === c.id && !x.fulfilled)
+            .reduce((s, x) => s + (x.quantity || 1), 0);
+          const priorQty  = matches.reduce((s, m) => s + (m.quantity || 0), 0);
+          const suggested = Math.max(0, totalQty - priorQty);
+          const key       = c.id;
+          if (!builderOverrides[key]) builderOverrides[key] = { include: suggested > 0, qty: suggested };
+          const ov = builderOverrides[key];
+          const priorLines = matches
+            .map(m => `${m.quantity}× on ${formatDate(m.submitted_on)} (cycle ${formatDate(m.foc_date)}, ${m.order_type})`)
+            .join('; ');
+          return `
+            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
+              <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')}
+                <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.75rem"> ${escapeHtml(c.item_code || '')}</span>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text-muted);margin:4px 0">Prior: ${priorLines}</div>
+              <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px">
+                Currently reserved: ${totalQty} · already on order: ${priorQty}
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;flex-wrap:wrap">
+                <input type="checkbox" class="ob-already-include" data-catalog-id="${key}" ${ov.include ? 'checked' : ''}>
+                Include in this export, qty:
+                <input type="number" min="0" max="${totalQty}" class="ob-already-qty" data-catalog-id="${key}"
+                       value="${ov.qty}" ${ov.include ? '' : 'disabled'}
+                       style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
+                              color:var(--text-primary);border-radius:var(--radius);padding:4px 6px">
+              </label>
+            </div>`;
+        }).join('')}
+      </div>`
+      : '';
+
+    obAlready.querySelectorAll('.ob-already-include').forEach(cb => {
+      cb.addEventListener('change', () => {
+        builderOverrides[cb.dataset.catalogId].include = cb.checked;
+        renderOrderBuilderResults();
+      });
+    });
+    obAlready.querySelectorAll('.ob-already-qty').forEach(inp => {
+      inp.addEventListener('input', () => {
+        builderOverrides[inp.dataset.catalogId].qty = Math.max(0, parseInt(inp.value) || 0);
+      });
+    });
+
+    // Held-back panel — every bucket, nothing dropped silently (§ 4.1)
+    const section = (label, color, entries) => entries.length ? `
+      <div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;color:${color};margin-bottom:4px">${label} (${entries.length})</div>
+        <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">
+          ${groupByCatalogId(entries).map(({ catalog: c, qty }) =>
+            `<li>${escapeHtml(c.title || '')} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('')}
+        </ul>
+      </div>` : '';
+
+    const fulfilledCount = allPreorders.filter(p => p.catalog?.distributor === distributor && p.fulfilled).length;
+    const nothingHeld = !buckets.backordered.length && !buckets.atRisk.length && !buckets.outsideCycle.length
+      && !buckets.adhocOrdered.length && !buckets.noFoc.length;
+
+    obHeldback.innerHTML = `
+      <h3 style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin:0 0 10px;letter-spacing:0.03em">HELD BACK</h3>
+      ${section('🔴 Backordered — FOC passed, never ordered', '#ff8070', buckets.backordered)}
+      ${section('🟡 At risk — needs an ad-hoc order before FOC', 'var(--warning)', buckets.atRisk)}
+      ${section('Outside selected cycle', 'var(--text-muted)', buckets.outsideCycle)}
+      ${section('Ad-hoc ordered — excluded automatically', 'var(--text-muted)', buckets.adhocOrdered)}
+      ${buckets.noFoc.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${buckets.noFoc.length} title${buckets.noFoc.length===1?'':'s'} with no FOC date on file — included regardless of cycle selection.</div>` : ''}
+      ${fulfilledCount ? `<div style="font-size:0.78rem;color:var(--text-muted)">${fulfilledCount} already fulfilled — excluded, not shown above.</div>` : ''}
+      ${nothingHeld && !fulfilledCount ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
+    `;
+
+    obSummary.textContent = `${buckets.included.length} title${buckets.included.length === 1 ? '' : 's'} ready to export`;
+  }
+
+  document.getElementById('order-builder-close').addEventListener('click', closeOrderBuilder);
+  document.getElementById('order-builder-cancel').addEventListener('click', closeOrderBuilder);
+  obOverlay.addEventListener('click', e => { if (e.target === obOverlay) closeOrderBuilder(); });
+
+  document.getElementById('order-builder-generate').addEventListener('click', () => {
+    const distributor = builderDistributor;
+    const buckets      = classifyForExport(distributor, builderSelectedDates);
+
+    // Normal rows go through the UNCHANGED makeOrderSheetRows — this is the
+    // byte-identical path V2 checks (empty ledger + every cycle ticked ⇒
+    // buckets.included == the old unfiltered unfulfilled set).
+    const baseRows = makeOrderSheetRows(buckets.included);
+
+    // Admin-approved "already ordered" rows get added back explicitly, at
+    // whatever quantity was chosen (full, reduced, or excluded via qty 0 /
+    // unchecked) — never auto-suppressed (§ 4.3 / V4).
+    const extraRows = buckets.alreadyOrdered
+      .map(({ p }) => {
+        const ov = builderOverrides[p.catalog.id];
+        if (!ov || !ov.include || ov.qty <= 0) return null;
+        const c = p.catalog;
+        return {
+          Distributor: c.distributor, ItemCode: c.item_code, UPC: c.upc, ISBN: c.isbn,
+          Title: c.title, Series: c.series_name, Publisher: c.publisher, Format: c.format,
+          IssueNumber: c.issue_number, VariantType: c.variant_type,
+          TotalQty: ov.qty, UnitPrice: c.price_usd,
+          TotalValue: ((parseFloat(c.price_usd) || 0) * ov.qty).toFixed(2),
+          FOCDate: c.foc_date, OnSaleDate: c.on_sale_date,
+        };
+      })
+      .filter(Boolean);
+
+    const consolidated = [...baseRows, ...extraRows]
+      .sort((a, b) => (a.ItemCode || '').localeCompare(b.ItemCode || ''));
+
+    if (!consolidated.length) { toast(`No ${distributor} reservations selected for export`, 'error'); return; }
+
+    const hadFulfilled = allPreorders.some(p => p.catalog?.distributor === distributor && p.fulfilled);
     const suffix        = hadFulfilled ? '-excl-fulfilled' : '';
-    const consolidated  = makeOrderSheetRows(lunar); // fulfilled already filtered inside
-    if (!consolidated.length) { toast('No unfulfilled Lunar reservations to export', 'error'); return; }
     const lines = consolidated.map(r => {
-      const code = r.ItemCode || r.UPC || r.ISBN || '';
+      const code = distributor === 'PRH'
+        ? (r.ISBN || r.ItemCode || r.UPC || '')
+        : (r.ItemCode || r.UPC || r.ISBN || '');
       return `${code},${r.TotalQty}`;
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `lunar-order-${DateUtils.todayLocal()}${suffix}.txt`;
+    const blob   = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    const prefix = distributor === 'PRH' ? 'prh-order' : 'lunar-order';
+    a.download   = `${prefix}-${DateUtils.todayLocal()}${suffix}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+
+    toast(`${distributor} order sheet generated — ${consolidated.length} title${consolidated.length===1?'':'s'}`);
+    closeOrderBuilder();
   });
 
-  // PRH order-entry format:
-  //   ISBN,Qty  — one product per line, no header, no spaces
-  //   Uses ISBN as the primary identifier; falls back to item_code (PRH MainIdentifier)
-  //   then UPC if ISBN is absent.
-  document.getElementById('btn-export-prh').addEventListener('click', () => {
-    const prh          = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
-    const hadFulfilled = prh.some(p => p.fulfilled);
-    const suffix       = hadFulfilled ? '-excl-fulfilled' : '';
-    const consolidated = makeOrderSheetRows(prh); // fulfilled already filtered inside
-    if (!consolidated.length) { toast('No unfulfilled PRH reservations to export', 'error'); return; }
-    const lines = consolidated.map(r => {
-      const code = r.ISBN || r.ItemCode || r.UPC || '';
-      return `${code},${r.TotalQty}`;
+  // ── Mark Order Submitted modal (F101/F102 write path) ──────
+  // The only writer of order_submissions in this session (§ 4.2 — "written
+  // manually, not on export click"). Deliberately independent of the
+  // existing Mark Fulfilled button/`fulfilled` flag — see § 4.6, PAUSE →
+  // Rick: this additive shape ships as the safe default; repointing Mark
+  // Fulfilled itself is a separate, explicitly-approved follow-up.
+  const moOverlay  = document.getElementById('mark-ordered-overlay');
+  const moSubtitle = document.getElementById('mark-ordered-subtitle');
+  const moQty      = document.getElementById('mo-qty');
+  const moDate     = document.getElementById('mo-date');
+  const moSave     = document.getElementById('mark-ordered-save');
+  const moResult   = document.getElementById('mark-ordered-result');
+
+  let markOrderedCatalog = null;
+
+  function openMarkOrderedModal(catalogId) {
+    const match = allPreorders.find(p => p.catalog?.id === catalogId);
+    if (!match) return;
+    markOrderedCatalog = match.catalog;
+
+    const totalQty = allPreorders
+      .filter(x => x.catalog?.id === catalogId && !x.fulfilled)
+      .reduce((s, x) => s + (x.quantity || 1), 0);
+
+    moSubtitle.textContent =
+      `${markOrderedCatalog.title || ''} (${markOrderedCatalog.item_code || markOrderedCatalog.upc || markOrderedCatalog.isbn || '—'}) — ${markOrderedCatalog.distributor}`;
+    moQty.value  = totalQty || 1;
+    moDate.value = DateUtils.todayLocal();
+    document.querySelector('input[name="mo-type"][value="monthly"]').checked = true;
+    moResult.style.display = 'none';
+    moSave.disabled    = false;
+    moSave.textContent = 'Save';
+    moOverlay.style.display = 'flex';
+    setTimeout(() => moQty.focus(), 50);
+  }
+
+  function closeMarkOrderedModal() {
+    moOverlay.style.display = 'none';
+    markOrderedCatalog = null;
+  }
+
+  document.getElementById('mark-ordered-close').addEventListener('click', closeMarkOrderedModal);
+  document.getElementById('mark-ordered-cancel').addEventListener('click', closeMarkOrderedModal);
+  moOverlay.addEventListener('click', e => { if (e.target === moOverlay) closeMarkOrderedModal(); });
+
+  moSave.addEventListener('click', async () => {
+    if (!markOrderedCatalog) return;
+    const qty = parseInt(moQty.value) || 0;
+    if (qty < 1) { toast('Quantity must be at least 1', 'error'); return; }
+    if (!moDate.value) { toast('Pick a submitted-on date first', 'error'); return; }
+
+    const orderType = document.querySelector('input[name="mo-type"]:checked').value;
+    const c = markOrderedCatalog;
+
+    moSave.disabled    = true;
+    moSave.textContent = 'Saving…';
+
+    const { error } = await db.from('order_submissions').insert({
+      tenant_id:     TenantContext.current().id,
+      distributor:   c.distributor,
+      order_code:    exportCode(c, c.distributor),
+      item_code:     c.item_code,
+      title:         c.title,
+      quantity:      qty,
+      order_type:    orderType,
+      foc_date:      c.foc_date || null,
+      catalog_month: currentCatalogMonth,
+      submitted_on:  moDate.value,
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `prh-order-${DateUtils.todayLocal()}${suffix}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    if (error) {
+      moResult.style.display = '';
+      moResult.className = 'alert alert-error';
+      moResult.textContent = `Failed to save: ${error.message}`;
+      moSave.disabled    = false;
+      moSave.textContent = 'Save';
+      return;
+    }
+
+    await loadOrderLedger();
+    renderByDistributor();
+    renderBackorderRiskPanel();
+    toast(`Recorded ${qty} ${c.distributor} cop${qty===1?'y':'ies'} on order`, 'success');
+    closeMarkOrderedModal();
   });
 
   // ── Invite Customer Modal ────────────────────────────────
