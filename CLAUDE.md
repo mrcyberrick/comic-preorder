@@ -431,12 +431,16 @@ truth: it read as applying to *genuinely new UI* whose specs did not exist yet.
 It applies to **every** web-app change, because the suite always loads the
 deployed build over HTTP — new specs or old.
 
-**Green is not the same as verified.** The suite only covers what has specs. The
-catalog **info-card** reserve path (`#modal-reserve`, `#modal-qty`,
-`.reserved-indicator`) has **no coverage at all**, which is how four defects
-shipped there unnoticed in July 2026. Check whether your change is actually
-covered before treating a pass as verification; if it isn't, a real-browser check
-is the only evidence you have. See F103.
+**Green is not the same as verified.** The suite only covers what has specs.
+The catalog **info-card** reserve path had **no coverage at all**, which is how
+four defects shipped there unnoticed in July 2026 — closed by spec 14
+(2026-08-02, see F103). The **order-export / order-ledger** path shipped to
+production the same way on 2026-08-03 and was closed by spec 15 the same day.
+Both are cautionary: in each case the gap was noticed only *after* the code was
+live, and in both cases the fix was cheap once someone looked. Check whether
+your change is actually covered before treating a pass as verification; if it
+isn't, a real-browser check is the only evidence you have — and adding the spec
+is usually an hour, not a project.
 
 ---
 
@@ -765,9 +769,28 @@ npx playwright test 04-arrivals-this-week     # single spec
 
 **Coverage:** magic-link auth, catalog reserve → mylist, cancel guards, arrivals
 orphan-reserved rendering, subscriptions, admin bagging + week nav, tenant
-isolation (F15, F20), per-tenant branding unit spec. `run-smoke.ps1` runs the
-scripts repo's committed unit suite (`npm test`, step [1/2]) before Playwright;
-the old local `node-tests/` copy was retired 2026-07-16.
+isolation (F15, F20), per-tenant branding unit spec, catalog info-card reserve
+(spec 14, added after F103), and the **order-export / order-ledger path**
+(spec 15, added 2026-08-03 — see below). `run-smoke.ps1` runs the scripts
+repo's committed unit suite (`npm test`, step [1/2]) before Playwright; the old
+local `node-tests/` copy was retired 2026-07-16. **56 Playwright tests as of
+2026-08-03.**
+
+**Spec 15 — `15-order-export-ledger.spec.ts` (F101/F102).** Covers the path
+that shipped to production on 2026-08-03: the Order Builder opens with a
+multi-select FOC-cycle list rather than downloading instantly; a title outside
+the selected cycle is excluded **and** surfaced in the held-back panel (V3); an
+already-ordered code is flagged with its prior quantity and defaulted to the
+remainder, never auto-suppressed (V4); the Status-column button reflects
+ordered-vs-reserved (`Mark Ordered` / `Add (n of m)` / `Over (n of m)` /
+`Ordered (n)` disabled); the backorder-risk panel separates At risk,
+Backordered and cleared-by-ledger (V7); and My List shows "Order placed" driven
+by the ledger with `fulfilled` still false.
+**Writing specs against this path: staging carries 857 real backfilled ledger
+rows**, so seeded rows share every panel with production-shaped data. Assert on
+a seeded title or `data-catalog-id` — never `.first()` and never an exact
+count. A `.first()` assertion in the initial draft failed against a real
+staging title, which is how this got caught.
 
 **Rules:**
 - Local-only. Never committed. Never runs against production.
