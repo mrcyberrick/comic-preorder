@@ -318,7 +318,7 @@ Load the archived June and July order files into `order_submissions` (`order_typ
 - [x] Ad-hoc flag + exclusion live; **V5** green
 - [x] Backorder-risk panel live, reusing `isFocThisMonth()` rather than reimplementing it; **V7** green on all three states, incl. (c) cleared-by-ledger
 - [x] § 4.6 relabel decision **presented to Rick** — answered "additive" (2026-08-02), then **superseded 2026-08-03**: Rick removed "Mark Fulfilled" entirely, on the grounds that manual fulfillment tracking is meaningless without POS integration. `fulfilled` itself is untouched and still set by `auto_fulfill_past_on_sale()`.
-- [x] S5 backfill done — **857 rows**, May + June + July (Rick added the July files mid-session; they confirm F102 directly: `75960621668000111,7` against June's `,5`). Caveat recorded: enrichment ran against staging's catalog, so 708/857 have NULL `title`/`foc_date` — cosmetic (no logic reads them), but **the production backfill must be regenerated against production's catalog**.
+- [x] S5 backfill done — **857 rows**, May + June + July (Rick added the July files mid-session; they confirm F102 directly: `75960621668000111,7` against June's `,5`). Caveat recorded: 708/857 staging rows have NULL `title`/`foc_date` — cosmetic (no logic reads them). Cause corrected 2026-08-03: mostly an F82-class truncated lookup in the generator, not staging's catalog. **The production backfill has since been generated with the fix and matched 857/857, zero NULLs.**
 - [x] **V3**/**V6**/**V8** green; all seeded fixtures torn down and verified by SELECT — V6 = full `run-smoke.ps1` (46 unit + 50 Playwright) green on every one of four deploys, **plus** Rick's real-browser check across three rounds of feedback
 - [x] § 13 F101/F102 updated, incl. the accepted export ↔ reserved-titles-report divergence — also § 4.11 (new table), § 6.8 (new RPC), § 7.1 (new policies), and **F109 filed** for the client-side-only cancel guard
 - [x] Production promotion raised with Rick (not performed unasked) — **still owed**, see below
@@ -330,9 +330,14 @@ order ledger, and no duplicate check. In order:
 
 1. `docs/sql/order-submissions.sql` (table + indexes + RLS)
 2. `docs/sql/get-ordered-codes-rpc.sql` (the customer-facing read)
-3. A backfill **regenerated against production's catalog** — do not reuse the
-   staging file; prod matched 100% of these codes during S1, so the prod
-   backfill can carry real titles and FOC dates instead of 708 NULLs
+3. `docs/sql/order-submissions-backfill-PROD.sql` — **generated 2026-08-03**,
+   857 rows, **857/857 codes matched against production's catalog, zero NULL
+   titles**. Do **not** run the staging backfill file on production: it
+   hardcodes the staging founding tenant UUID in all 857 rows and will
+   FK-violate. (Generating this also surfaced an F82-class bug in the one-off
+   generator — its catalog lookup was silently capped at PostgREST's 1000-row
+   default, which is what actually caused most of staging's 708 NULLs. Fixed
+   by paging; staging's rows were left as-is since the fields are cosmetic.)
 4. `/promote-prod` for the client change
 
 **Independent of any of that:** PRH holds **12 copies** of
