@@ -58,7 +58,7 @@ A reservation whose FOC passed **without an order having been placed** is **Back
 
 The FOC lock is already built and is deliberately hard (`isFocLocked` → `isFocPast`, `app.js:1358–1370`). Once FOC passes, the app blocks **both** new reservations **and cancellations** on that title — `catalog.html:1217–1218` treats an already-reserved locked title as *committed*, and `app.js:1436–1449` renders the locked state ("🔒 FOC Locked", disabled control, FOC badge).
 
-**That is what makes a backorder bad, and it is easy to miss:** the lock commits the *customer* independently of whether the *store* ordered. A backordered title is therefore one where the customer cannot back out and the book cannot arrive. Rick's stated intent is to **actively avoid** this state, not merely to report it after the fact.
+**That is what makes a backorder bad, and it is easy to miss:** the lock commits the *customer* independently of whether the *store* ordered. A backordered title is therefore one where the customer cannot back out and availability is no longer guaranteed — it may still arrive, on either distributor, just not reliably. **Correction, 2026-08-03 (F110/F111/F112 planning, § 2.1):** this entry previously said the book "cannot arrive" — that phrasing is accurate only for a title **withdrawn** upstream (F110), a distinct and worse state the store did not yet detect when this was written. A Backordered title stays orderable; a withdrawn one does not exist to order. Rick's stated intent is to **actively avoid** the Backordered state, not merely to report it after the fact — the urgency stands even though the "cannot arrive" claim was too strong.
 
 **Requirement (Rick, 2026-08-02):** notify admin users when a title is reserved whose FOC date falls **in the same month and/or precedes the order-deadline date** — i.e. while there is still time to place the ad-hoc order. See § 4.5.
 
@@ -131,7 +131,7 @@ Because § 2.2 rules out deriving the band, the cycle is **chosen**, from the FO
 
 | Bucket | Meaning | Urgency |
 |---|---|---|
-| **Backordered** | FOC **passed**, never ordered (§ 2.4) | **Already failed.** Customer is committed and cannot cancel; the book cannot arrive |
+| **Backordered** | FOC **passed**, never ordered (§ 2.4) | **Already failed.** Customer is committed and cannot cancel; still orderable on either distributor, but availability is no longer guaranteed (corrected 2026-08-03, § 2.1 — "cannot arrive" is accurate only for a title withdrawn upstream, F110) |
 | *At risk* | FOC not yet passed but locks before the monthly order | **Act now** — needs an ad-hoc order |
 | *Outside selected cycle* | FOC later than the ticked dates | None — returns on a later cycle |
 | *Already ordered* | in the ledger (§ 4.3) | Human call, quantity shown |
@@ -191,7 +191,7 @@ Either condition means the FOC will lock before the monthly order goes out, so a
 | State | Condition | What it means |
 |---|---|---|
 | **At risk** | trigger true, FOC **not** passed, not ordered | Actionable — place the ad-hoc order now |
-| **Backordered** | FOC **passed**, not ordered | Already failed — customer committed, cannot cancel, book cannot arrive |
+| **Backordered** | FOC **passed**, not ordered | Already failed — customer committed, cannot cancel; still orderable, availability no longer guaranteed (corrected 2026-08-03, § 2.1 — "book cannot arrive" is accurate only for a title withdrawn upstream, F110) |
 | *Cleared* | an `order_submissions` row exists for the code | Handled; drops off the list |
 
 **Where:** a persistent panel on the admin dashboard, visible without navigating to a tab, listing at-risk and backordered reservations with title, code, FOC date, **days remaining**, customer count and total copies — sorted soonest-FOC first. Backordered rows are visually distinct and sort to the top.

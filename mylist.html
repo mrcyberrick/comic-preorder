@@ -79,6 +79,16 @@
       cursor: default;
     }
 
+    /* Withdrawn rows (F110 § 4.5) — visually distinct from FOC-locked/
+       ordered: grey, not accent-red, since withdrawn is a different (worse)
+       state than Backordered and the two must never look alike. */
+    .withdrawn-row { opacity: 0.85; }
+    .withdrawn-notice {
+      color: #999 !important;
+      font-size: 0.72rem;
+      margin-top: 2px;
+    }
+
     /* FOC-locked rows */
     .foc-locked-row { opacity: 0.8; }
     .foc-locked-notice {
@@ -901,6 +911,7 @@ function confirmDialog(message, okLabel = 'Remove') {
         <tbody>
           ${filtered.map(item => {
             const c = item.catalog;
+            const isWithdrawn = !!c.withdrawn_at;
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
             const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -909,18 +920,20 @@ function confirmDialog(message, okLabel = 'Remove') {
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
             return `
-              <tr${focLocked ? ' class="foc-locked-row"' : ''}>
+              <tr${isWithdrawn ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
                 <td class="td-cover">${cover}</td>
                 <td>
                   <div class="col-title">${escapeHtml(c.title)}</div>
                   ${c.series_name ? `<div class="col-sub">${escapeHtml(c.series_name)}</div>` : ''}
                   ${c.variant_type && c.variant_type !== 'Standard'
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
-                  ${isOrdered
-                    ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
-                    : focLocked
-                      ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
-                      : ''}
+                  ${isWithdrawn
+                    ? `<div class="col-sub withdrawn-notice">\u26A0 No longer available &mdash; withdrawn by the distributor. This title cannot arrive.</div>`
+                    : isOrdered
+                      ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
+                      : focLocked
+                        ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
+                        : ''}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td>
@@ -937,8 +950,10 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
                 <td style="font-weight:600;color:var(--accent)">$${((parseFloat(c.price_usd)||0)*(item.quantity||1)).toFixed(2)}</td>
                 <td>
-                  ${isOrdered
-                    ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
+                  ${isWithdrawn
+                    ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
+                    : isOrdered
+                      ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
                         : `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`}
@@ -953,6 +968,7 @@ function confirmDialog(message, okLabel = 'Remove') {
         ${filtered.map(item => {
           const c   = item.catalog;
           const qty = item.quantity || 1;
+          const isWithdrawn = !!c.withdrawn_at;
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
           const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -962,16 +978,18 @@ function confirmDialog(message, okLabel = 'Remove') {
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
             : `<img src="${COVER_PLACEHOLDER}" alt="">`;
           return `
-            <div class="mobile-card${focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
+            <div class="mobile-card${isWithdrawn ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
               <div class="mobile-card-cover">${cover}</div>
               <div class="mobile-card-body">
                 <div class="mobile-card-title">${escapeHtml(c.title)}</div>
                 ${c.series_name ? `<div class="mobile-card-series">${escapeHtml(c.series_name)}</div>` : ''}
-                ${isOrdered
-                  ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
-                  : focLocked
-                    ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
-                    : ''}
+                ${isWithdrawn
+                  ? `<div class="mobile-card-series withdrawn-notice">\u26A0 No longer available &mdash; withdrawn by the distributor. This title cannot arrive.</div>`
+                  : isOrdered
+                    ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
+                    : focLocked
+                      ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
+                      : ''}
                 <div class="mobile-card-meta">
                   <span class="badge badge-${c.distributor.toLowerCase()}">${escapeHtml(c.distributor)}</span>
                   ${c.on_sale_date ? `<span class="mobile-card-date">${formatDate(c.on_sale_date)}</span>` : ''}
@@ -986,8 +1004,10 @@ function confirmDialog(message, okLabel = 'Remove') {
                     <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
                     <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}>+</button>
                   </div>
-                  ${isOrdered
-                    ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
+                  ${isWithdrawn
+                    ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
+                    : isOrdered
+                      ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
                         : `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`}
@@ -1048,7 +1068,19 @@ function confirmDialog(message, okLabel = 'Remove') {
           toast('Reservation removed');
           renderList();
           // Log cancel event — only for real customer sessions, not admin-managed lists
-          if (!AdminContext.isActive()) UsageEvents.cancel(user.id, item?.catalog);
+          if (!AdminContext.isActive()) {
+            const cCancelled = item?.catalog;
+            // F110 § 2.2 (Rick, 2026-08-03) — flag a cancellation that walks
+            // away from a copy already submitted to the distributor, so the
+            // store can find and reconcile that order. Only reachable via
+            // the withdrawn override: Preorders.cancel() otherwise blocks
+            // cancelling an already-ordered reservation (F101/F102).
+            const wasWithdrawn = !!cCancelled?.withdrawn_at;
+            const wasOrdered   = isCodeOrdered(cCancelled);
+            UsageEvents.cancel(user.id, cCancelled, wasWithdrawn
+              ? { withdrawn: true, cancelled_after_order_submitted: wasOrdered }
+              : {});
+          }
         }
       });
     });
@@ -1196,11 +1228,12 @@ function confirmDialog(message, okLabel = 'Remove') {
       });
       const cards = items.map(item => {
         const c = item.catalog;
+        const isWithdrawn = !!c.withdrawn_at;
         const cover = c.cover_url
           ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
           : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
         return `
-          <div class="month-arrival-card">
+          <div class="month-arrival-card${isWithdrawn ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
             <div class="month-arrival-cover">
               <span class="distributor-badge badge-${c.distributor?.toLowerCase()}" style="font-size:0.55rem;padding:1px 5px">${escapeHtml(c.distributor||'')}</span>
               ${cover}
@@ -1208,6 +1241,11 @@ function confirmDialog(message, okLabel = 'Remove') {
             <div class="month-arrival-info">
               <div class="month-arrival-title">${escapeHtml(c.title)}</div>
               <div class="month-arrival-price">${formatPrice(c.price_usd)}</div>
+              ${isWithdrawn ? `
+                <div class="withdrawn-notice">⚠ Withdrawn by the distributor</div>
+                <button class="btn btn-danger btn-sm cancel-btn-arrival" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
+                        style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>
+              ` : ''}
             </div>
           </div>`;
       }).join('');
@@ -1223,6 +1261,38 @@ function confirmDialog(message, okLabel = 'Remove') {
     grid.querySelectorAll('img').forEach(img => {
       if (img.complete) img.classList.add('loaded');
       else img.addEventListener('load', () => img.classList.add('loaded'));
+    });
+
+    // Withdrawn-title Remove (F110 § 4.5/§ 2.2) — the only action this
+    // otherwise-read-only grid offers, and only for a withdrawn reservation.
+    // Prior-catalog-month withdrawn reservations (the real MIDNIGHT X-MEN #2
+    // case) live here, not in the current-month table above, so the cancel
+    // exception must reach this grid too or it never becomes cancellable.
+    grid.querySelectorAll('.cancel-btn-arrival').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!(await confirmDialog('Remove this reservation? This title was withdrawn by the distributor.'))) return;
+        btn.disabled = true;
+        const item = allUpcoming.find(i => i.id === btn.dataset.preorderId);
+        const { error } = await Preorders.cancel(AdminContext.resolveUserId(user.id), btn.dataset.catalogId);
+        if (error) {
+          toast('Failed to remove reservation', 'error');
+          btn.disabled = false;
+        } else {
+          allItems    = allItems.filter(i => i.id !== btn.dataset.preorderId);
+          allUpcoming = allUpcoming.filter(i => i.id !== btn.dataset.preorderId);
+          toast('Reservation removed');
+          renderList();
+          renderArrivingThisMonth();
+          if (!AdminContext.isActive()) {
+            const cCancelled   = item?.catalog;
+            const wasWithdrawn = !!cCancelled?.withdrawn_at;
+            const wasOrdered   = isCodeOrdered(cCancelled);
+            UsageEvents.cancel(user.id, cCancelled, wasWithdrawn
+              ? { withdrawn: true, cancelled_after_order_submitted: wasOrdered }
+              : {});
+          }
+        }
+      });
     });
   }
 
