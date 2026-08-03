@@ -909,15 +909,20 @@
       return Object.values(map).sort((a, b) => (a.catalog?.foc_date || '').localeCompare(b.catalog?.foc_date || ''));
     }
 
-    // order_submissions ledger badge for this title, if any (F102 § 4.2)
-    function ledgerBadge(c) {
-      const matches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
+    // order_submissions ledger badge for this title, if any (F102 § 4.2).
+    // Accepts pre-looked-up matches so a row computes ledgerMatchesFor() once,
+    // not once per place the info is shown (title cell + status column).
+    function ledgerBadge(matches, compact) {
       if (!matches.length) return '';
-      const adhoc   = matches.some(m => m.order_type === 'adhoc');
-      const totalQty = matches.reduce((s, m) => s + (m.quantity || 0), 0);
-      return `<div class="col-sub" style="color:var(--accent);font-size:0.72rem">
-        \u{1F4CB} ${adhoc ? 'Ad-hoc ordered' : 'On order'} — ${totalQty} cop${totalQty===1?'y':'ies'}
-      </div>`;
+      const adhoc = matches.some(m => m.order_type === 'adhoc');
+      const qty   = matches.reduce((s, m) => s + (m.quantity || 0), 0);
+      return compact
+        ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:var(--accent)">
+            \u{1F4CB} ${adhoc ? 'Ad-hoc' : 'On order'} (${qty})
+          </div>`
+        : `<div class="col-sub" style="color:var(--accent);font-size:0.72rem">
+            \u{1F4CB} ${adhoc ? 'Ad-hoc ordered' : 'On order'} — ${qty} cop${qty===1?'y':'ies'}
+          </div>`;
     }
 
     function renderDistTable(grouped) {
@@ -941,6 +946,7 @@
             ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
               const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
               const someFulfilled = fulfilledCount > 0 && !allFulfilled;
+              const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
               return `
               <tr${allFulfilled ? ' style="opacity:0.6"' : ''}>
                 <td class="td-cover">
@@ -954,7 +960,7 @@
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
                   ${allFulfilled
                     ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.72rem">\u2713 Fulfilled — excluded from order exports</div>` : ''}
-                  ${ledgerBadge(c)}
+                  ${ledgerBadge(ledgerMatches, false)}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
@@ -978,11 +984,12 @@
                         ${allFulfilled ? '\u2713 Fulfilled' : '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')'}
                       </div>`
                     : ''}
+                  ${ledgerBadge(ledgerMatches, true)}
                   <button
                     class="btn btn-sm mark-ordered-btn"
                     data-catalog-id="${c.id}"
                     title="Record that this title was submitted to a distributor (writes order_submissions)">
-                    Mark Ordered
+                    ${ledgerMatches.length ? '+ Add Order' : 'Mark Ordered'}
                   </button>
                 </td>
               </tr>
