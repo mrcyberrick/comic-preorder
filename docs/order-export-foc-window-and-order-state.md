@@ -340,6 +340,15 @@ order ledger, and no duplicate check. In order:
 that order down before 8/31 is operational and worth doing regardless of when
 the code ships. The fix prevents the next one, not this one.
 
+**Gate scheduled (2026-08-03):** FOC `2026-08-31` is the hard cutoff for
+adjusting that PRH order; reminder set for **Mon 2026-08-24, 8:00 AM ET** —
+seven days of lead time, on a Monday to avoid the Tue/Wed shipment+bagging
+blackout. Routine `trig_01D8pWAMP5uuLqqb62gDjGrY` (one-time) **and** Google
+Calendar event `p434l5mr03movtdqd3pqsefgc0` (popup + email). Both carry the
+production-promotion steps as a secondary item, including the warning that
+the committed staging backfill hardcodes the staging tenant UUID and cannot
+be run against production.
+
 ---
 
 ## 9. Rollback
