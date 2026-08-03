@@ -909,20 +909,17 @@
       return Object.values(map).sort((a, b) => (a.catalog?.foc_date || '').localeCompare(b.catalog?.foc_date || ''));
     }
 
-    // order_submissions ledger badge for this title, if any (F102 § 4.2).
-    // Accepts pre-looked-up matches so a row computes ledgerMatchesFor() once,
-    // not once per place the info is shown (title cell + status column).
-    function ledgerBadge(matches, compact) {
+    // order_submissions ledger badge for the title cell (F102 § 4.2).
+    // Accepts pre-looked-up matches so a row computes ledgerMatchesFor() once.
+    // The Status column deliberately does NOT use this -- it carries order
+    // state in the button label instead (Rick, 2026-08-03).
+    function ledgerBadge(matches) {
       if (!matches.length) return '';
       const adhoc = matches.some(m => m.order_type === 'adhoc');
       const qty   = matches.reduce((s, m) => s + (m.quantity || 0), 0);
-      return compact
-        ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:var(--accent)">
-            \u{1F4CB} ${adhoc ? 'Ad-hoc' : 'On order'} (${qty})
-          </div>`
-        : `<div class="col-sub" style="color:var(--accent);font-size:0.72rem">
-            \u{1F4CB} ${adhoc ? 'Ad-hoc ordered' : 'On order'} — ${qty} cop${qty===1?'y':'ies'}
-          </div>`;
+      return `<div class="col-sub" style="color:var(--accent);font-size:0.72rem">
+        \u{1F4CB} ${adhoc ? 'Ad-hoc ordered' : 'On order'} — ${qty} cop${qty===1?'y':'ies'}
+      </div>`;
     }
 
     function renderDistTable(grouped) {
@@ -945,7 +942,6 @@
           <tbody>
             ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
               const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
-              const someFulfilled = fulfilledCount > 0 && !allFulfilled;
               const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
               const ledgerQty     = ledgerMatches.reduce((s, m) => s + (m.quantity || 0), 0);
               const orderMatched  = ledgerMatches.length > 0 && ledgerQty === totalQty;
@@ -964,7 +960,7 @@
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
                   ${allFulfilled
                     ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.72rem">\u2713 Fulfilled — excluded from order exports</div>` : ''}
-                  ${ledgerBadge(ledgerMatches, false)}
+                  ${ledgerBadge(ledgerMatches)}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
@@ -981,36 +977,32 @@
                   ).join(', ')}
                 </td>
                 <td>
-                  ${allFulfilled || someFulfilled
-                    ? `<div style="font-size:0.75rem;font-weight:600;margin-bottom:6px;
-                            color:${allFulfilled ? 'var(--success,#22c55e)' : 'var(--warning,#eab308)'}"
-                            title="Set automatically once on_sale_date passes -- no manual fulfillment tracking without a POS system">
-                        ${allFulfilled ? '\u2713 Fulfilled' : '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')'}
-                      </div>`
-                    : ''}
-                  ${orderMatched
-                    ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:var(--success,#22c55e)">
-                        \u2713 Fully ordered (${ledgerQty})
-                      </div>`
-                    : orderOver
-                      ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:#ff8070"
-                              title="Ordered quantity exceeds current reservations -- the exact surplus this session exists to catch (F102)">
-                          \u26A0 Over-ordered (${ledgerQty} of ${totalQty})
-                        </div>`
-                      : orderPartial
-                        ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:var(--warning,#eab308)">
-                            \u25D0 Partial order (${ledgerQty} of ${totalQty})
-                          </div>`
-                        : ''}
-                  <button
-                    class="btn btn-sm mark-ordered-btn"
-                    data-catalog-id="${c.id}"
-                    ${orderMatched ? 'disabled' : ''}
-                    title="${orderMatched
-                      ? 'Ordered quantity already matches reservations -- use By Distributor to adjust if reservations change'
-                      : 'Record that this title was submitted to a distributor (writes order_submissions)'}">
-                    ${orderMatched ? '\u2713 Ordered' : ledgerMatches.length ? '+ Add Order' : 'Mark Ordered'}
-                  </button>
+                  ${(() => {
+                      // Status column is the button and nothing else (Rick,
+                      // 2026-08-03) -- order state is carried by the label +
+                      // colour rather than a separate line of text above it.
+                      // Fulfilled state deliberately not repeated here: it
+                      // already shows in the title cell and as per-customer
+                      // ticks in the Customers column.
+                      const label = orderMatched ? '\u2713 Ordered (' + ledgerQty + ')'
+                        : orderOver              ? '\u26A0 Over (' + ledgerQty + ' of ' + totalQty + ')'
+                        : orderPartial           ? '\u25D0 Add (' + ledgerQty + ' of ' + totalQty + ')'
+                        :                          'Mark Ordered';
+                      const colour = orderMatched ? 'color:var(--success,#22c55e);border-color:var(--success,#22c55e)'
+                        : orderOver               ? 'color:#ff8070;border-color:rgba(232,50,28,0.5)'
+                        : orderPartial            ? 'color:var(--warning,#eab308);border-color:rgba(245,158,11,0.5)'
+                        :                           '';
+                      const hint = orderMatched ? 'Ordered quantity matches reservations'
+                        : orderOver              ? 'Ordered ' + ledgerQty + ' against ' + totalQty + ' reserved -- surplus already submitted to the distributor (F102)'
+                        : orderPartial           ? 'Ordered ' + ledgerQty + ' of ' + totalQty + ' reserved -- click to record the rest'
+                        :                          'Record that this title was submitted to a distributor';
+                      return `<button
+                        class="btn btn-sm mark-ordered-btn"
+                        data-catalog-id="${c.id}"
+                        style="white-space:nowrap;${colour}"
+                        ${orderMatched ? 'disabled' : ''}
+                        title="${hint}">${label}</button>`;
+                    })()}
                 </td>
               </tr>
             `}).join('')}
