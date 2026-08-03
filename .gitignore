@@ -1,6 +1,18 @@
 
-# Claude Code per-project memory
-.claude/
+# Claude Code — track shared skills only.
+# Skills encode CLAUDE.md's gates, so they must be versioned ALONGSIDE the doc
+# they encode: /deploy-staging asserted "smoke gate before push, not after"
+# while CLAUDE.md was being corrected away from it (2026-07-28), and nothing
+# could catch the contradiction because only one of the two was tracked.
+# settings.json and hooks/ stay OUT of this PUBLIC repo on purpose:
+#   - settings.json publishes the auto-approval allowlist (node -e, python3 -c,
+#     git commit are pre-approved), i.e. what runs without a prompt
+#   - hooks/guard-git.ps1 publishes the secret scanner's blind spots
+#     (added lines only, config.js excluded, commit-only, fails open)
+# Neither is remotely exploitable, but both are prompt-injection intel with no
+# upside to publishing. They are versioned in the PRIVATE scripts repo instead.
+.claude/*
+!.claude/skills/
 
 # Supabase CLI temp files
 supabase/.temp/

@@ -148,6 +148,16 @@ require user confirmation before the runbook is generated.
      .\run-smoke.ps1
      # Stop if anything fails — do not push.
      ```
+     > **⚠️ SUPERSEDED 2026-07-28 — do not follow this ordering.** The wording
+     > above is the historical record of what 3.7 wrote into CLAUDE.md; it was
+     > corrected because `run-smoke.ps1` stage [2/2] is Playwright with
+     > `baseURL = https://staging.pulllist.pages.dev/`, so it tests the
+     > **deployed** site and cannot see unpushed work. A pre-push run exercises
+     > the *previous* build. Current, authoritative ordering — push, confirm
+     > the new bytes are served, then run the suite — is in **CLAUDE.md
+     > § Standard Deployment Workflow → § Smoke-test ordering**. (Stage [1/2]
+     > `npm test` does run against local files and remains a real pre-push
+     > gate.) This doc is otherwise still canonical for suite coverage.
    - `CLAUDE.md` — **new § Smoke Test Suite (local)** section inserted
      after § Files That Must Stay in Sync. Contents: (1) where the
      suite lives (`<local scripts folder>\playwright\`); (2) one-line
