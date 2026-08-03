@@ -1,6 +1,6 @@
 # Order-Export Follow-Through — F110 (withdrawals) + F111 (FOC across months) + F112 (distributor model)
 
-**Status:** **PLANNED — not started.** Two execution sessions, A before B.
+**Status:** **Session A (detection) — COMPLETE 2026-08-03, live on staging AND production.** Session B (surfacing) — PLANNED, not started. See § 8 Completion criteria and `docs/technical-reference.md` § 13 F110/F112 for full evidence.
 **Plan written:** 2026-08-03 (planning session; execution handed to fresh CLI sessions).
 **Follows:** `docs/order-export-foc-window-and-order-state.md` (F101/F102) — **complete and live in production** 2026-08-03 (PR #100, merge `5951a30`). Nothing in that work is broken. All three findings here are gaps that reading the PRH and Lunar vendor documentation exposed.
 **Not a phase sub-deploy** — standalone correctness/enhancement work. Phase 5 closed 2026-07-15; Phase 6 not started.
@@ -411,16 +411,16 @@ Wherever the shipped UI or docs say a Backordered title **"cannot arrive"** or t
 
 ## 8. Completion criteria
 
-### Session A
-- [ ] § 3.2 line ranges re-verified against disk before any edit
-- [ ] Four `catalog` columns live on staging **and production**, all nullable, existing rows NULL
-- [ ] `catalog` confirmed still service-role-only (no new RLS needed)
-- [ ] Lunar normalizer reads `InitialOrderDue` + `TitleNote` in **both** scripts; window guard is a pure exported function; **V-A1** green
-- [ ] Withdrawal set difference implemented as pure exported functions, prior-month read **paged**; **V-A2** and **V-A3** green
-- [ ] Unit tests added to the scripts-repo suite; `npm test` green; `node --check` clean on both scripts
-- [ ] Synthetic fixtures torn down, verified by live SELECT returning zero rows
-- [ ] § 13 F110 (incl. the § 3.3 correction) + F112 updated; `CLAUDE.md` updated
-- [ ] Status update states plainly that detection **does not run until the next monthly import**
+### Session A — all complete 2026-08-03
+- [x] § 3.2 line ranges re-verified against disk before any edit
+- [x] Four `catalog` columns live on staging **and production**, all nullable, existing rows NULL
+- [x] `catalog` confirmed still service-role-only (no new RLS needed) — single `SELECT`-only policy (`users read tenant catalog`, `TO authenticated`) confirmed on both envs
+- [x] Lunar normalizer reads `InitialOrderDue` + `TitleNote` in **both** scripts; window guard is a pure exported function; **V-A1** green (exactly 2 rejected values against the real 08/26 file)
+- [x] Withdrawal set difference implemented as pure exported functions, prior-month read **paged**; **V-A2** and **V-A3** green
+- [x] Unit tests added to the scripts-repo suite; `npm test` green (85/85); `node --check` clean on both scripts
+- [x] Synthetic fixtures torn down, verified by live SELECT returning zero rows
+- [x] § 13 F110 (incl. the § 3.3 correction) + F112 updated; `CLAUDE.md` updated
+- [x] Status update states plainly that detection **does not run until the next monthly import**
 
 ### Session B
 - [ ] Session A confirmed complete; four columns confirmed present on **both** environments
