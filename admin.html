@@ -947,6 +947,10 @@
               const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
               const someFulfilled = fulfilledCount > 0 && !allFulfilled;
               const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
+              const ledgerQty     = ledgerMatches.reduce((s, m) => s + (m.quantity || 0), 0);
+              const orderMatched  = ledgerMatches.length > 0 && ledgerQty === totalQty;
+              const orderPartial  = ledgerMatches.length > 0 && ledgerQty < totalQty;
+              const orderOver     = ledgerMatches.length > 0 && ledgerQty > totalQty;
               return `
               <tr${allFulfilled ? ' style="opacity:0.6"' : ''}>
                 <td class="td-cover">
@@ -984,12 +988,28 @@
                         ${allFulfilled ? '\u2713 Fulfilled' : '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')'}
                       </div>`
                     : ''}
-                  ${ledgerBadge(ledgerMatches, true)}
+                  ${orderMatched
+                    ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:var(--success,#22c55e)">
+                        \u2713 Fully ordered (${ledgerQty})
+                      </div>`
+                    : orderOver
+                      ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:#ff8070"
+                              title="Ordered quantity exceeds current reservations -- the exact surplus this session exists to catch (F102)">
+                          \u26A0 Over-ordered (${ledgerQty} of ${totalQty})
+                        </div>`
+                      : orderPartial
+                        ? `<div style="font-size:0.72rem;font-weight:600;margin-bottom:6px;color:var(--warning,#eab308)">
+                            \u25D0 Partial order (${ledgerQty} of ${totalQty})
+                          </div>`
+                        : ''}
                   <button
                     class="btn btn-sm mark-ordered-btn"
                     data-catalog-id="${c.id}"
-                    title="Record that this title was submitted to a distributor (writes order_submissions)">
-                    ${ledgerMatches.length ? '+ Add Order' : 'Mark Ordered'}
+                    ${orderMatched ? 'disabled' : ''}
+                    title="${orderMatched
+                      ? 'Ordered quantity already matches reservations -- use By Distributor to adjust if reservations change'
+                      : 'Record that this title was submitted to a distributor (writes order_submissions)'}">
+                    ${orderMatched ? '\u2713 Ordered' : ledgerMatches.length ? '+ Add Order' : 'Mark Ordered'}
                   </button>
                 </td>
               </tr>
@@ -1426,14 +1446,23 @@
     const match = allPreorders.find(p => p.catalog?.id === catalogId);
     if (!match) return;
     markOrderedCatalog = match.catalog;
+    const c = markOrderedCatalog;
 
     const totalQty = allPreorders
       .filter(x => x.catalog?.id === catalogId && !x.fulfilled)
       .reduce((s, x) => s + (x.quantity || 1), 0);
 
-    moSubtitle.textContent =
-      `${markOrderedCatalog.title || ''} (${markOrderedCatalog.item_code || markOrderedCatalog.upc || markOrderedCatalog.isbn || '—'}) — ${markOrderedCatalog.distributor}`;
-    moQty.value  = totalQty || 1;
+    // Default qty is the REMAINING amount, not the full reservation total --
+    // suggesting the full amount again on a second "+ Add Order" click is
+    // exactly how the MIDNIGHT X-MEN over-order happened (F102).
+    const priorQty = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor))
+      .reduce((s, m) => s + (m.quantity || 0), 0);
+    const suggestedQty = Math.max(1, totalQty - priorQty);
+
+    moSubtitle.textContent = priorQty
+      ? `${c.title || ''} (${c.item_code || c.upc || c.isbn || '—'}) — ${c.distributor} — ${priorQty} already on order, ${totalQty} reserved`
+      : `${c.title || ''} (${c.item_code || c.upc || c.isbn || '—'}) — ${c.distributor}`;
+    moQty.value  = suggestedQty;
     moDate.value = DateUtils.todayLocal();
     document.querySelector('input[name="mo-type"][value="adhoc"]').checked = true;
     moResult.style.display = 'none';
