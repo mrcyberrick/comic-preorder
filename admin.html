@@ -571,15 +571,8 @@
     return orderLedger.filter(r => r.distributor === distributor && r.order_code === code);
   }
 
-  // The code actually submitted to each distributor — mirrors the fallback
-  // chains already used in the Lunar/PRH export line-builders below, so a
-  // ledger row (keyed on order_code) matches whichever code the export
-  // would have used to identify the same title.
-  function exportCode(c, distributor) {
-    return distributor === 'PRH'
-      ? (c.isbn || c.item_code || c.upc || '')
-      : (c.item_code || c.upc || c.isbn || '');
-  }
+  // exportCode() is shared from app.js (Preorders.cancel() and mylist.html
+  // need the identical fallback chain — F101/F102 session).
 
   function daysUntilFoc(dateStr) {
     if (!dateStr) return null;

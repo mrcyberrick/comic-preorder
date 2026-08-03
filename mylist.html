@@ -734,6 +734,16 @@ function confirmDialog(message, okLabel = 'Remove') {
   let allUpcoming = []; // all future reservations across all months
   let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
 
+  // Codes the store has already submitted to a distributor (F101/F102
+  // session) — drives the same "✓ Order placed" status/lock as `fulfilled`,
+  // independent of it. Set of "distributor||order_code" strings.
+  let orderedCodeSet = new Set();
+  function isCodeOrdered(c) {
+    if (!c || !c.distributor) return false;
+    const code = exportCode(c, c.distributor);
+    return !!code && orderedCodeSet.has(`${c.distributor}||${code}`);
+  }
+
   // Fetches standard-cover #1 issues from the current catalog month.
   // Results are cached so filter/search events don't re-fire the query.
   async function loadFirstIssues() {
@@ -762,11 +772,15 @@ function confirmDialog(message, okLabel = 'Remove') {
       const noticeEl = document.getElementById('pickup-notice');
       if (noticeEl) noticeEl.style.display = 'none';
     }
-    const { items, error } = await Preorders.getMy(targetUserId);
+    const [{ items, error }, ordered] = await Promise.all([
+      Preorders.getMy(targetUserId),
+      getOrderedCodes(),
+    ]);
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
       return;
     }
+    orderedCodeSet = new Set(ordered.map(o => `${o.distributor}||${o.order_code}`));
     // Main list shows current catalog month only.
     // Upcoming Arrivals section uses allUpcoming which includes all future months.
     // DateUtils.todayLocal() avoids the F28 toISOString() footgun.
@@ -889,7 +903,8 @@ function confirmDialog(message, okLabel = 'Remove') {
             const c = item.catalog;
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
-            const isLocked   = focLocked || isFulfilled;
+            const isOrdered  = isFulfilled || isCodeOrdered(c);
+            const isLocked   = focLocked || isOrdered;
             const cover = c.cover_url
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
@@ -901,7 +916,7 @@ function confirmDialog(message, okLabel = 'Remove') {
                   ${c.series_name ? `<div class="col-sub">${escapeHtml(c.series_name)}</div>` : ''}
                   ${c.variant_type && c.variant_type !== 'Standard'
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
-                  ${isFulfilled
+                  ${isOrdered
                     ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
                     : focLocked
                       ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
@@ -922,7 +937,7 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
                 <td style="font-weight:600;color:var(--accent)">$${((parseFloat(c.price_usd)||0)*(item.quantity||1)).toFixed(2)}</td>
                 <td>
-                  ${isFulfilled
+                  ${isOrdered
                     ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
@@ -940,7 +955,8 @@ function confirmDialog(message, okLabel = 'Remove') {
           const qty = item.quantity || 1;
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
-          const isLocked   = focLocked || isFulfilled;
+          const isOrdered  = isFulfilled || isCodeOrdered(c);
+          const isLocked   = focLocked || isOrdered;
           const lineTotal = ((parseFloat(c.price_usd) || 0) * qty).toFixed(2);
           const cover = c.cover_url
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
@@ -951,7 +967,7 @@ function confirmDialog(message, okLabel = 'Remove') {
               <div class="mobile-card-body">
                 <div class="mobile-card-title">${escapeHtml(c.title)}</div>
                 ${c.series_name ? `<div class="mobile-card-series">${escapeHtml(c.series_name)}</div>` : ''}
-                ${isFulfilled
+                ${isOrdered
                   ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
                   : focLocked
                     ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
@@ -970,7 +986,7 @@ function confirmDialog(message, okLabel = 'Remove') {
                     <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
                     <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}>+</button>
                   </div>
-                  ${isFulfilled
+                  ${isOrdered
                     ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`

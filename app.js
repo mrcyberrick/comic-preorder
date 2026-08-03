@@ -769,7 +769,7 @@ const Preorders = {
         fulfilled,
         fulfilled_at,
         catalog (
-          id, distributor, item_code, upc, title, series_name, publisher,
+          id, distributor, item_code, upc, isbn, title, series_name, publisher,
           issue_number, format, price_usd, foc_date, on_sale_date,
           writer, artist, cover_url, variant_type, catalog_month
         )
@@ -840,7 +840,7 @@ const Preorders = {
     // though no admin ever clicked anything.
     const { data: existing, error: lookupErr } = await db
       .from('preorders')
-      .select('id, fulfilled')
+      .select('id, fulfilled, catalog:catalog_id(distributor, item_code, upc, isbn)')
       .eq('user_id', userId)
       .eq('catalog_id', catalogId)
       .maybeSingle();
@@ -848,6 +848,21 @@ const Preorders = {
     if (!existing) return { error: { message: 'Reservation not found' } };
     if (existing.fulfilled) {
       return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+    }
+
+    // Second guard: refuse to cancel a code the store has already submitted
+    // to the distributor (order_submissions), independent of fulfilled —
+    // Rick's direction, F101/F102 session: "ordered" locks the customer the
+    // same way "fulfilled" (arrived) already does.
+    const c = existing.catalog || {};
+    const orderCode = exportCode(c, c.distributor);
+    if (orderCode) {
+      const { data: ordered } = await db.rpc('get_ordered_codes');
+      const alreadyOrdered = (ordered || []).some(o =>
+        o.distributor === c.distributor && o.order_code === orderCode);
+      if (alreadyOrdered) {
+        return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+      }
     }
 
     const { error } = await db
@@ -1379,6 +1394,28 @@ function isFocThisMonth(dateStr) {
   const mm   = String(now.getMonth() + 1).padStart(2, '0');
   const monthPrefix = `${yyyy}-${mm}`;
   return dateStr.startsWith(monthPrefix);
+}
+
+// The code actually submitted to each distributor — mirrors the fallback
+// chains used by admin.html's Lunar/PRH order-sheet exports, so a
+// order_submissions row (keyed on order_code) matches whichever code the
+// export would have used to identify the same title. Shared here (not
+// admin.html-local) because Preorders.cancel() and mylist.html both need it
+// (F101/F102 session — "Mark Ordered" locks My List the same way "Mark
+// Fulfilled" already does).
+function exportCode(c, distributor) {
+  return distributor === 'PRH'
+    ? (c.isbn || c.item_code || c.upc || '')
+    : (c.item_code || c.upc || c.isbn || '');
+}
+
+// Every (distributor, order_code) pair the store has ever submitted, for the
+// caller's own tenant — via a SECURITY DEFINER RPC, since order_submissions
+// itself is admin-only under RLS (docs/sql/get-ordered-codes-rpc.sql).
+async function getOrderedCodes() {
+  const { data, error } = await db.rpc('get_ordered_codes');
+  if (error) { console.error('getOrderedCodes failed:', error.message); return []; }
+  return data || [];
 }
 
 function formatPrice(price) {
