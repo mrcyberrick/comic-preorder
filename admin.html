@@ -502,10 +502,10 @@
                color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">ORDER TYPE</label>
         <div style="display:flex;gap:16px;font-size:0.88rem">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-            <input type="radio" name="mo-type" value="monthly" checked> Monthly cycle
+            <input type="radio" name="mo-type" value="monthly"> Monthly cycle
           </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-            <input type="radio" name="mo-type" value="adhoc"> Ad-hoc
+            <input type="radio" name="mo-type" value="adhoc" checked> Ad-hoc
           </label>
         </div>
       </div>
@@ -971,22 +971,13 @@
                   ).join(', ')}
                 </td>
                 <td>
-                  <button
-                    class="btn btn-sm fulfill-toggle-btn"
-                    data-catalog-id="${c.id}"
-                    data-fulfilled="${allFulfilled}"
-                    style="${allFulfilled
-                      ? 'color:var(--success,#22c55e);border-color:var(--success,#22c55e)'
-                      : someFulfilled
-                        ? 'color:var(--warning,#eab308);border-color:var(--warning,#eab308)'
-                        : ''}"
-                    title="${allFulfilled
-                      ? 'All copies fulfilled — click to undo'
-                      : someFulfilled
-                        ? fulfilledCount + ' of ' + customers.length + ' fulfilled — click to mark all fulfilled'
-                        : 'Mark all copies of this title as fulfilled (in hand — skip in order exports)'}">
-                    ${allFulfilled ? '\u2713 Fulfilled' : someFulfilled ? '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')' : 'Mark Fulfilled'}
-                  </button>
+                  ${allFulfilled || someFulfilled
+                    ? `<div style="font-size:0.75rem;font-weight:600;margin-bottom:6px;
+                            color:${allFulfilled ? 'var(--success,#22c55e)' : 'var(--warning,#eab308)'}"
+                            title="Set automatically once on_sale_date passes -- no manual fulfillment tracking without a POS system">
+                        ${allFulfilled ? '\u2713 Fulfilled' : '\u25D1 Partial (' + fulfilledCount + '/' + customers.length + ')'}
+                      </div>`
+                    : ''}
                   <button
                     class="btn btn-sm mark-ordered-btn"
                     data-catalog-id="${c.id}"
@@ -1004,54 +995,20 @@
     document.getElementById('lunar-list').innerHTML = renderDistTable(groupByItem(lunar));
     document.getElementById('prh-list').innerHTML   = renderDistTable(groupByItem(prh));
 
-    // ── Fulfill toggle — event delegation on each distributor list ──
+    // ── Mark Ordered — event delegation on each distributor list ──
     // One click handler per container, attached fresh each time renderByDistributor runs.
     // Using event delegation avoids stale references after innerHTML replacement.
+    // (Mark Fulfilled removed per Rick — fulfilled only matters with a POS
+    // system, out of scope; fulfilled stays live via auto_fulfill_past_on_sale.)
     ['lunar-list', 'prh-list'].forEach(containerId => {
       const container = document.getElementById(containerId);
       // Remove previous listener by cloning the node (cheap for a <div>)
       const fresh = container.cloneNode(true);
       container.parentNode.replaceChild(fresh, container);
 
-      fresh.addEventListener('click', async e => {
+      fresh.addEventListener('click', e => {
         const markOrderedBtn = e.target.closest('.mark-ordered-btn');
-        if (markOrderedBtn) {
-          openMarkOrderedModal(markOrderedBtn.dataset.catalogId);
-          return;
-        }
-
-        const btn = e.target.closest('.fulfill-toggle-btn');
-        if (!btn) return;
-
-        const catalogId    = btn.dataset.catalogId;
-        const currentState = btn.dataset.fulfilled === 'true';
-        const newState     = !currentState;
-
-        btn.disabled    = true;
-        btn.textContent = '\u2026';
-
-        const { error } = await Preorders.setFulfilledByCatalogId(catalogId, newState);
-        if (error) {
-          toast('Failed to update fulfilled status', 'error');
-          btn.disabled = false;
-          btn.textContent = currentState ? '\u2713 Fulfilled' : 'Mark Fulfilled';
-          return;
-        }
-
-        // Update in-memory data so export filters and re-renders are consistent
-        const ts = newState ? new Date().toISOString() : null;
-        allPreorders = allPreorders.map(p =>
-          p.catalog?.id === catalogId
-            ? { ...p, fulfilled: newState, fulfilled_at: ts }
-            : p
-        );
-
-        toast(newState ? '\u2713 Marked as fulfilled' : 'Marked as not fulfilled',
-              newState ? 'success' : undefined);
-
-        // Re-render both distributor lists and stats so fulfilled count is live
-        renderByDistributor();
-        renderStats();
+        if (markOrderedBtn) openMarkOrderedModal(markOrderedBtn.dataset.catalogId);
       });
     });
   }
@@ -1471,7 +1428,7 @@
       `${markOrderedCatalog.title || ''} (${markOrderedCatalog.item_code || markOrderedCatalog.upc || markOrderedCatalog.isbn || '—'}) — ${markOrderedCatalog.distributor}`;
     moQty.value  = totalQty || 1;
     moDate.value = DateUtils.todayLocal();
-    document.querySelector('input[name="mo-type"][value="monthly"]').checked = true;
+    document.querySelector('input[name="mo-type"][value="adhoc"]').checked = true;
     moResult.style.display = 'none';
     moSave.disabled    = false;
     moSave.textContent = 'Save';
