@@ -309,7 +309,7 @@ exhaustive but cover what the discovery pass surfaced.
 
 ## 4. Tables
 
-Ten base tables in the `public` schema. Listed with `tenants` first as the
+Eleven base tables in the `public` schema (ten on production — `order_submissions` is staging-only at time of writing). Listed with `tenants` first as the
 root of the cascade chain, then alphabetical. For each: purpose, columns
 with types and nullability, constraints, foreign keys, indexes, and any
 notable behavior.
@@ -811,6 +811,73 @@ step (Format A delivery invoice or Format B code invoice).
   can read every row regardless of `tenant_id`. Currently dormant under
   one tenant.
 
+
+### 4.11 `order_submissions`
+
+Append-only ledger of what the store has actually submitted to a
+distributor. Added 2026-08-03 by the F101/F102 order-export session
+(`docs/sql/order-submissions.sql`). **Staging only at time of writing —
+not yet created on production.**
+
+**Numbering note:** this table is 4.11 rather than slotting in
+alphabetically between `catalog` and `preorders`, deliberately — renumbering
+4.4–4.10 would break every existing `§ 4.x` cross-reference in this document
+and in the plan docs. The § 4 preamble's "then alphabetical" describes the
+original ten tables.
+
+| Column | Type | Nullable | Default |
+|---|---|---|---|
+| `id` | uuid | NO | `uuid_generate_v4()` |
+| `tenant_id` | uuid | NO | — |
+| `distributor` | text | NO | — |
+| `order_code` | text | NO | — |
+| `item_code` | text | YES | — |
+| `title` | text | YES | — |
+| `quantity` | integer | NO | — |
+| `order_type` | text | NO | — |
+| `foc_date` | date | YES | — |
+| `catalog_month` | text | YES | — |
+| `submitted_on` | date | NO | — |
+| `created_at` | timestamptz | YES | `now()` |
+
+**Constraints:**
+- PK: `id`
+- CHECK `order_submissions_distributor_check`: `distributor = ANY (ARRAY['Lunar', 'PRH'])`
+- CHECK `order_submissions_order_type_check`: `order_type = ANY (ARRAY['monthly', 'adhoc'])`
+- CHECK `order_submissions_quantity_check`: `quantity >= 1`
+- **No unique constraint on `order_code`** — deliberate. Re-ordering a code is
+  legitimate (a customer may reserve after an order has gone out). The ledger
+  records history; the *export* reasons over it.
+
+**FKs:**
+- `tenant_id` → `tenants.id` ON DELETE CASCADE
+
+**Indexes:**
+- `order_submissions_pkey` on `id`
+- `idx_order_submissions_lookup` on `(tenant_id, distributor, order_code)` — the duplicate-check lookup
+- `idx_order_submissions_submitted` on `(tenant_id, submitted_on)` — reading a cycle back
+
+**Notes:**
+- **`order_code` is the distributor code, and that is the whole point.**
+  `preorders.fulfilled` could not serve as an order record because it is keyed
+  on `catalog_id`, which does not survive a re-listing (a title re-solicited in
+  a later month gets a new `catalog` row under the four-column upsert key,
+  § 4.3, and new `preorders` rows that start unmarked). The distributor code is
+  what stayed constant across `2026-05`/`-06`/`-07` in F102's live instance.
+  `order_code` mirrors the export's own fallback chain — PRH `isbn || item_code
+  || upc`, Lunar `item_code || upc || isbn` — via `exportCode()` in `app.js`.
+- **Written manually**, from the By Distributor tab's "Mark Ordered" action,
+  *after* an order is placed. Not written on export click: generating a file is
+  not proof of submission. F108's invoice ingest is designed to populate the
+  same table automatically later.
+- `title` / `foc_date` / `catalog_month` are **descriptive only** — no code
+  reads them for logic. The duplicate check and the backorder-risk panel both
+  match on `order_code` alone. This is why the staging backfill's 708 NULL
+  titles (§ 13 F102) are cosmetic rather than a defect.
+- Append-only: no UPDATE or DELETE policy, matching `reservation_history`'s
+  posture. Corrections are service-role SQL, not an app path.
+- Customer-facing reads go through the `get_ordered_codes()` RPC (§ 6.8), never
+  directly — RLS here is admin-only.
 ---
 
 ## 5. Views
@@ -855,7 +922,7 @@ F26.
 
 ## 6. Database functions
 
-Eight functions in the `public` schema. Listed by category with signature,
+Nine functions in the `public` schema (eight on production — `get_ordered_codes()` is staging-only at time of writing). Listed by category with signature,
 security mode, and purpose.
 
 ### 6.1 Auth helpers
@@ -1021,6 +1088,43 @@ The function lacks defensive checks (no verification that
 and depends on the caller having `auth.users` DELETE rights, which means
 it only succeeds when called via service-role. See F21.
 
+
+### 6.8 Order ledger
+
+#### `get_ordered_codes() → TABLE(distributor text, order_code text)`
+
+```
+LANGUAGE sql STABLE SECURITY DEFINER  SET search_path = public
+```
+
+Returns the DISTINCT `(distributor, order_code)` pairs in
+`order_submissions` (§ 4.11) for the caller's own tenant. Added 2026-08-03
+by the F101/F102 session (`docs/sql/get-ordered-codes-rpc.sql`). **Staging
+only at time of writing — not yet created on production.**
+
+**Why it exists:** `order_submissions` RLS is admin-only, but My List needs
+the "Order placed" status for ordinary customers. This function exposes the
+one fact they need — *which codes are on order* — and nothing else: no
+quantities, no submission dates, no titles. The full ledger stays admin-only.
+
+**Tenant scope is derived internally** from `current_tenant_id()`, never from
+a client-supplied parameter — the same pattern as every other RLS-adjacent
+function here. For an anon caller `current_tenant_id()` is NULL, so the
+result is empty.
+
+**Grants:** `EXECUTE` to `authenticated`; `REVOKE ALL` from `PUBLIC` and
+`anon`.
+
+**Callers:** `app.js` `getOrderedCodes()` → `mylist.html` (drives the
+"✓ Order placed" chip and its qty/cancel lock) and `Preorders.cancel()`
+(refuses to cancel a code with a ledger row — see F109 for the limits of
+that guard).
+
+**Note when testing:** running `SELECT count(*) FROM get_ordered_codes()` in
+the Supabase SQL Editor returns **0** even when the table is full. That is
+correct, not a fault — the editor runs as `postgres` with no `auth.uid()`,
+so `current_tenant_id()` is NULL. Verify with a real authenticated session
+against PostgREST instead.
 ---
 
 ## 7. Row-level security
@@ -1105,6 +1209,25 @@ The only policy. `qual = true` means every authenticated user reads every
 row, regardless of tenant. **F15 — confirmed cross-tenant SELECT leak**,
 dormant only because there is one tenant. The arrivals.html caller relies
 on RLS to scope, and RLS doesn't scope here.
+
+#### `order_submissions` (staging only at time of writing)
+- `admins read tenant order_submissions` — SELECT, authenticated, where `tenant_id = current_tenant_id() AND current_user_is_admin()`
+- `admins insert tenant order_submissions` — INSERT, authenticated, with check `tenant_id = current_tenant_id() AND current_user_is_admin()`
+
+No UPDATE or DELETE policy — the ledger is append-only (§ 4.11). Both
+policies carry an explicit `TO authenticated` rather than defaulting to
+`public`, which is the shape phase-5.0 S2 had to backfill onto several older
+policies; written that way here from the start.
+
+Customer-facing access is deliberately **not** via these policies — the
+`get_ordered_codes()` SECURITY DEFINER RPC (§ 6.8) exposes the minimum
+subset non-admins need. **Verified by simulated-role test, not by
+inspection** (2026-08-03): a real non-admin session sees 0 rows and is
+refused INSERT; a second tenant's admin sees 0 rows and cannot INSERT even
+when supplying the founding tenant's `tenant_id` explicitly; both positive
+controls (founding admin reads own row, tenant-B admin inserts into own
+tenant) pass. The SQL Editor bypasses RLS as superuser, so a plain SELECT
+there proves nothing.
 
 ### 7.2 What the policies don't cover
 
@@ -2771,7 +2894,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F101 — distributor order exports carry no FOC window: any title in the current catalog month is ordered regardless of which order cycle its FOC belongs to
 
-- **Status:** filed 2026-07-27 during a title-reconcile question about two PRH codes rejected as UNKNOWN. **Open — planned 2026-08-02; not started.** Plan: `docs/order-export-foc-window-and-order-state.md` (taken together with F102).
+- **Status:** filed 2026-07-27 during a title-reconcile question about two PRH codes rejected as UNKNOWN. **RESOLVED on staging 2026-08-03** — plan `docs/order-export-foc-window-and-order-state.md` (executed together with F102). **Not yet promoted to production**; see *Production promotion* below, which is where the real exposure lives.
+- **Resolution (2026-08-03, staging):** both order exports now go through an **Order Builder** modal on the By Distributor tab instead of downloading immediately. It lists every distinct `foc_date` among that distributor's unfulfilled current-month reservations with per-cycle title/copy counts, **multi-select**, defaulting to the earliest not-yet-passed FOC date. Everything held back is shown, grouped by reason — **Backordered** (FOC passed, never ordered), *At risk*, *Outside selected cycle*, *Ad-hoc ordered*, *no-FOC* (included regardless, matching `admin.html`'s existing null-FOC convention), and a fulfilled count — with Backordered and "outside selected cycle" visually distinct, per this entry's own "surface, never silently drop" requirement. Null-FOC handling follows the in-file precedent at the shelf-copy suggested-order path rather than reinventing it.
+- **S1 band measurement (2026-08-03) — the default is empirical, not invented.** Intersected the archived order files against production `catalog.foc_date`: the May 24 cycle spans **8** distinct PRH FOC dates (5/25 → 7/13) and 6 Lunar; the June 27 cycle spans **8** PRH (6/22 → 8/17) and 8 Lunar; July's covered 8/10–8/31. **No stable offset exists** between submission date and FOC band, confirming § 2.2's ruling that `order_deadline` cannot anchor the export. The preselected default is therefore the earliest not-yet-passed FOC date, stated as a convenience the operator overrides — never a derived rule.
+- **Backorder-risk panel (§ 4.5) shipped** as a persistent admin-dashboard panel above the export bar, hidden when empty. It reuses `isFocThisMonth()` and `isFocPast()` from `app.js` rather than reimplementing date logic (F28's precedent), reads `Settings.getOrderDeadline()` for the second trigger, and classifies **At risk** / **Backordered** / cleared-by-ledger. A code with any `order_submissions` row drops off the list regardless of date — proven by gate V7(c), which is the assertion that distinguishes "reads the ledger" from "only reads the date".
+- **Verification:** V2 (byte-identical export on a clean slate — empty ledger + all cycles selected reproduces the pre-fix sheet exactly, asserted against the real staging dataset through the unmodified `makeOrderSheetRows`), V3 (a two-cycles-out title excluded **and** listed under *outside selected cycle*), V7 (all three backorder states) — 22 logic assertions total, run against the **actual functions extracted from `admin.html`/`app.js` by line range**, not reimplementations. Full `run-smoke.ps1` green (46 unit + 50 Playwright) on every deploy. Real-browser check confirmed by Rick 2026-08-03. All seeded fixtures torn down and verified by live SELECT returning zero rows.
+- **Accepted divergence (recorded per the plan's § 5 OUT):** the **reserved-titles report** and the **Paper Orders tab** remain **month-scoped** and now legitimately **disagree with the export**, which is FOC-cycle-scoped. This was Rick's explicit scoping call, not an oversight — but it means the two surfaces answer different questions and should not be reconciled against each other. Anyone changing either should decide deliberately whether to adopt the FOC window there too.
+- **Still open, inherited by F108:** a reservation pointing at a withdrawn advance record (the MIDNIGHT X-MEN #2 case that surfaced this finding) still has no customer-facing or admin-facing signal. This session warns *before* the FOC lock bites; it does not detect a title the distributor rejected or withdrew. That is F108's scope and needs sample order-confirmation files.
 - **Domain correction (2026-08-02, from a planning interview with Rick) — the fix direction below is under-specified:** a catalog month carries **many** FOC cycles (July 2026 had **13** distinct FOC dates, 07/20 → 11/09), and there is **no derivable rule** mapping a catalog month to an order band. Critically, `app_settings.order_deadline` — which already exists (`app.js:622–631`, `admin.html:1048–1086`) and was 7/24 for July — is the **customer** reservation cutoff, **not** the submission date, and cannot anchor the export window: July's sheet reached PRH covering FOC **8/10–8/31**, with nothing at 07/27 or 08/03. The band is driven by the distributor's own cycle dates. The plan therefore makes cycle selection **explicit** (multi-select over the FOC dates present in the data) rather than derived. Also newly recorded: **ad-hoc orders exist** — when a title's FOC locks before the monthly order goes out, it is ordered separately and **must be excluded from the monthly order**, which is a second, independent route to F102's duplicate failure. None of this was visible from the code.
 - **"Backordered" — the store's term, and the state the FOC lock exists to prevent (2026-08-02, Rick).** A reservation whose FOC passed **without an order having been placed** is *Backordered*. Use this term in code, UI and docs. Why it is worse than it first appears: the FOC lock (`isFocLocked` → `isFocPast`, `app.js:1358–1370`) is a **hard** cutoff that blocks new reservations **and cancellations** — `catalog.html:1217–1218` treats an already-reserved locked title as *committed*. So the lock commits the **customer** independently of whether the **store** ordered, and a backordered title is one the customer cannot back out of and that cannot arrive. Rick's stated intent is to actively avoid this state, so the plan adds an **admin backorder-risk panel** (at-risk vs Backordered) triggered when a reserved title's `foc_date` falls in the current calendar month **and/or** on-or-before `app_settings.order_deadline`. Note `isFocThisMonth()` (`app.js:1375+`) already computes that first condition and is already in customer-side use at `catalog.html:601` — reuse it; reimplementing the date logic is how F28 recurs.
 - **Severity:** Medium — real money and real customer expectations. Titles are submitted to the distributor one or more cycles before they are orderable; the distributor rejects them, and the rejection is caught only by reading the order confirmation by eye. No data-integrity or security exposure. Both environments (same client code).
@@ -2786,7 +2915,17 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F102 — `fulfilled` is an arrival flag, not an order flag, so a re-listed long-lead title is re-exported to the distributor on every cycle until it physically arrives
 
-- **Status:** filed 2026-07-27 alongside F101, from the same production reconcile. **Open — planned 2026-08-02; not started.** Plan: `docs/order-export-foc-window-and-order-state.md` (taken together with F101). **The live instance is confirmed realized, not hypothetical — Rick verified the same day that PRH holds an order for 12 copies.**
+- **Status:** filed 2026-07-27 alongside F101, from the same production reconcile. **RESOLVED on staging 2026-08-03** — plan `docs/order-export-foc-window-and-order-state.md` (executed together with F101). **Not yet promoted to production, where the realized 5-copy surplus actually sits**; see *Production promotion* below. **The live instance is confirmed realized, not hypothetical — Rick verified 2026-07-27 that PRH holds an order for 12 copies.**
+- **Resolution (2026-08-03, staging) — a code-keyed ledger, exactly as § 2.6 required:** new table **`order_submissions`** (`docs/sql/order-submissions.sql`), keyed on the **distributor code** (`order_code`) so it survives a re-listing, with `tenant_id` FK CASCADE, CHECK constraints on `distributor` (`Lunar`/`PRH`) and `order_type` (`monthly`/`adhoc`), two indexes, and admin-only RLS (SELECT + INSERT, both `tenant_id = current_tenant_id() AND current_user_is_admin()`, explicit `TO authenticated`). **No unique constraint on `order_code`** — re-ordering is legitimate; the ledger records history and the export reasons over it. Append-only: no UPDATE/DELETE policy, matching `reservation_history`'s posture.
+- **Write path:** a **"Mark Ordered"** action on the By Distributor tab (modal: quantity, `monthly`/`adhoc`, submitted-on date), written **manually after ordering** — not on export click, since generating a file is not proof of submission. **Defaults to `adhoc`** (Rick, 2026-08-03).
+- **Duplicate surfacing (§ 4.3) — surfaces, never auto-suppresses.** At export time each code is looked up in the ledger; hits appear in an **"Already ordered"** panel with prior quantity, date, cycle and order type, each with an include/exclude checkbox and an editable quantity **pre-filled with the remaining amount** (reserved − already-ordered). On the live MIDNIGHT X-MEN shape this suggests **2**, which is the correct action — not 7 (what happened) and not 0 (what auto-suppression would have done). Gate **V4** asserts the row is flagged with prior qty and is *not* auto-suppressed.
+- **Per-title order state, added 2026-08-03 after Rick's real-browser review:** the By Distributor **Status column is a single button** whose label and colour carry the state — `Mark Ordered` (nothing on the ledger) → `◐ Add (n of m)` (ordered < reserved, amber) → `⚠ Over (n of m)` (ordered > reserved, red, **still clickable** — surface, never block) → `✓ Ordered (n)` (exact match, **disabled**). This is what makes the F102 failure mode visible *per title, at a glance*, rather than only inside the export flow. **The over-order state is the one this finding exists for** and it is now impossible to look at the tab and not see it.
+- **Ad-hoc exclusion (§ 4.4):** a ledger row with `order_type = 'adhoc'` excludes that code from the monthly export and lists it as excluded (gate **V5**) — closing the second, independent route to the same duplicate failure.
+- **Customer-facing consequence (scope extension, Rick 2026-08-03):** "Order placed" on **My List** is now driven by the ledger, **independent of `fulfilled`** — Rick's words: *"The fulfilled status is not relevant as Marked Ordered should show the Order placed status."* Because `order_submissions` is admin-only under RLS, a new SECURITY DEFINER RPC **`get_ordered_codes()`** (`docs/sql/get-ordered-codes-rpc.sql`) exposes only `(distributor, order_code)` pairs — no quantities, dates, or titles — tenant-scoped via `current_tenant_id()` internally, never a client parameter; `EXECUTE` to `authenticated` only. `Preorders.cancel()` gained a matching second guard refusing to cancel a code with any ledger row, and `exportCode()` moved from `admin.html`-local into `app.js` so the cancel guard, My List and the exports share one fallback chain. **Verified end-to-end** with real throwaway staging users: the RPC returns correct tenant-scoped rows for a non-admin session, and the guard refuses an ordered code while permitting a non-ordered one (positive *and* negative control).
+- **"Mark Fulfilled" removed (Rick, 2026-08-03):** rather than the § 4.6 relabel, Rick's call was that manual fulfillment tracking is meaningless without POS integration (out of scope), so the manual toggle and its handler are gone. **`fulfilled` itself is untouched** — same column, same RLS, still set automatically by `auto_fulfill_past_on_sale()` at import, and `Preorders.setFulfilledByCatalogId()` is left in `app.js` unused for a future POS path. This supersedes the § 4.6 decision gate, which had been answered "additive" earlier the same session.
+- **Ledger seeded (§ 4.7 / S5) — the feature is not inert.** 857 rows backfilled from the real archived order files (`docs/sql/order-submissions-backfill-may-june-july.sql`): May 24 (93 PRH + 55 Lunar), June 27 (131 + 137), July 26 (212 + 229). The July files did not exist in `Orders Archived/` when the backfill was first drafted and were added by Rick mid-session; **they confirm this finding directly** — `prh-order-2026-07-26.txt` carries `75960621668000111,7`, which against June's `,5` is the 12-against-7 surplus. **Caveat:** enrichment ran against *staging's* catalog, which does not mirror production's history, so 708 of 857 rows have NULL `title`/`foc_date`. Harmless (no FK; duplicate-check and panel both match on `order_code` alone) but **the production backfill must be regenerated against production's catalog**, which matched 100% of these codes during S1.
+- **Residual — the cancel guard is client-side only.** `Preorders.cancel()`'s ledger check, like the pre-existing `fulfilled` check it mirrors, lives in application code; `preorders` RLS lets a user delete their own row, so a client bypassing `Preorders.cancel()` could still cancel an ordered reservation. Pre-existing posture, now covering a money-relevant guard — filed as **F109** rather than left implicit.
+- **Production promotion (not performed — Rick's explicit call):** requires, in order: `docs/sql/order-submissions.sql`, `docs/sql/get-ordered-codes-rpc.sql`, a **regenerated** backfill against production's catalog, then the client promotion via `/promote-prod`. **The realized exposure is on production** — PRH holds 12 copies of `75960621668000111` against 7 reservations, FOC **2026-08-31**. Adjusting that order down is operational and worth doing before 8/31 regardless of when this code ships; the fix prevents the next one, not this one.
 - **Correction (2026-08-02, from a planning interview with Rick) — this entry's headline claim is true of the code but not of the practice.** *"`fulfilled` is an arrival flag, not an order flag"* describes what the code means. In actual use, a reserved title is treated as **ordered** when it is manually set via **"Mark Fulfilled"** on the By Distributor tab (`admin.html:666`, `:699` → `Preorders.setFulfilledByCatalogId`) — Rick's words: *"not the best description of what is happening."* So an order record does exist; it is mislabelled, and — the part that actually causes the duplicate — **keyed on `catalog_id`**, which does not survive a re-listing. **Consequence for the fix:** this entry's *"per-reservation (or per-code-per-cycle) `ordered_at`"* hedge names the wrong option first. A `preorders.ordered_at` column inherits **exactly** the flaw this entry diagnoses in `fulfilled` — a re-listed title gets a new `catalog` row (upsert key `(tenant_id, item_code, distributor, catalog_month)`, § 4.3) and new `preorders` rows that start unmarked. Only a ledger keyed on the **distributor code** works; that is the identity that persisted across `2026-05`/`-06`/`-07` in the live instance. Also settled: the duplicate check must **surface, not auto-suppress** — auto-suppression would have ordered **0** copies where **2** were correct (12 held, 7 reserved, 5 already on order). Finally, reconciliation today runs off **shipping reports**, which cannot surface a rejection (a rejected title simply never ships); Rick's assessment is that **invoice reconciliation is the more accurate source** — filed separately as **F108**.
 - **Severity:** Medium — a duplicate-ordering path with direct, realized cost exposure, but a **rare trigger**. The mechanism is general; firing it requires the uncommon combination of (a) submitted on an earlier cycle, (b) still unarrived so never marked `fulfilled`, and (c) re-listed by the distributor in a later catalog month under the same code — which in practice means the publisher re-dated the book *after* its FOC. Measured incidence: **1 of 268** codes submitted on the June cycle reappears on the July sheet (sweep below). No data-integrity or security exposure. Both environments. *(Filed initially as "Medium-to-High … systematic rather than specific to one title"; the sweep corrected that — general in mechanism, rare in practice.)*
 - **Symptom:** none in the app. A title already submitted to the distributor on an earlier cycle reappears on a later cycle's order sheet, indistinguishable from a title never ordered.
@@ -2894,6 +3033,17 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Scope:** both environments (same client code and same operational process). Production is where the exposure is real.
 - **Fix direction (future session):** ingest the distributor order confirmation/invoice and reconcile it against the submitted order — marking each code accepted / rejected / short-allocated, writing the outcome to the `order_submissions` ledger that the F101/F102 session creates (that table is designed to be populated by this path later, not only by hand). Then decide the **customer-facing** behaviour, which is the harder half: what a reservation should show when its title was rejected or withdrawn upstream. Needs sample PRH and Lunar order-confirmation files before it can be specified — the shipment path's Format A/B history (F83, F84) is a warning that assuming a format from memory is expensive here.
 - **Related:** **F101** — its UNKNOWN rejections are what surfaced this, and its "customer-facing consequence to settle" thread is inherited by this finding. **F102** — creates the `order_submissions` ledger this would populate. **F89** / **F90** — the same absence of outcome instrumentation, on the claim/invite and analytics paths. **F84**, **F83** — prior evidence that distributor file formats must be read, not assumed. Partial fulfillment (`Known Out-of-Scope Items`) is the adjacent product question.
+
+#### F109 — the order-ledger cancel guard (like the pre-existing `fulfilled` guard it mirrors) lives in client code, not RLS, so a client bypassing `Preorders.cancel()` can still cancel an ordered reservation
+
+- **Status:** filed 2026-08-03 at the close of the F101/F102 order-export session, which is what made the gap worth naming. **Open — deferred, low priority.** No plan doc.
+- **Severity:** **Low.** Not a new hole — `Preorders.cancel()`'s original `fulfilled` guard has always had exactly this property and was never filed. Recorded now because the same guard shape was extended to cover **order state**, where the consequence is money rather than tidiness: a cancelled-after-ordering reservation leaves the store holding a copy nobody wants, and the store has no signal that it happened. Requires a deliberately hand-crafted PostgREST call with the user's own JWT — not reachable through the app's UI, which hides and disables the control.
+- **Symptom:** none observed. Found by writing the end-to-end verification for the new guard: the test deliberately issued a direct `DELETE /rest/v1/preorders?...` with a real customer token, bypassing `Preorders.cancel()` entirely, and it returned **HTTP 204**. The row was gone despite an `order_submissions` row existing for its code.
+- **Diagnosis:** `preorders` RLS grants `users manage own preorders` — `ALL` where `auth.uid() = user_id AND tenant_id = current_tenant_id()` (§ 7.1). DELETE is therefore permitted on any row the user owns. Both cancellation guards — the original `fulfilled` check and the new `get_ordered_codes()` ledger check — are pre-flight lookups inside `Preorders.cancel()` in `app.js`, and the defensive `.eq('fulfilled', false)` on the DELETE only narrows the *fulfilled* case. Nothing at the database layer knows about the ledger. The FOC lock (`isFocLocked`) is likewise client-side.
+- **Scope:** both environments (same client code, same policy set). Staging today; production once the F101/F102 work is promoted.
+- **Fix direction (future session, low priority):** the honest options are (a) accept and document it as a UI-level guard, which is what it has always been, or (b) move enforcement into the database — a `BEFORE DELETE` trigger on `preorders` rejecting a delete when a matching `order_submissions` row exists (and, if wanted, when `fulfilled = true`), which is the only version that actually holds against a crafted request. **Do not** narrow the RLS policy itself to express this; the condition depends on a join against another table and belongs in a trigger, not a policy `USING` clause. Worth weighing against how reachable this is in practice: customers are magic-link authenticated and the app never exposes the call.
+- **Where:** `app.js` — `Preorders.cancel()` (both guards); `docs/sql/get-ordered-codes-rpc.sql`; `preorders` RLS policy `users manage own preorders` (§ 7.1). Related client-side-only guard: `isFocLocked` / `isFocPast`.
+- **Related:** **F102** — created the ledger guard that prompted this filing. **F10** — the other `preorders` FK/deletion-behaviour finding; both concern what the database does or does not enforce about preorder deletion. **F104** — the adjacent "a guard's blind spot is worth recording even when nothing has gone wrong" precedent.
 
 ---
 

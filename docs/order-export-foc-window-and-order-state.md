@@ -1,6 +1,11 @@
 # Order-Export Correctness Session — F101 (FOC window) + F102 (order state)
 
-**Status:** Planned — 2026-08-02. Not started.
+**Status:** **Complete on staging — 2026-08-03. Not promoted to production** (Rick's call; promotion steps in § 8).
+**Executed:** 2026-08-02 → 2026-08-03 (CLI session). Gates V1–V8 all green; real-browser check confirmed by Rick 2026-08-03.
+**Scope changed mid-session by Rick, three times** — all live, all recorded in § 8:
+(a) My List's "Order placed" status/lock is driven by the ledger **independent of `fulfilled`** (needed a new `get_ordered_codes()` RPC, since `order_submissions` is admin-only);
+(b) **"Mark Fulfilled" removed entirely** — superseding § 4.6's decision gate, which had already been answered "additive" earlier the same session;
+(c) Mark Ordered defaults to `adhoc`, and the By Distributor Status column became a single state-carrying button after two rounds of Rick's real-browser feedback.
 **Plan written:** 2026-08-02 (planning session; execution handed to a fresh CLI session)
 **Not a phase sub-deploy** — standalone correctness session. Phase 5 closed 2026-07-15; Phase 6 not started.
 **Target surface:** `admin.html` (order exports + By Distributor tab), one new table, `docs/technical-reference.md`.
@@ -304,19 +309,36 @@ Load the archived June and July order files into `order_submissions` (`order_typ
 
 ## 8. Completion criteria
 
-- [ ] § 3 line numbers re-verified against disk before any edit
-- [ ] S1 band measurement run; default preselection stated as derived-or-not, never invented
-- [ ] `order_submissions` live on staging with RLS; **V1** green by simulated-role test
-- [ ] Both exports FOC-filtered with an explicit multi-select cycle; **V2** byte-identical on a clean slate
-- [ ] Held-back panel shows every bucket in § 4.1's table; **Backordered visually distinct from "outside selected cycle"**; nothing dropped silently
-- [ ] Duplicate surfacing live with per-title quantity control; **V4** confirms no auto-suppression
-- [ ] Ad-hoc flag + exclusion live; **V5** green
-- [ ] Backorder-risk panel live, reusing `isFocThisMonth()` rather than reimplementing it; **V7** green on all three states
-- [ ] § 4.6 relabel decision **presented to Rick**; implemented only if approved, or recorded as deferred
-- [ ] S5 backfill done — or its absence stated explicitly, with § 4.7's consequence repeated (the panel over-reports until it happens)
-- [ ] **V3**/**V6**/**V8** green; all seeded fixtures torn down and verified by SELECT
-- [ ] § 13 F101/F102 updated, incl. the accepted export ↔ reserved-titles-report divergence
-- [ ] Production promotion raised with Rick (not performed unasked)
+- [x] § 3 line numbers re-verified against disk before any edit — all matched, zero drift
+- [x] S1 band measurement run; default preselection stated as derived-or-not, never invented — **no stable band exists** (May: 8 distinct PRH FOC dates 5/25→7/13; June: 8, 6/22→8/17), so the default is "earliest not-yet-passed FOC date", explicitly a convenience the operator overrides
+- [x] `order_submissions` live on staging with RLS; **V1** green by simulated-role test — 6/6 assertions using real throwaway users + PostgREST (not `SET LOCAL`, which has failed 25P02 in this editor), incl. both positive controls; fixtures torn down, verified 0 rows
+- [x] Both exports FOC-filtered with an explicit multi-select cycle; **V2** byte-identical on a clean slate — asserted through the unmodified `makeOrderSheetRows` against the real staging dataset
+- [x] Held-back panel shows every bucket in § 4.1's table; **Backordered visually distinct from "outside selected cycle"**; nothing dropped silently
+- [x] Duplicate surfacing live with per-title quantity control; **V4** confirms no auto-suppression — suggests **2** on the MIDNIGHT X-MEN shape (7 reserved − 5 prior), the correct answer
+- [x] Ad-hoc flag + exclusion live; **V5** green
+- [x] Backorder-risk panel live, reusing `isFocThisMonth()` rather than reimplementing it; **V7** green on all three states, incl. (c) cleared-by-ledger
+- [x] § 4.6 relabel decision **presented to Rick** — answered "additive" (2026-08-02), then **superseded 2026-08-03**: Rick removed "Mark Fulfilled" entirely, on the grounds that manual fulfillment tracking is meaningless without POS integration. `fulfilled` itself is untouched and still set by `auto_fulfill_past_on_sale()`.
+- [x] S5 backfill done — **857 rows**, May + June + July (Rick added the July files mid-session; they confirm F102 directly: `75960621668000111,7` against June's `,5`). Caveat recorded: enrichment ran against staging's catalog, so 708/857 have NULL `title`/`foc_date` — cosmetic (no logic reads them), but **the production backfill must be regenerated against production's catalog**.
+- [x] **V3**/**V6**/**V8** green; all seeded fixtures torn down and verified by SELECT — V6 = full `run-smoke.ps1` (46 unit + 50 Playwright) green on every one of four deploys, **plus** Rick's real-browser check across three rounds of feedback
+- [x] § 13 F101/F102 updated, incl. the accepted export ↔ reserved-titles-report divergence — also § 4.11 (new table), § 6.8 (new RPC), § 7.1 (new policies), and **F109 filed** for the client-side-only cancel guard
+- [x] Production promotion raised with Rick (not performed unasked) — **still owed**, see below
+
+### Production promotion — owed, not performed
+
+Everything above is **staging only**. Production still has no FOC window, no
+order ledger, and no duplicate check. In order:
+
+1. `docs/sql/order-submissions.sql` (table + indexes + RLS)
+2. `docs/sql/get-ordered-codes-rpc.sql` (the customer-facing read)
+3. A backfill **regenerated against production's catalog** — do not reuse the
+   staging file; prod matched 100% of these codes during S1, so the prod
+   backfill can carry real titles and FOC dates instead of 708 NULLs
+4. `/promote-prod` for the client change
+
+**Independent of any of that:** PRH holds **12 copies** of
+`75960621668000111` against **7** reservations, FOC **2026-08-31**. Adjusting
+that order down before 8/31 is operational and worth doing regardless of when
+the code ships. The fix prevents the next one, not this one.
 
 ---
 
