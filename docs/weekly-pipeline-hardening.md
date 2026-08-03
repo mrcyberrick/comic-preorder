@@ -9,7 +9,7 @@ signup check confirmed. Written 2026-07-25, executed 2026-07-26, closed 2026-07-
 |---|---|---|
 | S1 CTA → founding subdomain | **Live and verified on the served page** | `4582c12` (scripts) |
 | S2 single-commit publish | **Live and verified: 1 commit, 1 build, 1 deploy** | `b727912` (scripts) |
-| S3 send-status assertion | **Live and verified both directions 2026-07-27: V4 red + GitHub email, V5 healthy send delivered** | `34074c3e` (weekly-pull-feed) |
+| S3 send-status assertion | **Live. V4/V5 verified 2026-07-27; then false-alarmed on the first unattended run (2026-07-28, campaign 24, 100% delivered, Action red) — camelCase `inProcess` vs Brevo's `in_process`. Fixed, filed as F106** | `34074c3e`, fix `95d5eec8` (weekly-pull-feed) |
 
 **Also landed this session** (both discovered *by* running the gates, not planned):
 - `604cfaec` (weekly-pull-feed) — `branches: [main]` on `deploy-pages.yml`; V2 prerequisite,
@@ -88,7 +88,7 @@ situation this plan exists to end.
 |---|---|---|
 | **S1** | **CTA → founding subdomain** | `build-pull-feed.js:921` — `const PREORDER_URL = "https://pulllist.app";` → `"https://rjbookstop.pulllist.app"`. One line. Feeds **three** anchors in the generated email: the header wordmark, the hero image, and the "Reserve Your Comics" button. |
 | **S2** | **F98 — single-commit publish** | Replace the per-file Contents API commits (~30 per import) with one **Git Data API** commit: create blobs → build one tree → one commit → one ref update. Covers thumbnails, `newsletter.html`, `newsletter-email.html`, and `rss.xml` together. Preserve the existing MD5 cache-skip and orphan-purge behaviour. |
-| **S3** | **F96 — assert the send** | In `scripts/send-brevo-campaign.js` (weekly-pull-feed repo), after `POST /emailCampaigns/{id}/sendNow`, issue `GET /v3/emailCampaigns/{id}` and assert `status` ∈ {`sent`, `inProcess`}. Exit non-zero on `suspended`/`draft` so GitHub emails a failure — matching the fail-closed posture the staleness guard already uses. Optionally also assert recipient count > 0 *before* sending, which would have caught the original outage pre-send. |
+| **S3** | **F96 — assert the send** | In `scripts/send-brevo-campaign.js` (weekly-pull-feed repo), after `POST /emailCampaigns/{id}/sendNow`, issue `GET /v3/emailCampaigns/{id}` and assert `status` ∈ {`sent`, `in_process`} **(corrected 2026-07-29 — this spec originally said `inProcess`; Brevo returns snake_case, and the camelCase literal shipped into the code and cost a false alarm on the first unattended send. See F106.)**. Exit non-zero on `suspended`/`draft` so GitHub emails a failure — matching the fail-closed posture the staleness guard already uses. Optionally also assert recipient count > 0 *before* sending, which would have caught the original outage pre-send. |
 
 ---
 
@@ -120,7 +120,7 @@ situation this plan exists to end.
   resulting tree against a known-good publish before pointing at `main`.
 - **R2 — S3's status assertion fires falsely.** If Brevo reports a transient non-terminal status
   immediately after `sendNow`, a strict assertion could fail a send that actually succeeded.
-  *Mitigation:* accept `inProcess` as well as `sent`, and poll briefly rather than reading once.
+  *Mitigation:* accept `in_process` as well as `sent`, and poll briefly rather than reading once. **Outcome: the mitigation was right and the literal was wrong** — shipped as `inProcess`, so R2 fired anyway on 2026-07-28 (campaign 24, 100% delivered, Action red). Fixed in `95d5eec8`; filed as F106.
 - **R3 — verification requires a real send.** A `DRY_RUN` draft does not exercise the suspension
   path, which is precisely why the original outage hid for 18 days. *Mitigation:* verify against a
   one-contact test list (list **8**, `test - Weekly Pull List`, already exists), and restore
