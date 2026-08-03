@@ -1201,6 +1201,12 @@ function confirmDialog(message, okLabel = 'Remove') {
 
     if (!arriving.length) {
       section.style.display = 'none';
+      // Clear stale cards — this function used to run only once at page
+      // load, so a shrink-to-empty transition was unreachable. The F110
+      // withdrawn-cancel path is the first thing that can trigger it: without
+      // this, a removed card stays in the DOM (just hidden behind the
+      // section's display:none) until the next full page reload.
+      grid.innerHTML = '';
       return;
     }
 
