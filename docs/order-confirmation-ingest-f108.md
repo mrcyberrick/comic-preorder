@@ -1,7 +1,8 @@
 # Order-Confirmation Ingest — closing F108, and making the Order Follow-Up panel mean something
 
-**Status:** **Planning — not started.** Session A is specification-only and produces no code.
-**Plan written:** 2026-08-04.
+**Status:** **Planning. Session A substantially COMPLETE 2026-08-04** — real confirmation exports obtained from both distributors and characterised against live production data (§ 2.9). Sessions B–D not started.
+**Plan written:** 2026-08-04; **materially revised the same day** once the real files arrived. **Two things the screenshots implied turned out to be false, and both were load-bearing** — see § 2.9.4 and § 2.9.5. This is the third time in this workstream that reading the actual vendor material corrected a design before it reached code (cf. F110's `SalesStatus`, F112's severity split).
+**Sample files:** `catalogs/order-confirmations/` (local, alongside the catalog CSVs — not committed).
 **Follows:** `docs/order-export-foc-window-and-order-state.md` (F101/F102 — built the ledger), `docs/order-export-followthrough-f110-f111-f112.md` (F110/F111/F113 — cross-month gather + withdrawal), and the 2026-08-04 panel-triage work (F115/F116 — arrival-evidence clearing). All three are **live on production**.
 **Unblocks:** **F108**, whose entry has read *"needs sample PRH/Lunar order-confirmation files before it can be specified"* since 2026-08-02. **Those samples now exist** — see § 2.6.
 **Environments:** staging first throughout. Production promotion is Rick's explicit call, per session.
@@ -95,6 +96,74 @@ All four are prior-catalog-month rows (`2026-05`/`2026-06`; production is on `20
 
 **This is why the work is a priority-not-emergency.** The damage is operator trust and wasted checking, not a broken customer promise — yet. The customer-facing half (§ 4.4) is where that changes, and it is deliberately last.
 
+### 2.9 The real files, measured 2026-08-04 — this supersedes every screenshot-derived assumption above
+
+Two genuine exports were obtained and parsed with an RFC4180 parser (both need one — see § 2.9.6), then feasibility-tested against the live production catalog (11,713 rows, read-only).
+
+| | **PRH** `order-detail-0006099880-0599580000.csv` | **Lunar** `Order_1853046.csv` |
+|---|---|---|
+| Shape | header block (12 key/value rows) + blank row + line table | single flat table |
+| Line columns | `Line, Description, ISBN, Warehouse, Price, Discount %, Net Value, Qty, Net Amount, Order Status` | `Code, Title, Qty, Retail, Discount, Discounted Price, Total, UPC` |
+| Lines | 31 | 152 (**149 distinct codes**) |
+| Order number | **in file** — `Order Number 0006099880` | **filename only** — not in the content |
+| Order date | **`Order Create Date 2026-08-04`, ISO** | **absent** |
+| Status column | present but **31/31 `Backordered`** | **absent** |
+| Negative quantities | none | **3** |
+| Code column | `ISBN` — but **30/31 are 17-digit UPC-style**, 1 real ISBN-13 | `Code` (our `item_code` shape) **plus** a separate `UPC` |
+| Catalog-month span | n/a | **4 months in one order** — `0626`×129, `0526`×19, `0426`×3, `0326`×1 |
+
+**Match feasibility against the production catalog — the number that decides whether this is worth building:**
+
+- **PRH: 28 / 31 lines matched (90%).** The three misses are real comics not in our catalog (Magic: The Gathering — Jace #4, MARVEL KNIGHTS #6 ×2) — titles ordered outside the pull-list catalog.
+- **Lunar: 137 / 149 codes matched (92%).** The misses are almost entirely **promo posters, ashcans and free bundles** (`…DC8606 BATMAN BAD SEEDS PROMO POSTER`, `LAST DRIVER #1 ASHCAN PROMO`, …) — items that correctly do not exist in a customer-facing catalog.
+- **Of the matched lines, 28/31 (PRH) and 122/149 (Lunar) correspond to a title with an *open founding-tenant reservation*** (measured against 1,343 open reservations / 1,190 distinct reserved keys). These orders are overwhelmingly customer-driven, which is precisely why ingesting them removes so much panel noise.
+- **Volume:** roughly **180 ledger rows per monthly ingest** (31 + 149). Against 857 today, ~2,200/year. `loadOrderLedger()` was paginated on 2026-08-04 (F116) — that fix is now load-bearing rather than precautionary.
+
+#### 2.9.1 Netting is mandatory, and the schema will reject the raw file
+
+Lunar carries **3 negative-quantity lines**, and each cancels an earlier positive line for the same code:
+
+| Code | Net | Title |
+|---|---|---|
+| `0626DC0232` | **0** | DC CONNECT #75 OPT-IN BUNDLES OF 25 (FREE) (NET) |
+| `0526IM0377` | **0** | HYDE STREET #14 CVR A IVAN REIS & DANNY MIKI **Cancelled** |
+| `0626DE0825` | **0** | VAMPIRELLA VS RED SONJA RED CITY #1 CVR G … VIRGIN VAR |
+
+`order_submissions` has **CHECK `quantity >= 1`**. A row-per-line ingest therefore **fails outright** on the first negative line — not silently, but the import breaks. **Ingest must net by code within a file before writing, and skip codes whose net is 0.** Writing a `1` for a cancelled title would be worse than the current false alarm: it would tell the panel a cancelled book is on order.
+
+#### 2.9.2 Cancellation is signalled in free text, not a column
+
+Two Lunar lines carry the word **`Cancelled` appended to the title**. There is no status column to read it from. Netting (§ 2.9.1) catches these correctly *without* parsing the title, which is the robust path — **do not build a title-text matcher**; it is a fragile signal that happens to agree with the arithmetic here.
+
+#### 2.9.3 PRH's `Order Status` is the F110 trap, exactly repeated
+
+**31 of 31 lines read `Backordered`.** This is the same shape as F110's discovery that `*_full_active.csv` was 871/871 `IP / Active`: **a status column that never varies is not a signal.** It is also the F112 collision in its most dangerous form — the literal string `Backordered`, meaning *ordered and awaiting fulfilment*, one column away from our own `Backordered`, meaning *never ordered*. **This column must not be ingested, stored, or displayed.**
+
+#### 2.9.4 Correction — the rich supplier state is screen-only
+
+§ 4.2 was written from the web UIs, which show Lunar's per-line **Shipped / Partially Shipped / Processing**, ship date, in-store date and Due Date, and PRH's **Est Delivery**. **None of that is in either export.** The Lunar CSV has no dates and no status at all; PRH has no date column in its line table.
+
+**Consequence: `supplier_status`, `expected_date` and `status_as_of` have no source and are cut from Session B** (§ 4.2, rewritten). Anything that depends on them — including the customer-facing *"Ordered — expected Aug 12"* in § 4.4 — is **not deliverable from these files** and needs a separately-sourced feed before it can be planned. Had Session A been skipped, Session B would have built three columns with nothing to populate them.
+
+#### 2.9.5 Correction — Lunar's order number is not in the file
+
+The natural key proposed at § 4.1 assumed a supplier order id available per line. **Lunar's export contains no order number**; it exists only in the filename `Order_1853046.csv`. PRH's is properly in the header (`Order Number`, and a distinct `Purchase Order Number`). So the two distributors need **different key-derivation strategies**, and Lunar's depends on a filename the operator could rename. See § 4.1, rewritten.
+
+Related: **Lunar supplies no order date**, yet `submitted_on` is **NOT NULL**. PRH supplies `Order Create Date` in ISO form and needs no help.
+
+#### 2.9.6 Parsing hygiene, all confirmed against the real bytes
+
+- The PRH file begins with a **UTF-8 BOM**.
+- Its `Bill To` / `Ship To` header values contain **embedded newlines inside quoted fields** — a line-splitting parser corrupts the file. A real RFC4180 parser is required, not `split('\n')`.
+- The PRH file is **two tables in one**: locate the row beginning `Line,Description,ISBN` and parse the line items from there; treat everything above it as header key/values.
+- PRH `Line` numbers are **not monotonic** (200 precedes 170) — never infer ordering from them.
+- Lunar has **3 UPCs with a trailing `x`** (`70985304127601411x`), and **14 zero-retail** promo/bundle rows with an **empty-string** `Discount` field.
+- Lunar's `Code` matches our `item_code` shape; its `UPC` column carries real ISBN-13s for trade paperbacks. **Both distributors therefore need the F76 three-key match** (`item_code` / `upc` / `isbn`) — a single-column join on PRH's misleadingly-named `ISBN` field would silently under-match.
+
+#### 2.9.7 Independent corroboration of F111
+
+One Lunar order spans **four catalog months** (`0626`, `0526`, `0426`, `0326`). F111 was derived from our own reservation data; the supplier's own order file shows the same structure from the other side. Nothing to do — it simply confirms the cross-month gather shipped on 2026-08-03 was modelling reality.
+
 ---
 
 ## 3. Current state — verified against live code and data 2026-08-04
@@ -125,7 +194,7 @@ All four are prior-catalog-month rows (`2026-05`/`2026-06`; production is on `20
 
 ## 4. Design
 
-> **Everything in § 4.1–4.2 is provisional until Session A reports the real file shapes.** It is written as a set of questions with proposed answers, not as a specification. The F110/F112 precedent is explicit: reading the vendor material first corrected two wrong fix directions before either reached code, and *assuming* file behaviour is what produced them.
+> **Revised 2026-08-04 against the real exports (§ 2.9).** The pre-file version of § 4.2 and § 4.4 was written from the vendors' web UIs and specified three columns that have **no source in either export**. Those are cut. What remains is smaller, fully sourced, and therefore buildable with confidence.
 
 ### 4.1 Idempotency and the double-count trap — the highest-risk decision
 
@@ -133,13 +202,22 @@ Ingest must be safely re-runnable. The ledger has **no unique constraint on `ord
 
 **This is an F102-shaped hazard pointing at money.** F102's whole finding was that Lunar orders *ADD* to existing quantities; a ledger that double-counts a confirmation would tell the panel a title is over-ordered when it is not — or, worse, suppress a genuine re-order.
 
-Proposed (to be confirmed at Session A):
-
-- Add **`supplier_order_id`** (text, nullable) and **`supplier_line_ref`** (text, nullable).
+- Add **`supplier_order_id`** (text, nullable) and **`supplier_source`** (text, nullable — the filename ingested, for audit).
 - Dedup key: `(tenant_id, distributor, supplier_order_id, order_code)` as a **partial unique index** where `supplier_order_id IS NOT NULL` — leaving the 857 manual/backfilled rows (all NULL) untouched and still duplicate-legal.
-- **Nullable, partial, additive** — matching the Session A precedent from the F110 work, which is the pattern this codebase has had success with.
+- **Nullable, partial, additive** — the pattern this codebase has had success with (F110 Session A).
 
-**The overlap problem, stated plainly:** the backfill already covers `2026-05-24`, `2026-06-27` and `2026-07-26`. If the operator downloads confirmations for those same cycles, ingest **will** double-count them, because the existing rows carry no `supplier_order_id` to match against. Options — **Rick's call at Session A**:
+**Where `supplier_order_id` comes from differs by distributor (§ 2.9.5), and Lunar's is weak:**
+
+| | Source | Robustness |
+|---|---|---|
+| PRH | `Order Number` in the header block | **Strong** — inside the file |
+| Lunar | parsed from the **filename** `Order_1853046.csv` | **Weak** — a rename breaks it |
+
+> **PAUSE → Rick.** Lunar's key rests on a filename. Options: (i) require the operator not to rename downloads and fail loudly if the pattern does not match `Order_<digits>.csv`; (ii) derive a content hash as the key instead; (iii) prompt for the order number at ingest. **(i) with a hard failure is recommended** — it is honest, and a silent wrong key here corrupts money data. A content hash sounds safer but breaks the moment Lunar re-exports the same order with a trivial difference, which would then double-count.
+
+**`submitted_on` is NOT NULL and Lunar supplies no date** (§ 2.9.5). PRH's `Order Create Date` is ISO and usable directly. For Lunar the same PAUSE applies — prompt, or take the file's modification time (fragile across copies), or require it as a CLI argument. **A CLI argument is recommended: explicit, auditable, and it fails closed.**
+
+**The overlap problem, unchanged and still Rick's call:** the backfill already covers `2026-05-24`, `2026-06-27` and `2026-07-26`. Confirmations for those cycles **will** double-count, because the existing rows carry no `supplier_order_id` to match against. Options:
 
 - (a) ingest only confirmations dated **after** a cutoff, and never re-ingest history;
 - (b) reconcile against existing rows on `(distributor, order_code, submitted_on)` and skip matches;
@@ -147,36 +225,43 @@ Proposed (to be confirmed at Session A):
 
 (c) is the cleanest long-term and the most dangerous to execute. (a) is the safest and leaves history slightly wrong. **Do not choose this in code review — it is a data decision.**
 
-### 4.2 Richer state — map, never pass through
+### 4.2 Netting — mandatory, and it replaces the cut "richer state"
 
-Lunar publishes per line: **Shipped / Partially Shipped / Processing**, a **ship date**, an **in-store date**, and a **Due Date**. PRH publishes **Est Delivery**. Ours is binary.
+**What was here is withdrawn.** `supplier_status`, `expected_date` and `status_as_of` were specified from the web UIs; § 2.9.4 establishes that **neither export carries status or dates we can use**. Lunar's CSV has none at all; PRH's `Order Status` is 31/31 `Backordered` — the F110 uniform-column trap, wearing the F112 collision's exact vocabulary. **Nothing about supplier status or expected dates is ingested.**
 
-Proposed additive columns: **`supplier_status`** (our vocabulary, not theirs), **`expected_date`** (date), **`status_as_of`** (date — when the supplier last said so).
+What takes its place is the requirement the files actually imposed:
 
-Two constraints:
+**Net quantities by `(distributor, order_code)` within a file before writing.** Lunar's export contains positive and negative lines for the same code (§ 2.9.1), and `order_submissions` has **CHECK `quantity >= 1`** — so a naive row-per-line ingest does not merely mis-count, it **aborts the import** on the first negative line.
 
-- **Map vendor vocabulary into ours** (§ 2.7). A vendor "backordered" is *ordered, filling late* and must never land in a column our UI renders next to our own "Backordered".
-- **`Partially Shipped` is a state we cannot currently represent anywhere.** It is the long-deferred *"partial fulfillment not representable"* item in `CLAUDE.md` § Known Out-of-Scope. Lunar is already telling us. **Ingesting the value is in scope; teaching the app to reason about partial quantities is not** — that stays a product decision, and the plan must not smuggle it in.
+- Sum all lines per code; write **one row per code**.
+- **Net 0 ⇒ skip entirely.** This is the ordered-then-cancelled case (3 of 149 in the sample). Writing `1` for a cancelled title is worse than the false alarm it replaces.
+- **Net < 0 ⇒ do not write; report and halt that file.** It means the file is an amendment against a prior order, which is a case this design does not handle and must not guess at.
+- Do **not** parse `Cancelled` out of the title (§ 2.9.2) — netting already handles it, and free-text matching is the fragile path.
+
+**Partial fulfilment remains out of scope and is now also out of reach** — Lunar's `Partially Shipped` exists only on screen. The long-deferred `CLAUDE.md` item stands unchanged; this plan neither advances nor blocks it.
 
 ### 4.3 What the panel becomes
 
 Once ingest exists, `computeBackorderRisk()` gains a genuinely new capability: **"no record" becomes meaningful.** Today it means "we didn't write it down". After ingest it means "the supplier has no order for this", which is the thing the panel has always claimed to say.
 
-Panel changes (small, deliberately):
+Panel changes (small, deliberately — and smaller than first drafted, since there is no expected date to show):
 
-- A row cleared by an *ingested* confirmation can show its expected date — *"Ordered · expected Aug 12"* — instead of vanishing silently, so the operator can distinguish "handled" from "never happened".
+- A row cleared by an *ingested* confirmation can name the supplier order — *"Ordered · Lunar 1853046"* — instead of vanishing silently, so the operator can distinguish "handled" from "never happened" and has something to look up. **This replaces the "expected Aug 12" idea, which has no source (§ 2.9.4).**
 - The **At risk** bucket stays exactly as-is; it is already correct and is the panel's most valuable output (both current At risk rows, FOC 8/31, are real).
 - **Precision becomes measurable.** Record it at the first two ingests, the same way F110 § 2.4 required recording the set-difference noise rate.
+- **Expect the panel to get much quieter, and verify that is honest rather than assumed.** ~180 rows land per ingest and 28/31 + 122/149 of them match open reservations (§ 2.9). A panel that empties out is the intended outcome *and* the classic symptom of an over-broad clearing rule — so the first ingest must be checked against a title known to be genuinely un-ordered.
 
-### 4.4 Customer-facing status — last, and gated
+### 4.4 Customer-facing status — deferred, and now blocked on a source that does not exist
 
-The payoff: My List could read **"Ordered — expected Aug 12"** instead of a silent Upcoming Arrivals card.
+The original payoff was My List reading **"Ordered — expected Aug 12"**.
 
-**Deliberately last, and requires an explicit product decision**, because it converts an internal record into a **promise to a customer**. An expected date sourced from a supplier feed will sometimes be wrong, and a wrong promise is worse than silence. Open questions for Rick, not for the agent:
+**§ 2.9.4 removes the date half of that.** Neither export carries an expected-delivery date; Lunar's in-store date and PRH's Est Delivery are visible only in the browser. So the deliverable shrinks to **"Ordered"**, with no date — which is worth something, but far less, and it is worth deciding whether that alone justifies touching a customer surface.
 
-- Show a date, or only "Ordered"?
-- What happens visually when a supplier date slips?
-- Does this interact with the F110 withdrawn flag and the F72 email-branding thread?
+Still requires an explicit product decision, because it converts an internal record into a **promise to a customer**:
+
+- Is a bare *"Ordered"* (no date) worth showing at all?
+- If a date is genuinely wanted, where does it come from? Our own `catalog.on_sale_date` is already accurate (§ 2.1 — it matched both suppliers exactly on all four titles), so *"Ordered · expected on sale Aug 12"* could be sourced entirely from data we already hold, with no supplier feed at all. **That is probably the better answer, and it does not depend on this plan.**
+- Interaction with the F110 withdrawn flag and the F72 email-branding thread.
 
 ---
 
@@ -189,7 +274,9 @@ The payoff: My List could read **"Ordered — expected Aug 12"** instead of a si
 - **Session D:** customer-facing status — only after § 4.4's product decisions are answered.
 
 ### OUT — stop and ask
-- **Reasoning over partial quantities** (§ 4.2). Ingest the value; do not build fulfilment maths.
+- **Supplier status and expected dates.** Cut 2026-08-04 — **no source exists in either export** (§ 2.9.4). Do not reintroduce them from the web UIs.
+- **Reasoning over partial quantities.** Out of scope and now also out of reach — `Partially Shipped` is screen-only.
+- **Parsing `Cancelled` out of title text** (§ 2.9.2). Netting handles it; free-text matching is the fragile path.
 - **Any change to `isFocPast`/`isFocLocked`**, or to the FOC lock's customer semantics.
 - **Automating order *placement*.** This ingests confirmations of orders a human placed; it never submits anything.
 - **Re-ingesting the three backfilled cycles** unless Rick explicitly picks option (c) at § 4.1.
@@ -200,30 +287,33 @@ The payoff: My List could read **"Ordered — expected Aug 12"** instead of a si
 
 ## 6. Runbook
 
-### Session A — obtain and characterise (specification only, no code)
+### Session A — obtain and characterise — **SUBSTANTIALLY COMPLETE 2026-08-04**
 
-**The entire session is "read the vendor material first".** It exists because the F110 and F112 fix directions were both wrong until someone opened the actual files.
+Both exports were obtained and characterised; findings are recorded at **§ 2.9**, and **V-A1 is green** — every field Session B will write traces to a named column in a real file with a quoted example. The session did its job: it cut three unsourceable columns (§ 2.9.4) and corrected the key design (§ 2.9.5) before either reached code.
 
-1. **Operator step (Rick):** download the Lunar `CSV Download` for order `1804145` and at least one monthly cycle order; save to `catalogs/order-confirmations/`. Determine whether PRH offers a comparable export — and if it does not, say so explicitly, because that changes Session B's shape from "parse two files" to "parse one file and handle PRH some other way".
-2. Record, **from the files rather than the screenshots**: exact column names, date formats, the code column and how it maps to our `exportCode()` fallback chain per distributor, the order-number field, the status vocabulary, and whether quantities are per-line or aggregated.
-3. Check whether a re-downloaded confirmation for the same order is **byte-stable** — if it is not, the dedup key cannot rely on file content.
-4. Decide § 4.1's idempotency key and the § 4.1 overlap option. > **PAUSE → Rick.**
-5. Write the findings into this document as a new § 2.9 **before** any Session B work. Commit doc-only to `staging`.
-6. **Gate V-A1:** every field Session B intends to write is traceable to a named column in a real file, with a real example value quoted. No field may be specified from a screenshot.
+**Still open, and all three are Rick's calls — Session B cannot start without them:**
+
+1. **Lunar's order-number source** (§ 4.1) — filename parsing with a hard failure, content hash, or prompt. *Recommended: filename + hard failure.*
+2. **Lunar's `submitted_on`** (§ 4.1) — CLI argument, prompt, or file mtime. *Recommended: CLI argument.*
+3. **The backfill-overlap option** (§ 4.1) — (a) cutoff, (b) reconcile, or (c) delete-and-re-ingest. *Recommended: (a).*
+
+**Also still unverified, and worth one minute when the next confirmation is downloaded:** whether re-downloading the *same* order yields a byte-identical file. It only matters if option (ii) — content hashing — is chosen for #1; the recommended filename approach does not depend on it.
 
 ### Session B — ingest (schema + scripts repo)
 
-1. `docs/sql/order-submissions-supplier-fields.sql` — additive nullable columns + the partial unique index (§ 4.1). > **PAUSE → Rick** to run on staging, then production.
-2. Parser as **pure exported functions**, unit-tested against the real sample files, in the private scripts repo. Follow the `findUnverifiedFulfillments` / `parseInitialOrderDue` precedent: pure, exported, tested both scripts, parity-checked.
-3. Idempotent upsert. **Gate V-B1:** ingesting the same confirmation twice produces the same row count and the same total quantity. This is the money-safety gate.
-4. **Gate V-B2:** ingesting Lunar order `1804145` on staging clears exactly the two ACTION COMICS titles from the panel and leaves AVENGERS' existing row untouched (no duplicate).
-5. **Gate V-B3:** `--no-write` prints what it would ingest and writes nothing.
-6. Record the § 4.3 precision measurement before and after.
+1. `docs/sql/order-submissions-supplier-fields.sql` — additive nullable `supplier_order_id`, `supplier_source` + the partial unique index (§ 4.1). > **PAUSE → Rick** to run on staging, then production.
+2. Parsers as **pure exported functions** in the private scripts repo, unit-tested against the two real sample files. Follow the `findUnverifiedFulfillments` / `parseInitialOrderDue` precedent: pure, exported, present in both scripts, parity-checked. **Must include an RFC4180-capable reader** — the PRH file has a BOM and multi-line quoted header fields, so `split('\n')` corrupts it (§ 2.9.6).
+3. **Net by code before writing** (§ 4.2): one row per code, skip net-0, halt on net-negative.
+4. Idempotent upsert. **Gate V-B1** (money safety): ingesting the same confirmation twice produces the same row count **and** the same total quantity.
+5. **Gate V-B2** (netting): ingesting `Order_1853046.csv` writes **149 − 3 = 146** rows, with `0626DC0232`, `0526IM0377` and `0626DE0825` **absent**, and no row violating `quantity >= 1`.
+6. **Gate V-B3** (match rate): the ingest reports its match rate and it is **≥ 90%**, with every miss listed. Regression alarm — a sudden drop means a code-format change, which is how F84 and F110 both began.
+7. **Gate V-B4:** `--no-write` prints the full plan and writes nothing.
+8. Record the § 4.3 precision measurement before and after the first real ingest.
 
 ### Session C — surface (client)
 
-1. Panel shows expected date / supplier state on cleared rows; "no record" wording updated to reflect that it now means something.
-2. Extend **spec 15**. **Gate V-C1:** a title cleared by ingested confirmation renders its expected date; a title with genuinely no supplier record still reads Backordered.
+1. Panel names the supplier order on rows cleared by ingest (§ 4.3); "no record" wording updated to reflect that it now means something. **No expected date — there is no source for one (§ 2.9.4).**
+2. Extend **spec 15**. **Gate V-C1:** a title cleared by an ingested confirmation renders its supplier order reference; a title with genuinely no supplier record still reads Backordered.
 3. `/deploy-staging` — push first, then run the suite (CLAUDE.md § Smoke-test ordering).
 
 ### Session D — customer-facing (gated on § 4.4 answers)
@@ -236,34 +326,40 @@ Not specified here. Do not start without the § 4.4 product decisions recorded i
 
 | Gate | Session | Assertion | Why this one |
 |---|---|---|---|
-| **V-A1** | A | Every planned field traces to a real column in a real file, with an example value | Screenshots are not a schema — the F110/F112 lesson |
+| **V-A1** ✅ | A | Every planned field traces to a real column in a real file, with an example value | Screenshots are not a schema — the F110/F112 lesson. **Green 2026-08-04**; it cut three unsourceable columns |
 | **V-B1** | B | Double-ingest ⇒ identical row count **and** total quantity | The F102 double-count hazard, pointed at money |
-| **V-B2** | B | Ingesting `1804145` clears both ACTION COMICS rows and does not duplicate AVENGERS | The exact live case this plan exists for |
-| **V-B3** | B | `--no-write` writes nothing | Every import path in this codebase has this property |
-| **V-C1** | C | Cleared-by-confirmation shows a date; genuinely-unordered still reads Backordered | Proves the panel gained information rather than just going quiet |
+| **V-B2** | B | `Order_1853046.csv` writes **146** rows; the three net-0 codes absent; no `quantity < 1` | Netting is mandatory — the raw file otherwise violates the CHECK and aborts (§ 2.9.1) |
+| **V-B3** | B | Reported match rate **≥ 90%**, every miss listed | Measured baseline is 90% PRH / 92% Lunar; a drop means a code-format change, which is how F84 and F110 began |
+| **V-B4** | B | `--no-write` writes nothing | Every import path in this codebase has this property |
+| **V-C1** | C | Cleared-by-confirmation names its supplier order; genuinely-unordered still reads Backordered | Proves the panel gained information rather than just going quiet |
 
 ---
 
 ## 8. Completion criteria
 
-### Session A
-- [ ] Real confirmation files obtained for **both** distributors, or PRH's absence explicitly recorded
-- [ ] § 2.9 written from files, not screenshots; **V-A1** green
-- [ ] § 4.1 idempotency key and overlap option decided by Rick and recorded
-- [ ] Committed doc-only to `staging`
+### Session A — substantially complete 2026-08-04
+- [x] Real confirmation files obtained for **both** distributors (`catalogs/order-confirmations/`)
+- [x] § 2.9 written from the files, not screenshots; **V-A1** green
+- [x] Match feasibility measured against live production — 90% PRH / 92% Lunar, misses categorised
+- [x] Committed doc-only to `staging`
+- [ ] § 4.1 Lunar order-number source decided by Rick
+- [ ] § 4.1 Lunar `submitted_on` source decided by Rick
+- [ ] § 4.1 backfill-overlap option decided by Rick
 
 ### Session B
 - [ ] Additive columns live on staging **and** production, all nullable, existing 857 rows untouched
-- [ ] Parser pure, exported, unit-tested against real files; parity across both scripts
-- [ ] **V-B1**, **V-B2**, **V-B3** green
-- [ ] Precision measurement recorded before/after
+- [ ] RFC4180 reader handles the BOM and multi-line quoted header fields (§ 2.9.6)
+- [ ] Netting implemented: one row per code, net-0 skipped, net-negative halts (§ 4.2)
+- [ ] Parsers pure, exported, unit-tested against the real sample files; parity across both scripts
+- [ ] **V-B1**, **V-B2**, **V-B3**, **V-B4** green
+- [ ] Precision measurement recorded before/after the first real ingest
 
 ### Session C
 - [ ] Panel surfaces ingested state; spec 15 extended; **V-C1** green; full suite green
 - [ ] Fixtures torn down, verified by live SELECT returning zero rows
 
 ### Session D
-- [ ] § 4.4 product decisions answered **before** any code
+- [ ] § 4.4 product decisions answered **before** any code — including whether a bare "Ordered" is worth showing at all, given the expected-date source does not exist
 
 ---
 

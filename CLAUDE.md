@@ -591,13 +591,29 @@ approval.
 - **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
   import so adoption trends survive the 90-day purge (schema + import
   script). See `docs/technical-reference.md` § 13 F90.
-- **Order-confirmation ingest (F108)** — **UNBLOCKED and PLANNED 2026-08-04,
-  not started.** Plan: `docs/order-confirmation-ingest-f108.md` (Sessions
-  A–D; **Session A is specification-only and forbids writing a parser from
-  screenshots**, per the F110/F112 precedent). The sample-file blocker that
-  deferred this since 2026-08-02 is gone — Lunar exposes a per-order
-  `CSV Download` with per-line status/ship/in-store dates, PRH exposes
-  per-line Est Delivery. **Why it matters:** on 2026-08-04 the production
+- **Order-confirmation ingest (F108)** — **UNBLOCKED and PLANNED 2026-08-04.
+  Session A COMPLETE; Sessions B–D not started.** Plan:
+  `docs/order-confirmation-ingest-f108.md`. Real exports from both
+  distributors are in `catalogs/order-confirmations/` (local, uncommitted)
+  and are characterised at that plan's § 2.9. **Match feasibility measured
+  against live production: PRH 28/31 (90%), Lunar 137/149 (92%)**, misses
+  categorised and benign; ~180 ledger rows per monthly ingest. **Reading the
+  real files corrected the plan twice before any code existed** — (1) the
+  rich supplier state (Shipped/Processing, ship + in-store + est-delivery
+  dates) is **screen-only and absent from both exports**, so three planned
+  columns were cut and the customer-facing "expected Aug 12" is not
+  deliverable from these files; (2) **Lunar's order number is in the
+  filename, not the file**, and Lunar supplies no order date at all while
+  `submitted_on` is NOT NULL. **Blocking implementation fact: the Lunar
+  export contains negative-quantity lines and `order_submissions` has CHECK
+  `quantity >= 1`** — a row-per-line ingest aborts the import, so netting by
+  code (skip net-0, halt on net-negative) is mandatory. **PRH's `Order
+  Status` is the F110 trap repeated: 31/31 rows read `Backordered`** — a
+  column that never varies is not a signal, and it collides verbatim with
+  our own opposite-meaning label, so it must never be ingested or shown.
+  **Three decisions are owed from Rick before Session B can start** (Lunar
+  order-number source, Lunar `submitted_on` source, and the
+  backfill-overlap option — plan § 4.1). **Why it matters:** on 2026-08-04 the production
   Order Follow-Up panel showed 4 titles BACKORDERED and **all 4 had actually
   been ordered** (precision 0 of 4). The cause is the input, not the logic —
   **Mark Ordered has been used zero times on production**; all 857 ledger
