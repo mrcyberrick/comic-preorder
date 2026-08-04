@@ -1,6 +1,6 @@
 # Order-Export Correctness Session — F101 (FOC window) + F102 (order state)
 
-**Status:** **Complete on staging — 2026-08-03. Not promoted to production** (Rick's call; promotion steps in § 8).
+**Status:** **COMPLETE — live in production 2026-08-03** (PR #100, merge `5951a30`).
 **Executed:** 2026-08-02 → 2026-08-03 (CLI session). Gates V1–V8 all green; real-browser check confirmed by Rick 2026-08-03.
 **Scope changed mid-session by Rick, three times** — all live, all recorded in § 8:
 (a) My List's "Order placed" status/lock is driven by the ledger **independent of `fulfilled`** (needed a new `get_ordered_codes()` RPC, since `order_submissions` is admin-only);
@@ -58,7 +58,7 @@ A reservation whose FOC passed **without an order having been placed** is **Back
 
 The FOC lock is already built and is deliberately hard (`isFocLocked` → `isFocPast`, `app.js:1358–1370`). Once FOC passes, the app blocks **both** new reservations **and cancellations** on that title — `catalog.html:1217–1218` treats an already-reserved locked title as *committed*, and `app.js:1436–1449` renders the locked state ("🔒 FOC Locked", disabled control, FOC badge).
 
-**That is what makes a backorder bad, and it is easy to miss:** the lock commits the *customer* independently of whether the *store* ordered. A backordered title is therefore one where the customer cannot back out and the book cannot arrive. Rick's stated intent is to **actively avoid** this state, not merely to report it after the fact.
+**That is what makes a backorder bad, and it is easy to miss:** the lock commits the *customer* independently of whether the *store* ordered. A backordered title is therefore one where the customer cannot back out and availability is no longer guaranteed — it may still arrive, on either distributor, just not reliably. **Correction, 2026-08-03 (F110/F111/F112 planning, § 2.1):** this entry previously said the book "cannot arrive" — that phrasing is accurate only for a title **withdrawn** upstream (F110), a distinct and worse state the store did not yet detect when this was written. A Backordered title stays orderable; a withdrawn one does not exist to order. Rick's stated intent is to **actively avoid** the Backordered state, not merely to report it after the fact — the urgency stands even though the "cannot arrive" claim was too strong.
 
 **Requirement (Rick, 2026-08-02):** notify admin users when a title is reserved whose FOC date falls **in the same month and/or precedes the order-deadline date** — i.e. while there is still time to place the ad-hoc order. See § 4.5.
 
@@ -131,7 +131,7 @@ Because § 2.2 rules out deriving the band, the cycle is **chosen**, from the FO
 
 | Bucket | Meaning | Urgency |
 |---|---|---|
-| **Backordered** | FOC **passed**, never ordered (§ 2.4) | **Already failed.** Customer is committed and cannot cancel; the book cannot arrive |
+| **Backordered** | FOC **passed**, never ordered (§ 2.4) | **Already failed.** Customer is committed and cannot cancel; still orderable on either distributor, but availability is no longer guaranteed (corrected 2026-08-03, § 2.1 — "cannot arrive" is accurate only for a title withdrawn upstream, F110) |
 | *At risk* | FOC not yet passed but locks before the monthly order | **Act now** — needs an ad-hoc order |
 | *Outside selected cycle* | FOC later than the ticked dates | None — returns on a later cycle |
 | *Already ordered* | in the ledger (§ 4.3) | Human call, quantity shown |
@@ -191,7 +191,7 @@ Either condition means the FOC will lock before the monthly order goes out, so a
 | State | Condition | What it means |
 |---|---|---|
 | **At risk** | trigger true, FOC **not** passed, not ordered | Actionable — place the ad-hoc order now |
-| **Backordered** | FOC **passed**, not ordered | Already failed — customer committed, cannot cancel, book cannot arrive |
+| **Backordered** | FOC **passed**, not ordered | Already failed — customer committed, cannot cancel; still orderable, availability no longer guaranteed (corrected 2026-08-03, § 2.1 — "book cannot arrive" is accurate only for a title withdrawn upstream, F110) |
 | *Cleared* | an `order_submissions` row exists for the code | Handled; drops off the list |
 
 **Where:** a persistent panel on the admin dashboard, visible without navigating to a tab, listing at-risk and backordered reservations with title, code, FOC date, **days remaining**, customer count and total copies — sorted soonest-FOC first. Backordered rows are visually distinct and sort to the top.
@@ -321,24 +321,45 @@ Load the archived June and July order files into `order_submissions` (`order_typ
 - [x] S5 backfill done — **857 rows**, May + June + July (Rick added the July files mid-session; they confirm F102 directly: `75960621668000111,7` against June's `,5`). Caveat recorded: 708/857 staging rows have NULL `title`/`foc_date` — cosmetic (no logic reads them). Cause corrected 2026-08-03: mostly an F82-class truncated lookup in the generator, not staging's catalog. **The production backfill has since been generated with the fix and matched 857/857, zero NULLs.**
 - [x] **V3**/**V6**/**V8** green; all seeded fixtures torn down and verified by SELECT — V6 = full `run-smoke.ps1` (46 unit + 50 Playwright) green on every one of four deploys, **plus** Rick's real-browser check across three rounds of feedback
 - [x] § 13 F101/F102 updated, incl. the accepted export ↔ reserved-titles-report divergence — also § 4.11 (new table), § 6.8 (new RPC), § 7.1 (new policies), and **F109 filed** for the client-side-only cancel guard
-- [x] Production promotion raised with Rick (not performed unasked) — **still owed**, see below
+- [x] Production promotion raised with Rick, then **performed at his request 2026-08-03** — see the deploy log below
 
-### Production promotion — owed, not performed
+### Production promotion — COMPLETED 2026-08-03
 
-Everything above is **staging only**. Production still has no FOC window, no
-order ledger, and no duplicate check. In order:
+Executed in this order, each step verified before the next:
 
-1. `docs/sql/order-submissions.sql` (table + indexes + RLS)
-2. `docs/sql/get-ordered-codes-rpc.sql` (the customer-facing read)
-3. `docs/sql/order-submissions-backfill-PROD.sql` — **generated 2026-08-03**,
-   857 rows, **857/857 codes matched against production's catalog, zero NULL
-   titles**. Do **not** run the staging backfill file on production: it
-   hardcodes the staging founding tenant UUID in all 857 rows and will
-   FK-violate. (Generating this also surfaced an F82-class bug in the one-off
-   generator — its catalog lookup was silently capped at PostgREST's 1000-row
-   default, which is what actually caused most of staging's 708 NULLs. Fixed
-   by paging; staging's rows were left as-is since the fields are cosmetic.)
-4. `/promote-prod` for the client change
+1. **`docs/sql/order-submissions.sql`** — table + indexes + RLS. Verified: table
+   reachable, 0 rows, RLS active.
+2. **`docs/sql/get-ordered-codes-rpc.sql`** — the customer-facing read. Verified:
+   function exists (200 via service role) and **`anon` is revoked**
+   (`42501 permission denied for function`). Note its own smoke query returns 0
+   in the SQL Editor by design — superuser has no `auth.uid()`, so
+   `current_tenant_id()` is NULL (§ 6.8).
+3. **`docs/sql/order-submissions-backfill-PROD.sql`** — 857 rows,
+   **857/857 codes matched production's catalog, zero NULL titles.** Verified:
+   count 857, split exact (PRH 93/131/212, Lunar 55/137/229), and — now that
+   the table holds data — **anon still reads `[]`**, which makes the RLS check
+   a real isolation test rather than a vacuous one.
+   *Do not run the staging backfill file on production:* it hardcodes the
+   staging founding tenant UUID in all 857 rows and will FK-violate.
+4. **Client via PR #100** (merge `5951a30`). Verified: production `admin.html`
+   **byte-identical** to `main`; `mylist.html` and `app.js` carry their new
+   markers; `config.js` untouched and still holding the prod publishable key.
+   Rick's post-deploy write-smoke passed.
+
+**Pre-promotion end-to-end check on production:** one throwaway non-admin user
+was created, `get_ordered_codes()` called with their real token — returned
+**845 distinct tenant-scoped codes** including the MIDNIGHT X-MEN code, exposing
+only `(distributor, order_code)` with no quantity/date/title leak — then the
+user was deleted and removal verified by live SELECT (0 rows).
+
+**Two process notes worth carrying forward.** The `.sql` generator's catalog
+lookup was silently capped at PostgREST's 1000-row default (F82's pattern),
+which is what actually caused most of staging's 708 NULL titles — not, as first
+recorded, staging's catalog lacking history. Fixed by paging until a short read;
+prod then matched 857/857. Separately, in PowerShell 5.1
+`@($raw | ConvertFrom-Json)` counts **1** regardless of row count, because the
+deserialized array arrives as a single pipeline object — which reads exactly
+like a short page and ends pagination on the first batch. Assign, then wrap.
 
 **Independent of any of that:** PRH holds **12 copies** of
 `75960621668000111` against **7** reservations, FOC **2026-08-31**. Adjusting

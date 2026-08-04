@@ -672,13 +672,18 @@ const UsageEvents = {
     });
   },
 
-  cancel(userId, catalogItem) {
+  // extra — optional flags merged into metadata. Used by mylist.html's F110
+  // § 2.2 cancel-exception path to flag a cancellation that walks away from
+  // a copy already submitted to the distributor, so the store can find and
+  // reconcile that order (Rick, 2026-08-03).
+  cancel(userId, catalogItem, extra = {}) {
     this._log(userId, 'cancel', {
       title:         catalogItem?.title        || null,
       publisher:     catalogItem?.publisher    || null,
       series_name:   catalogItem?.series_name  || null,
       distributor:   catalogItem?.distributor  || null,
       catalog_month: catalogItem?.catalog_month || null,
+      ...extra,
     });
   },
 
@@ -771,7 +776,8 @@ const Preorders = {
         catalog (
           id, distributor, item_code, upc, isbn, title, series_name, publisher,
           issue_number, format, price_usd, foc_date, on_sale_date,
-          writer, artist, cover_url, variant_type, catalog_month
+          writer, artist, cover_url, variant_type, catalog_month,
+          withdrawn_at, withdrawn_last_seen_month
         )
       `)
       .eq('user_id', userId)
@@ -840,13 +846,23 @@ const Preorders = {
     // though no admin ever clicked anything.
     const { data: existing, error: lookupErr } = await db
       .from('preorders')
-      .select('id, fulfilled, catalog:catalog_id(distributor, item_code, upc, isbn)')
+      .select('id, fulfilled, catalog:catalog_id(distributor, item_code, upc, isbn, withdrawn_at)')
       .eq('user_id', userId)
       .eq('catalog_id', catalogId)
       .maybeSingle();
     if (lookupErr) return { error: lookupErr };
     if (!existing) return { error: { message: 'Reservation not found' } };
-    if (existing.fulfilled) {
+
+    const c = existing.catalog || {};
+
+    // F110 § 2.2 — a withdrawn title (the distributor no longer publishes
+    // this code) overrides BOTH guards below, not just the FOC lock: the
+    // customer cannot be held to a book that cannot arrive. Deliberate,
+    // Rick-authorized exception implemented at this call site;
+    // isFocPast()/isFocLocked() are untouched.
+    const isWithdrawn = !!c.withdrawn_at;
+
+    if (!isWithdrawn && existing.fulfilled) {
       return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
     }
 
@@ -854,23 +870,23 @@ const Preorders = {
     // to the distributor (order_submissions), independent of fulfilled —
     // Rick's direction, F101/F102 session: "ordered" locks the customer the
     // same way "fulfilled" (arrived) already does.
-    const c = existing.catalog || {};
-    const orderCode = exportCode(c, c.distributor);
-    if (orderCode) {
-      const { data: ordered } = await db.rpc('get_ordered_codes');
-      const alreadyOrdered = (ordered || []).some(o =>
-        o.distributor === c.distributor && o.order_code === orderCode);
-      if (alreadyOrdered) {
-        return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+    if (!isWithdrawn) {
+      const orderCode = exportCode(c, c.distributor);
+      if (orderCode) {
+        const { data: ordered } = await db.rpc('get_ordered_codes');
+        const alreadyOrdered = (ordered || []).some(o =>
+          o.distributor === c.distributor && o.order_code === orderCode);
+        if (alreadyOrdered) {
+          return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+        }
       }
     }
 
-    const { error } = await db
-      .from('preorders')
-      .delete()
-      .eq('user_id', userId)
-      .eq('catalog_id', catalogId)
-      .eq('fulfilled', false); // defensive race guard
+    let deleteQuery = db.from('preorders').delete().eq('user_id', userId).eq('catalog_id', catalogId);
+    // Defensive race guard — skipped for withdrawn rows since a withdrawn
+    // reservation is cancellable even if it has since become fulfilled.
+    if (!isWithdrawn) deleteQuery = deleteQuery.eq('fulfilled', false);
+    const { error } = await deleteQuery;
     return { error };
   },
 

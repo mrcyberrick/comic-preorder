@@ -172,6 +172,12 @@
   <div id="backorder-risk-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
+  <!-- Withdrawn Panel (F110 § 4.5) — sibling to Backorder Risk, hidden when
+       empty, visually distinct (grey, not red/amber) since Backordered and
+       Withdrawn look similar but mean opposite things (§ 2.1). -->
+  <div id="withdrawn-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
+       border:1px solid #666;border-radius:var(--radius-lg);background:var(--bg-card)"></div>
+
   <!-- Export Bar -->
   <div class="export-bar">
     <button class="btn btn-secondary btn-sm" id="btn-export-all">↓ Export All (CSV)</button>
@@ -543,6 +549,11 @@
   if (navAnalytics) navAnalytics.style.display = 'block';
 
   let allPreorders = [];
+  // Unfiltered across every catalog month — paged fetch, F113/F111. Only the
+  // four cross-month consumers named in docs/order-export-followthrough-
+  // f110-f111-f112.md § 4.4 read this; allPreorders and its other 15+
+  // consumers stay month-scoped and untouched.
+  let allPreordersAllMonths = [];
   let profileMap   = {};
 
   // ── Order ledger (F101/F102 — order_submissions) ───────────
@@ -585,28 +596,95 @@
   }
 
   // Group a set of { p } entries (p = preorder row with joined catalog) by
-  // catalog.id — one line per title with total copies and customer count.
+  // distributor export code (F111 § 4.4), not catalog.id — a re-listed title
+  // has one catalog row per month, so catalog.id grouping would emit two
+  // lines for one physical title once the gather spans months. Picks the
+  // newest-catalog_month row for display fields (title/foc_date/etc.).
   // Deliberately separate from renderByDistributor's own groupByItem
   // (closure-local there, and shaped for the fulfilled-toggle UI, not this).
-  function groupByCatalogId(entries) {
+  function groupByExportCode(entries) {
     const map = new Map();
     entries.forEach(({ p }) => {
       const c = p.catalog || {};
-      if (!c.id) return;
-      if (!map.has(c.id)) map.set(c.id, { catalog: c, qty: 0, customers: new Set() });
-      const e = map.get(c.id);
+      const code = exportCode(c, c.distributor);
+      if (!code) return;
+      if (!map.has(code)) map.set(code, { catalog: c, qty: 0, customers: new Set() });
+      const e = map.get(code);
+      if ((c.catalog_month || '') > (e.catalog.catalog_month || '')) e.catalog = c;
       e.qty += (p.quantity || 1);
       e.customers.add(p.user_id);
     });
     return [...map.values()].sort((a, b) => (a.catalog.foc_date || '').localeCompare(b.catalog.foc_date || ''));
   }
 
-  // Every distinct FOC date among a distributor's current-month unfulfilled
-  // reservations, with title/copy counts — the order-cycle checklist source.
-  // Includes past dates (flagged, unchecked by default) so "select all"
-  // can reproduce the pre-fix export exactly (V2).
+  // Consolidate an { p, matches } bucket (alreadyOrdered/adhocOrdered) by
+  // export code — same reasoning as groupByExportCode, applied to the Order
+  // Builder's "already ordered" cards so a re-listed title gets one card
+  // (one override) instead of one per catalog-month row (F111 § 4.4).
+  function groupBucketByCode(entries) {
+    const map = new Map();
+    entries.forEach(({ p, matches }) => {
+      const c = p.catalog || {};
+      const code = exportCode(c, c.distributor);
+      if (!code) return;
+      if (!map.has(code)) map.set(code, { code, catalog: c, matches, rows: [] });
+      const entry = map.get(code);
+      if ((c.catalog_month || '') > (entry.catalog.catalog_month || '')) entry.catalog = c;
+      entry.rows.push(p);
+    });
+    return [...map.values()];
+  }
+
+  // F111 § 4.4 collapse — a customer can hold reservations against the same
+  // physical title in more than one catalog month (F85's cross-month
+  // duplicate; F85's carry-forward fix closes this for subscriber
+  // auto-reserves but not manual reservations). Collapses (distributor,
+  // user_id, order_code) to the newest-catalog_month row, tie-broken by
+  // latest on_sale_date, quantity = MAX across the group — the same survivor
+  // rule F85's one-time production cleanup used, so the two agree. Returns
+  // the collapsed rows plus the dropped groups, so the caller can surface
+  // the collapse rather than silently picking (§ 4.4 — "never silent").
+  function collapseCrossMonthReservations(rows) {
+    const groups = new Map();
+    rows.forEach(p => {
+      const c = p.catalog || {};
+      const code = exportCode(c, c.distributor);
+      const key = code ? `${c.distributor}||${p.user_id}||${code}` : `__nocode__${p.id}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    });
+    const survivors = [];
+    const collapsedGroups = [];
+    groups.forEach(group => {
+      if (group.length === 1) { survivors.push(group[0]); return; }
+      const sorted = [...group].sort((a, b) => {
+        const am = a.catalog?.catalog_month || '', bm = b.catalog?.catalog_month || '';
+        if (am !== bm) return bm.localeCompare(am);
+        const ad = a.catalog?.on_sale_date || '', bd = b.catalog?.on_sale_date || '';
+        return bd.localeCompare(ad);
+      });
+      const maxQty = Math.max(...group.map(p => p.quantity || 1));
+      const survivor = { ...sorted[0], quantity: maxQty };
+      survivors.push(survivor);
+      collapsedGroups.push({ survivor, dropped: sorted.slice(1) });
+    });
+    return { rows: survivors, collapsedGroups };
+  }
+
+  // The collapsed cross-month gather and its dropped-duplicate groups —
+  // recomputed once per loadData() and read only by the four consumers
+  // named in § 4.4 below (distinctFocDates, classifyForExport,
+  // computeBackorderRisk, the Order Builder consolidation path).
+  let gatherCollapsed = [];
+  let gatherCollapsedGroups = [];
+
+  // Every distinct FOC date among a distributor's unfulfilled reservations
+  // across ALL catalog months (F111 — a distributor FOC cycle spans several
+  // catalog months), with title/copy counts — the order-cycle checklist
+  // source. Includes past dates (flagged, unchecked by default) so "select
+  // all" can reproduce the pre-fix export exactly (V2/V-B3).
   function distinctFocDates(distributor) {
-    const rows = allPreorders.filter(p =>
+    const rows = gatherCollapsed.filter(p =>
       p.catalog?.distributor === distributor && !p.fulfilled && p.catalog?.foc_date);
     const map = new Map();
     rows.forEach(p => {
@@ -621,22 +699,32 @@
       .sort((a, b) => a.foc.localeCompare(b.foc));
   }
 
-  // Classify a distributor's unfulfilled current-month reservations against
-  // the selected FOC cycle(s) and the order_submissions ledger. Buckets
-  // mirror docs/order-export-foc-window-and-order-state.md § 4.1's table.
-  // Precedence: ledger match (adhoc, then any-order) beats FOC classification
-  // — an already-ordered code is a human call regardless of which cycle its
-  // FOC falls in.
+  // Classify a distributor's unfulfilled reservations across ALL catalog
+  // months (F111) against the selected FOC cycle(s) and the order_submissions
+  // ledger. Buckets mirror docs/order-export-foc-window-and-order-state.md
+  // § 4.1's table. Precedence: ledger match (adhoc, then any-order) beats FOC
+  // classification — an already-ordered code is a human call regardless of
+  // which cycle its FOC falls in.
   function classifyForExport(distributor, selectedFocDates) {
-    const rows = allPreorders.filter(p => p.catalog?.distributor === distributor && !p.fulfilled);
+    const rows = gatherCollapsed.filter(p => p.catalog?.distributor === distributor && !p.fulfilled);
     const buckets = {
       included: [], noFoc: [], backordered: [], atRisk: [],
-      outsideCycle: [], alreadyOrdered: [], adhocOrdered: [],
+      outsideCycle: [], alreadyOrdered: [], adhocOrdered: [], withdrawn: [],
     };
 
     rows.forEach(p => {
       const c = p.catalog || {};
       const code = exportCode(c, distributor);
+
+      // Withdrawn (F110) — cannot be ordered, the code no longer exists at
+      // the distributor. Excluded from every other bucket regardless of
+      // ledger status: an already-ordered-but-since-withdrawn code (the
+      // MIDNIGHT X-MEN #2 case) must not be re-offered for export.
+      if (c.withdrawn_at) {
+        buckets.withdrawn.push({ p });
+        return;
+      }
+
       const matches = ledgerMatchesFor(distributor, code);
 
       if (matches.some(m => m.order_type === 'adhoc')) {
@@ -671,26 +759,54 @@
   // ── Load Data ─────────────────────────────────────────────
   let currentCatalogMonth = null;
 
+  // Count-first, paged read — F113. admin.html:679-693 previously issued a
+  // single unbounded select(), silently capped at PostgREST's 1,000-row
+  // default (production holds 2,004). Mirrors the precedent already in this
+  // file at getReservedPublishers()/fetchAllCatalogForDistributor() (below).
+  // created_at is not unique, so `id` is added as a tiebreaker to keep
+  // range() page boundaries deterministic.
+  async function fetchAllPreorders() {
+    const selectExpr = `
+      id,
+      created_at,
+      user_id,
+      quantity,
+      fulfilled,
+      fulfilled_at,
+      catalog (
+        id, distributor, item_code, upc, isbn, title, series_name, publisher,
+        issue_number, format, price_usd, foc_date, on_sale_date,
+        writer, artist, cover_url, variant_type, catalog_month,
+        withdrawn_at, withdrawn_last_seen_month
+      )
+    `;
+    const countRes = await db.from('preorders').select('*', { count: 'exact', head: true });
+    if (countRes.error) return { data: null, error: countRes.error };
+    const total = countRes.count ?? 0;
+    if (!total) return { data: [], error: null };
+
+    const batches = [];
+    for (let from = 0; from < total; from += 1000) {
+      batches.push(
+        db.from('preorders')
+          .select(selectExpr)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, Math.min(from + 999, total - 1))
+      );
+    }
+    const results = await Promise.all(batches);
+    const errored = results.find(r => r.error);
+    if (errored) return { data: null, error: errored.error };
+    return { data: results.flatMap(r => r.data || []), error: null };
+  }
+
   async function loadData() {
     // Get current catalog month first so we can scope all views to it
     currentCatalogMonth = await Catalog.getLatestMonth();
 
     const [preordersRes, profilesRes] = await Promise.all([
-      db.from('preorders')
-        .select(`
-          id,
-          created_at,
-          user_id,
-          quantity,
-          fulfilled,
-          fulfilled_at,
-          catalog (
-            id, distributor, item_code, upc, isbn, title, series_name, publisher,
-            issue_number, format, price_usd, foc_date, on_sale_date,
-            writer, artist, cover_url, variant_type, catalog_month
-          )
-        `)
-        .order('created_at', { ascending: false }),
+      fetchAllPreorders(),
       db.from('user_profiles').select('id, full_name'),
       loadOrderLedger(),
       Settings.getOrderDeadline().then(v => { orderDeadline = v; }),
@@ -705,13 +821,24 @@
     profileMap = {};
     (profilesRes.data || []).forEach(u => profileMap[u.id] = u.full_name);
 
-    // Scope to current catalog month only
-    allPreorders = (preordersRes.data || [])
-      .filter(p => p.catalog?.catalog_month === currentCatalogMonth)
-      .map(p => ({
-        ...p,
-        customer_name: profileMap[p.user_id] || 'Unknown',
-      }));
+    const withNames = (preordersRes.data || []).map(p => ({
+      ...p,
+      customer_name: profileMap[p.user_id] || 'Unknown',
+    }));
+
+    // Scope to current catalog month only — allPreorders' 15+ consumers are
+    // deliberately month-scoped (F101/F102 plan § 5 OUT) and stay that way.
+    allPreorders = withNames.filter(p => p.catalog?.catalog_month === currentCatalogMonth);
+
+    // Unfiltered, every catalog month — F111. Zero extra network: the paged
+    // fetch above already retrieves every row; this just keeps the rest.
+    allPreordersAllMonths = withNames;
+
+    // Collapsed cross-month gather for the four § 4.4 consumers — computed
+    // once here, not per-render, since it's a pure function of the fetch.
+    const gather = collapseCrossMonthReservations(allPreordersAllMonths);
+    gatherCollapsed = gather.rows;
+    gatherCollapsedGroups = gather.collapsedGroups;
 
     // Update page subtitle to show current month
     if (currentCatalogMonth) {
@@ -727,6 +854,7 @@
     renderByDistributor();
     renderAllItems();
     renderBackorderRiskPanel();
+    renderWithdrawnPanel();
   }
 
   await loadData();
@@ -763,11 +891,19 @@
   // the customer order_deadline) and has no order_submissions row for its
   // code needs an ad-hoc order placed NOW — once FOC passes with no order
   // placed, the title is "Backordered": the customer is committed (the FOC
-  // lock blocks cancellation, catalog.html:1217-1218) and the book cannot
-  // arrive. Any ledger row (monthly or adhoc) clears a code from this list
-  // regardless of date — proven by V7(c).
+  // lock blocks cancellation, catalog.html:1217-1218) and availability is
+  // no longer guaranteed — it may still arrive, on either distributor, just
+  // not reliably (§ 2.1 correction: "cannot arrive" is accurate only for a
+  // title withdrawn upstream, F110 — the two states are visually and
+  // semantically distinct; see renderWithdrawnPanel()). Any ledger row
+  // (monthly or adhoc) clears a code from this list regardless of date —
+  // proven by V7(c).
+  // Withdrawn titles are excluded here (F110 § 2.1) — they are visually and
+  // semantically distinct from Backordered: Backordered can still be
+  // ordered (availability unguaranteed); withdrawn cannot be ordered at
+  // all. See renderWithdrawnPanel() below for the sibling panel.
   function computeBackorderRisk() {
-    const rows = allPreorders.filter(p => !p.fulfilled && p.catalog?.foc_date);
+    const rows = gatherCollapsed.filter(p => !p.fulfilled && p.catalog?.foc_date && !p.catalog?.withdrawn_at);
     const atRisk = [], backordered = [];
 
     rows.forEach(p => {
@@ -783,8 +919,8 @@
     });
 
     return {
-      backordered: groupByCatalogId(backordered),
-      atRisk:      groupByCatalogId(atRisk),
+      backordered: groupByExportCode(backordered),
+      atRisk:      groupByExportCode(atRisk),
     };
   }
 
@@ -838,6 +974,67 @@
       <div style="display:flex;flex-direction:column;gap:6px">
         ${rowHtml(backordered, true)}
         ${rowHtml(atRisk, false)}
+      </div>
+    `;
+  }
+
+  // ── Withdrawn panel (F110 § 4.5) ────────────────────────────
+  // Sibling to the backorder-risk panel, same persistence/scoping. A
+  // withdrawn title (distributor stopped publishing the code) is distinct
+  // from Backordered (§ 2.1): Backordered is still orderable on either
+  // distributor; withdrawn is not — the code no longer exists. Deliberately
+  // grey, not red/amber, so the two states never look interchangeable.
+  function computeWithdrawnTitles() {
+    const rows = gatherCollapsed.filter(p => !p.fulfilled && p.catalog?.withdrawn_at);
+    return groupByExportCode(rows.map(p => ({ p })));
+  }
+
+  function renderWithdrawnPanel() {
+    const panel = document.getElementById('withdrawn-panel');
+    if (!panel) return;
+
+    const withdrawn = computeWithdrawnTitles();
+
+    if (!withdrawn.length) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      return;
+    }
+    panel.style.display = '';
+
+    const rowHtml = withdrawn.map(({ catalog: c, qty, customers }) => {
+      const code       = exportCode(c, c.distributor);
+      const ordered     = ledgerMatchesFor(c.distributor, code);
+      const orderedQty  = ordered.reduce((s, m) => s + (m.quantity || 0), 0);
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+             border-radius:var(--radius);background:rgba(136,136,136,0.1);
+             border:1px solid rgba(136,136,136,0.35)">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${escapeHtml(c.title || '')}
+              <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
+            </div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">
+              Last seen ${escapeHtml(c.withdrawn_last_seen_month || '—')} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
+              ${orderedQty ? ` · ⚠ ${orderedQty} already submitted to ${escapeHtml(c.distributor || '')} — reconcile with the distributor` : ''}
+            </div>
+          </div>
+          <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#999">
+            Withdrawn
+          </span>
+        </div>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="margin:0;font-size:0.95rem;font-family:var(--font-display);letter-spacing:0.03em;color:#999">
+          ⛔ Withdrawn by Distributor — cannot be ordered
+        </h3>
+        <span style="font-size:0.75rem;color:var(--text-muted)">${withdrawn.length} title${withdrawn.length===1?'':'s'}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${rowHtml}
       </div>
     `;
   }
@@ -1144,12 +1341,15 @@
 
   // Consolidated order sheet — one row per title, total qty across all customers.
   // Fulfilled items are excluded: they are already in hand and must not be re-ordered.
+  // Keyed on export code, not catalog.id (F111 § 4.4) — within one month
+  // that is equivalent, but a re-listed title across months has one catalog
+  // row per month, and catalog.id would emit two lines for one code.
   function makeOrderSheetRows(items) {
     const unfulfilled = items.filter(p => !p.fulfilled);
     const map = {};
     unfulfilled.forEach(p => {
       const c   = p.catalog || {};
-      const key = c.id;
+      const key = exportCode(c, c.distributor);
       if (!key) return;
       if (!map[key]) {
         map[key] = {
@@ -1280,25 +1480,27 @@
     const distributor = builderDistributor;
     const buckets      = classifyForExport(distributor, builderSelectedDates);
 
-    // "Already ordered" — human call, never auto-suppressed (§ 4.3 / V4)
-    obAlready.innerHTML = buckets.alreadyOrdered.length ? `
+    // "Already ordered" — human call, never auto-suppressed (§ 4.3 / V4).
+    // Grouped by export code (F111 § 4.4), not catalog.id: a re-listed
+    // title can produce one row per catalog month per customer, all
+    // resolving to the same code — one card, one override, not one per row.
+    const alreadyGrouped = groupBucketByCode(buckets.alreadyOrdered);
+    obAlready.innerHTML = alreadyGrouped.length ? `
       <h3 style="font-size:0.85rem;font-weight:600;color:var(--warning);margin:0 0 8px;letter-spacing:0.03em">
-        ⚠ ALREADY ORDERED — ${buckets.alreadyOrdered.length} title${buckets.alreadyOrdered.length === 1 ? '' : 's'} (your call — not auto-suppressed)
+        ⚠ ALREADY ORDERED — ${alreadyGrouped.length} title${alreadyGrouped.length === 1 ? '' : 's'} (your call — not auto-suppressed)
       </h3>
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
-        ${buckets.alreadyOrdered.map(({ p, matches }) => {
-          const c        = p.catalog || {};
-          const totalQty = allPreorders
-            .filter(x => x.catalog?.id === c.id && !x.fulfilled)
-            .reduce((s, x) => s + (x.quantity || 1), 0);
+        ${alreadyGrouped.map(({ code, catalog: c, matches, rows }) => {
+          const totalQty  = rows.reduce((s, p) => s + (p.quantity || 1), 0);
           const priorQty  = matches.reduce((s, m) => s + (m.quantity || 0), 0);
           const suggested = Math.max(0, totalQty - priorQty);
-          const key       = c.id;
+          const key       = code;
           if (!builderOverrides[key]) builderOverrides[key] = { include: suggested > 0, qty: suggested };
           const ov = builderOverrides[key];
           const priorLines = matches
             .map(m => `${m.quantity}× on ${formatDate(m.submitted_on)} (cycle ${formatDate(m.foc_date)}, ${m.order_type})`)
             .join('; ');
+          const monthsInvolved = [...new Set(rows.map(p => p.catalog?.catalog_month).filter(Boolean))];
           return `
             <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
               <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')}
@@ -1307,11 +1509,12 @@
               <div style="font-size:0.75rem;color:var(--text-muted);margin:4px 0">Prior: ${priorLines}</div>
               <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px">
                 Currently reserved: ${totalQty} · already on order: ${priorQty}
+                ${monthsInvolved.length > 1 ? ` · reserved across ${monthsInvolved.join(', ')}` : ''}
               </div>
               <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;flex-wrap:wrap">
-                <input type="checkbox" class="ob-already-include" data-catalog-id="${key}" ${ov.include ? 'checked' : ''}>
+                <input type="checkbox" class="ob-already-include" data-code="${escapeHtml(key)}" ${ov.include ? 'checked' : ''}>
                 Include in this export, qty:
-                <input type="number" min="0" max="${totalQty}" class="ob-already-qty" data-catalog-id="${key}"
+                <input type="number" min="0" max="${totalQty}" class="ob-already-qty" data-code="${escapeHtml(key)}"
                        value="${ov.qty}" ${ov.include ? '' : 'disabled'}
                        style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
                               color:var(--text-primary);border-radius:var(--radius);padding:4px 6px">
@@ -1323,39 +1526,58 @@
 
     obAlready.querySelectorAll('.ob-already-include').forEach(cb => {
       cb.addEventListener('change', () => {
-        builderOverrides[cb.dataset.catalogId].include = cb.checked;
+        builderOverrides[cb.dataset.code].include = cb.checked;
         renderOrderBuilderResults();
       });
     });
     obAlready.querySelectorAll('.ob-already-qty').forEach(inp => {
       inp.addEventListener('input', () => {
-        builderOverrides[inp.dataset.catalogId].qty = Math.max(0, parseInt(inp.value) || 0);
+        builderOverrides[inp.dataset.code].qty = Math.max(0, parseInt(inp.value) || 0);
       });
     });
 
-    // Held-back panel — every bucket, nothing dropped silently (§ 4.1)
+    // Held-back panel — every bucket, nothing dropped silently (§ 4.1/§ 4.4)
     const section = (label, color, entries) => entries.length ? `
       <div style="margin-bottom:12px">
         <div style="font-weight:600;font-size:0.8rem;color:${color};margin-bottom:4px">${label} (${entries.length})</div>
         <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">
-          ${groupByCatalogId(entries).map(({ catalog: c, qty }) =>
+          ${groupByExportCode(entries).map(({ catalog: c, qty }) =>
             `<li>${escapeHtml(c.title || '')} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('')}
         </ul>
       </div>` : '';
 
-    const fulfilledCount = allPreorders.filter(p => p.catalog?.distributor === distributor && p.fulfilled).length;
+    // Cross-month reservation collapses (F111 § 4.4 collapse #2) — surfaced
+    // here, never silently picked. Only groups touching this distributor.
+    const distributorCollapses = gatherCollapsedGroups.filter(g => g.survivor.catalog?.distributor === distributor);
+    const collapseSection = distributorCollapses.length ? `
+      <div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">
+          Cross-month duplicate reservations collapsed (${distributorCollapses.length})
+        </div>
+        <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">
+          ${distributorCollapses.map(g => {
+            const c = g.survivor.catalog || {};
+            const otherMonths = [...new Set(g.dropped.map(d => d.catalog?.catalog_month).filter(Boolean))].join(', ');
+            return `<li>${escapeHtml(c.title || '')} — also reserved in ${escapeHtml(otherMonths)}; kept ${escapeHtml(c.catalog_month || '')} (qty ${g.survivor.quantity || 1})</li>`;
+          }).join('')}
+        </ul>
+      </div>` : '';
+
+    const fulfilledCount = gatherCollapsed.filter(p => p.catalog?.distributor === distributor && p.fulfilled).length;
     const nothingHeld = !buckets.backordered.length && !buckets.atRisk.length && !buckets.outsideCycle.length
-      && !buckets.adhocOrdered.length && !buckets.noFoc.length;
+      && !buckets.adhocOrdered.length && !buckets.noFoc.length && !buckets.withdrawn.length;
 
     obHeldback.innerHTML = `
       <h3 style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin:0 0 10px;letter-spacing:0.03em">HELD BACK</h3>
-      ${section('🔴 Backordered — FOC passed, never ordered', '#ff8070', buckets.backordered)}
+      ${section('⛔ Withdrawn by the distributor — cannot be ordered', '#888', buckets.withdrawn)}
+      ${section('🔴 Backordered — FOC passed, never ordered, still orderable', '#ff8070', buckets.backordered)}
       ${section('🟡 At risk — needs an ad-hoc order before FOC', 'var(--warning)', buckets.atRisk)}
       ${section('Outside selected cycle', 'var(--text-muted)', buckets.outsideCycle)}
       ${section('Ad-hoc ordered — excluded automatically', 'var(--text-muted)', buckets.adhocOrdered)}
+      ${collapseSection}
       ${buckets.noFoc.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${buckets.noFoc.length} title${buckets.noFoc.length===1?'':'s'} with no FOC date on file — included regardless of cycle selection.</div>` : ''}
       ${fulfilledCount ? `<div style="font-size:0.78rem;color:var(--text-muted)">${fulfilledCount} already fulfilled — excluded, not shown above.</div>` : ''}
-      ${nothingHeld && !fulfilledCount ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
+      ${nothingHeld && !fulfilledCount && !distributorCollapses.length ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
     `;
 
     obSummary.textContent = `${buckets.included.length} title${buckets.included.length === 1 ? '' : 's'} ready to export`;
@@ -1369,19 +1591,21 @@
     const distributor = builderDistributor;
     const buckets      = classifyForExport(distributor, builderSelectedDates);
 
-    // Normal rows go through the UNCHANGED makeOrderSheetRows — this is the
-    // byte-identical path V2 checks (empty ledger + every cycle ticked ⇒
+    // Normal rows go through makeOrderSheetRows, now grouped by export code
+    // rather than catalog.id (F111 § 4.4) — equivalent within a single
+    // month, which is what V-B3's byte-identical gate checks (empty ledger
+    // + every cycle ticked + gather restricted to the current month ⇒
     // buckets.included == the old unfiltered unfulfilled set).
     const baseRows = makeOrderSheetRows(buckets.included);
 
     // Admin-approved "already ordered" rows get added back explicitly, at
     // whatever quantity was chosen (full, reduced, or excluded via qty 0 /
-    // unchecked) — never auto-suppressed (§ 4.3 / V4).
-    const extraRows = buckets.alreadyOrdered
-      .map(({ p }) => {
-        const ov = builderOverrides[p.catalog.id];
+    // unchecked) — never auto-suppressed (§ 4.3 / V4). Grouped by export
+    // code (F111 § 4.4), matching the cards rendered above.
+    const extraRows = groupBucketByCode(buckets.alreadyOrdered)
+      .map(({ code, catalog: c }) => {
+        const ov = builderOverrides[code];
         if (!ov || !ov.include || ov.qty <= 0) return null;
-        const c = p.catalog;
         return {
           Distributor: c.distributor, ItemCode: c.item_code, UPC: c.upc, ISBN: c.isbn,
           Title: c.title, Series: c.series_name, Publisher: c.publisher, Format: c.format,
@@ -1398,7 +1622,7 @@
 
     if (!consolidated.length) { toast(`No ${distributor} reservations selected for export`, 'error'); return; }
 
-    const hadFulfilled = allPreorders.some(p => p.catalog?.distributor === distributor && p.fulfilled);
+    const hadFulfilled = gatherCollapsed.some(p => p.catalog?.distributor === distributor && p.fulfilled);
     const suffix        = hadFulfilled ? '-excl-fulfilled' : '';
     const lines = consolidated.map(r => {
       const code = distributor === 'PRH'
