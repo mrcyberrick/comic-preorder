@@ -591,12 +591,88 @@ approval.
 - **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
   import so adoption trends survive the 90-day purge (schema + import
   script). See `docs/technical-reference.md` § 13 F90.
-- **Order-invoice reconciliation (F108)** — ingest the distributor order
-  confirmation so rejected/short-allocated codes are surfaced instead of
-  being indistinguishable from "not shipped yet." Needs sample PRH/Lunar
-  order-confirmation files before it can be specified. Scoped OUT of the
-  F101/F102 session by Rick 2026-08-02. The `order_submissions` ledger that
-  session built (§ 4.11) is the table this would populate automatically.
+- **Closing the ad-hoc order loop (F108)** — **Session A COMPLETE on staging
+  2026-08-04** (production promotion is Rick's call, not yet requested);
+  Sessions B and C not started. Plan: `docs/order-loop-closure-f108.md`.
+  **Session A shipped:** `order_deadline` now **supersedes** the
+  in-current-month rule instead of adding to it, and a **lapsed deadline is
+  treated as absent** so the in-month rule takes over automatically rather
+  than At Risk going silent. Both the follow-up panel and the Order
+  Builder's held-back panel route through one shared `missesOrderCycle()`
+  helper — `classifyForExport()` was found mid-session to carry its own copy
+  of the expression with the same `OR` bug, so fixing one would have left
+  two surfaces disagreeing. Treating a lapsed deadline as absent is **not a
+  new convention**: `catalog.html`'s customer banner has always self-hidden
+  on a passed date, so this makes the admin side consistent with shipped
+  behaviour. **V-A1 and V-A3 green; 67/67 suite, zero flaky**; `order_deadline`
+  restored to its pre-test value and fixtures verified gone by SELECT.
+  **V-A2 (panel shows 0 At Risk) is a production-data observation** and is
+  owed read-only after promotion. **Carried to Session B:** clearing the
+  stored `order_deadline` at `isNewMonth` (scripts repo). **Open, needs
+  Rick:** `order_deadline` also drives the customer catalog banner (which
+  already self-hides), but the admin *input field* will show an expired date
+  until Session B clears it — leave it, or add an "expired" hint. **DIRECTION CHANGED
+  2026-08-04: file ingest is DROPPED, not deferred.** Rick's binding
+  constraint — *"I do not want to download multiple files to feed the import
+  every week… The pulllist app should not be a chore to maintain."* The plan
+  is now **capture-in-flow**: (1) **confirm-on-export** for ad-hoc orders
+  (explicit confirmation after the Order Builder download, deliberately
+  reversing F101 § 4.2 with the operator's agreement); (2) **confirm at
+  new-catalog import**, gated on `isNewMonth` so a same-month refresh never
+  re-confirms; (3) **zero-quantity Mark Ordered records a supplier
+  rejection** — which needs `CHECK quantity >= 1` relaxed to `>= 0` and
+  **`get_ordered_codes()` reworked, or it will tell the customer "✓ Order
+  placed" for a rejected title**; (4) a rejected title **reuses F110's
+  generic unavailable surface** (Rick's call), though *not* by writing to
+  `catalog.withdrawn_at` — that is a property of the title, a rejection is a
+  property of our order. The customer's arrival date comes from
+  `catalog.on_sale_date`, verified to match both distributors exactly, so no
+  supplier feed is needed. **Second live defect found the same day:
+  `order_deadline` must SUPERSEDE the in-current-month rule and the shipped
+  code has it as `OR`** — verified on production (`order_deadline
+  = 2026-08-21`), the two At Risk rows (FOC `2026-08-31`, i.e. after the
+  deadline) should not be showing. **Combined with the four false
+  Backordered rows, the panel's precision on 2026-08-04 was 0 of 6.**
+  **Both open decisions were answered 2026-08-04 — the plan is fully
+  specified and ready to execute:** a **stale deadline resets to blank**
+  (Rick's call, better than either option offered — it self-heals into the
+  in-month fallback instead of going silent, and the empty field is itself
+  the prompt to set the next cycle), implemented as read-path
+  treat-as-absent plus a clear at `isNewMonth`, with **no write-on-page-
+  load**; and the import confirmation is **reviewed for now**, built so that
+  becoming blind later is a flag rather than a rewrite. Real exports from both
+  distributors are in `catalogs/order-confirmations/` (local, uncommitted)
+  and are characterised at that plan's § 2.9. **Match feasibility measured
+  against live production: PRH 28/31 (90%), Lunar 137/149 (92%)**, misses
+  categorised and benign; ~180 ledger rows per monthly ingest. **Reading the
+  real files corrected the plan twice before any code existed** — (1) the
+  rich supplier state (Shipped/Processing, ship + in-store + est-delivery
+  dates) is **screen-only and absent from both exports**, so three planned
+  columns were cut and the customer-facing "expected Aug 12" is not
+  deliverable from these files; (2) **Lunar's order number is in the
+  filename, not the file**, and Lunar supplies no order date at all while
+  `submitted_on` is NOT NULL. **Blocking implementation fact: the Lunar
+  export contains negative-quantity lines and `order_submissions` has CHECK
+  `quantity >= 1`** — a row-per-line ingest aborts the import, so netting by
+  code (skip net-0, halt on net-negative) is mandatory. **PRH's `Order
+  Status` is the F110 trap repeated: 31/31 rows read `Backordered`** — a
+  column that never varies is not a signal, and it collides verbatim with
+  our own opposite-meaning label, so it must never be ingested or shown.
+  **Three decisions are owed from Rick before Session B can start** (Lunar
+  order-number source, Lunar `submitted_on` source, and the
+  backfill-overlap option — plan § 4.1). **Why it matters:** on 2026-08-04 the production
+  Order Follow-Up panel showed 4 titles BACKORDERED and **all 4 had actually
+  been ordered** (precision 0 of 4). The cause is the input, not the logic —
+  **Mark Ordered has been used zero times on production**; all 857 ledger
+  rows are backfill across exactly three cycle dates, and the orders in
+  question were placed off-cycle directly on the vendor sites. F116's
+  arrival-evidence clearing cannot fix it: order → arrival is ~10 weeks, so
+  arrival evidence clears *stale* false alarms while only order evidence
+  clears *in-flight* ones. Customer impact today is **nil** (all four are
+  prior-month rows that never reach the FOC-lock surface — verified), so
+  this is priority-not-emergency, and the customer-facing half is sequenced
+  last behind a product decision. Carries an F102-shaped double-count hazard
+  that must not be resolved casually — see the plan § 4.1.
   See `docs/technical-reference.md` § 13 F108.
 - **Order-ledger cancel guard is client-side only (F109)** — moving it into
   a `BEFORE DELETE` trigger on `preorders` is the only version that holds
