@@ -591,9 +591,33 @@ approval.
 - **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
   import so adoption trends survive the 90-day purge (schema + import
   script). See `docs/technical-reference.md` § 13 F90.
-- **Order-confirmation ingest (F108)** — **UNBLOCKED and PLANNED 2026-08-04.
-  Session A COMPLETE; Sessions B–D not started.** Plan:
-  `docs/order-confirmation-ingest-f108.md`. Real exports from both
+- **Closing the ad-hoc order loop (F108)** — **PLANNED 2026-08-04, not
+  started.** Plan: `docs/order-loop-closure-f108.md`. **DIRECTION CHANGED
+  2026-08-04: file ingest is DROPPED, not deferred.** Rick's binding
+  constraint — *"I do not want to download multiple files to feed the import
+  every week… The pulllist app should not be a chore to maintain."* The plan
+  is now **capture-in-flow**: (1) **confirm-on-export** for ad-hoc orders
+  (explicit confirmation after the Order Builder download, deliberately
+  reversing F101 § 4.2 with the operator's agreement); (2) **confirm at
+  new-catalog import**, gated on `isNewMonth` so a same-month refresh never
+  re-confirms; (3) **zero-quantity Mark Ordered records a supplier
+  rejection** — which needs `CHECK quantity >= 1` relaxed to `>= 0` and
+  **`get_ordered_codes()` reworked, or it will tell the customer "✓ Order
+  placed" for a rejected title**; (4) a rejected title **reuses F110's
+  generic unavailable surface** (Rick's call), though *not* by writing to
+  `catalog.withdrawn_at` — that is a property of the title, a rejection is a
+  property of our order. The customer's arrival date comes from
+  `catalog.on_sale_date`, verified to match both distributors exactly, so no
+  supplier feed is needed. **Second live defect found the same day:
+  `order_deadline` must SUPERSEDE the in-current-month rule and the shipped
+  code has it as `OR`** — verified on production (`order_deadline
+  = 2026-08-21`), the two At Risk rows (FOC `2026-08-31`, i.e. after the
+  deadline) should not be showing. **Combined with the four false
+  Backordered rows, the panel's precision on 2026-08-04 was 0 of 6.** Two
+  decisions are owed from Rick before Session A: stale-deadline behaviour
+  (superseding makes At Risk go *silent* if never rolled forward — the
+  opposite of F96 and the worse failure), and whether the import
+  confirmation is a blind write or one review. Real exports from both
   distributors are in `catalogs/order-confirmations/` (local, uncommitted)
   and are characterised at that plan's § 2.9. **Match feasibility measured
   against live production: PRH 28/31 (90%), Lunar 137/149 (92%)**, misses
