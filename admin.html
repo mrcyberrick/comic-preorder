@@ -642,6 +642,37 @@
   // exportCode() is shared from app.js (Preorders.cancel() and mylist.html
   // need the identical fallback chain — F101/F102 session).
 
+  // ── The order cycle's edge ─────────────────────────────────
+  // `order_deadline` is the agreed date orders are actually processed, and it
+  // **supersedes** the calendar month rather than adding to it (Rick,
+  // 2026-08-04). Only when it is absent does the in-month rule apply.
+  //
+  // Why "or lapsed": a deadline whose date has passed is not the current
+  // cycle's edge, and treating it as one makes At Risk go silent until
+  // someone remembers to roll it forward. Resetting to blank lets the
+  // in-month fallback take over automatically. This is NOT a new convention —
+  // the customer-facing catalog banner has always self-hidden on a passed
+  // deadline (`catalog.html`: `if (deadline < todayStr) return;`). This makes
+  // the admin side consistent with behaviour that already shipped.
+  //
+  // The stored value is left alone here; clearing it is the import's job at
+  // the next new-catalog load, so the admin field keeps showing what is
+  // actually in the database rather than being silently blanked on a read.
+  function effectiveOrderDeadline() {
+    const todayStr = DateUtils.todayLocal();
+    return (orderDeadline && orderDeadline >= todayStr) ? orderDeadline : null;
+  }
+
+  // Does this title's FOC fall outside the current order cycle — i.e. will the
+  // regular monthly order NOT cover it, so it needs an ad-hoc order?
+  // Single source of truth for both the follow-up panel and the Order
+  // Builder's held-back panel; they previously carried separate copies of the
+  // expression and had both drifted to `OR`.
+  function missesOrderCycle(focDate) {
+    const deadline = effectiveOrderDeadline();
+    return deadline ? focDate <= deadline : isFocThisMonth(focDate);
+  }
+
   // Whole days from today to any 'YYYY-MM-DD' (negative = in the past).
   // Local date parts throughout — never toISOString() (F28).
   function daysUntil(dateStr) {
@@ -805,7 +836,7 @@
       }
       if (isFocPast(c.foc_date)) {
         buckets.backordered.push({ p });
-      } else if (isFocThisMonth(c.foc_date) || (orderDeadline && c.foc_date <= orderDeadline)) {
+      } else if (missesOrderCycle(c.foc_date)) {
         buckets.atRisk.push({ p });
       } else {
         buckets.outsideCycle.push({ p });
@@ -957,8 +988,13 @@
   //                  Still orderable on both distributors, availability
   //                  unguaranteed (§ 2.1 — "cannot arrive" is accurate only
   //                  for a title withdrawn upstream, F110).
-  //   At risk        FOC still ahead but closing. The genuinely actionable
-  //                  early warning.
+  //   At risk        FOC still ahead, but falling OUTSIDE the current order
+  //                  cycle — the regular monthly order will not cover it, so
+  //                  it needs an ad-hoc order. This is the signal the whole
+  //                  ad-hoc process runs on, and preventing a Backorder is
+  //                  the point of acting on it. See missesOrderCycle():
+  //                  `order_deadline` is the cycle's edge and SUPERSEDES the
+  //                  calendar month; it is not an additional trigger.
   //
   // TWO things clear a code, and the second is the important one:
   //   * any order_submissions row (monthly or adhoc), regardless of date —
@@ -989,7 +1025,7 @@
       if (c.on_sale_date && c.on_sale_date < todayStr) { neverArrived.push({ p }); return; }
 
       const past    = isFocPast(c.foc_date);
-      const trigger = past || isFocThisMonth(c.foc_date) || (orderDeadline && c.foc_date <= orderDeadline);
+      const trigger = past || missesOrderCycle(c.foc_date);
       if (!trigger) return;
 
       (past ? backordered : atRisk).push({ p });
