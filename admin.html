@@ -565,10 +565,34 @@
   let orderLedger  = [];
   let orderDeadline = null; // 'YYYY-MM-DD' or null — shared with the Order Deadline panel below
 
+  // Count-first, paged read — the F82/F113 shape. Every admin fetch that can
+  // outgrow PostgREST's 1,000-row default goes through here. buildQuery() is
+  // called once per page and must return a fresh query builder.
+  async function fetchPaged(table, buildQuery) {
+    const countRes = await db.from(table).select('*', { count: 'exact', head: true });
+    if (countRes.error) return { data: null, error: countRes.error };
+    const total = countRes.count ?? 0;
+    if (!total) return { data: [], error: null };
+    const batches = [];
+    for (let from = 0; from < total; from += 1000) {
+      batches.push(buildQuery().range(from, Math.min(from + 999, total - 1)));
+    }
+    const results = await Promise.all(batches);
+    const errored = results.find(r => r.error);
+    if (errored) return { data: null, error: errored.error };
+    return { data: results.flatMap(r => r.data || []), error: null };
+  }
+
+  // Paged for the same reason as F113: production held 857 ledger rows against
+  // PostgREST's 1,000 cap and grows by roughly a cycle's worth each month. A
+  // truncated ledger silently un-clears already-ordered codes, which surfaces
+  // as false Backordered rows — the exact noise this panel exists to avoid.
   async function loadOrderLedger() {
-    const { data, error } = await db.from('order_submissions')
-      .select('id, distributor, order_code, item_code, title, quantity, order_type, foc_date, catalog_month, submitted_on, created_at')
-      .order('submitted_on', { ascending: false });
+    const { data, error } = await fetchPaged('order_submissions', () =>
+      db.from('order_submissions')
+        .select('id, distributor, order_code, item_code, title, quantity, order_type, foc_date, catalog_month, submitted_on, created_at')
+        .order('submitted_on', { ascending: false })
+        .order('id', { ascending: false }));
     if (error) {
       console.error('order_submissions load failed:', error.message);
       orderLedger = [];
@@ -582,10 +606,45 @@
     return orderLedger.filter(r => r.distributor === distributor && r.order_code === code);
   }
 
+  // ── Shipment evidence ──────────────────────────────────────
+  // A reservation whose catalog_id, upc OR item_code appears on any
+  // weekly_shipment row physically arrived — which is proof the store ordered
+  // it, even with no order_submissions row. This matters because the ledger's
+  // history starts at the May cycle: a title ordered earlier leaves no row and
+  // would otherwise read as Backordered forever (the Sonic #88 case,
+  // 36 days "overdue" the day before it landed on the shelf).
+  // Three-key match is the F76 key, identical to arrivals.html's
+  // isCoveredByShipment() — catalog_id alone under-matches, because shipment
+  // rows can carry a null catalog_id with a valid upc/item_code.
+  let shipCatalogIds = new Set(), shipUpcs = new Set(), shipItemCodes = new Set();
+
+  async function loadShipmentEvidence() {
+    const { data, error } = await fetchPaged('weekly_shipment', () =>
+      db.from('weekly_shipment').select('catalog_id, upc, item_code'));
+    if (error) {
+      // Fail loud-but-safe: with no evidence loaded nothing clears, so the
+      // panel over-reports rather than silently hiding a real problem.
+      console.error('weekly_shipment load failed:', error.message);
+      return;
+    }
+    shipCatalogIds = new Set((data || []).map(s => s.catalog_id).filter(Boolean));
+    shipUpcs       = new Set((data || []).map(s => s.upc).filter(Boolean));
+    shipItemCodes  = new Set((data || []).map(s => s.item_code).filter(Boolean));
+  }
+
+  function hasShipmentEvidence(c) {
+    if (!c) return false;
+    return !!((c.id && shipCatalogIds.has(c.id)) ||
+              (c.upc && shipUpcs.has(c.upc)) ||
+              (c.item_code && shipItemCodes.has(c.item_code)));
+  }
+
   // exportCode() is shared from app.js (Preorders.cancel() and mylist.html
   // need the identical fallback chain — F101/F102 session).
 
-  function daysUntilFoc(dateStr) {
+  // Whole days from today to any 'YYYY-MM-DD' (negative = in the past).
+  // Local date parts throughout — never toISOString() (F28).
+  function daysUntil(dateStr) {
     if (!dateStr) return null;
     const [y, m, d] = dateStr.split('-').map(Number);
     const target = new Date(y, m - 1, d);
@@ -809,6 +868,7 @@
       fetchAllPreorders(),
       db.from('user_profiles').select('id, full_name'),
       loadOrderLedger(),
+      loadShipmentEvidence(),
       Settings.getOrderDeadline().then(v => { orderDeadline = v; }),
     ]);
 
@@ -885,31 +945,48 @@
     }
   }
 
-  // ── Backorder-risk panel (F101 § 2.4/§ 4.5) ────────────────
-  // Persistent, tab-independent: a reservation whose title's FOC locks
-  // before the monthly order can go out (this calendar month, or on/before
-  // the customer order_deadline) and has no order_submissions row for its
-  // code needs an ad-hoc order placed NOW — once FOC passes with no order
-  // placed, the title is "Backordered": the customer is committed (the FOC
-  // lock blocks cancellation, catalog.html:1217-1218) and availability is
-  // no longer guaranteed — it may still arrive, on either distributor, just
-  // not reliably (§ 2.1 correction: "cannot arrive" is accurate only for a
-  // title withdrawn upstream, F110 — the two states are visually and
-  // semantically distinct; see renderWithdrawnPanel()). Any ledger row
-  // (monthly or adhoc) clears a code from this list regardless of date —
-  // proven by V7(c).
-  // Withdrawn titles are excluded here (F110 § 2.1) — they are visually and
-  // semantically distinct from Backordered: Backordered can still be
-  // ordered (availability unguaranteed); withdrawn cannot be ordered at
-  // all. See renderWithdrawnPanel() below for the sibling panel.
+  // ── Order follow-up panel (F101 § 2.4/§ 4.5) ───────────────
+  // Persistent, tab-independent. Three states, because "FOC passed without a
+  // ledger row" conflated two situations that need opposite responses:
+  //
+  //   Never arrived  on-sale date passed, still nothing showing it arrived.
+  //                  Ordering can no longer help — this one needs a phone
+  //                  call, and it is the only state where a customer was
+  //                  actually let down.
+  //   Backordered    FOC passed, not yet released, no evidence either way.
+  //                  Still orderable on both distributors, availability
+  //                  unguaranteed (§ 2.1 — "cannot arrive" is accurate only
+  //                  for a title withdrawn upstream, F110).
+  //   At risk        FOC still ahead but closing. The genuinely actionable
+  //                  early warning.
+  //
+  // TWO things clear a code, and the second is the important one:
+  //   * any order_submissions row (monthly or adhoc), regardless of date —
+  //     proven by V7(c); and
+  //   * SHIPMENT EVIDENCE — the title physically arrived, so it was ordered
+  //     even though nothing recorded it. The ledger's history begins at the
+  //     May cycle, so an earlier-cycle order leaves no row and the title
+  //     would otherwise read as Backordered forever. Measured on production
+  //     2026-08-04: this single rule removed the loudest row on the panel
+  //     (Sonic #88, "36 days overdue", shipped and on sale the next day).
+  //
+  // Withdrawn titles are excluded entirely (F110 § 2.1) — they cannot be
+  // ordered at all, and get their own panel. See renderWithdrawnPanel().
   function computeBackorderRisk() {
     const rows = gatherCollapsed.filter(p => !p.fulfilled && p.catalog?.foc_date && !p.catalog?.withdrawn_at);
-    const atRisk = [], backordered = [];
+    const neverArrived = [], backordered = [], atRisk = [];
+    const todayStr = DateUtils.todayLocal();
 
     rows.forEach(p => {
       const c = p.catalog;
       const code = exportCode(c, c.distributor);
-      if (ledgerMatchesFor(c.distributor, code).length) return; // cleared
+      if (ledgerMatchesFor(c.distributor, code).length) return; // ordered — cleared
+      if (hasShipmentEvidence(c)) return;                       // arrived — cleared
+
+      // Released with no arrival record. Deliberately checked before the FOC
+      // triage: once the on-sale date has passed, how the order window was
+      // missed stops mattering — the outcome is already settled.
+      if (c.on_sale_date && c.on_sale_date < todayStr) { neverArrived.push({ p }); return; }
 
       const past    = isFocPast(c.foc_date);
       const trigger = past || isFocThisMonth(c.foc_date) || (orderDeadline && c.foc_date <= orderDeadline);
@@ -918,9 +995,18 @@
       (past ? backordered : atRisk).push({ p });
     });
 
+    // Sorted by on-sale proximity, soonest first — the actionable ordering.
+    // Days-past-FOC is deliberately NOT the sort key: it keeps climbing after
+    // the outcome is settled, and its size is a function of import cadence
+    // rather than anything about the title (Sonic #88 read "36 days overdue"
+    // the day before it went on sale).
+    const byOnSale = entries => entries.slice().sort((a, b) =>
+      (a.catalog.on_sale_date || '9999-99-99').localeCompare(b.catalog.on_sale_date || '9999-99-99'));
+
     return {
-      backordered: groupByExportCode(backordered),
-      atRisk:      groupByExportCode(atRisk),
+      neverArrived: byOnSale(groupByExportCode(neverArrived)),
+      backordered:  byOnSale(groupByExportCode(backordered)),
+      atRisk:       byOnSale(groupByExportCode(atRisk)),
     };
   }
 
@@ -928,52 +1014,73 @@
     const panel = document.getElementById('backorder-risk-panel');
     if (!panel) return;
 
-    const { backordered, atRisk } = computeBackorderRisk();
+    const { neverArrived, backordered, atRisk } = computeBackorderRisk();
 
-    if (!backordered.length && !atRisk.length) {
+    if (!neverArrived.length && !backordered.length && !atRisk.length) {
       panel.style.display = 'none';
       panel.innerHTML = '';
       return;
     }
     panel.style.display = '';
 
-    const rowHtml = (entries, isBackordered) => entries.map(({ catalog: c, qty, customers }) => {
-      const days = daysUntilFoc(c.foc_date);
-      const daysLabel = isBackordered
-        ? `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`
-        : (days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} left`);
+    // Urgency is time to/from the ON-SALE date — the window in which doing
+    // something can still change the outcome.
+    const onSaleLabel = (c) => {
+      const d = daysUntil(c.on_sale_date);
+      if (d === null)  return 'no on-sale date';
+      if (d > 0)       return `on sale in ${d} day${d === 1 ? '' : 's'}`;
+      if (d === 0)     return 'on sale today';
+      return `on sale ${-d} day${-d === 1 ? '' : 's'} ago`;
+    };
+
+    const STATES = {
+      neverArrived: { label: 'Never arrived', text: '#ff5f4a', bg: 'rgba(232,50,28,0.14)', border: 'rgba(232,50,28,0.55)' },
+      backordered:  { label: 'Backordered',   text: '#ff8070', bg: 'rgba(232,50,28,0.08)', border: 'rgba(232,50,28,0.3)'  },
+      atRisk:       { label: 'At risk',       text: 'var(--warning)', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)' },
+    };
+
+    const rowHtml = (entries, stateKey) => entries.map(({ catalog: c, qty, customers }) => {
+      const s = STATES[stateKey];
       return `
-        <div class="backorder-risk-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;
-             border-radius:var(--radius);background:${isBackordered ? 'rgba(232,50,28,0.08)' : 'rgba(245,158,11,0.08)'};
-             border:1px solid ${isBackordered ? 'rgba(232,50,28,0.3)' : 'rgba(245,158,11,0.3)'}">
+        <div class="backorder-risk-row" data-state="${stateKey}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+             border-radius:var(--radius);background:${s.bg};border:1px solid ${s.border}">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
               ${escapeHtml(c.title || '')}
               <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
             </div>
             <div style="font-size:0.75rem;color:var(--text-muted)">
-              FOC ${formatDate(c.foc_date)} · ${daysLabel} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
+              ${onSaleLabel(c)} · FOC ${formatDate(c.foc_date)} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
             </div>
           </div>
           <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
-                       color:${isBackordered ? '#ff8070' : 'var(--warning)'}">
-            ${isBackordered ? 'Backordered' : 'At risk'}
-          </span>
+                       color:${s.text};white-space:nowrap">${s.label}</span>
         </div>`;
     }).join('');
 
+    const counts = [
+      neverArrived.length ? `${neverArrived.length} never arrived` : '',
+      backordered.length  ? `${backordered.length} backordered`    : '',
+      atRisk.length       ? `${atRisk.length} at risk`             : '',
+    ].filter(Boolean).join(' · ');
+
     panel.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap">
         <h3 style="margin:0;font-size:0.95rem;font-family:var(--font-display);letter-spacing:0.03em">
-          ⚠ Backorder Risk — needs an ad-hoc order
+          ⚠ Order Follow-Up
         </h3>
-        <span style="font-size:0.75rem;color:var(--text-muted)">
-          ${backordered.length ? `${backordered.length} backordered` : ''}${backordered.length && atRisk.length ? ' · ' : ''}${atRisk.length ? `${atRisk.length} at risk` : ''}
-        </span>
+        <span style="font-size:0.75rem;color:var(--text-muted)">${counts}</span>
       </div>
+      ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin-bottom:6px">
+        Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
+      </div>` : ''}
       <div style="display:flex;flex-direction:column;gap:6px">
-        ${rowHtml(backordered, true)}
-        ${rowHtml(atRisk, false)}
+        ${rowHtml(neverArrived, 'neverArrived')}
+        ${rowHtml(backordered, 'backordered')}
+        ${rowHtml(atRisk, 'atRisk')}
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
+        Titles already ordered, or with a shipment record, are cleared automatically.
       </div>
     `;
   }
