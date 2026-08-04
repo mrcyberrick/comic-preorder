@@ -591,9 +591,11 @@ approval.
 - **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
   import so adoption trends survive the 90-day purge (schema + import
   script). See `docs/technical-reference.md` § 13 F90.
-- **Closing the ad-hoc order loop (F108)** — **Session A COMPLETE on staging
-  2026-08-04** (production promotion is Rick's call, not yet requested);
-  Sessions B and C not started. Plan: `docs/order-loop-closure-f108.md`.
+- **Closing the ad-hoc order loop (F108)** — **Session A COMPLETE AND LIVE IN
+  PRODUCTION 2026-08-04** (PR #103, merge 22:29 UTC; **V-A2 verified on live
+  data — At Risk went 2 → 0**, four Backordered rows correctly remaining for
+  Session B); Sessions B and C not started. Plan:
+  `docs/order-loop-closure-f108.md`.
   **Session A shipped:** `order_deadline` now **supersedes** the
   in-current-month rule instead of adding to it, and a **lapsed deadline is
   treated as absent** so the in-month rule takes over automatically rather

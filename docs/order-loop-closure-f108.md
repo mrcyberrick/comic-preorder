@@ -1,6 +1,6 @@
 # Closing the Ad-Hoc Order Loop — making the Order Follow-Up panel tell the truth
 
-**Status:** **Session A COMPLETE on staging 2026-08-04** (production promotion is Rick's call, not yet requested). Sessions B and C not started. Rewritten 2026-08-04 after a decision interview with Rick; all open decisions closed at § 3.8/§ 3.9.
+**Status:** **Session A COMPLETE AND LIVE IN PRODUCTION 2026-08-04** (PR #103; V-A2 verified on live data — At Risk went 2 → 0). Sessions B and C not started. Rewritten 2026-08-04 after a decision interview with Rick; all open decisions closed at § 3.8/§ 3.9.
 **Supersedes:** `docs/order-confirmation-ingest-f108.md` (same file, renamed). **That plan's central proposal — ingesting distributor order-confirmation files — is DROPPED, not deferred.** § 3.1 records why, in Rick's words. The evidence that produced it is kept at § 2.8 because it is what justifies dropping it.
 **Closes:** **F108** — not by reconciliation after the fact, which is what F108 originally imagined, but by capturing the order at the moment it is placed (§ 3.5).
 **Follows:** F101/F102 (built the ledger), F110/F111/F113 (cross-month gather + withdrawal), F115/F116 (arrival-evidence triage). All live on production.
@@ -287,12 +287,15 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ## 8. Completion criteria
 
-### Session A — COMPLETE on staging 2026-08-04; production promotion is Rick's call
+### Session A — COMPLETE AND LIVE IN PRODUCTION 2026-08-04 (PR #103, merged 22:29 UTC)
 - [x] Supersede logic landed; `Backordered` unchanged
 - [x] Lapsed deadline treated as absent on the read path (no write-on-load)
 - [x] **V-A1**, **V-A3** green; spec 15 extended; **67/67 suite green, zero flaky**
 - [x] `order_deadline` restored to its pre-test value; fixtures torn down, verified by SELECT
-- [ ] **V-A2** — panel shows 0 At Risk on **production**. Cannot be asserted from staging (it is a production-data observation); verify read-only after promotion.
+- [x] **V-A2 GREEN on production** — read-only reproduction of the deployed panel against live data (`order_deadline = 2026-08-21`, effective): **At Risk = 0**, down from 2. The four Backordered rows remain, as expected — those are the ordered-but-unrecorded titles Session B addresses. Served bytes confirmed to contain `missesOrderCycle`/`effectiveOrderDeadline` and to no longer contain the old `isFocThisMonth(...) || (orderDeadline ...)` expression.
+- [x] Rick confirmed production behaviour 2026-08-04.
+
+**No post-deploy write-smoke was run, deliberately.** The F59 check confirmed `app.js` is **byte-identical to main**, so `Preorders.reserve()`/`cancel()` are unchanged; the entire diff is read-side logic inside `admin.html`. A reserve→cancel against production would have exercised code this change provably does not touch, at the cost of a real write to live customer data. **V-A2 is the correct post-deploy check for this change**, and it passed.
 
 **Scope note — one thing found during execution and fixed in the same pass.** `classifyForExport()` (the Order Builder's held-back panel) carried its **own copy** of the trigger expression and had drifted to the same `OR` bug. Fixing only `computeBackorderRisk()` would have left two surfaces disagreeing about the same word. Both now route through a single `missesOrderCycle()` helper so they cannot diverge again.
 
