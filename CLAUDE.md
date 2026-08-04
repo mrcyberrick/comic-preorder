@@ -591,8 +591,27 @@ approval.
 - **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
   import so adoption trends survive the 90-day purge (schema + import
   script). See `docs/technical-reference.md` § 13 F90.
-- **Closing the ad-hoc order loop (F108)** — **PLANNED 2026-08-04, not
-  started.** Plan: `docs/order-loop-closure-f108.md`. **DIRECTION CHANGED
+- **Closing the ad-hoc order loop (F108)** — **Session A COMPLETE on staging
+  2026-08-04** (production promotion is Rick's call, not yet requested);
+  Sessions B and C not started. Plan: `docs/order-loop-closure-f108.md`.
+  **Session A shipped:** `order_deadline` now **supersedes** the
+  in-current-month rule instead of adding to it, and a **lapsed deadline is
+  treated as absent** so the in-month rule takes over automatically rather
+  than At Risk going silent. Both the follow-up panel and the Order
+  Builder's held-back panel route through one shared `missesOrderCycle()`
+  helper — `classifyForExport()` was found mid-session to carry its own copy
+  of the expression with the same `OR` bug, so fixing one would have left
+  two surfaces disagreeing. Treating a lapsed deadline as absent is **not a
+  new convention**: `catalog.html`'s customer banner has always self-hidden
+  on a passed date, so this makes the admin side consistent with shipped
+  behaviour. **V-A1 and V-A3 green; 67/67 suite, zero flaky**; `order_deadline`
+  restored to its pre-test value and fixtures verified gone by SELECT.
+  **V-A2 (panel shows 0 At Risk) is a production-data observation** and is
+  owed read-only after promotion. **Carried to Session B:** clearing the
+  stored `order_deadline` at `isNewMonth` (scripts repo). **Open, needs
+  Rick:** `order_deadline` also drives the customer catalog banner (which
+  already self-hides), but the admin *input field* will show an expired date
+  until Session B clears it — leave it, or add an "expired" hint. **DIRECTION CHANGED
   2026-08-04: file ingest is DROPPED, not deferred.** Rick's binding
   constraint — *"I do not want to download multiple files to feed the import
   every week… The pulllist app should not be a chore to maintain."* The plan

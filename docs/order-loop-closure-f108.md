@@ -1,6 +1,6 @@
 # Closing the Ad-Hoc Order Loop — making the Order Follow-Up panel tell the truth
 
-**Status:** **Planning — rewritten 2026-08-04 after a decision interview with Rick. Not started.**
+**Status:** **Session A COMPLETE on staging 2026-08-04** (production promotion is Rick's call, not yet requested). Sessions B and C not started. Rewritten 2026-08-04 after a decision interview with Rick; all open decisions closed at § 3.8/§ 3.9.
 **Supersedes:** `docs/order-confirmation-ingest-f108.md` (same file, renamed). **That plan's central proposal — ingesting distributor order-confirmation files — is DROPPED, not deferred.** § 3.1 records why, in Rick's words. The evidence that produced it is kept at § 2.8 because it is what justifies dropping it.
 **Closes:** **F108** — not by reconciliation after the fact, which is what F108 originally imagined, but by capturing the order at the moment it is placed (§ 3.5).
 **Follows:** F101/F102 (built the ledger), F110/F111/F113 (cross-month gather + withdrawal), F115/F116 (arrival-evidence triage). All live on production.
@@ -287,10 +287,20 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ## 8. Completion criteria
 
-### Session A
-- [ ] Supersede logic landed; `Backordered` unchanged
-- [ ] Lapsed deadline treated as absent on the read path (no write-on-load)
-- [ ] **V-A1**, **V-A2**, **V-A3** green; spec 15 extended
+### Session A — COMPLETE on staging 2026-08-04; production promotion is Rick's call
+- [x] Supersede logic landed; `Backordered` unchanged
+- [x] Lapsed deadline treated as absent on the read path (no write-on-load)
+- [x] **V-A1**, **V-A3** green; spec 15 extended; **67/67 suite green, zero flaky**
+- [x] `order_deadline` restored to its pre-test value; fixtures torn down, verified by SELECT
+- [ ] **V-A2** — panel shows 0 At Risk on **production**. Cannot be asserted from staging (it is a production-data observation); verify read-only after promotion.
+
+**Scope note — one thing found during execution and fixed in the same pass.** `classifyForExport()` (the Order Builder's held-back panel) carried its **own copy** of the trigger expression and had drifted to the same `OR` bug. Fixing only `computeBackorderRisk()` would have left two surfaces disagreeing about the same word. Both now route through a single `missesOrderCycle()` helper so they cannot diverge again.
+
+**Also established during execution:** treating a lapsed deadline as absent is **not a new convention** — `catalog.html`'s customer-facing deadline banner has always self-hidden on a passed date (`if (deadline < todayStr) return;`). Session A makes the admin side consistent with behaviour that already shipped, which is a stronger footing than the plan claimed.
+
+**Carried to Session B:** clearing the stored `order_deadline` at `isNewMonth` (the scripts-repo half of § 4.1). The read path already makes behaviour correct; the clear only makes the admin input field match. Deferred to keep Session A to one repo, per the runbook's own allowance.
+
+**Discovered, not actioned — needs Rick's call:** `order_deadline` also drives the **customer-facing catalog banner**, which the plan did not account for. Because the banner already self-hides when lapsed, nothing is wrong today. But between a deadline lapsing and the next new-catalog import clearing it, the admin **input field** will still display the expired date while governing nothing. Options: leave it (Session B clears it within days), or add an "expired" hint next to the field. Not added unasked.
 
 ### Session B
 - [ ] Confirm-on-export live; **V-B1** green
