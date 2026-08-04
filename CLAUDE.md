@@ -613,11 +613,15 @@ approval.
   code has it as `OR`** — verified on production (`order_deadline
   = 2026-08-21`), the two At Risk rows (FOC `2026-08-31`, i.e. after the
   deadline) should not be showing. **Combined with the four false
-  Backordered rows, the panel's precision on 2026-08-04 was 0 of 6.** Two
-  decisions are owed from Rick before Session A: stale-deadline behaviour
-  (superseding makes At Risk go *silent* if never rolled forward — the
-  opposite of F96 and the worse failure), and whether the import
-  confirmation is a blind write or one review. Real exports from both
+  Backordered rows, the panel's precision on 2026-08-04 was 0 of 6.**
+  **Both open decisions were answered 2026-08-04 — the plan is fully
+  specified and ready to execute:** a **stale deadline resets to blank**
+  (Rick's call, better than either option offered — it self-heals into the
+  in-month fallback instead of going silent, and the empty field is itself
+  the prompt to set the next cycle), implemented as read-path
+  treat-as-absent plus a clear at `isNewMonth`, with **no write-on-page-
+  load**; and the import confirmation is **reviewed for now**, built so that
+  becoming blind later is a flag rather than a rewrite. Real exports from both
   distributors are in `catalogs/order-confirmations/` (local, uncommitted)
   and are characterised at that plan's § 2.9. **Match feasibility measured
   against live production: PRH 28/31 (90%), Lunar 137/149 (92%)**, misses

@@ -134,6 +134,16 @@ Rick: *"…I can use the Ad Hoc process (By Distributor) list to 'zero' out the 
 ### 3.7 A rejected title reuses the generic unavailable status
 Rick: *"Reusing a generic unavailable status is reasonable."* From the customer's seat a **rejected** title and a **withdrawn** title (F110) are the same thing: *this cannot arrive*. F110's surface is reused rather than inventing a parallel concept.
 
+### 3.8 A stale deadline resets to blank
+Rick, 2026-08-04: *"I would prefer a stale deadline to drop (reset) to a blank deadline."*
+
+This is better than either option offered. It **self-heals**: the moment the deadline lapses it stops being authoritative, the trigger falls back to in-month (§ 3.3), and the blank field is itself the signal that the next cycle's date needs setting. No silent alarm, no nagging banner. Design at § 4.1.
+
+### 3.9 Import confirmation is reviewed — for now
+Rick: *"Fine to review but may change this down the road."*
+
+Build the review, but **structure it so becoming blind later is a flag, not a rewrite** (§ 4.3). Recorded because a future session finding a review step should know it was a deliberate starting point, not a permanent requirement.
+
 ---
 
 ## 4. Design
@@ -148,7 +158,18 @@ const trigger = past || (orderDeadline
 
 `Backordered` is unchanged: `focPast && no order`.
 
-> **OPEN — Rick's call.** Superseding introduces a **silent-failure mode**: once the deadline passes, `foc_date <= deadline` matches nothing in the future and At Risk goes empty until the deadline is rolled forward. Today's `OR` would keep firing on in-month FOCs. F96 was an alarm that cried wolf for 18 days; a **silent** alarm is the worse failure. Options: (a) warn on the dashboard when the deadline is in the past; (b) fall back to in-month once it lapses; (c) accept it. **Recommend (a)** — keeps the semantic clean and makes staleness visible.
+**Stale-deadline handling — settled (§ 3.8): a lapsed deadline resets to blank.**
+
+Superseding would otherwise introduce a silent-failure mode — once the deadline passes, `foc_date <= deadline` matches nothing in the future and At Risk goes empty until someone remembers to roll it forward. F96 was an alarm that cried wolf for 18 days; a *silent* alarm is the worse failure. Resetting to blank removes the failure mode entirely rather than papering over it: the fallback at § 3.3 takes over automatically, and the empty field is the prompt to set the next cycle's date.
+
+Two places implement it, deliberately:
+
+| Where | What | Why both |
+|---|---|---|
+| **Read path** (`admin.html`) | treat `order_deadline < today` as absent — **no write** | Behaviour is correct the instant it lapses, without depending on anything having run |
+| **New-catalog import** (`isNewMonth`) | clear the stored value | The stored value and the UI field match reality; a new cycle genuinely has no deadline yet |
+
+The read-path check is what makes it correct; the import clear is what makes the dashboard *look* correct. Doing only the second would leave a stale date on screen governing nothing. Doing only the first would leave the field showing an expired date indefinitely. **No write-on-page-load** — that would be a surprising side effect on a read.
 
 ### 4.2 Capture point 1 — confirm-on-export (ad-hoc, client)
 
@@ -162,7 +183,9 @@ After **Generate & Download** in the Order Builder, offer an explicit confirmati
 
 On `isNewMonth` only (§ 3.5), the import presents the closing cycle's open, unordered, non-withdrawn reservations and confirms them as the monthly order.
 
-> **OPEN — Rick's call.** The import knows what was **reserved**, not what was **ordered**; they differ when a quantity is trimmed, a title skipped, or a code already covered ad-hoc. A blind write would record titles as ordered that were not — and **a false "Ordered" reaches the customer as a promise, which is worse than today's false "Backordered", which only wastes operator time.** Recommend **one review of the list with the ability to drop lines before writing** — still a single interaction, no files, fails safe. The Step 9 report (F115) already establishes this shape.
+**Reviewed, not blind — settled (§ 3.9).** The import knows what was **reserved**, not what was **ordered**; they differ when a quantity is trimmed, a title skipped, or a code already covered ad-hoc. A blind write would record titles as ordered that were not, and **a false "Ordered" reaches the customer as a promise — worse than today's false "Backordered", which only wastes operator time.** So: present the list, allow lines to be dropped, then write. Still one interaction, no files, fails safe. The Step 9 report (F115) already establishes this shape.
+
+**Build it so blind becomes a flag, not a rewrite** (§ 3.9 — Rick expects this may change). Keep the selection *set* and the *write* as separate steps: compute the confirmable list, optionally filter it interactively, write the result. Skipping the middle step must then be a single branch (`--auto-confirm`, or a setting) rather than an unpicking of the flow. Do not interleave prompting with writing.
 
 Rules regardless:
 - Skip codes that already have a ledger row for the cycle — no double-count.
@@ -227,16 +250,17 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ### Session A — At Risk correctness (client, small)
 1. § 4.1 supersede logic in `computeBackorderRisk()`.
-2. Resolve the § 4.1 stale-deadline decision. > **PAUSE → Rick.**
+2. § 4.1 stale-deadline reset — read-path treat-as-absent (client) **and** clear-on-`isNewMonth` (scripts repo). The script half can ship with Session B if it keeps Session A to one repo.
 3. Extend spec 15. **Gate V-A1:** with `order_deadline` set, a title whose FOC is *after* it is **not** At Risk; with the deadline cleared, the same title **is**. Both assertions in one test — that pair is the whole semantic.
 4. **Gate V-A2:** against production-shaped data the two Aug-31 titles show **0 At Risk** (§ 2.10).
+5. **Gate V-A3:** a deadline dated in the past behaves exactly as a blank one (§ 3.8) — the self-healing property, and the one most likely to rot unnoticed since it only manifests after a date passes.
 
 ### Session B — capture (client + scripts repo)
 1. § 4.2 confirm-on-export. **Gate V-B1:** confirming writes one row per exported code at the exported quantity; declining writes nothing.
 2. § 4.4 schema: `docs/sql/order-submissions-allow-zero-qty.sql` (CHECK relaxation) + `get_ordered_codes()` rework. > **PAUSE → Rick** to run on staging, then production.
 3. **Gate V-B2 (the false-promise gate):** a code with **only** a zero-quantity row does **not** read "Order placed" on My List; a code ordered 5 then zeroed still does.
-4. § 4.3 import confirmation, gated on `isNewMonth`. **Gate V-B3:** a same-month refresh confirms nothing. **Gate V-B4:** an existing zero-quantity row survives an import untouched.
-5. Resolve the § 4.3 blind-vs-review decision. > **PAUSE → Rick.**
+4. § 4.3 import confirmation, gated on `isNewMonth`, **reviewed** (§ 3.9) with selection and write kept as separate steps. **Gate V-B3:** a same-month refresh confirms nothing. **Gate V-B4:** an existing zero-quantity row survives an import untouched.
+5. Clear a lapsed `order_deadline` on `isNewMonth` (§ 4.1), if not already shipped with Session A.
 
 ### Session C — unavailable + customer (client)
 1. § 4.5 generic unavailable state reusing F110's rendering, admin panel and cancel exception.
@@ -252,6 +276,7 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 |---|---|---|
 | **V-A1** | Deadline set ⇒ later-FOC title not At Risk; deadline cleared ⇒ it is | The supersede semantic in one test |
 | **V-A2** | The two Aug-31 titles show **0 At Risk** | The live false positives this fixes |
+| **V-A3** | A past-dated deadline behaves exactly as a blank one | § 3.8's self-healing property — only manifests after a date passes, so it rots unnoticed without a test |
 | **V-B1** | Confirm writes exactly the export; decline writes nothing | Export is not an order |
 | **V-B2** | Zero-only code never reads "Order placed" | **A false promise reaches the customer — the worst failure available** |
 | **V-B3** | Same-month refresh confirms nothing | Double-counting the ledger is an F102-shaped money error |
@@ -264,14 +289,15 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ### Session A
 - [ ] Supersede logic landed; `Backordered` unchanged
-- [ ] Stale-deadline decision answered and recorded
-- [ ] **V-A1**, **V-A2** green; spec 15 extended
+- [ ] Lapsed deadline treated as absent on the read path (no write-on-load)
+- [ ] **V-A1**, **V-A2**, **V-A3** green; spec 15 extended
 
 ### Session B
 - [ ] Confirm-on-export live; **V-B1** green
 - [ ] CHECK relaxed and `get_ordered_codes()` reworked on staging **and** production
 - [ ] **V-B2**, **V-B3**, **V-B4** green
-- [ ] Blind-vs-review decision answered and recorded
+- [ ] Import confirmation keeps selection and write as separate steps (§ 3.9)
+- [ ] Lapsed `order_deadline` cleared on `isNewMonth`
 - [ ] Ledger row count before/after first real use recorded
 
 ### Session C
@@ -293,18 +319,15 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ## 10. Open decisions
 
-1. **§ 4.1** — stale `order_deadline` behaviour: warn / fall back / accept. *Recommend warn.*
-2. **§ 4.3** — import confirmation: blind write, or one review with the ability to drop lines. *Recommend review; a false "Ordered" reaches the customer.*
-
-Both are small, both change what gets built, and neither should be settled in code review.
+**None.** Both were answered 2026-08-04 and are recorded at § 3.8 (stale deadline resets to blank) and § 3.9 (reviewed confirmation, built so blind is a later flag). Sessions A–C are fully specified.
 
 ---
 
 ## 11. Out-of-session operational items
 
-- **PRH holds 12 copies of `75960621668000111`** (MIDNIGHT X-MEN #1) against 7 reservations, FOC **2026-08-31**. Reminder armed 2026-08-24.
+- **PRH holds 12 copies of `75960621668000111`** (MIDNIGHT X-MEN #1) against 7 reservations, FOC **2026-08-31**. Reminder armed 2026-08-24. **Not fixed by any code in this plan** — it needs a call to PRH before the 31st.
 - The four § 2.3 titles are ordered and arriving; no action beyond the panel eventually reflecting it.
-- **Post-deploy write-smoke for PR #102 is still owed** (merged 2026-08-04, live on production).
+- ~~Post-deploy write-smoke for PR #102~~ — **confirmed by Rick 2026-08-04.** F115/F116 are live and verified on production.
 
 ---
 
