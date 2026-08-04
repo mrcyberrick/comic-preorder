@@ -591,12 +591,25 @@ approval.
 - **Analytics monthly rollup (F90)** — per-tenant monthly snapshot written at
   import so adoption trends survive the 90-day purge (schema + import
   script). See `docs/technical-reference.md` § 13 F90.
-- **Order-invoice reconciliation (F108)** — ingest the distributor order
-  confirmation so rejected/short-allocated codes are surfaced instead of
-  being indistinguishable from "not shipped yet." Needs sample PRH/Lunar
-  order-confirmation files before it can be specified. Scoped OUT of the
-  F101/F102 session by Rick 2026-08-02. The `order_submissions` ledger that
-  session built (§ 4.11) is the table this would populate automatically.
+- **Order-confirmation ingest (F108)** — **UNBLOCKED and PLANNED 2026-08-04,
+  not started.** Plan: `docs/order-confirmation-ingest-f108.md` (Sessions
+  A–D; **Session A is specification-only and forbids writing a parser from
+  screenshots**, per the F110/F112 precedent). The sample-file blocker that
+  deferred this since 2026-08-02 is gone — Lunar exposes a per-order
+  `CSV Download` with per-line status/ship/in-store dates, PRH exposes
+  per-line Est Delivery. **Why it matters:** on 2026-08-04 the production
+  Order Follow-Up panel showed 4 titles BACKORDERED and **all 4 had actually
+  been ordered** (precision 0 of 4). The cause is the input, not the logic —
+  **Mark Ordered has been used zero times on production**; all 857 ledger
+  rows are backfill across exactly three cycle dates, and the orders in
+  question were placed off-cycle directly on the vendor sites. F116's
+  arrival-evidence clearing cannot fix it: order → arrival is ~10 weeks, so
+  arrival evidence clears *stale* false alarms while only order evidence
+  clears *in-flight* ones. Customer impact today is **nil** (all four are
+  prior-month rows that never reach the FOC-lock surface — verified), so
+  this is priority-not-emergency, and the customer-facing half is sequenced
+  last behind a product decision. Carries an F102-shaped double-count hazard
+  that must not be resolved casually — see the plan § 4.1.
   See `docs/technical-reference.md` § 13 F108.
 - **Order-ledger cancel guard is client-side only (F109)** — moving it into
   a `BEFORE DELETE` trigger on `preorders` is the only version that holds
