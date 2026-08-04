@@ -303,7 +303,9 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 **Carried to Session B:** clearing the stored `order_deadline` at `isNewMonth` (the scripts-repo half of § 4.1). The read path already makes behaviour correct; the clear only makes the admin input field match. Deferred to keep Session A to one repo, per the runbook's own allowance.
 
-**Discovered, not actioned — needs Rick's call:** `order_deadline` also drives the **customer-facing catalog banner**, which the plan did not account for. Because the banner already self-hides when lapsed, nothing is wrong today. But between a deadline lapsing and the next new-catalog import clearing it, the admin **input field** will still display the expired date while governing nothing. Options: leave it (Session B clears it within days), or add an "expired" hint next to the field. Not added unasked.
+**Discovered during execution, and SETTLED 2026-08-04 — leave it as is.** `order_deadline` also drives the **customer-facing catalog banner**, which the plan had not accounted for. Because that banner already self-hides once the date passes, nothing is wrong for customers. The remaining wrinkle is admin-only: between a deadline lapsing and the next new-catalog import clearing it, the **input field** still displays the expired date while governing nothing.
+
+**Rick's call: leave the expired date; no "expired" hint.** The window is short (Session B's `isNewMonth` clear closes it), the value is inert, and the admin setting the next cycle's date overwrites it anyway. **Do not add a hint in a later session** — it was considered and declined, not overlooked.
 
 ### Session B
 - [ ] Confirm-on-export live; **V-B1** green

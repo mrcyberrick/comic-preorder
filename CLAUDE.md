@@ -610,10 +610,12 @@ approval.
   restored to its pre-test value and fixtures verified gone by SELECT.
   **V-A2 (panel shows 0 At Risk) is a production-data observation** and is
   owed read-only after promotion. **Carried to Session B:** clearing the
-  stored `order_deadline` at `isNewMonth` (scripts repo). **Open, needs
-  Rick:** `order_deadline` also drives the customer catalog banner (which
-  already self-hides), but the admin *input field* will show an expired date
-  until Session B clears it — leave it, or add an "expired" hint. **DIRECTION CHANGED
+  stored `order_deadline` at `isNewMonth` (scripts repo). **Settled 2026-08-04:**
+  `order_deadline` also drives the customer catalog banner (which already
+  self-hides on a passed date, so customers are unaffected); the admin *input
+  field* will show an expired date until Session B's `isNewMonth` clear lands,
+  and **Rick's call is to leave it — no "expired" hint.** Considered and
+  declined, not overlooked; do not add one in a later session. **DIRECTION CHANGED
   2026-08-04: file ingest is DROPPED, not deferred.** Rick's binding
   constraint — *"I do not want to download multiple files to feed the import
   every week… The pulllist app should not be a chore to maintain."* The plan
