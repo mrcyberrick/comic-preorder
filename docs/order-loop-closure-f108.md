@@ -196,7 +196,9 @@ Rules regardless:
 
 Written from the existing **Mark Ordered** modal on By Distributor. All three are mandatory or it backfires:
 
-1. **Relax the CHECK constraint.** `order_submissions_quantity_check` is `quantity >= 1`; a zero row is rejected by the database outright. → `quantity >= 0`.
+1. **Relax the CHECK constraint — to allow NEGATIVES, not just zero (F117).** `order_submissions_quantity_check` is `quantity >= 1`; a zero row is rejected outright, and so is a correcting row. Verified against production 2026-08-05: a `-4` insert returns **HTTP 400 / `23514`**. Zero alone covers rejections; **negatives are needed for downward adjustments**, which is a real operation — Rick trimmed the MIDNIGHT X-MEN #1 order from 12 to 8 on 2026-08-05 and the ledger could not record it. Drop the lower bound entirely and add an **`adjustment`** value to the `order_type` CHECK.
+
+   **This makes the ledger signed, which every consumer must respect.** Nothing may assume quantities only accumulate: `ledgerMatchesFor()` consumers, the By Distributor `Ordered / Add (n of m) / Over (n of m)` maths, and the `get_ordered_codes()` aggregate below. The aggregate is the reassuring part — `HAVING SUM(quantity) > 0` already resolves an adjusted-to-zero code to *unavailable*, so the rejection change and the adjustment change reinforce rather than fight each other.
 2. **`get_ordered_codes()` must stop lying.** Currently `SELECT DISTINCT distributor, order_code` with **no quantity filter**, so a zero row would make My List show **"✓ Order placed"** and lock cancellation for a rejected title. It must aggregate — a code ordered 5 then zeroed still reads ordered; a code *only* ever zeroed does not. To preserve the RPC's deliberate privacy design (quantities stay admin-only, per its own header comment) it returns a **state**, not a number:
 
    ```sql
@@ -257,10 +259,11 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ### Session B — capture (client + scripts repo)
 1. § 4.2 confirm-on-export. **Gate V-B1:** confirming writes one row per exported code at the exported quantity; declining writes nothing.
-2. § 4.4 schema: `docs/sql/order-submissions-allow-zero-qty.sql` (CHECK relaxation) + `get_ordered_codes()` rework. > **PAUSE → Rick** to run on staging, then production.
+2. § 4.4 schema: `docs/sql/order-submissions-signed-quantity.sql` — CHECK relaxed to permit **zero and negatives** (F117), `order_type` gains `adjustment`, plus the `get_ordered_codes()` rework. > **PAUSE → Rick** to run on staging, then production.
 3. **Gate V-B2 (the false-promise gate):** a code with **only** a zero-quantity row does **not** read "Order placed" on My List; a code ordered 5 then zeroed still does.
-4. § 4.3 import confirmation, gated on `isNewMonth`, **reviewed** (§ 3.9) with selection and write kept as separate steps. **Gate V-B3:** a same-month refresh confirms nothing. **Gate V-B4:** an existing zero-quantity row survives an import untouched.
-5. Clear a lapsed `order_deadline` on `isNewMonth` (§ 4.1), if not already shipped with Session A.
+4. **Gate V-B5 (F117, signed ledger):** appending a `-4` adjustment to `75960621668000111` on **staging** makes the code total **8**, and the By Distributor button reads `✓ Ordered (8)` rather than `⚠ Over (12 of 8)`. Then, on production, append the real `-4` — the outstanding correction from 2026-08-05.
+5. § 4.3 import confirmation, gated on `isNewMonth`, **reviewed** (§ 3.9) with selection and write kept as separate steps. **Gate V-B3:** a same-month refresh confirms nothing. **Gate V-B4:** an existing zero-quantity row survives an import untouched.
+6. Clear a lapsed `order_deadline` on `isNewMonth` (§ 4.1), if not already shipped with Session A.
 
 ### Session C — unavailable + customer (client)
 1. § 4.5 generic unavailable state reusing F110's rendering, admin panel and cancel exception.
@@ -281,6 +284,7 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 | **V-B2** | Zero-only code never reads "Order placed" | **A false promise reaches the customer — the worst failure available** |
 | **V-B3** | Same-month refresh confirms nothing | Double-counting the ledger is an F102-shaped money error |
 | **V-B4** | Zero-quantity row survives import | § 3.6 — the import accepts it, never overwrites |
+| **V-B5** | A `-4` adjustment makes `75960621668000111` total **8**, button reads `Ordered (8)` not `Over (12 of 8)` | **F117** — proves the ledger is genuinely signed, on the live case that exposed it |
 | **V-C1** | Rejected renders and behaves as unavailable | § 3.7 — one surface, two sources |
 
 ---
@@ -309,8 +313,10 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ### Session B
 - [ ] Confirm-on-export live; **V-B1** green
-- [ ] CHECK relaxed and `get_ordered_codes()` reworked on staging **and** production
-- [ ] **V-B2**, **V-B3**, **V-B4** green
+- [ ] CHECK relaxed to permit **zero and negatives** (F117), `order_type` gains `adjustment`, `get_ordered_codes()` reworked — on staging **and** production
+- [ ] Every ledger consumer handles **signed** quantities (button maths, `ledgerMatchesFor()` consumers, the RPC aggregate)
+- [ ] **V-B2**, **V-B3**, **V-B4**, **V-B5** green
+- [ ] The real `-4` adjustment for `75960621668000111` appended on production (the outstanding 2026-08-05 correction)
 - [ ] Import confirmation keeps selection and write as separate steps (§ 3.9)
 - [ ] Lapsed `order_deadline` cleared on `isNewMonth`
 - [ ] Ledger row count before/after first real use recorded
