@@ -245,6 +245,14 @@ button { cursor: pointer; font-family: var(--font-body); }
   body.printing-this-week #btn-print-this-week,
   body.printing-this-week .no-print,
   body.printing-this-week #toast-container,
+  /* #backorder-risk-panel and #withdrawn-panel (fix, 2026-08-06) — both sit
+     above .admin-tabs in the DOM (persistent, tab-independent, shown on
+     every tab), so .admin-section:not(#tab-this-week) above never caught
+     them: neither panel is an .admin-section. Added after this print rule
+     was originally written, so a visible Order Follow-Up / Withdrawn panel
+     printed above the bagging list on every "Print Bagging List" click. */
+  body.printing-this-week #backorder-risk-panel,
+  body.printing-this-week #withdrawn-panel,
   body.printing-this-week .footer {
     display: none !important;
   }
