@@ -754,6 +754,20 @@ function confirmDialog(message, okLabel = 'Remove') {
     return !!code && orderedCodeSet.has(`${c.distributor}||${code}`);
   }
 
+  // Codes the store submitted and the supplier rejected, or that were
+  // corrected away to net zero/negative (F117/F108 § 4.4/§ 4.5 -- badge-only,
+  // Rick's call 2026-08-06: no FOC/ordered-lock override, since the
+  // reservation may not stay on My List long enough for the customer to act
+  // on it anyway, and the flag itself has future reporting value). Same
+  // get_ordered_codes() read as isCodeOrdered() above -- 'unavailable' is
+  // the RPC's other state, not a separate query.
+  let rejectedCodeSet = new Set();
+  function isCodeRejected(c) {
+    if (!c || !c.distributor) return false;
+    const code = exportCode(c, c.distributor);
+    return !!code && rejectedCodeSet.has(`${c.distributor}||${code}`);
+  }
+
   // Fetches standard-cover #1 issues from the current catalog month.
   // Results are cached so filter/search events don't re-fire the query.
   async function loadFirstIssues() {
@@ -798,6 +812,8 @@ function confirmDialog(message, okLabel = 'Remove') {
     // being told a rejected title was ordered.
     orderedCodeSet = new Set(
       ordered.filter(o => o.order_state === 'ordered').map(o => `${o.distributor}||${o.order_code}`));
+    rejectedCodeSet = new Set(
+      ordered.filter(o => o.order_state === 'unavailable').map(o => `${o.distributor}||${o.order_code}`));
     // Main list shows current catalog month only.
     // Upcoming Arrivals section uses allUpcoming which includes all future months.
     // DateUtils.todayLocal() avoids the F28 toISOString() footgun.
@@ -919,6 +935,13 @@ function confirmDialog(message, okLabel = 'Remove') {
           ${filtered.map(item => {
             const c = item.catalog;
             const isWithdrawn = !!c.withdrawn_at;
+            // Rejected (F117/F108 \u00A7 4.5) -- badge-only per Rick's call
+            // 2026-08-06: no FOC/ordered-lock override (the reservation may
+            // not stay on My List long enough to act on anyway; the flag has
+            // future reporting value regardless). Reuses the withdrawn-row/
+            // withdrawn-notice styling -- same "generic unavailable" surface,
+            // rejected-specific copy.
+            const isRejected  = !isWithdrawn && isCodeRejected(c);
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
             const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -927,7 +950,7 @@ function confirmDialog(message, okLabel = 'Remove') {
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
             return `
-              <tr${isWithdrawn ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
+              <tr${(isWithdrawn || isRejected) ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
                 <td class="td-cover">${cover}</td>
                 <td>
                   <div class="col-title">${escapeHtml(c.title)}</div>
@@ -936,11 +959,13 @@ function confirmDialog(message, okLabel = 'Remove') {
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
                   ${isWithdrawn
                     ? `<div class="col-sub withdrawn-notice">\u26A0 No longer available &mdash; withdrawn by the distributor. This title cannot arrive.</div>`
-                    : isOrdered
-                      ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
-                      : focLocked
-                        ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
-                        : ''}
+                    : isRejected
+                      ? `<div class="col-sub withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
+                      : isOrdered
+                        ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
+                        : focLocked
+                          ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
+                          : ''}
                 </td>
                 <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td>
@@ -976,6 +1001,7 @@ function confirmDialog(message, okLabel = 'Remove') {
           const c   = item.catalog;
           const qty = item.quantity || 1;
           const isWithdrawn = !!c.withdrawn_at;
+          const isRejected  = !isWithdrawn && isCodeRejected(c); // F117/F108 \u00A7 4.5 \u2014 badge-only, see desktop table comment
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
           const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -985,18 +1011,20 @@ function confirmDialog(message, okLabel = 'Remove') {
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
             : `<img src="${COVER_PLACEHOLDER}" alt="">`;
           return `
-            <div class="mobile-card${isWithdrawn ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
+            <div class="mobile-card${(isWithdrawn || isRejected) ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
               <div class="mobile-card-cover">${cover}</div>
               <div class="mobile-card-body">
                 <div class="mobile-card-title">${escapeHtml(c.title)}</div>
                 ${c.series_name ? `<div class="mobile-card-series">${escapeHtml(c.series_name)}</div>` : ''}
                 ${isWithdrawn
                   ? `<div class="mobile-card-series withdrawn-notice">\u26A0 No longer available &mdash; withdrawn by the distributor. This title cannot arrive.</div>`
-                  : isOrdered
-                    ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
-                    : focLocked
-                      ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
-                      : ''}
+                  : isRejected
+                    ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
+                    : isOrdered
+                      ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
+                      : focLocked
+                        ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
+                        : ''}
                 <div class="mobile-card-meta">
                   <span class="badge badge-${c.distributor.toLowerCase()}">${escapeHtml(c.distributor)}</span>
                   ${c.on_sale_date ? `<span class="mobile-card-date">${formatDate(c.on_sale_date)}</span>` : ''}
@@ -1242,11 +1270,16 @@ function confirmDialog(message, okLabel = 'Remove') {
       const cards = items.map(item => {
         const c = item.catalog;
         const isWithdrawn = !!c.withdrawn_at;
+        // Rejected (F117/F108 § 4.5) -- badge-only, no Remove button here:
+        // unlike withdrawn, rejected does NOT override the FOC/ordered locks
+        // (Rick's call 2026-08-06 — see the desktop table's isRejected
+        // comment for the reasoning).
+        const isRejected  = !isWithdrawn && isCodeRejected(c);
         const cover = c.cover_url
           ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
           : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
         return `
-          <div class="month-arrival-card${isWithdrawn ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
+          <div class="month-arrival-card${(isWithdrawn || isRejected) ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
             <div class="month-arrival-cover">
               <span class="distributor-badge badge-${c.distributor?.toLowerCase()}" style="font-size:0.55rem;padding:1px 5px">${escapeHtml(c.distributor||'')}</span>
               ${cover}
@@ -1258,6 +1291,8 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <div class="withdrawn-notice">⚠ Withdrawn by the distributor</div>
                 <button class="btn btn-danger btn-sm cancel-btn-arrival" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
                         style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>
+              ` : isRejected ? `
+                <div class="withdrawn-notice">⚠ Rejected by the supplier</div>
               ` : ''}
             </div>
           </div>`;

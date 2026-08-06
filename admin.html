@@ -624,6 +624,15 @@
     return ledgerMatchesFor(distributor, code).reduce((s, m) => s + (m.quantity || 0), 0);
   }
 
+  // Rows exist but net to zero or less — a rejection, or a corrected-away
+  // order. Distinct from "no ledger activity" (also net 0, but no rows).
+  // Used by the Bagging List (F117/F108 § 4.5) to flag a title that will
+  // not physically be in the shipment.
+  function ledgerRejected(distributor, code) {
+    const matches = ledgerMatchesFor(distributor, code);
+    return matches.length > 0 && matches.reduce((s, m) => s + (m.quantity || 0), 0) <= 0;
+  }
+
   // ── Shipment evidence ──────────────────────────────────────
   // A reservation whose catalog_id, upc OR item_code appears on any
   // weekly_shipment row physically arrived — which is proof the store ordered
@@ -2195,14 +2204,19 @@
     container.innerHTML = '<div class="empty-state"><p style="color:var(--text-muted)">Loading…</p></div>';
     headerEl.innerHTML  = '';
 
-    // Query across all catalog months — not scoped to currentCatalogMonth
+    // Query across all catalog months — not scoped to currentCatalogMonth.
+    // isbn/upc/withdrawn_at added (F117/F108 § 4.5) so a title that will not
+    // physically arrive — withdrawn by the distributor, or rejected by the
+    // supplier — can be flagged instead of silently appearing as a normal
+    // book to bag. isbn/upc are needed for exportCode() (PRH's fallback
+    // chain starts at isbn, not item_code).
     const { data, error } = await db
       .from('preorders')
       .select(`
         id, user_id, quantity, fulfilled, fulfilled_at,
         catalog!inner(
-          id, distributor, item_code, title, series_name, publisher,
-          price_usd, on_sale_date, cover_url, variant_type, catalog_month
+          id, distributor, item_code, isbn, upc, title, series_name, publisher,
+          price_usd, on_sale_date, cover_url, variant_type, catalog_month, withdrawn_at
         )
       `)
       .gte('catalog.on_sale_date', weekStart)
@@ -2214,10 +2228,23 @@
       return;
     }
 
-    const arriving = (data || []).map(p => ({
-      ...p,
-      customer_name: profileMap[p.user_id] || 'Unknown',
-    }));
+    // Unavailable (F117/F108 § 4.5) — withdrawn OR rejected (net ledger
+    // quantity <= 0). Both mean "this physical book will not be in the
+    // shipment", the same "generic unavailable" concept the customer-facing
+    // My List badge reuses. Computed once per row here, read by both the
+    // header totals (excluded) and the row renderer (flagged, not dropped —
+    // "surface, never silently drop" is this whole session's throughline).
+    const arriving = (data || []).map(p => {
+      const c = p.catalog || {};
+      const isWithdrawn = !!c.withdrawn_at;
+      const isRejected  = !isWithdrawn && ledgerRejected(c.distributor, exportCode(c, c.distributor));
+      return {
+        ...p,
+        customer_name: profileMap[p.user_id] || 'Unknown',
+        isUnavailable: isWithdrawn || isRejected,
+        unavailableReason: isWithdrawn ? 'Withdrawn by the distributor' : isRejected ? 'Rejected by the supplier' : null,
+      };
+    });
 
     if (!arriving.length) {
       headerEl.innerHTML = `
@@ -2232,16 +2259,23 @@
       return;
     }
 
-    // Summary header
+    // Summary header — counted from AVAILABLE items only (F117/F108 § 4.5):
+    // an unavailable title is not physically part of the shipment, so it
+    // must not inflate what the operator expects to bag. A customer whose
+    // ENTIRE week is unavailable titles still gets a card below (so nothing
+    // silently disappears) but will not be reflected in the Customers count
+    // here — same kind of explained gap as the existing Total Titles/Total
+    // Items note below, for a different reason.
     // Total Titles = distinct catalog titles reserved this week (a title counts
     // once regardless of how many customers reserved it). Total Items sums
     // quantities across all customers. The gap between the two is reservation
     // demand (many customers / multi-qty on one title) and is expected — see the
     // shipment-reconciliation note in arrivals.html.
-    const totalItems  = arriving.reduce((s, p) => s + (p.quantity || 1), 0);
-    const totalValue  = arriving.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity || 1)), 0);
-    const customers   = new Set(arriving.map(p => p.user_id)).size;
-    const totalTitles = new Set(arriving.map(p => p.catalog?.id).filter(Boolean)).size;
+    const available   = arriving.filter(p => !p.isUnavailable);
+    const totalItems  = available.reduce((s, p) => s + (p.quantity || 1), 0);
+    const totalValue  = available.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity || 1)), 0);
+    const customers   = new Set(available.map(p => p.user_id)).size;
+    const totalTitles = new Set(available.map(p => p.catalog?.id).filter(Boolean)).size;
 
     headerEl.innerHTML = `
       <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;
@@ -2286,11 +2320,28 @@
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, group]) => {
         const items    = group.items.slice().sort((a, b) => (a.catalog?.title || '').localeCompare(b.catalog?.title || ''));
-        const total    = items.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
-        const totalQty = items.reduce((s, p) => s + (p.quantity||1), 0);
+        // Est. $ / item count exclude unavailable titles (F117/F108 § 4.5) —
+        // same reasoning as the page-level header totals above: a title
+        // that will not arrive is not part of what's being bagged.
+        const available = items.filter(p => !p.isUnavailable);
+        const total    = available.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
+        const totalQty = available.reduce((s, p) => s + (p.quantity||1), 0);
 
         const rows = items.map(p => {
           const c    = p.catalog || {};
+          // Unavailable (F117/F108 § 4.5) — flagged, not dropped: no
+          // checkbox (nothing to pick up), struck through, reason shown so
+          // the person bagging knows why it's not in the box and can follow
+          // up with the customer, rather than searching for a book that
+          // will never arrive.
+          if (p.isUnavailable) {
+            return `
+              <li class="bagging-row bagging-row-unavailable" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.92rem;opacity:0.6">
+                <span style="width:16px;text-align:center;flex-shrink:0" title="${escapeHtml(p.unavailableReason)} — will not arrive">⚠</span>
+                <span style="flex:1;text-decoration:line-through">${escapeHtml(c.title || '—')}</span>
+                <span style="font-size:0.72rem;color:var(--warning,#eab308);white-space:nowrap">${escapeHtml(p.unavailableReason)}</span>
+              </li>`;
+          }
           const qty  = p.quantity || 1;
           const unit = parseFloat(c.price_usd) || 0;
           const line = unit * qty;
