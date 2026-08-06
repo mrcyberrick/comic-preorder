@@ -3534,6 +3534,9 @@
   // Mirrors the By Distributor tab data; columns tuned to avoid word-wrap and
   // titles truncated to keep the page count down.
   // Columns: Title | Distributor | UPC/ISBN | Price | Total Qty | Customers | FOC | Status
+  // Status now reads the order ledger (fix, 2026-08-06) — see the inline
+  // comment at its computation in buildReservedReportHtml() for why this was
+  // out of sync (Open/Partial/Fulfilled only, no ledger awareness) until now.
 
   function buildReservedReportHtml(grouped, monthLabel, customerCount) {
     const TITLE_MAX = 42; // truncate titles to keep rows on one line
@@ -3557,12 +3560,39 @@
 
       const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
       const someFulfilled = fulfilledCount > 0 && !allFulfilled;
-      const status = allFulfilled
-        ? 'Fulfilled'
-        : someFulfilled
-          ? `Partial ${fulfilledCount}/${customers.length}`
-          : 'Open';
-      const statusClass = allFulfilled ? 'st-done' : someFulfilled ? 'st-partial' : 'st-open';
+
+      // Ledger-aware order status (fix, 2026-08-06) — this report predates
+      // order_submissions by five weeks (introduced 2026-06-26; the ledger
+      // landed 2026-08-03, F101/F102) and was never revisited when the By
+      // Distributor tab's own Status button was wired to it, then made
+      // signed-quantity-aware in order-loop-closure Session B. A title
+      // already reading "✓ Ordered" on the tab was printing as "Open" here.
+      // Same ledgerNetQty()-based states as renderDistTable's Status button,
+      // reusing the identical signed-sum logic rather than re-deriving it
+      // (a second independent copy is exactly how the tab and this report
+      // drifted apart the first time). Arrival (fulfilled) still takes
+      // precedence -- once a title has arrived, whether it was flagged
+      // Ordered/Over/Rejected along the way stops being the operative fact.
+      let status, statusClass;
+      if (allFulfilled) {
+        status = 'Fulfilled'; statusClass = 'st-done';
+      } else if (someFulfilled) {
+        status = `Partial ${fulfilledCount}/${customers.length}`; statusClass = 'st-partial';
+      } else {
+        const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
+        const ledgerQty     = ledgerMatches.reduce((s, m) => s + (m.quantity || 0), 0);
+        if (!ledgerMatches.length) {
+          status = 'Open'; statusClass = 'st-open';
+        } else if (ledgerQty <= 0) {
+          status = 'Rejected'; statusClass = 'st-rejected';
+        } else if (ledgerQty === totalQty) {
+          status = 'Ordered'; statusClass = 'st-ordered';
+        } else if (ledgerQty > totalQty) {
+          status = `Over ${ledgerQty}/${totalQty}`; statusClass = 'st-over';
+        } else {
+          status = `Order ${ledgerQty}/${totalQty}`; statusClass = 'st-order-partial';
+        }
+      }
 
       const custList = customers
         .map(cust => escapeHtml(cust.name) + (cust.qty > 1 ? ` (x${cust.qty})` : ''))
@@ -3654,6 +3684,15 @@
     .st-done    { color: #2e7d32; }
     .st-partial { color: #b7791f; }
     .st-open    { color: #555; }
+    /* Ledger-derived order states (fix, 2026-08-06) — colours chosen to stay
+       distinct from st-partial (customer fulfillment) even though both are
+       "in between" states; st-rejected reuses st-open's neutral grey,
+       matching the live By Distributor tab's own Rejected colour (#888),
+       deliberately unalarming rather than red. */
+    .st-ordered       { color: #1565c0; }
+    .st-order-partial { color: #7c3aed; }
+    .st-over          { color: #c0392b; }
+    .st-rejected      { color: #888; }
 
     .sheet-footer { margin-top: 6px; font-size: 6.5pt; color: #aaa; text-align: right; }
   </style>
