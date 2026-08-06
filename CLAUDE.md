@@ -594,8 +594,16 @@ approval.
 - **Closing the ad-hoc order loop (F108)** — **Session A COMPLETE AND LIVE IN
   PRODUCTION 2026-08-04** (PR #103, merge 22:29 UTC; **V-A2 verified on live
   data — At Risk went 2 → 0**, four Backordered rows correctly remaining for
-  Session B); Sessions B and C not started. Plan:
-  `docs/order-loop-closure-f108.md`.
+  Session B). **Session B COMPLETE ON STAGING 2026-08-06** (comic-preorder
+  `095d051`; scripts repo `5bc7461`, committed locally — push blocked by the
+  `guard-git` hook, needs Rick to push manually or authorize a fix). Full
+  Playwright suite 72/72 green on deployed staging (4 new tests), scripts
+  unit suite 120/120 green. **Production promotion — the signed-quantity SQL
+  migration (`docs/sql/order-submissions-signed-quantity.sql`), the real `-4`
+  adjustment for `75960621668000111` (already done on staging: 5+7−4=8), and
+  the client PR — is Rick's explicit call, not yet requested.** Session C not
+  started. Plan: `docs/order-loop-closure-f108.md` § 8 Session B for full
+  evidence.
   **Session A shipped:** `order_deadline` now **supersedes** the
   in-current-month rule instead of adding to it, and a **lapsed deadline is
   treated as absent** so the in-month rule takes over automatically rather
