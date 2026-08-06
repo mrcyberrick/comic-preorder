@@ -1,6 +1,6 @@
 # Closing the Ad-Hoc Order Loop — making the Order Follow-Up panel tell the truth
 
-**Status:** **Session A COMPLETE on staging 2026-08-04** (production promotion is Rick's call, not yet requested). Sessions B and C not started. Rewritten 2026-08-04 after a decision interview with Rick; all open decisions closed at § 3.8/§ 3.9.
+**Status:** **Session A COMPLETE AND LIVE IN PRODUCTION 2026-08-04** (PR #103; V-A2 verified on live data — At Risk went 2 → 0). **Session B COMPLETE ON STAGING 2026-08-06** (comic-preorder `095d051`; scripts repo `5bc7461`, committed locally, push blocked by the `guard-git` hook — see § 8 Session B). **Production promotion (SQL migration, the real `-4` adjustment, and the client PR) is Rick's explicit call, not yet requested.** Session C not started. Rewritten 2026-08-04 after a decision interview with Rick; all open decisions closed at § 3.8/§ 3.9.
 **Supersedes:** `docs/order-confirmation-ingest-f108.md` (same file, renamed). **That plan's central proposal — ingesting distributor order-confirmation files — is DROPPED, not deferred.** § 3.1 records why, in Rick's words. The evidence that produced it is kept at § 2.8 because it is what justifies dropping it.
 **Closes:** **F108** — not by reconciliation after the fact, which is what F108 originally imagined, but by capturing the order at the moment it is placed (§ 3.5).
 **Follows:** F101/F102 (built the ledger), F110/F111/F113 (cross-month gather + withdrawal), F115/F116 (arrival-evidence triage). All live on production.
@@ -196,7 +196,9 @@ Rules regardless:
 
 Written from the existing **Mark Ordered** modal on By Distributor. All three are mandatory or it backfires:
 
-1. **Relax the CHECK constraint.** `order_submissions_quantity_check` is `quantity >= 1`; a zero row is rejected by the database outright. → `quantity >= 0`.
+1. **Relax the CHECK constraint — to allow NEGATIVES, not just zero (F117).** `order_submissions_quantity_check` is `quantity >= 1`; a zero row is rejected outright, and so is a correcting row. Verified against production 2026-08-05: a `-4` insert returns **HTTP 400 / `23514`**. Zero alone covers rejections; **negatives are needed for downward adjustments**, which is a real operation — Rick trimmed the MIDNIGHT X-MEN #1 order from 12 to 8 on 2026-08-05 and the ledger could not record it. Drop the lower bound entirely and add an **`adjustment`** value to the `order_type` CHECK.
+
+   **This makes the ledger signed, which every consumer must respect.** Nothing may assume quantities only accumulate: `ledgerMatchesFor()` consumers, the By Distributor `Ordered / Add (n of m) / Over (n of m)` maths, and the `get_ordered_codes()` aggregate below. The aggregate is the reassuring part — `HAVING SUM(quantity) > 0` already resolves an adjusted-to-zero code to *unavailable*, so the rejection change and the adjustment change reinforce rather than fight each other.
 2. **`get_ordered_codes()` must stop lying.** Currently `SELECT DISTINCT distributor, order_code` with **no quantity filter**, so a zero row would make My List show **"✓ Order placed"** and lock cancellation for a rejected title. It must aggregate — a code ordered 5 then zeroed still reads ordered; a code *only* ever zeroed does not. To preserve the RPC's deliberate privacy design (quantities stay admin-only, per its own header comment) it returns a **state**, not a number:
 
    ```sql
@@ -257,10 +259,11 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 ### Session B — capture (client + scripts repo)
 1. § 4.2 confirm-on-export. **Gate V-B1:** confirming writes one row per exported code at the exported quantity; declining writes nothing.
-2. § 4.4 schema: `docs/sql/order-submissions-allow-zero-qty.sql` (CHECK relaxation) + `get_ordered_codes()` rework. > **PAUSE → Rick** to run on staging, then production.
+2. § 4.4 schema: `docs/sql/order-submissions-signed-quantity.sql` — CHECK relaxed to permit **zero and negatives** (F117), `order_type` gains `adjustment`, plus the `get_ordered_codes()` rework. > **PAUSE → Rick** to run on staging, then production.
 3. **Gate V-B2 (the false-promise gate):** a code with **only** a zero-quantity row does **not** read "Order placed" on My List; a code ordered 5 then zeroed still does.
-4. § 4.3 import confirmation, gated on `isNewMonth`, **reviewed** (§ 3.9) with selection and write kept as separate steps. **Gate V-B3:** a same-month refresh confirms nothing. **Gate V-B4:** an existing zero-quantity row survives an import untouched.
-5. Clear a lapsed `order_deadline` on `isNewMonth` (§ 4.1), if not already shipped with Session A.
+4. **Gate V-B5 (F117, signed ledger):** appending a `-4` adjustment to `75960621668000111` on **staging** makes the code total **8**, and the By Distributor button reads `✓ Ordered (8)` rather than `⚠ Over (12 of 8)`. Then, on production, append the real `-4` — the outstanding correction from 2026-08-05.
+5. § 4.3 import confirmation, gated on `isNewMonth`, **reviewed** (§ 3.9) with selection and write kept as separate steps. **Gate V-B3:** a same-month refresh confirms nothing. **Gate V-B4:** an existing zero-quantity row survives an import untouched.
+6. Clear a lapsed `order_deadline` on `isNewMonth` (§ 4.1), if not already shipped with Session A.
 
 ### Session C — unavailable + customer (client)
 1. § 4.5 generic unavailable state reusing F110's rendering, admin panel and cancel exception.
@@ -281,18 +284,22 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 | **V-B2** | Zero-only code never reads "Order placed" | **A false promise reaches the customer — the worst failure available** |
 | **V-B3** | Same-month refresh confirms nothing | Double-counting the ledger is an F102-shaped money error |
 | **V-B4** | Zero-quantity row survives import | § 3.6 — the import accepts it, never overwrites |
+| **V-B5** | A `-4` adjustment makes `75960621668000111` total **8**, button reads `Ordered (8)` not `Over (12 of 8)` | **F117** — proves the ledger is genuinely signed, on the live case that exposed it |
 | **V-C1** | Rejected renders and behaves as unavailable | § 3.7 — one surface, two sources |
 
 ---
 
 ## 8. Completion criteria
 
-### Session A — COMPLETE on staging 2026-08-04; production promotion is Rick's call
+### Session A — COMPLETE AND LIVE IN PRODUCTION 2026-08-04 (PR #103, merged 22:29 UTC)
 - [x] Supersede logic landed; `Backordered` unchanged
 - [x] Lapsed deadline treated as absent on the read path (no write-on-load)
 - [x] **V-A1**, **V-A3** green; spec 15 extended; **67/67 suite green, zero flaky**
 - [x] `order_deadline` restored to its pre-test value; fixtures torn down, verified by SELECT
-- [ ] **V-A2** — panel shows 0 At Risk on **production**. Cannot be asserted from staging (it is a production-data observation); verify read-only after promotion.
+- [x] **V-A2 GREEN on production** — read-only reproduction of the deployed panel against live data (`order_deadline = 2026-08-21`, effective): **At Risk = 0**, down from 2. The four Backordered rows remain, as expected — those are the ordered-but-unrecorded titles Session B addresses. Served bytes confirmed to contain `missesOrderCycle`/`effectiveOrderDeadline` and to no longer contain the old `isFocThisMonth(...) || (orderDeadline ...)` expression.
+- [x] Rick confirmed production behaviour 2026-08-04.
+
+**No post-deploy write-smoke was run, deliberately.** The F59 check confirmed `app.js` is **byte-identical to main**, so `Preorders.reserve()`/`cancel()` are unchanged; the entire diff is read-side logic inside `admin.html`. A reserve→cancel against production would have exercised code this change provably does not touch, at the cost of a real write to live customer data. **V-A2 is the correct post-deploy check for this change**, and it passed.
 
 **Scope note — one thing found during execution and fixed in the same pass.** `classifyForExport()` (the Order Builder's held-back panel) carried its **own copy** of the trigger expression and had drifted to the same `OR` bug. Fixing only `computeBackorderRisk()` would have left two surfaces disagreeing about the same word. Both now route through a single `missesOrderCycle()` helper so they cannot diverge again.
 
@@ -300,15 +307,26 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 
 **Carried to Session B:** clearing the stored `order_deadline` at `isNewMonth` (the scripts-repo half of § 4.1). The read path already makes behaviour correct; the clear only makes the admin input field match. Deferred to keep Session A to one repo, per the runbook's own allowance.
 
-**Discovered, not actioned — needs Rick's call:** `order_deadline` also drives the **customer-facing catalog banner**, which the plan did not account for. Because the banner already self-hides when lapsed, nothing is wrong today. But between a deadline lapsing and the next new-catalog import clearing it, the admin **input field** will still display the expired date while governing nothing. Options: leave it (Session B clears it within days), or add an "expired" hint next to the field. Not added unasked.
+**Discovered during execution, and SETTLED 2026-08-04 — leave it as is.** `order_deadline` also drives the **customer-facing catalog banner**, which the plan had not accounted for. Because that banner already self-hides once the date passes, nothing is wrong for customers. The remaining wrinkle is admin-only: between a deadline lapsing and the next new-catalog import clearing it, the **input field** still displays the expired date while governing nothing.
 
-### Session B
-- [ ] Confirm-on-export live; **V-B1** green
-- [ ] CHECK relaxed and `get_ordered_codes()` reworked on staging **and** production
-- [ ] **V-B2**, **V-B3**, **V-B4** green
-- [ ] Import confirmation keeps selection and write as separate steps (§ 3.9)
-- [ ] Lapsed `order_deadline` cleared on `isNewMonth`
-- [ ] Ledger row count before/after first real use recorded
+**Rick's call: leave the expired date; no "expired" hint.** The window is short (Session B's `isNewMonth` clear closes it), the value is inert, and the admin setting the next cycle's date overwrites it anyway. **Do not add a hint in a later session** — it was considered and declined, not overlooked.
+
+### Session B — COMPLETE ON STAGING 2026-08-06; production promotion is Rick's call, not yet requested
+
+- [x] Confirm-on-export live; **V-B1** green (V-B1a confirms writes one row per exported code at the exported quantity; V-B1b confirms declining writes nothing)
+- [x] CHECK relaxed to permit **zero and negatives** (F117), `order_type` gains `adjustment`, `get_ordered_codes()` reworked — **on staging.** Migration file: `docs/sql/order-submissions-signed-quantity.sql`. Verified on staging: no `order_submissions_quantity_check` row; `order_type_check` includes `adjustment`; `anon`/`PUBLIC` denied `EXECUTE` on `get_ordered_codes()` (`postgres`/`service_role` retaining it is expected — same as the original pre-Session-B grants, and neither is client-reachable). **Production run not yet requested.**
+- [x] Every ledger consumer handles **signed** quantities — new `ledgerNetQty()` helper in `admin.html`; `computeBackorderRisk()`, `classifyForExport()`, `ledgerBadge()`, the By Distributor Status button (gained a **Rejected** state), and Mark Ordered's `priorQty`/`suggestedQty` (floor changed 1→0) all sum instead of testing row presence. `app.js` `Preorders.cancel()` and `mylist.html`'s `orderedCodeSet` now key off `get_ordered_codes()`'s `order_state`, not row presence.
+- [x] **V-B2**, **V-B3**, **V-B5** green. **V-B4** verified via unit test (`computeConfirmableMonthlyOrders`, `test/order-confirmation.test.mjs`) rather than a live new-month import run — see note below.
+- [x] The real `-4` adjustment for `75960621668000111` appended **on staging** 2026-08-06 (verified: 5 + 7 − 4 = 8, row count 858→859). **Appending the real `-4` on production — the outstanding 2026-08-05 correction — is still owed and is Rick's call**, alongside the schema migration.
+- [x] Import confirmation keeps selection (`computeConfirmableMonthlyOrders`, pure) and write (`writeMonthlyOrderConfirmations`) as separate steps, with review (`confirmMonthlyOrders`) in between (§ 3.9) — both `import.js` and `import-staging.js`, scripts repo commit `5bc7461` (committed locally; **push blocked by the `guard-git` hook** — "unresolvable repo" for the scripts-repo working directory, despite the hook's own message naming `comic-preorder-scripts` as an allowed case; needs Rick to push manually or authorize a fix).
+- [x] Lapsed `order_deadline` cleared unconditionally on `isNewMonth` (Step 4d, both scripts) — pairs with Session A's read-path treat-as-absent.
+- [x] Ledger row count before/after first real use recorded: staging baseline was **858** (not the documented 857 — one genuine prior "Mark Ordered" click from the F110/F111/F112 session's 2026-08-03/04 real-browser verification, confirmed legitimate, not a leftover probe), **859** after the real `-4` adjustment. **"First real use" of the new capture points (confirm-on-export, Mark Ordered's zero/adjustment types, the monthly import confirmation) has not yet happened** — that will be a future session's/Rick's observation, not something this session could produce.
+
+**V-B4 note:** the plan's own gate ("an existing zero-quantity row survives an import untouched") describes behavior inside `confirmClosingCycleOrders()`, which only runs at `isNewMonth` on a real catalog import. No September catalog file exists yet, and fabricating one or manipulating staging's real catalog month to force a "new month" state was judged out of scope for this session (a live-data change bigger than the gate itself). Verified instead via `computeConfirmableMonthlyOrders`'s own unit test: a code with **any** existing ledger row, including quantity 0, is always excluded from the candidate list — the exact rule that makes V-B4 true by construction. **V-B3** (a same-month refresh confirms nothing) *was* verified live — a real `--no-write` dry run against the current same-month August files showed Steps 4b/4c/4d correctly absent.
+
+**Full Playwright suite: 72/72 green on deployed staging** (`https://staging.pulllist.pages.dev/`, commit `095d051`), zero flaky, including 4 new tests (V-B1a, V-B1b, V-B2, V-B5) plus the Rejected-state check. All seeded fixtures torn down and reverified by live SELECT: 0 `TEST_PW_` catalog rows, 0 `TEST_PW_` ledger rows, ledger total back to 858 before the real `-4` insert brought it to 859.
+
+**Scripts-repo unit suite: 120/120 green** (18 new — `test/order-confirmation.test.mjs`, both scripts + cross-script parity).
 
 ### Session C
 - [ ] Unavailable state shared with F110; **V-C1** green
