@@ -870,12 +870,20 @@ const Preorders = {
     // to the distributor (order_submissions), independent of fulfilled —
     // Rick's direction, F101/F102 session: "ordered" locks the customer the
     // same way "fulfilled" (arrived) already does.
+    //
+    // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now
+    // returns a signed order_state ('ordered' | 'unavailable') instead of a
+    // bare row match — a code with only a zero/negative net quantity (a
+    // rejection, or an adjustment that corrected the order away) is NOT
+    // "already placed" and must not lock the customer out. Checking mere
+    // presence here would be the same false-promise the RPC itself was
+    // reworked to stop making on My List (V-B2).
     if (!isWithdrawn) {
       const orderCode = exportCode(c, c.distributor);
       if (orderCode) {
         const { data: ordered } = await db.rpc('get_ordered_codes');
         const alreadyOrdered = (ordered || []).some(o =>
-          o.distributor === c.distributor && o.order_code === orderCode);
+          o.distributor === c.distributor && o.order_code === orderCode && o.order_state === 'ordered');
         if (alreadyOrdered) {
           return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
         }

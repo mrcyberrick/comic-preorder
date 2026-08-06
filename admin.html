@@ -498,20 +498,27 @@
       <div>
         <label for="mo-qty" style="display:block;font-size:0.78rem;font-weight:600;
                color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">QUANTITY SUBMITTED</label>
-        <input id="mo-qty" type="number" min="1"
+        <input id="mo-qty" type="number"
           style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
                  color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
                  font-size:0.9rem;box-sizing:border-box">
+        <div id="mo-qty-hint" style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">
+          0 = the supplier rejected this order (F108). Negative = a downward
+          correction against history (F117) — Adjustment type only.
+        </div>
       </div>
       <div>
         <label style="display:block;font-size:0.78rem;font-weight:600;
                color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">ORDER TYPE</label>
-        <div style="display:flex;gap:16px;font-size:0.88rem">
+        <div style="display:flex;gap:16px;font-size:0.88rem;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
             <input type="radio" name="mo-type" value="monthly"> Monthly cycle
           </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
             <input type="radio" name="mo-type" value="adhoc" checked> Ad-hoc
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="mo-type" value="adjustment"> Adjustment (correction)
           </label>
         </div>
       </div>
@@ -604,6 +611,17 @@
   function ledgerMatchesFor(distributor, code) {
     if (!code) return [];
     return orderLedger.filter(r => r.distributor === distributor && r.order_code === code);
+  }
+
+  // order-loop-closure Session B (F117/F108 § 4.4) — the ledger is now
+  // SIGNED: a zero-quantity row records a supplier rejection, and a negative
+  // row records a downward adjustment. "A row exists for this code" no
+  // longer means "this code is on order" — every caller that used to test
+  // matches.length as a proxy for "ordered" must sum instead. This is that
+  // sum, shared so it can't drift between callers the way the two
+  // missesOrderCycle() copies did before Session A unified them.
+  function ledgerNetQty(distributor, code) {
+    return ledgerMatchesFor(distributor, code).reduce((s, m) => s + (m.quantity || 0), 0);
   }
 
   // ── Shipment evidence ──────────────────────────────────────
@@ -817,12 +835,20 @@
 
       const matches = ledgerMatchesFor(distributor, code);
 
-      if (matches.some(m => m.order_type === 'adhoc')) {
-        buckets.adhocOrdered.push({ p, matches });
-        return;
-      }
-      if (matches.length) {
-        buckets.alreadyOrdered.push({ p, matches });
+      // Signed ledger (F117/F108 § 4.4): a code is only genuinely "already
+      // ordered" if its NET quantity is positive. A rejected-then-never-
+      // reordered code (net <= 0) must fall through to normal FOC
+      // classification, not sit excluded forever in adhocOrdered/
+      // alreadyOrdered — otherwise a rejection would silently remove a title
+      // from every future export, which is the opposite of "closing the
+      // loop" on it.
+      const netQty = matches.reduce((s, m) => s + (m.quantity || 0), 0);
+      if (netQty > 0) {
+        if (matches.some(m => m.order_type === 'adhoc')) {
+          buckets.adhocOrdered.push({ p, matches });
+        } else {
+          buckets.alreadyOrdered.push({ p, matches });
+        }
         return;
       }
       if (!c.foc_date) {
@@ -1016,8 +1042,13 @@
     rows.forEach(p => {
       const c = p.catalog;
       const code = exportCode(c, c.distributor);
-      if (ledgerMatchesFor(c.distributor, code).length) return; // ordered — cleared
-      if (hasShipmentEvidence(c)) return;                       // arrived — cleared
+      // Signed ledger (F117/F108 § 4.4): a code only clears here on a
+      // POSITIVE net quantity. A rejected or corrected-to-zero code has
+      // ledger rows but was never actually ordered, so it must stay visible
+      // (Backordered/At risk/Never arrived, whichever applies) rather than
+      // being cleared on the mere presence of a row.
+      if (ledgerNetQty(c.distributor, code) > 0) return;         // ordered — cleared
+      if (hasShipmentEvidence(c)) return;                        // arrived — cleared
 
       // Released with no arrival record. Deliberately checked before the FOC
       // triage: once the on-sale date has passed, how the order window was
@@ -1255,8 +1286,16 @@
     // state in the button label instead (Rick, 2026-08-03).
     function ledgerBadge(matches) {
       if (!matches.length) return '';
+      const qty = matches.reduce((s, m) => s + (m.quantity || 0), 0);
+      // Signed ledger (F117/F108 § 4.4): rows exist but net to zero or less —
+      // a rejection or a corrected-away order. Not "on order" in any sense a
+      // badge should say so cheerfully.
+      if (qty <= 0) {
+        return `<div class="col-sub" style="color:#ff8070;font-size:0.72rem">
+          \u{1F4CB} Rejected — none currently ordered
+        </div>`;
+      }
       const adhoc = matches.some(m => m.order_type === 'adhoc');
-      const qty   = matches.reduce((s, m) => s + (m.quantity || 0), 0);
       return `<div class="col-sub" style="color:var(--accent);font-size:0.72rem">
         \u{1F4CB} ${adhoc ? 'Ad-hoc ordered' : 'On order'} — ${qty} cop${qty===1?'y':'ies'}
       </div>`;
@@ -1284,8 +1323,16 @@
               const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
               const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
               const ledgerQty     = ledgerMatches.reduce((s, m) => s + (m.quantity || 0), 0);
-              const orderMatched  = ledgerMatches.length > 0 && ledgerQty === totalQty;
-              const orderPartial  = ledgerMatches.length > 0 && ledgerQty < totalQty;
+              // Signed ledger (F117/F108 § 4.4) — ledgerQty can now be zero
+              // or negative (a rejection, or a corrected-away order), which
+              // is a distinct state from "partially ordered" and must not
+              // read as one. orderMatched additionally requires ledgerQty > 0
+              // so a net-zero code with totalQty === 0 (impossible in
+              // practice — a rendered row always has a reservation) can never
+              // masquerade as "done".
+              const orderRejected = ledgerMatches.length > 0 && ledgerQty <= 0;
+              const orderMatched  = ledgerMatches.length > 0 && ledgerQty === totalQty && ledgerQty > 0;
+              const orderPartial  = ledgerMatches.length > 0 && ledgerQty > 0 && ledgerQty < totalQty;
               const orderOver     = ledgerMatches.length > 0 && ledgerQty > totalQty;
               return `
               <tr${allFulfilled ? ' style="opacity:0.6"' : ''}>
@@ -1324,18 +1371,21 @@
                       // Fulfilled state deliberately not repeated here: it
                       // already shows in the title cell and as per-customer
                       // ticks in the Customers column.
-                      const label = orderMatched ? '\u2713 Ordered (' + ledgerQty + ')'
-                        : orderOver              ? '\u26A0 Over (' + ledgerQty + ' of ' + totalQty + ')'
-                        : orderPartial           ? '\u25D0 Add (' + ledgerQty + ' of ' + totalQty + ')'
-                        :                          'Mark Ordered';
+                      const label = orderMatched  ? '\u2713 Ordered (' + ledgerQty + ')'
+                        : orderOver               ? '\u26A0 Over (' + ledgerQty + ' of ' + totalQty + ')'
+                        : orderRejected           ? '\u2298 Rejected \u2014 none ordered'
+                        : orderPartial            ? '\u25D0 Add (' + ledgerQty + ' of ' + totalQty + ')'
+                        :                           'Mark Ordered';
                       const colour = orderMatched ? 'color:var(--success,#22c55e);border-color:var(--success,#22c55e)'
                         : orderOver               ? 'color:#ff8070;border-color:rgba(232,50,28,0.5)'
+                        : orderRejected           ? 'color:#888;border-color:rgba(136,136,136,0.5)'
                         : orderPartial            ? 'color:var(--warning,#eab308);border-color:rgba(245,158,11,0.5)'
                         :                           '';
-                      const hint = orderMatched ? 'Ordered quantity matches reservations'
-                        : orderOver              ? 'Ordered ' + ledgerQty + ' against ' + totalQty + ' reserved -- surplus already submitted to the distributor (F102)'
-                        : orderPartial           ? 'Ordered ' + ledgerQty + ' of ' + totalQty + ' reserved -- click to record the rest'
-                        :                          'Record that this title was submitted to a distributor';
+                      const hint = orderMatched   ? 'Ordered quantity matches reservations'
+                        : orderOver               ? 'Ordered ' + ledgerQty + ' against ' + totalQty + ' reserved -- surplus already submitted to the distributor (F102)'
+                        : orderRejected           ? 'Submitted but net quantity on order is ' + ledgerQty + ' -- the supplier rejected it, or it was corrected away. Click to record a fresh submission (F108/F117)'
+                        : orderPartial            ? 'Ordered ' + ledgerQty + ' of ' + totalQty + ' reserved -- click to record the rest'
+                        :                           'Record that this title was submitted to a distributor';
                       return `<button
                         class="btn btn-sm mark-ordered-btn"
                         data-catalog-id="${c.id}"
@@ -1730,7 +1780,7 @@
   document.getElementById('order-builder-cancel').addEventListener('click', closeOrderBuilder);
   obOverlay.addEventListener('click', e => { if (e.target === obOverlay) closeOrderBuilder(); });
 
-  document.getElementById('order-builder-generate').addEventListener('click', () => {
+  document.getElementById('order-builder-generate').addEventListener('click', async () => {
     const distributor = builderDistributor;
     const buckets      = classifyForExport(distributor, builderSelectedDates);
 
@@ -1783,6 +1833,54 @@
     URL.revokeObjectURL(url);
 
     toast(`${distributor} order sheet generated — ${consolidated.length} title${consolidated.length===1?'':'s'}`);
+
+    // ── Confirm-on-export (F108 § 4.2, order-loop-closure Session B) ──────
+    // Deliberately reverses F101 § 4.2's "written manually, not on export
+    // click" — with the operator's agreement (plan § 3.4): the ad-hoc process
+    // specifically benefits from capturing the order as a by-product of
+    // exporting it, rather than a remember-it-afterwards step. Measured
+    // proof this matters: the pre-existing manual Mark Ordered button was
+    // used ZERO times on production before this landed (§ 2.2).
+    //
+    // Explicit and AFTER the download, never automatic — generating a file
+    // is not proof of submission (same reasoning as the original Mark
+    // Ordered design). Declining leaves the ledger untouched (V-B1).
+    // order_type is always 'adhoc' here, matching Mark Ordered's own default
+    // (Rick, F102 resolution) — this is the ad-hoc path, not the reviewed
+    // monthly-cycle confirmation the import script performs at isNewMonth
+    // (§ 4.3, scripts repo).
+    const wantsConfirm = confirm(
+      `Record these ${consolidated.length} title${consolidated.length===1?'':'s'} as ordered?`);
+    if (wantsConfirm) {
+      const rows = consolidated.map(r => {
+        const code = distributor === 'PRH'
+          ? (r.ISBN || r.ItemCode || r.UPC || '')
+          : (r.ItemCode || r.UPC || r.ISBN || '');
+        return {
+          tenant_id:     TenantContext.current().id,
+          distributor,
+          order_code:    code,
+          item_code:     r.ItemCode || null,
+          title:         r.Title || null,
+          quantity:      r.TotalQty,
+          order_type:    'adhoc',
+          foc_date:      r.FOCDate || null,
+          catalog_month: currentCatalogMonth,
+          submitted_on:  DateUtils.todayLocal(),
+        };
+      }).filter(row => row.order_code);
+
+      const { error } = await db.from('order_submissions').insert(rows);
+      if (error) {
+        toast(`Order recorded to file, but the ledger write failed: ${error.message}`, 'error');
+      } else {
+        await loadOrderLedger();
+        renderByDistributor();
+        renderBackorderRiskPanel();
+        toast(`Recorded ${rows.length} title${rows.length===1?'':'s'} on the order ledger`, 'success');
+      }
+    }
+
     closeOrderBuilder();
   });
 
@@ -1814,9 +1912,13 @@
     // Default qty is the REMAINING amount, not the full reservation total --
     // suggesting the full amount again on a second "+ Add Order" click is
     // exactly how the MIDNIGHT X-MEN over-order happened (F102).
+    // Floor is 0, not 1 (F117/F108 § 4.4) -- when priorQty already covers or
+    // exceeds totalQty (Over state), the old floor of 1 suggested ordering
+    // ONE MORE, nudging the operator toward exactly the over-order this
+    // modal exists to prevent. 0 is a safe, honest default in that state.
     const priorQty = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor))
       .reduce((s, m) => s + (m.quantity || 0), 0);
-    const suggestedQty = Math.max(1, totalQty - priorQty);
+    const suggestedQty = Math.max(0, totalQty - priorQty);
 
     moSubtitle.textContent = priorQty
       ? `${c.title || ''} (${c.item_code || c.upc || c.isbn || '—'}) — ${c.distributor} — ${priorQty} already on order, ${totalQty} reserved`
@@ -1842,11 +1944,29 @@
 
   moSave.addEventListener('click', async () => {
     if (!markOrderedCatalog) return;
-    const qty = parseInt(moQty.value) || 0;
-    if (qty < 1) { toast('Quantity must be at least 1', 'error'); return; }
+
+    // F117/F108 § 4.4 — the ledger is signed now: 0 records a supplier
+    // rejection, negative records a downward correction. parseInt(...)||0
+    // would silently swallow a genuine "-4" alongside a blank/invalid
+    // input, so NaN is checked explicitly instead of folded into the
+    // fallback.
+    const qty = parseInt(moQty.value, 10);
+    if (Number.isNaN(qty)) { toast('Enter a quantity', 'error'); return; }
     if (!moDate.value) { toast('Pick a submitted-on date first', 'error'); return; }
 
     const orderType = document.querySelector('input[name="mo-type"]:checked').value;
+    // Negative quantities are an Adjustment-only operation (F117) -- a
+    // correction against ledger history, not a fresh monthly/ad-hoc
+    // submission. Zero is fine on any type (a rejection can happen on a
+    // monthly-cycle order too). A zero-quantity Adjustment is meaningless
+    // (nothing to adjust by) and blocked.
+    if (orderType === 'adjustment') {
+      if (qty === 0) { toast('An adjustment must be a non-zero quantity', 'error'); return; }
+    } else if (qty < 0) {
+      toast('Quantity cannot be negative for Monthly/Ad-hoc — use Adjustment for a downward correction', 'error');
+      return;
+    }
+
     const c = markOrderedCatalog;
 
     moSave.disabled    = true;
@@ -1877,7 +1997,12 @@
     await loadOrderLedger();
     renderByDistributor();
     renderBackorderRiskPanel();
-    toast(`Recorded ${qty} ${c.distributor} cop${qty===1?'y':'ies'} on order`, 'success');
+    const toastMsg = qty === 0
+      ? `Recorded as rejected — 0 ${c.distributor} copies on order`
+      : qty < 0
+        ? `Recorded a correction of ${qty} ${c.distributor} cop${qty===-1?'y':'ies'}`
+        : `Recorded ${qty} ${c.distributor} cop${qty===1?'y':'ies'} on order`;
+    toast(toastMsg, 'success');
     closeMarkOrderedModal();
   });
 

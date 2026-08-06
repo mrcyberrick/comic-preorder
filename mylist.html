@@ -790,7 +790,14 @@ function confirmDialog(message, okLabel = 'Remove') {
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
       return;
     }
-    orderedCodeSet = new Set(ordered.map(o => `${o.distributor}||${o.order_code}`));
+    // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now
+    // returns a signed order_state per code. A code with only a zero/negative
+    // net quantity (rejected, or corrected away) is 'unavailable', not
+    // 'ordered' — it must NOT read "✓ Order placed" here. This is the
+    // false-promise gate (V-B2): the worst available failure is a customer
+    // being told a rejected title was ordered.
+    orderedCodeSet = new Set(
+      ordered.filter(o => o.order_state === 'ordered').map(o => `${o.distributor}||${o.order_code}`));
     // Main list shows current catalog month only.
     // Upcoming Arrivals section uses allUpcoming which includes all future months.
     // DateUtils.todayLocal() avoids the F28 toISOString() footgun.
