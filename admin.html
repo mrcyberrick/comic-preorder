@@ -206,7 +206,21 @@
 
   <!-- Tab: By Distributor -->
   <div class="admin-section" id="tab-by-distributor">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+    <!-- Cycle (catalog month) selector — lets a closed cycle be reviewed and
+         printed after the next catalog import has moved the dashboard on.
+         Every month is already in browser memory (allPreordersAllMonths), so
+         this is a re-filter, not a fetch. -->
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                margin-bottom:16px;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px">
+        <label for="bd-month" style="font-size:0.78rem;font-weight:600;
+               color:var(--text-secondary);letter-spacing:0.04em;text-transform:uppercase">Catalog month</label>
+        <select id="bd-month"
+                style="background:var(--bg-elevated);border:1px solid var(--border);
+                       color:var(--text-primary);padding:6px 10px;border-radius:var(--radius);
+                       font-size:0.85rem"></select>
+        <span id="bd-month-note" style="display:none;font-size:0.75rem;color:var(--warning)"></span>
+      </div>
       <button class="btn btn-secondary btn-sm" id="btn-print-reserved"
               style="display:flex;align-items:center;gap:6px">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -563,6 +577,39 @@
   let allPreordersAllMonths = [];
   let profileMap   = {};
 
+  // ── By Distributor cycle selector (2026-08-06) ──────────────
+  // The By Distributor tab can review a CLOSED catalog month, so a cycle's
+  // final order state stays reviewable and printable after the next import
+  // has moved `currentCatalogMonth` on. Rick's monthly process prints the
+  // reserved-titles report as a permanent record; before this, that record
+  // could only ever be taken while the month was still current — and the
+  // order state is not final until the ordering is done.
+  //
+  // Deliberately a SEPARATE variable rather than widening `allPreorders`:
+  // that array has 15+ deliberately month-scoped consumers (stats, By
+  // Customer, All Reservations, Paper Orders), and F111's § 4.4 note is
+  // explicit that it must not be widened. This scopes exactly two surfaces —
+  // renderByDistributor() and printReservedReport() — plus the Mark Ordered
+  // lookup they share.
+  let distributorViewMonth = null; // 'YYYY-MM'; set from currentCatalogMonth at load
+
+  // Rows for whichever cycle the By Distributor tab is currently showing.
+  // Equivalent to `allPreorders` when the selection is the current month.
+  function distributorRows() {
+    return allPreordersAllMonths.filter(p => p.catalog?.catalog_month === distributorViewMonth);
+  }
+
+  // Is the tab showing a closed (past) cycle rather than the live one?
+  // Drives the export-button lock and the inline notice — Rick's call
+  // 2026-08-06: recording a late order on a closed cycle is legitimate and
+  // stays enabled, but GENERATING a supplier order sheet from a closed cycle
+  // is almost certainly a mistake. The Order Builder is FOC-cycle-scoped and
+  // cross-month (F111), so it would silently build from live cycles while
+  // the tab shows history — exactly the mismatch worth blocking.
+  function isViewingPastCycle() {
+    return !!distributorViewMonth && !!currentCatalogMonth && distributorViewMonth !== currentCatalogMonth;
+  }
+
   // ── Order ledger (F101/F102 — order_submissions) ───────────
   // order_submissions is written manually (not on export click) and read
   // fresh whenever the Order Builder opens or the backorder-risk panel
@@ -805,14 +852,36 @@
       p.catalog?.distributor === distributor && !p.fulfilled && p.catalog?.foc_date);
     const map = new Map();
     rows.forEach(p => {
-      const foc = p.catalog.foc_date;
-      if (!map.has(foc)) map.set(foc, { titles: new Set(), copies: 0 });
+      const c = p.catalog;
+      const foc = c.foc_date;
+      if (!map.has(foc)) {
+        map.set(foc, { titles: new Set(), copies: 0, ordered: new Set(), withdrawn: new Set() });
+      }
       const entry = map.get(foc);
-      entry.titles.add(p.catalog.id);
+      entry.titles.add(c.id);
       entry.copies += (p.quantity || 1);
+
+      // Mirror classifyForExport()'s OWN two unconditional exclusions, in the
+      // same precedence order, so these checkbox counts reconcile with the
+      // "N titles ready to export" summary. Without it the list promises
+      // titles that ticking the box cannot deliver — a cycle reading
+      // "1 title" beside a summary reading "0 ready" is arithmetically
+      // correct and completely opaque, which is exactly how it was found
+      // (2026-08-06, production-shaped data on staging).
+      if (c.withdrawn_at) {
+        entry.withdrawn.add(c.id);
+      } else if (ledgerNetQty(c.distributor, exportCode(c, c.distributor)) > 0) {
+        entry.ordered.add(c.id);
+      }
     });
     return [...map.entries()]
-      .map(([foc, v]) => ({ foc, titleCount: v.titles.size, copies: v.copies }))
+      .map(([foc, v]) => ({
+        foc,
+        titleCount:     v.titles.size,
+        copies:         v.copies,
+        orderedCount:   v.ordered.size,
+        withdrawnCount: v.withdrawn.size,
+      }))
       .sort((a, b) => a.foc.localeCompare(b.foc));
   }
 
@@ -975,12 +1044,78 @@
         `Customer pre-orders for ${monthLabel}`;
     }
 
+    // Cycle selector defaults to the live month on every load — a reload
+    // must never silently leave the dashboard showing history.
+    distributorViewMonth = currentCatalogMonth;
+    renderDistributorMonthSelector();
+
     renderStats();
     renderByCustomer();
     renderByDistributor();
     renderAllItems();
     renderBackorderRiskPanel();
     renderWithdrawnPanel();
+  }
+
+  // ── By Distributor cycle selector ──────────────────────────
+  // Options come from the months actually present in the fetched data,
+  // newest first, so there is never an empty cycle to select.
+  function renderDistributorMonthSelector() {
+    const sel = document.getElementById('bd-month');
+    if (!sel) return;
+
+    const months = [...new Set(
+      allPreordersAllMonths.map(p => p.catalog?.catalog_month).filter(Boolean)
+    )].sort((a, b) => b.localeCompare(a));
+
+    // Defensive: keep the live month selectable even if it currently holds
+    // no reservations at all (a freshly-imported month before anyone reserves).
+    if (currentCatalogMonth && !months.includes(currentCatalogMonth)) {
+      months.unshift(currentCatalogMonth);
+    }
+
+    const label = (ym) => {
+      const [y, m] = ym.split('-');
+      return new Date(parseInt(y), parseInt(m) - 1, 1)
+        .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    };
+
+    sel.innerHTML = months.map(ym =>
+      `<option value="${ym}"${ym === distributorViewMonth ? ' selected' : ''}>${label(ym)}${ym === currentCatalogMonth ? ' (current)' : ''}</option>`
+    ).join('');
+
+    applyCycleViewLock();
+  }
+
+  // Locks the two order-sheet exports while a CLOSED cycle is on screen, and
+  // says why. The Order Builder reasons over FOC cycles across all months
+  // (F111), so from a past-month view it would build a live order sheet
+  // while the table shows history — a mismatch with real money attached.
+  // "Export All (CSV)" is deliberately left alone: it is a non-destructive
+  // dump, and it is page-level rather than part of this tab.
+  function applyCycleViewLock() {
+    const past = isViewingPastCycle();
+    const note = document.getElementById('bd-month-note');
+
+    ['btn-export-lunar', 'btn-export-prh'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.disabled = past;
+      btn.style.opacity = past ? '0.45' : '';
+      btn.title = past
+        ? 'Disabled while a closed catalog month is selected on By Distributor — order sheets are built from live FOC cycles, not the month shown. Switch back to the current month to export.'
+        : '';
+    });
+
+    if (note) {
+      if (past) {
+        note.style.display = '';
+        note.textContent = '⚠ Viewing a closed cycle — order-sheet exports disabled; recording an order is still allowed.';
+      } else {
+        note.style.display = 'none';
+        note.textContent = '';
+      }
+    }
   }
 
   await loadData();
@@ -1271,9 +1406,13 @@
   }
 
   // ── By Distributor ────────────────────────────────────────
+  // Scoped to distributorViewMonth (the cycle selector), NOT allPreorders —
+  // identical output when the selection is the current month, and able to
+  // show a closed cycle otherwise.
   function renderByDistributor() {
-    const lunar = allPreorders.filter(p => p.catalog?.distributor === 'Lunar');
-    const prh   = allPreorders.filter(p => p.catalog?.distributor === 'PRH');
+    const rows  = distributorRows();
+    const lunar = rows.filter(p => p.catalog?.distributor === 'Lunar');
+    const prh   = rows.filter(p => p.catalog?.distributor === 'PRH');
 
     // Group by item, count how many customers want it and how many are fulfilled
     function groupByItem(items) {
@@ -1647,10 +1786,24 @@
         ${dates.map(d => {
           const past    = d.foc < todayStr;
           const checked = builderSelectedDates.has(d.foc) ? 'checked' : '';
+          // Why the counts are broken out (2026-08-06): ticking a cycle only
+          // exports the titles that classifyForExport() has not already
+          // excluded, so a cycle whose titles are all already-ordered or
+          // withdrawn contributes NOTHING to the export. Saying so here is
+          // what makes the checkbox list and the "N titles ready to export"
+          // summary reconcile at a glance instead of by hand.
+          const excl = [
+            d.orderedCount   ? `${d.orderedCount} already ordered` : '',
+            d.withdrawnCount ? `${d.withdrawnCount} withdrawn`     : '',
+          ].filter(Boolean).join(' · ');
+          const exportable = d.titleCount - d.orderedCount - d.withdrawnCount;
           return `
-            <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
+            <label class="ob-cycle-row" data-foc="${d.foc}"
+                   style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
               <input type="checkbox" class="ob-cycle-cb" data-foc="${d.foc}" ${checked}>
               ${formatDate(d.foc)} — ${d.titleCount} title${d.titleCount === 1 ? '' : 's'}, ${d.copies} cop${d.copies === 1 ? 'y' : 'ies'}
+              ${excl ? `<span style="font-size:0.72rem;color:var(--text-muted)">· ${excl}</span>` : ''}
+              ${excl && exportable === 0 ? '<span style="font-size:0.72rem;color:var(--text-muted)">· nothing to export</span>' : ''}
               ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed</span>' : ''}
             </label>`;
         }).join('')}
@@ -1909,12 +2062,17 @@
   let markOrderedCatalog = null;
 
   function openMarkOrderedModal(catalogId) {
-    const match = allPreorders.find(p => p.catalog?.id === catalogId);
+    // Looks up in the SELECTED cycle, not the current month — recording a
+    // late order against a closed cycle is legitimate and stays enabled
+    // (Rick's call 2026-08-06, the counterpart to locking the export
+    // buttons there). Identical behaviour when the selection is current.
+    const viewRows = distributorRows();
+    const match = viewRows.find(p => p.catalog?.id === catalogId);
     if (!match) return;
     markOrderedCatalog = match.catalog;
     const c = markOrderedCatalog;
 
-    const totalQty = allPreorders
+    const totalQty = viewRows
       .filter(x => x.catalog?.id === catalogId && !x.fulfilled)
       .reduce((s, x) => s + (x.quantity || 1), 0);
 
@@ -1990,7 +2148,13 @@
       quantity:      qty,
       order_type:    orderType,
       foc_date:      c.foc_date || null,
-      catalog_month: currentCatalogMonth,
+      // The title's OWN catalog month, not the dashboard's current one —
+      // identical while recording against the live cycle, and correct when
+      // recording late against a closed one (the cycle selector, 2026-08-06).
+      // Descriptive only (§ 4.11), but Rick's stated reason for wanting the
+      // rejected/ordered data captured at all is future reporting, and a
+      // row filed under the wrong cycle would quietly poison exactly that.
+      catalog_month: c.catalog_month || currentCatalogMonth,
       submitted_on:  moDate.value,
     });
 
@@ -3790,10 +3954,14 @@
     const btn = document.getElementById('btn-print-reserved');
     const origHtml = btn.innerHTML;
 
-    // Group current-month reservations by catalog item (one row per title)
+    // Group the SELECTED cycle's reservations by catalog item (one row per
+    // title). Follows the By Distributor month selector, so a closed cycle
+    // can be printed as a permanent record after the next import — the whole
+    // reason the selector exists.
+    const viewRows = distributorRows();
     const map = {};
     const grouped = [];
-    allPreorders.forEach(p => {
+    viewRows.forEach(p => {
       const c = p.catalog;
       if (!c?.id) return;
       if (!map[c.id]) {
@@ -3807,7 +3975,7 @@
     });
 
     if (!grouped.length) {
-      toast('No reserved titles for the current month', 'error');
+      toast('No reserved titles for the selected catalog month', 'error');
       return;
     }
 
@@ -3816,10 +3984,10 @@
       (a.catalog.title || '').localeCompare(b.catalog.title || '')
     );
 
-    const customerCount = new Set(allPreorders.map(p => p.user_id)).size;
+    const customerCount = new Set(viewRows.map(p => p.user_id)).size;
 
-    const [y, m] = (currentCatalogMonth || '').split('-');
-    const monthLabel = currentCatalogMonth
+    const [y, m] = (distributorViewMonth || '').split('-');
+    const monthLabel = distributorViewMonth
       ? new Date(parseInt(y), parseInt(m) - 1, 1)
           .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
       : '';
@@ -3837,6 +4005,16 @@
   }
 
   document.getElementById('btn-print-reserved').addEventListener('click', printReservedReport);
+
+  // Cycle selector — re-renders By Distributor against the chosen catalog
+  // month and re-applies the closed-cycle export lock. Pure client-side
+  // re-filter: every month is already in allPreordersAllMonths (F111/F113),
+  // so switching cycles issues no network request.
+  document.getElementById('bd-month').addEventListener('change', (e) => {
+    distributorViewMonth = e.target.value;
+    applyCycleViewLock();
+    renderByDistributor();
+  });
 
   // ── Load tab on first click ──────────────────────────────
   document.querySelector('[data-tab="paper-orders"]').addEventListener('click', () => {
