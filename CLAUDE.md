@@ -614,6 +614,34 @@ approval.
   `guard-git` hook, needs Rick to push manually or authorize a fix. Session C
   not started. Plan: `docs/order-loop-closure-f108.md` § 8 Session B for full
   evidence.
+  **Session B follow-on, LIVE ON STAGING ONLY (`ec98f54`, 2026-08-06,
+  production promotion is Rick's call, not yet requested):** a
+  **catalog-month selector on the By Distributor tab**, so a closed cycle
+  stays reviewable and printable after the next import moves
+  `currentCatalogMonth` on — Rick's monthly process prints the
+  reserved-titles report as a cycle's permanent record, and a cycle's order
+  state is not final until after the ordering is done. Mark Ordered stays
+  **enabled** on a closed cycle (late recording is the point; its write now
+  files under the title's own `catalog_month`); order-sheet exports are
+  **disabled** there with an inline reason (the Order Builder is
+  FOC-cycle-scoped and cross-month per F111, so it would build a live sheet
+  while the table shows history). 80/80 Playwright green.
+  **DEFERRED to its own session — decoupling "record the order" from
+  "download the file".** Rick's walkthrough exposed a timing flaw in
+  confirm-on-export (§ 4.2, shipped the same day): the export produces a
+  *file*, but the order — and which titles the supplier rejected — happens
+  after that, so the prompt asks before the answer is knowable. This is
+  F101 § 4.2's original principle ("generating a file is not proof of
+  submission") reasserting itself; the § 3.4 reversal holds for ad-hoc and
+  not for the monthly cycle. Agreed direction: split the Order Builder into
+  "Generate & Download" and a separate "Record submitted order", the latter
+  being the export set with per-title checkboxes where **ticked = ordered,
+  unticked = rejected**. **Also owed in that session:** confirm-on-export
+  hardcodes `order_type: 'adhoc'`, but Rick uses the Order Builder for the
+  **monthly** cycle — and `classifyForExport()` routes `adhoc` matches away
+  from the "Already ordered — your call" bucket, silently dropping F102's
+  remainder-defaulted quantity control on the next cycle. See the plan's
+  § 8 for both.
   **Session A shipped:** `order_deadline` now **supersedes** the
   in-current-month rule instead of adding to it, and a **lapsed deadline is
   treated as absent** so the in-month rule takes over automatically rather

@@ -335,6 +335,35 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 - **F119** — Print Bagging List also printed the Order Follow-Up/Withdrawn panels.
 - **F120** — a rejected title was invisible on both the Bagging List and My List; badge-only fix (Rick's explicit scope call — no FOC/ordered-lock override).
 
+### Session B follow-on — By Distributor catalog-month selector (2026-08-06, live on staging; not yet promoted)
+
+**Live on staging only** (`ec98f54`); production promotion is Rick's call, not yet requested. **80/80 Playwright green**, fixtures torn down and reverified by SELECT.
+
+**Why it exists — Rick's monthly process, walked through 2026-08-06:**
+1. Maintenance Mode ON → 2. export order sheet(s) and submit to supplier → 3. record rejected titles → 4. **print the reserved-titles report as the cycle's permanent record** → 5. import the new catalog.
+
+Step 4's printout could only ever be taken while the cycle was still `currentCatalogMonth`, but a cycle's order state is not final until the ordering at Steps 2–3 is done and recorded — and Step 5 then moves `currentCatalogMonth` on, taking the only view of that cycle with it. The selector decouples "which cycle am I looking at" from "which cycle is live".
+
+**Two scope decisions, both Rick's, deliberately pulling in opposite directions:**
+1. **Mark Ordered stays ENABLED on a closed cycle** — recording an order late is exactly what this is for. Its write now files the ledger row under the *title's own* `catalog_month` rather than the dashboard's current one, so a late record lands in the right cycle (descriptive per § 4.11, but Rick's stated reason for wanting rejections captured at all is future reporting, which a mis-filed cycle would quietly poison).
+2. **Order-sheet exports are DISABLED on a closed cycle**, with an inline reason — the Order Builder is FOC-cycle-scoped and cross-month (F111), so from a past-month view it would build a *live* order sheet while the table shows history. "Export All (CSV)" is left alone: non-destructive, and page-level rather than part of this tab.
+
+Both are asserted together in one spec deliberately, so a future "just disable everything on past months" simplification fails the suite.
+
+**Implementation note:** `distributorViewMonth` + `distributorRows()` is a **separate** variable, not a widening of `allPreorders` — that array has 15+ intentionally month-scoped consumers and F111 § 4.4 explicitly says not to widen it. Zero extra network: every month is already in `allPreordersAllMonths` (F111/F113), so switching cycles is a client-side re-filter. Defaults to the live month on every load, so a reload can never leave the dashboard silently showing history.
+
+### Deferred to its own session — decoupling "record the order" from "download the file"
+
+**Not started. Rick's decision 2026-08-06, after the walkthrough above exposed the timing flaw in confirm-on-export (§ 4.2, shipped earlier the same day).**
+
+Confirm-on-export asks the question *before the answer is knowable*: the export produces a **file**; the order is placed on the supplier's site, and which titles were rejected only comes back after that. In Rick's words — it forces browser-swapping mid-flow, and the titles are "locked as Ordered after the fact," so a rejection then needs a negative adjustment rather than the intended zero row. **This is F101 § 4.2's original principle reasserting itself** ("generating a file is not proof of submission"), which § 3.4 reversed for the ad-hoc case. The reversal holds for ad-hoc — one or two titles, outcome known immediately — and does not survive the monthly cycle.
+
+**Agreed direction (design only, not built):** split the Order Builder's action in two — **"Generate & Download"** (before going to the supplier) and a separate **"Record submitted order"** (after coming back). Same modal, same cycle selection, no prompt interrupting the download. The recording screen is the export set with per-title checkboxes: **ticked = ordered at that quantity, unticked = rejected (writes the zero row)**. That is semantically exact because everything in the set *was* submitted, so unticking genuinely means the supplier refused it — and it produces the rejection rows in the same pass, with no per-title Mark Ordered modals (which Rick assessed as "may not flow naturally", and which is indeed miserable for a handful of rejections after a monthly submission). No persistence needed: the export set is re-derivable from the cycle selection the Order Builder already computes.
+
+Mark Ordered stays as-is for the genuine ad-hoc path. The `isNewMonth` import prompt stays as the backstop for anything never recorded.
+
+**Also unresolved and belonging to that session — `order_type` on confirm-on-export.** It hardcodes `'adhoc'` (plan § 4.2, written on the assumption that confirm-on-export served the *ad-hoc* process). Rick uses the Order Builder for the **monthly** cycle, so a monthly order recorded that way is mislabelled — and the consequence is not cosmetic: `classifyForExport()` routes `adhoc` matches to the "Ad-hoc ordered — excluded automatically" bucket instead of "Already ordered — your call", which **silently drops the F102 remainder-defaulted quantity control** on the next cycle. Order Builder should write `'monthly'`; Mark Ordered keeps `'adhoc'`.
+
 ### Session C
 - [ ] Unavailable state shared with F110; **V-C1** green
 - [ ] Customer arrival date live; full suite green; real-browser check at mobile width
