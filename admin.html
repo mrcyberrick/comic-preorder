@@ -2042,18 +2042,35 @@
       ${nothingHeld && !fulfilledCount && !distributorCollapses.length && !buckets.orderedOtherCycle.length ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
     `;
 
-    obSummary.textContent = `${buckets.included.length} title${buckets.included.length === 1 ? '' : 's'} ready to export`;
+    // Counts the ACTUAL export lines, via the same builder the Generate
+    // button uses — not buckets.included.length, which is reservation rows
+    // and overstated the file by 12 on production PRH while also ignoring
+    // approved already-ordered overrides.
+    const exportCount = buildExportRows(distributor, builderSelectedDates).length;
+    obSummary.textContent = `${exportCount} title${exportCount === 1 ? '' : 's'} ready to export`;
   }
 
   document.getElementById('order-builder-close').addEventListener('click', closeOrderBuilder);
   document.getElementById('order-builder-cancel').addEventListener('click', closeOrderBuilder);
   obOverlay.addEventListener('click', e => { if (e.target === obOverlay) closeOrderBuilder(); });
 
-  document.getElementById('order-builder-generate').addEventListener('click', async () => {
-    const distributor = builderDistributor;
-    const buckets      = classifyForExport(distributor, builderSelectedDates);
+  // The exact rows the export file will contain — ONE line per distributor
+  // code. Shared by the summary line and the Generate handler (2026-08-07)
+  // so the count you are shown cannot disagree with the file you get.
+  //
+  // It did disagree, and by a lot: the summary counted `buckets.included`,
+  // which holds RESERVATION ROWS, while the file groups them by export code.
+  // Measured on production PRH with every cycle ticked: summary said "70
+  // titles", the file would have carried 58 lines — and the summary also
+  // ignored approved already-ordered overrides entirely, so it was wrong in
+  // both directions at once. Third instance of the same rows-vs-titles
+  // confusion in this modal (cycle counts, held-back headers, this); the
+  // first two were fixed by hand, which is why this one is now shared code
+  // rather than a third careful copy.
+  function buildExportRows(distributor, selectedFocDates) {
+    const buckets = classifyForExport(distributor, selectedFocDates);
 
-    // Normal rows go through makeOrderSheetRows, now grouped by export code
+    // Normal rows go through makeOrderSheetRows, grouped by export code
     // rather than catalog.id (F111 § 4.4) — equivalent within a single
     // month, which is what V-B3's byte-identical gate checks (empty ledger
     // + every cycle ticked + gather restricted to the current month ⇒
@@ -2079,8 +2096,13 @@
       })
       .filter(Boolean);
 
-    const consolidated = [...baseRows, ...extraRows]
+    return [...baseRows, ...extraRows]
       .sort((a, b) => (a.ItemCode || '').localeCompare(b.ItemCode || ''));
+  }
+
+  document.getElementById('order-builder-generate').addEventListener('click', async () => {
+    const distributor  = builderDistributor;
+    const consolidated = buildExportRows(distributor, builderSelectedDates);
 
     if (!consolidated.length) { toast(`No ${distributor} reservations selected for export`, 'error'); return; }
 
