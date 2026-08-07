@@ -852,14 +852,36 @@
       p.catalog?.distributor === distributor && !p.fulfilled && p.catalog?.foc_date);
     const map = new Map();
     rows.forEach(p => {
-      const foc = p.catalog.foc_date;
-      if (!map.has(foc)) map.set(foc, { titles: new Set(), copies: 0 });
+      const c = p.catalog;
+      const foc = c.foc_date;
+      if (!map.has(foc)) {
+        map.set(foc, { titles: new Set(), copies: 0, ordered: new Set(), withdrawn: new Set() });
+      }
       const entry = map.get(foc);
-      entry.titles.add(p.catalog.id);
+      entry.titles.add(c.id);
       entry.copies += (p.quantity || 1);
+
+      // Mirror classifyForExport()'s OWN two unconditional exclusions, in the
+      // same precedence order, so these checkbox counts reconcile with the
+      // "N titles ready to export" summary. Without it the list promises
+      // titles that ticking the box cannot deliver — a cycle reading
+      // "1 title" beside a summary reading "0 ready" is arithmetically
+      // correct and completely opaque, which is exactly how it was found
+      // (2026-08-06, production-shaped data on staging).
+      if (c.withdrawn_at) {
+        entry.withdrawn.add(c.id);
+      } else if (ledgerNetQty(c.distributor, exportCode(c, c.distributor)) > 0) {
+        entry.ordered.add(c.id);
+      }
     });
     return [...map.entries()]
-      .map(([foc, v]) => ({ foc, titleCount: v.titles.size, copies: v.copies }))
+      .map(([foc, v]) => ({
+        foc,
+        titleCount:     v.titles.size,
+        copies:         v.copies,
+        orderedCount:   v.ordered.size,
+        withdrawnCount: v.withdrawn.size,
+      }))
       .sort((a, b) => a.foc.localeCompare(b.foc));
   }
 
@@ -1764,10 +1786,24 @@
         ${dates.map(d => {
           const past    = d.foc < todayStr;
           const checked = builderSelectedDates.has(d.foc) ? 'checked' : '';
+          // Why the counts are broken out (2026-08-06): ticking a cycle only
+          // exports the titles that classifyForExport() has not already
+          // excluded, so a cycle whose titles are all already-ordered or
+          // withdrawn contributes NOTHING to the export. Saying so here is
+          // what makes the checkbox list and the "N titles ready to export"
+          // summary reconcile at a glance instead of by hand.
+          const excl = [
+            d.orderedCount   ? `${d.orderedCount} already ordered` : '',
+            d.withdrawnCount ? `${d.withdrawnCount} withdrawn`     : '',
+          ].filter(Boolean).join(' · ');
+          const exportable = d.titleCount - d.orderedCount - d.withdrawnCount;
           return `
-            <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
+            <label class="ob-cycle-row" data-foc="${d.foc}"
+                   style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
               <input type="checkbox" class="ob-cycle-cb" data-foc="${d.foc}" ${checked}>
               ${formatDate(d.foc)} — ${d.titleCount} title${d.titleCount === 1 ? '' : 's'}, ${d.copies} cop${d.copies === 1 ? 'y' : 'ies'}
+              ${excl ? `<span style="font-size:0.72rem;color:var(--text-muted)">· ${excl}</span>` : ''}
+              ${excl && exportable === 0 ? '<span style="font-size:0.72rem;color:var(--text-muted)">· nothing to export</span>' : ''}
               ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed</span>' : ''}
             </label>`;
         }).join('')}
