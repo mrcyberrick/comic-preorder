@@ -1850,6 +1850,10 @@
               </summary>
               <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;
                           border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-top:8px">
+                <div style="font-size:0.72rem;color:var(--text-muted);padding-bottom:2px">
+                  Not included by "Select all" — tick individually, or
+                  <a href="#" id="ob-select-passed" style="color:var(--accent)">select all ${passed.length} passed cycles</a>.
+                </div>
                 ${passed.map(cycleRow).join('')}
               </div>
             </details>` : ''}`;
@@ -1863,10 +1867,28 @@
         renderOrderBuilderResults();
       });
     });
+    // "Select all" means all LIVE cycles — never the collapsed FOC-passed
+    // ones (Rick, 2026-08-07). It used to tick every date, which was
+    // defensible while every cycle was visible in one list, and became a
+    // trap the moment passed cycles were collapsed: a convenience click
+    // silently opted you into backorders you could not see. Ordering late is
+    // legitimate (F112(b)) but it is a deliberate act, so it gets its own
+    // control inside the disclosure rather than riding along with this one.
     obCycles.querySelector('#ob-select-all')?.addEventListener('click', e => {
       e.preventDefault();
-      builderSelectedDates = new Set(dates.map(d => d.foc));
+      const todayStr = DateUtils.todayLocal();
+      builderSelectedDates = new Set(dates.filter(d => d.foc >= todayStr).map(d => d.foc));
       renderOrderBuilder();
+    });
+    obCycles.querySelector('#ob-select-passed')?.addEventListener('click', e => {
+      e.preventDefault();
+      const todayStr = DateUtils.todayLocal();
+      dates.filter(d => d.foc < todayStr).forEach(d => builderSelectedDates.add(d.foc));
+      renderOrderBuilder();
+      // Keep the disclosure open — the user just acted inside it, and
+      // re-rendering would otherwise collapse the rows they just ticked.
+      const det = obCycles.querySelector('details.ob-passed-cycles');
+      if (det) det.open = true;
     });
     obCycles.querySelector('#ob-select-none')?.addEventListener('click', e => {
       e.preventDefault();
