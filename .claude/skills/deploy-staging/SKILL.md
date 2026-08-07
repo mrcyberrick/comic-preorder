@@ -50,10 +50,18 @@ gates; **any failed gate is a halt-and-report, never an improvise.**
    Wait for CF Pages (~30–60s) and confirm the new bytes are actually served —
    a stale build otherwise looks like a passing test run:
    ```powershell
-   curl.exe -s -L "https://staging.pulllist.pages.dev/<changed-file>?cb=$(Get-Random)"
+   curl.exe -s -L "https://staging.pulllist.pages.dev/<changed-file>"
    ```
    Match a marker string your change introduced. **Note `-L`** — without it the
-   redirect returns an empty body that reads exactly like a stale build. Then:
+   redirect returns an empty body that reads exactly like a stale build.
+
+   **Use the PLAIN URL — no `?cb=` cache-buster** (corrected 2026-08-07; this
+   step used to recommend one). A query string is a different Cloudflare cache
+   key, so it can return the new build while the plain URL a browser and
+   Playwright actually request still serves the old one. On 2026-08-06 that
+   produced a green "new bytes served" check followed by a spec failing against
+   stale bytes — it looked like a code defect and was not. Verify what the
+   browser will get. Then:
    ```powershell
    .\run-smoke.ps1
    ```

@@ -371,8 +371,18 @@ git push origin staging
 # Wait for the build, then CONFIRM the new bytes are actually served before
 # trusting any test result (~30-60s; note -L, without it the redirect yields
 # an empty body that looks like a stale build):
-#   curl.exe -s -L "https://staging.pulllist.pages.dev/style.css?cb=$(Get-Random)"
+#   curl.exe -s -L "https://staging.pulllist.pages.dev/style.css"
 # and match a marker string your change introduced.
+#
+# CHECK THE PLAIN URL, NOT A CACHE-BUSTED ONE (corrected 2026-08-07). This
+# line previously appended "?cb=$(Get-Random)". A query string is a DIFFERENT
+# Cloudflare cache key, so it can fetch the new build while the plain URL a
+# browser (and Playwright) actually requests is still serving the old one —
+# a green "new bytes served" check followed by a test failing against stale
+# bytes. That happened on 2026-08-06: a spec asserting a brand-new CSS class
+# failed with 0 elements, looked like a code defect, and was neither. Verify
+# what the browser will get. Cache-busting is for forcing a fresh read when
+# you WANT to bypass the edge, which is the opposite of this check's purpose.
 
 # THEN run the authoritative smoke pass — this one exercises your change:
 .\run-smoke.ps1
