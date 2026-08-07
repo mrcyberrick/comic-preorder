@@ -335,9 +335,13 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 - **F119** — Print Bagging List also printed the Order Follow-Up/Withdrawn panels.
 - **F120** — a rejected title was invisible on both the Bagging List and My List; badge-only fix (Rick's explicit scope call — no FOC/ordered-lock override).
 
-### Session B follow-on — By Distributor catalog-month selector (2026-08-06, live on staging; not yet promoted)
+### Session B follow-on — By Distributor catalog-month selector (2026-08-06) — COMPLETE AND LIVE IN PRODUCTION (PR #105, merge `93caca0`)
 
-**Live on staging only** (`ec98f54`); production promotion is Rick's call, not yet requested. **80/80 Playwright green**, fixtures torn down and reverified by SELECT.
+**Live on staging (`ec98f54`) and production (PR #105).** **81/81 Playwright green**, fixtures torn down and reverified by SELECT. **No database changes** — client-only, so unlike Session B's own promotion there was no SQL sequencing to observe.
+
+**Shipped with it (`40203d2`) — Order Builder cycle-list clarity.** Found by Rick immediately after the selector landed, on production-shaped staging data: a PRH Order Builder showing four cycles totalling 5 titles while the summary read **"0 titles ready to export"**. Both numbers were correct — 4 of the 5 were already ordered and the 5th was Backordered outside the selected cycle — but reconciling them required doing that arithmetic by hand, which is indistinguishable from the screen being broken. `distinctFocDates()` counted every unfulfilled reservation with that FOC; `classifyForExport()` then unconditionally excluded withdrawn titles and any code with a positive net ledger quantity, regardless of cycle selection. The cycle list now mirrors those same two exclusions in the same precedence order and shows the breakdown (`· 1 already ordered`, `· 1 withdrawn`, `· nothing to export`).
+
+**Verification note worth carrying forward:** the new cycle-label test failed on its first attempt against a build that had just deployed, because the agent's "new bytes served" check used a **cache-busting query string** — a different Cloudflare cache key than the plain URL a browser actually requests. The plain URL was still serving the previous build for a few seconds afterward. Re-ran clean once both agreed. **When verifying a deploy, check the plain URL, not just a cache-busted one** (F79's asset-cache-skew family).
 
 **Why it exists — Rick's monthly process, walked through 2026-08-06:**
 1. Maintenance Mode ON → 2. export order sheet(s) and submit to supplier → 3. record rejected titles → 4. **print the reserved-titles report as the cycle's permanent record** → 5. import the new catalog.
