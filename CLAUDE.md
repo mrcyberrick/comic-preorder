@@ -614,18 +614,22 @@ approval.
   `guard-git` hook, needs Rick to push manually or authorize a fix. Session C
   not started. Plan: `docs/order-loop-closure-f108.md` § 8 Session B for full
   evidence.
-  **Session B follow-on, LIVE ON STAGING ONLY (`ec98f54`, 2026-08-06,
-  production promotion is Rick's call, not yet requested):** a
-  **catalog-month selector on the By Distributor tab**, so a closed cycle
-  stays reviewable and printable after the next import moves
-  `currentCatalogMonth` on — Rick's monthly process prints the
-  reserved-titles report as a cycle's permanent record, and a cycle's order
-  state is not final until after the ordering is done. Mark Ordered stays
-  **enabled** on a closed cycle (late recording is the point; its write now
-  files under the title's own `catalog_month`); order-sheet exports are
-  **disabled** there with an inline reason (the Order Builder is
-  FOC-cycle-scoped and cross-month per F111, so it would build a live sheet
-  while the table shows history). 80/80 Playwright green.
+  **Session B follow-on, COMPLETE AND LIVE IN PRODUCTION 2026-08-06** (PR
+  #105, merge `93caca0`; staging `ec98f54`+`40203d2`): a **catalog-month
+  selector on the By Distributor tab**, so a closed cycle stays reviewable
+  and printable after the next import moves `currentCatalogMonth` on —
+  Rick's monthly process prints the reserved-titles report as a cycle's
+  permanent record, and a cycle's order state is not final until after the
+  ordering is done. Mark Ordered stays **enabled** on a closed cycle (late
+  recording is the point; its write now files under the title's own
+  `catalog_month`); order-sheet exports are **disabled** there with an
+  inline reason (the Order Builder is FOC-cycle-scoped and cross-month per
+  F111, so it would build a live sheet while the table shows history).
+  Shipped with it: the **Order Builder cycle list now breaks out
+  already-ordered / withdrawn counts**, so the checkboxes reconcile with
+  the "N titles ready to export" summary — a cycle reading "1 title" beside
+  a summary reading "0 ready" was correct but opaque. 81/81 Playwright
+  green; client-only, no DB change.
   **DEFERRED to its own session — decoupling "record the order" from
   "download the file".** Rick's walkthrough exposed a timing flaw in
   confirm-on-export (§ 4.2, shipped the same day): the export produces a
