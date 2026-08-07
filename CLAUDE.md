@@ -630,6 +630,23 @@ approval.
   the "N titles ready to export" summary — a cycle reading "1 title" beside
   a summary reading "0 ready" was correct but opaque. 81/81 Playwright
   green; client-only, no DB change.
+  **Order Builder readability follow-on, LIVE IN PRODUCTION 2026-08-07**
+  (PR #106 merge `93caca0`-successor, PR #107 merge `01cfb67`; 85/85
+  Playwright green, client-only): the Already Ordered panel is **scoped to
+  the selected FOC cycles** and **collapses exact matches** behind a count
+  (it was carding 350 titles on production PRH, ~345 with nothing to
+  decide); **one collapse rule now governs the whole modal** — expanded =
+  may need action this export, collapsed = accounted for; FOC-passed cycles
+  state the **consequence** ("ordering now backorders, availability not
+  guaranteed") and sit collapsed below the live ones while staying
+  selectable (F112(b)). **The consequential one:** the export summary
+  counted reservation ROWS while the file groups by distributor code, and
+  ignored approved already-ordered overrides — "70 titles ready to export"
+  against a file of 58 lines, measured on production. Both now share one
+  `buildExportRows()`. **That was the third rows-vs-titles slip in this one
+  modal** (cycle counts, held-back headers, summary), each caught by Rick's
+  arithmetic on the live screen rather than by the suite — a green suite
+  asserts behaviour, not coherence between numbers on a page.
   **DEFERRED to its own session — decoupling "record the order" from
   "download the file".** Rick's walkthrough exposed a timing flaw in
   confirm-on-export (§ 4.2, shipped the same day): the export produces a
