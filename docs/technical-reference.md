@@ -3218,7 +3218,27 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `admin.html` — `renderThisWeek()` (query + row rendering + header/card totals), `ledgerRejected()`. `mylist.html` — `rejectedCodeSet`, `isCodeRejected()`, the three row-rendering paths.
 - **Related:** **F119** — found minutes earlier in the same staging review, which is what led Rick to look at the reservation data itself rather than just the panels. **F110** — the "generic unavailable" surface and CSS this reuses. **F117**/**F108** § 4.4/§ 4.5 — the signed ledger and the customer-facing design this is a scoped-down, badge-only slice of. **F107** — the unrelated environmental flake hit during verification.
 
-Next free finding ID: **F121**.
+#### F121 — the Admin Dashboard has accumulated four time-scoping models and three counting units on one page, and no session ever re-asked what the page's model is
+
+- **Status:** filed 2026-08-07, raised by Rick after a day of Order Builder work: *"I am getting concerned about the Admin Dashboard losing its focus. Originally it was geared to the monthly catalog but now I see some other elements seeping in… Maybe we are ready to introduce a process mapping session."* **Open — no code fix proposed. Wants a process-mapping/workflow session, not a patch.** No plan doc yet.
+- **Severity:** **Medium.** Nothing computes a wrong answer — every surface is correctly scoped *for its own purpose*. The cost is comprehension: the operator cannot tell from the page which question any given number answers, and has now tried three times in one day to reconcile numbers that were never meant to agree (dashboard PRH tile vs Order Builder export count: 67v70, 66v67, 35v36). Each time the numbers were individually correct. A dashboard whose figures cannot be cross-checked by the person acting on them is a slower, more error-prone dashboard even when every figure is right.
+- **Measured 2026-08-07 — four distinct time-scoping models on `admin.html`:**
+  | Scope | Backing array | Surfaces |
+  |---|---|---|
+  | Current catalog month | `allPreorders` | stats bar, By Customer, All Reservations, Top Series |
+  | **All** catalog months | `gatherCollapsed` | Order Follow-Up panel, Withdrawn panel, Order Builder cycle list, `classifyForExport()` |
+  | A **selected** catalog month | `distributorRows()` | By Distributor, Print/Save Report, Mark Ordered — **added 2026-08-06**, newest layer |
+  | Mon–Sun calendar week | own query | This Week / bagging list |
+  Plus surfaces with **no** time scope: Subscriptions, Pending Accounts, Paper Orders.
+- **And three counting units, unlabelled until 2026-08-07:** **copies** (stats bar — sums `quantity`), **titles/distributor codes** (Order Builder, held-back panels, order sheets), **reservation rows** (By Customer groupings, and until this date the Order Builder summary itself — see F120's sibling fix). The tiles were relabelled to say "Copies" the same day, which stops them misdescribing themselves but does not make them reconcilable with the builder, and was never going to.
+- **Diagnosis — no single decision was wrong, which is the point.** Every scope was introduced by a finding-driven session that scoped correctly for *its* problem: **F111** widened the order panels cross-month because a distributor FOC cycle genuinely spans catalog months; **F115**/**F116** added arrival-evidence triage; the 2026-08-06 cycle selector exists so a closed cycle stays printable after the next import. None re-asked whether the page as a whole still had one model. That is how drift accrues in a codebase whose own process rule is "one sub-deploy per session, stop and ask before touching anything else" — the rule that prevents scope creep also prevents anyone stepping back.
+- **Working hypothesis for the session (not a conclusion):** the dashboard serves **three different cadences** at once — **monthly** (ordering: By Distributor, Order Builder, exports), **weekly** (bagging/arrivals: This Week), and **continuous** (pending accounts, subscriptions, paper orders). Different jobs, different rhythms, one screen. Whether the answer is separate pages, clearly-labelled scoped sections, or something else is exactly what the session should decide rather than assume.
+- **Evidence the exercise pays:** Rick's five-step walkthrough of his monthly process on 2026-08-06 took minutes and immediately exposed a real design flaw — confirm-on-export asks whether to record the order *before the supplier has said which titles were rejected* (see `docs/order-loop-closure-f108.md` § 8, "decoupling record from download"). A full pass over the weekly and monthly workflows would likely surface several more of that kind.
+- **Fix direction:** a process-mapping session — map the real weekly and monthly workflows, attribute every dashboard element to a workflow and cadence, settle one vocabulary for copies/titles/reservations, then decide the page structure. Deliberately **not** a UI patch; patching individual labels is what produced the current state.
+- **Where:** `admin.html` throughout — `allPreorders` / `gatherCollapsed` / `distributorRows()` / `renderThisWeek()`; the stats bar; every tab.
+- **Related:** **F111** (introduced the cross-month gather, correctly), **F115**/**F116** (arrival triage panels), **F120** (the rows-vs-titles confusion that made the unit drift visible), **F101**/**F102**/**F108** (the order-workflow findings whose sessions built most of these surfaces). **F103** and the "green is not the same as verified" note in `CLAUDE.md` — the adjacent lesson that a passing suite says nothing about whether a screen is coherent.
+
+Next free finding ID: **F122**.
 
 ---
 
