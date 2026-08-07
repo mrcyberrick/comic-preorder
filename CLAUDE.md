@@ -371,8 +371,18 @@ git push origin staging
 # Wait for the build, then CONFIRM the new bytes are actually served before
 # trusting any test result (~30-60s; note -L, without it the redirect yields
 # an empty body that looks like a stale build):
-#   curl.exe -s -L "https://staging.pulllist.pages.dev/style.css?cb=$(Get-Random)"
+#   curl.exe -s -L "https://staging.pulllist.pages.dev/style.css"
 # and match a marker string your change introduced.
+#
+# CHECK THE PLAIN URL, NOT A CACHE-BUSTED ONE (corrected 2026-08-07). This
+# line previously appended "?cb=$(Get-Random)". A query string is a DIFFERENT
+# Cloudflare cache key, so it can fetch the new build while the plain URL a
+# browser (and Playwright) actually requests is still serving the old one —
+# a green "new bytes served" check followed by a test failing against stale
+# bytes. That happened on 2026-08-06: a spec asserting a brand-new CSS class
+# failed with 0 elements, looked like a code defect, and was neither. Verify
+# what the browser will get. Cache-busting is for forcing a fresh read when
+# you WANT to bypass the edge, which is the opposite of this check's purpose.
 
 # THEN run the authoritative smoke pass — this one exercises your change:
 .\run-smoke.ps1
@@ -630,6 +640,23 @@ approval.
   the "N titles ready to export" summary — a cycle reading "1 title" beside
   a summary reading "0 ready" was correct but opaque. 81/81 Playwright
   green; client-only, no DB change.
+  **Order Builder readability follow-on, LIVE IN PRODUCTION 2026-08-07**
+  (PR #106 merge `93caca0`-successor, PR #107 merge `01cfb67`; 85/85
+  Playwright green, client-only): the Already Ordered panel is **scoped to
+  the selected FOC cycles** and **collapses exact matches** behind a count
+  (it was carding 350 titles on production PRH, ~345 with nothing to
+  decide); **one collapse rule now governs the whole modal** — expanded =
+  may need action this export, collapsed = accounted for; FOC-passed cycles
+  state the **consequence** ("ordering now backorders, availability not
+  guaranteed") and sit collapsed below the live ones while staying
+  selectable (F112(b)). **The consequential one:** the export summary
+  counted reservation ROWS while the file groups by distributor code, and
+  ignored approved already-ordered overrides — "70 titles ready to export"
+  against a file of 58 lines, measured on production. Both now share one
+  `buildExportRows()`. **That was the third rows-vs-titles slip in this one
+  modal** (cycle counts, held-back headers, summary), each caught by Rick's
+  arithmetic on the live screen rather than by the suite — a green suite
+  asserts behaviour, not coherence between numbers on a page.
   **DEFERRED to its own session — decoupling "record the order" from
   "download the file".** Rick's walkthrough exposed a timing flaw in
   confirm-on-export (§ 4.2, shipped the same day): the export produces a
