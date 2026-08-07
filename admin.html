@@ -889,13 +889,23 @@
   // months (F111) against the selected FOC cycle(s) and the order_submissions
   // ledger. Buckets mirror docs/order-export-foc-window-and-order-state.md
   // § 4.1's table. Precedence: ledger match (adhoc, then any-order) beats FOC
-  // classification — an already-ordered code is a human call regardless of
-  // which cycle its FOC falls in.
+  // classification — an already-ordered code is a human call, but only for
+  // the cycles actually being ordered against (see orderedOtherCycle).
   function classifyForExport(distributor, selectedFocDates) {
     const rows = gatherCollapsed.filter(p => p.catalog?.distributor === distributor && !p.fulfilled);
     const buckets = {
       included: [], noFoc: [], backordered: [], atRisk: [],
       outsideCycle: [], alreadyOrdered: [], adhocOrdered: [], withdrawn: [],
+      // Already ordered, but its FOC is NOT in the selected cycle(s) — so it
+      // is not part of this export and there is nothing to decide about it.
+      // Counted in the held-back panel, never carded (2026-08-07). Before
+      // this split the panel carded EVERY already-ordered code across every
+      // catalog month: 350 cards on production, ~345 of them with reserved
+      // == ordered and a suggested quantity of 0. F102's "surface, never
+      // auto-suppress" rule is about codes where you might need to order
+      // MORE; applying it to codes with nothing to decide buried the few
+      // that mattered.
+      orderedOtherCycle: [],
     };
 
     rows.forEach(p => {
@@ -922,6 +932,17 @@
       // loop" on it.
       const netQty = matches.reduce((s, m) => s + (m.quantity || 0), 0);
       if (netQty > 0) {
+        // Scoped to the cycles being ordered against. A no-FOC title counts
+        // as in-scope because those are included regardless of cycle
+        // selection (the null-FOC convention, F101). Out-of-scope ordered
+        // titles must NOT fall through to the FOC classification below —
+        // they would land in backordered/atRisk and read as "never ordered",
+        // which is the opposite of the truth.
+        const inSelectedCycle = !c.foc_date || selectedFocDates.has(c.foc_date);
+        if (!inSelectedCycle) {
+          buckets.orderedOtherCycle.push({ p, matches });
+          return;
+        }
         if (matches.some(m => m.order_type === 'adhoc')) {
           buckets.adhocOrdered.push({ p, matches });
         } else {
@@ -1839,44 +1860,77 @@
     // Grouped by export code (F111 § 4.4), not catalog.id: a re-listed
     // title can produce one row per catalog month per customer, all
     // resolving to the same code — one card, one override, not one per row.
+    //
+    // Split into two tiers (2026-08-07). F102's rule is about codes where you
+    // might need to order MORE — i.e. reserved > already-ordered. A code where
+    // the two match exactly has nothing to decide: its suggested quantity is 0
+    // and its checkbox is unticked, and carding it only buries the ones that
+    // do need a call. Production had 350 cards, ~345 of them exact matches.
+    // The fully-covered set is still rendered (same cards, same controls) —
+    // just inside a collapsed <details>, so nothing is hidden and the audit
+    // trail survives, which is what "never auto-suppress" actually requires.
     const alreadyGrouped = groupBucketByCode(buckets.alreadyOrdered);
+
+    const alreadyCard = ({ code, catalog: c, matches, rows }) => {
+      const totalQty  = rows.reduce((s, p) => s + (p.quantity || 1), 0);
+      const priorQty  = matches.reduce((s, m) => s + (m.quantity || 0), 0);
+      const suggested = Math.max(0, totalQty - priorQty);
+      const key       = code;
+      if (!builderOverrides[key]) builderOverrides[key] = { include: suggested > 0, qty: suggested };
+      const ov = builderOverrides[key];
+      const priorLines = matches
+        .map(m => `${m.quantity}× on ${formatDate(m.submitted_on)} (cycle ${formatDate(m.foc_date)}, ${m.order_type})`)
+        .join('; ');
+      const monthsInvolved = [...new Set(rows.map(p => p.catalog?.catalog_month).filter(Boolean))];
+      const over = priorQty > totalQty;
+      return `
+        <div style="border:1px solid ${over ? 'rgba(232,50,28,0.5)' : 'var(--border)'};border-radius:var(--radius);padding:10px 12px">
+          <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')}
+            <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.75rem"> ${escapeHtml(c.item_code || '')}</span>
+          </div>
+          <div style="font-size:0.75rem;color:var(--text-muted);margin:4px 0">Prior: ${priorLines}</div>
+          <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px">
+            Currently reserved: ${totalQty} · already on order: ${priorQty}
+            ${over ? ' · <span style="color:#ff8070;font-weight:600">over-ordered</span>' : ''}
+            ${monthsInvolved.length > 1 ? ` · reserved across ${monthsInvolved.join(', ')}` : ''}
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;flex-wrap:wrap">
+            <input type="checkbox" class="ob-already-include" data-code="${escapeHtml(key)}" ${ov.include ? 'checked' : ''}>
+            Include in this export, qty:
+            <input type="number" min="0" max="${totalQty}" class="ob-already-qty" data-code="${escapeHtml(key)}"
+                   value="${ov.qty}" ${ov.include ? '' : 'disabled'}
+                   style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
+                          color:var(--text-primary);border-radius:var(--radius);padding:4px 6px">
+          </label>
+        </div>`;
+    };
+
+    // Needs a call: short of what's reserved (top up), or over-ordered (F102's
+    // own failure shape). Exact matches are fully covered — nothing to decide.
+    const needsCall = [], fullyCovered = [];
+    alreadyGrouped.forEach(entry => {
+      const totalQty = entry.rows.reduce((s, p) => s + (p.quantity || 1), 0);
+      const priorQty = entry.matches.reduce((s, m) => s + (m.quantity || 0), 0);
+      (priorQty === totalQty ? fullyCovered : needsCall).push(entry);
+    });
+
     obAlready.innerHTML = alreadyGrouped.length ? `
-      <h3 style="font-size:0.85rem;font-weight:600;color:var(--warning);margin:0 0 8px;letter-spacing:0.03em">
-        ⚠ ALREADY ORDERED — ${alreadyGrouped.length} title${alreadyGrouped.length === 1 ? '' : 's'} (your call — not auto-suppressed)
-      </h3>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
-        ${alreadyGrouped.map(({ code, catalog: c, matches, rows }) => {
-          const totalQty  = rows.reduce((s, p) => s + (p.quantity || 1), 0);
-          const priorQty  = matches.reduce((s, m) => s + (m.quantity || 0), 0);
-          const suggested = Math.max(0, totalQty - priorQty);
-          const key       = code;
-          if (!builderOverrides[key]) builderOverrides[key] = { include: suggested > 0, qty: suggested };
-          const ov = builderOverrides[key];
-          const priorLines = matches
-            .map(m => `${m.quantity}× on ${formatDate(m.submitted_on)} (cycle ${formatDate(m.foc_date)}, ${m.order_type})`)
-            .join('; ');
-          const monthsInvolved = [...new Set(rows.map(p => p.catalog?.catalog_month).filter(Boolean))];
-          return `
-            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
-              <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')}
-                <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.75rem"> ${escapeHtml(c.item_code || '')}</span>
-              </div>
-              <div style="font-size:0.75rem;color:var(--text-muted);margin:4px 0">Prior: ${priorLines}</div>
-              <div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px">
-                Currently reserved: ${totalQty} · already on order: ${priorQty}
-                ${monthsInvolved.length > 1 ? ` · reserved across ${monthsInvolved.join(', ')}` : ''}
-              </div>
-              <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;flex-wrap:wrap">
-                <input type="checkbox" class="ob-already-include" data-code="${escapeHtml(key)}" ${ov.include ? 'checked' : ''}>
-                Include in this export, qty:
-                <input type="number" min="0" max="${totalQty}" class="ob-already-qty" data-code="${escapeHtml(key)}"
-                       value="${ov.qty}" ${ov.include ? '' : 'disabled'}
-                       style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
-                              color:var(--text-primary);border-radius:var(--radius);padding:4px 6px">
-              </label>
-            </div>`;
-        }).join('')}
-      </div>`
+      ${needsCall.length ? `
+        <h3 style="font-size:0.85rem;font-weight:600;color:var(--warning);margin:0 0 8px;letter-spacing:0.03em">
+          ⚠ ALREADY ORDERED — ${needsCall.length} need${needsCall.length === 1 ? 's' : ''} a call (not auto-suppressed)
+        </h3>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+          ${needsCall.map(alreadyCard).join('')}
+        </div>` : ''}
+      ${fullyCovered.length ? `
+        <details style="margin-bottom:16px">
+          <summary style="cursor:pointer;font-size:0.8rem;color:var(--text-muted);padding:6px 0">
+            ${fullyCovered.length} title${fullyCovered.length === 1 ? '' : 's'} already fully covered in ${fullyCovered.length === 1 ? 'this cycle' : 'these cycles'} — nothing to decide (show)
+          </summary>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+            ${fullyCovered.map(alreadyCard).join('')}
+          </div>
+        </details>` : ''}`
       : '';
 
     obAlready.querySelectorAll('.ob-already-include').forEach(cb => {
@@ -1931,8 +1985,9 @@
       ${section('Ad-hoc ordered — excluded automatically', 'var(--text-muted)', buckets.adhocOrdered)}
       ${collapseSection}
       ${buckets.noFoc.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${buckets.noFoc.length} title${buckets.noFoc.length===1?'':'s'} with no FOC date on file — included regardless of cycle selection.</div>` : ''}
+      ${buckets.orderedOtherCycle.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${groupByExportCode(buckets.orderedOtherCycle).length} title${groupByExportCode(buckets.orderedOtherCycle).length===1?'':'s'} already ordered on other FOC cycles — not part of this export. Tick that cycle above to review them.</div>` : ''}
       ${fulfilledCount ? `<div style="font-size:0.78rem;color:var(--text-muted)">${fulfilledCount} already fulfilled — excluded, not shown above.</div>` : ''}
-      ${nothingHeld && !fulfilledCount && !distributorCollapses.length ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
+      ${nothingHeld && !fulfilledCount && !distributorCollapses.length && !buckets.orderedOtherCycle.length ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
     `;
 
     obSummary.textContent = `${buckets.included.length} title${buckets.included.length === 1 ? '' : 's'} ready to export`;
