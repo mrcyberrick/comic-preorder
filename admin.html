@@ -1802,17 +1802,15 @@
           <a href="#" id="ob-select-none" style="color:var(--accent)">None</a>
         </span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;
-                  border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:16px">
-        ${dates.map(d => {
+      ${(() => {
+        // Cycle rows. The counts are broken out (2026-08-06) because ticking
+        // a cycle only exports what classifyForExport() has not already
+        // excluded — a cycle whose titles are all already-ordered or
+        // withdrawn contributes NOTHING, and saying so is what makes this
+        // list reconcile with the "N titles ready to export" summary.
+        const cycleRow = (d) => {
           const past    = d.foc < todayStr;
           const checked = builderSelectedDates.has(d.foc) ? 'checked' : '';
-          // Why the counts are broken out (2026-08-06): ticking a cycle only
-          // exports the titles that classifyForExport() has not already
-          // excluded, so a cycle whose titles are all already-ordered or
-          // withdrawn contributes NOTHING to the export. Saying so here is
-          // what makes the checkbox list and the "N titles ready to export"
-          // summary reconcile at a glance instead of by hand.
           const excl = [
             d.orderedCount   ? `${d.orderedCount} already ordered` : '',
             d.withdrawnCount ? `${d.withdrawnCount} withdrawn`     : '',
@@ -1825,10 +1823,37 @@
               ${formatDate(d.foc)} — ${d.titleCount} title${d.titleCount === 1 ? '' : 's'}, ${d.copies} cop${d.copies === 1 ? 'y' : 'ies'}
               ${excl ? `<span style="font-size:0.72rem;color:var(--text-muted)">· ${excl}</span>` : ''}
               ${excl && exportable === 0 ? '<span style="font-size:0.72rem;color:var(--text-muted)">· nothing to export</span>' : ''}
-              ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed</span>' : ''}
+              ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed — ordering now backorders, availability not guaranteed</span>' : ''}
             </label>`;
-        }).join('')}
-      </div>`
+        };
+
+        // Live cycles first and expanded; passed cycles collapsed below
+        // (Rick, 2026-08-07). Passed cycles stay SELECTABLE — ordering late
+        // is legitimate on both distributors (F112(b), Rick's own overrule)
+        // — but they are not the natural first choice, and on production
+        // they were opening the list: five passed cycles before anything
+        // actionable. The label now states the consequence, not just the
+        // date, because "FOC passed" is a fact and "this will backorder" is
+        // what you are actually deciding.
+        const live   = dates.filter(d => d.foc >= todayStr);
+        const passed = dates.filter(d => d.foc <  todayStr);
+        return `
+          <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;
+                      border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:${passed.length ? '8' : '16'}px">
+            ${live.length ? live.map(cycleRow).join('')
+                          : '<div style="font-size:0.78rem;color:var(--text-muted)">No cycles with a future FOC date.</div>'}
+          </div>
+          ${passed.length ? `
+            <details class="ob-passed-cycles" style="margin-bottom:16px">
+              <summary style="cursor:pointer;font-size:0.78rem;color:#ff8070;padding:4px 0">
+                ⚠ ${passed.length} cycle${passed.length === 1 ? '' : 's'} with FOC already passed — ordering these backorders (show)
+              </summary>
+              <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;
+                          border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-top:8px">
+                ${passed.map(cycleRow).join('')}
+              </div>
+            </details>` : ''}`;
+      })()}`
       : `<div class="empty-state" style="padding:16px 0"><p>No unfulfilled ${distributor} reservations with an FOC date this month.</p></div>`;
 
     obCycles.querySelectorAll('.ob-cycle-cb').forEach(cb => {
@@ -1945,32 +1970,55 @@
       });
     });
 
-    // Held-back panel — every bucket, nothing dropped silently (§ 4.1/§ 4.4)
-    const section = (label, color, entries) => entries.length ? `
-      <div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;color:${color};margin-bottom:4px">${label} (${entries.length})</div>
-        <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">
-          ${groupByExportCode(entries).map(({ catalog: c, qty }) =>
-            `<li>${escapeHtml(c.title || '')} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('')}
-        </ul>
-      </div>` : '';
+    // Held-back panel — every bucket, nothing dropped silently (§ 4.1/§ 4.4).
+    //
+    // ONE RULE, applied across the whole modal (Rick, 2026-08-07):
+    //   EXPANDED  = you may need to do something about it in THIS export
+    //   COLLAPSED = it is being accounted for, and there is nothing to decide
+    // "Nothing dropped silently" requires that everything be *reachable*, not
+    // that everything be *shouted*. Enumerating all of it always is what made
+    // the panel unreadable, and an unreadable panel is functionally the same
+    // as a silent one — which is the failure this whole design exists to
+    // avoid. Same rule already governs the Already Ordered panel above.
+    //
+    // The count is now DISTINCT TITLES, matching the list beneath it. It
+    // previously counted reservation ROWS, so a header could read 66 above a
+    // 55-item list (measured on production PRH) — the same reconcile-by-hand
+    // problem as the cycle counts.
+    const section = (label, color, entries, opts = {}) => {
+      if (!entries.length) return '';
+      const grouped = groupByExportCode(entries);
+      const items = grouped.map(({ catalog: c, qty }) =>
+        `<li>${escapeHtml(c.title || '')} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('');
+      const list = `<ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">${items}</ul>`;
+      const heading = `${label} (${grouped.length})`;
+      return opts.collapsed
+        ? `<details style="margin-bottom:12px">
+             <summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:${color};padding:2px 0">${heading} — show</summary>
+             <div style="margin-top:6px">${list}</div>
+           </details>`
+        : `<div style="margin-bottom:12px">
+             <div style="font-weight:600;font-size:0.8rem;color:${color};margin-bottom:4px">${heading}</div>
+             ${list}
+           </div>`;
+    };
 
     // Cross-month reservation collapses (F111 § 4.4 collapse #2) — surfaced
     // here, never silently picked. Only groups touching this distributor.
     const distributorCollapses = gatherCollapsedGroups.filter(g => g.survivor.catalog?.distributor === distributor);
     const collapseSection = distributorCollapses.length ? `
-      <div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">
-          Cross-month duplicate reservations collapsed (${distributorCollapses.length})
-        </div>
-        <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:var(--text-muted);padding:2px 0">
+          Cross-month duplicate reservations collapsed (${distributorCollapses.length}) — show
+        </summary>
+        <ul style="margin:6px 0 0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">
           ${distributorCollapses.map(g => {
             const c = g.survivor.catalog || {};
             const otherMonths = [...new Set(g.dropped.map(d => d.catalog?.catalog_month).filter(Boolean))].join(', ');
             return `<li>${escapeHtml(c.title || '')} — also reserved in ${escapeHtml(otherMonths)}; kept ${escapeHtml(c.catalog_month || '')} (qty ${g.survivor.quantity || 1})</li>`;
           }).join('')}
         </ul>
-      </div>` : '';
+      </details>` : '';
 
     const fulfilledCount = gatherCollapsed.filter(p => p.catalog?.distributor === distributor && p.fulfilled).length;
     const nothingHeld = !buckets.backordered.length && !buckets.atRisk.length && !buckets.outsideCycle.length
@@ -1978,11 +2026,15 @@
 
     obHeldback.innerHTML = `
       <h3 style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin:0 0 10px;letter-spacing:0.03em">HELD BACK</h3>
+      ${/* EXPANDED — each of these may need action in this run. */''}
       ${section('⛔ Withdrawn by the distributor — cannot be ordered', '#888', buckets.withdrawn)}
       ${section('🔴 Backordered — FOC passed, never ordered, still orderable', '#ff8070', buckets.backordered)}
       ${section('🟡 At risk — needs an ad-hoc order before FOC', 'var(--warning)', buckets.atRisk)}
-      ${section('Outside selected cycle', 'var(--text-muted)', buckets.outsideCycle)}
-      ${section('Ad-hoc ordered — excluded automatically', 'var(--text-muted)', buckets.adhocOrdered)}
+      ${/* COLLAPSED — correctly excluded, nothing to decide. "Outside
+           selected cycle" is the big one: on production Lunar it was 36
+           titles, all belonging to LATER ordering cycles. */''}
+      ${section('Outside selected cycle — belongs to a later ordering cycle', 'var(--text-muted)', buckets.outsideCycle, { collapsed: true })}
+      ${section('Ad-hoc ordered — excluded automatically', 'var(--text-muted)', buckets.adhocOrdered, { collapsed: true })}
       ${collapseSection}
       ${buckets.noFoc.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${buckets.noFoc.length} title${buckets.noFoc.length===1?'':'s'} with no FOC date on file — included regardless of cycle selection.</div>` : ''}
       ${buckets.orderedOtherCycle.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${groupByExportCode(buckets.orderedOtherCycle).length} title${groupByExportCode(buckets.orderedOtherCycle).length===1?'':'s'} already ordered on other FOC cycles — not part of this export. Tick that cycle above to review them.</div>` : ''}
