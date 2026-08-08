@@ -912,6 +912,28 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--text-muted);
 }
 .admin-mode.active .admin-mode-sub { color: var(--accent); }
+
+/* Attention dot — "there is something in here for you", nothing more.
+   Two levels only, because a third would need explaining:
+     red    = a customer is affected, or money is
+     yellow = routine work waiting
+   A dot is never shown speculatively: absent means "nothing to flag" ONLY
+   once that mode's data has loaded. See updateModeDots() for the guard that
+   keeps an unloaded mode from reading as clean. */
+.admin-mode { position: relative; }
+.mode-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+.mode-dot[hidden] { display: none; }
+.mode-dot.dot-warn { background: var(--warning); }
+.mode-dot.dot-alert { background: var(--accent); }
+.admin-mode.active .mode-dot { box-shadow: 0 0 0 2px var(--bg); }
 /* A mode with a single tab needs no tab strip — the mode name already said it. */
 .admin-tabs.single-tab { display: none; }
 

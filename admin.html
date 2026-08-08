@@ -150,6 +150,22 @@
        with arrivals, catalog, mylist and subscriptions.
        See docs/admin-dashboard-process-map.md § 5.5 W1 and § 5.7.1. -->
 
+
+  <!-- ── Mode switch (F121 session 4) ────────────────────────────────────
+       The dashboard serves three different rhythms — monthly ordering, weekly
+       bagging, and continuous account admin — and used to interleave all of
+       them in one tab strip. Rick's walkthrough mapped twenty workflow steps
+       across those three cadences (process map § 5.1–5.3); the tabs followed
+       none of them, which is F121.
+       Modes, not separate pages: keeping one admin.html means nothing is added
+       to the nav-sync set that CLAUDE.md already records as a drift source
+       (§ 5.7.2 P4). Each mode owns its tabs and, in time, its own fetch.  -->
+  <div class="admin-modes" role="tablist" aria-label="Dashboard mode">
+    <button class="admin-mode active" data-mode="customers" role="tab" aria-selected="true">Customers<span class="admin-mode-sub">ongoing</span><span class="mode-dot" data-dot="customers" hidden></span></button>
+    <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span><span class="mode-dot" data-dot="bagging" hidden></span></button>
+    <button class="admin-mode"        data-mode="ordering"  role="tab" aria-selected="false">Ordering<span class="admin-mode-sub">monthly</span><span class="mode-dot" data-dot="ordering" hidden></span></button>
+  </div>
+
   <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
   <div id="backorder-risk-panel" data-chrome="ordering" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
@@ -170,33 +186,19 @@
     <button class="btn btn-secondary btn-sm" id="btn-export-prh">↓ PRH Order Sheet</button>
   </div>
 
-  <!-- ── Mode switch (F121 session 4) ────────────────────────────────────
-       The dashboard serves three different rhythms — monthly ordering, weekly
-       bagging, and continuous account admin — and used to interleave all of
-       them in one tab strip. Rick's walkthrough mapped twenty workflow steps
-       across those three cadences (process map § 5.1–5.3); the tabs followed
-       none of them, which is F121.
-       Modes, not separate pages: keeping one admin.html means nothing is added
-       to the nav-sync set that CLAUDE.md already records as a drift source
-       (§ 5.7.2 P4). Each mode owns its tabs and, in time, its own fetch.  -->
-  <div class="admin-modes" role="tablist" aria-label="Dashboard mode">
-    <button class="admin-mode active" data-mode="ordering"  role="tab" aria-selected="true">Ordering<span class="admin-mode-sub">monthly</span></button>
-    <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span></button>
-    <button class="admin-mode"        data-mode="customers" role="tab" aria-selected="false">Customers<span class="admin-mode-sub">ongoing</span></button>
-  </div>
 
   <!-- Tabs — filtered to the active mode by applyMode() -->
   <div class="admin-tabs">
-    <button class="admin-tab active" data-tab="by-distributor" data-mode="ordering">By Distributor</button>
-    <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
-    <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
-    <button class="admin-tab" data-tab="by-customer" data-mode="customers">By Customer</button>
+    <button class="admin-tab active" data-tab="by-customer" data-mode="customers">By Customer</button>
     <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions</button>
     <button class="admin-tab" data-tab="pending" data-mode="customers" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
+    <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
+    <button class="admin-tab" data-tab="by-distributor" data-mode="ordering">By Distributor</button>
+    <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
   </div>
 
   <!-- Tab: By Customer -->
-  <div class="admin-section" id="tab-by-customer">
+  <div class="admin-section active" id="tab-by-customer">
     <!-- Search moved here from the retired "All Reservations" tab (F121
          session 2). That tab was a flat list of every reservation, rated
          below this one and By Distributor for reviewing orders — but it held
@@ -220,7 +222,7 @@
   </div>
 
   <!-- Tab: By Distributor -->
-  <div class="admin-section active" id="tab-by-distributor">
+  <div class="admin-section" id="tab-by-distributor">
     <!-- Cycle (catalog month) selector — lets a closed cycle be reviewed and
          printed after the next catalog import has moved the dashboard on.
          Every month is already in browser memory (allPreordersAllMonths), so
@@ -1205,15 +1207,66 @@
   // Bagging; remembering it means that visit genuinely skips the 2,000-row
   // preorders read and the weekly_shipment table.
   const MODE_KEY = 'pulllist.admin.mode';
-  const VALID_MODES = ['ordering', 'bagging', 'customers'];
-  let currentMode = 'ordering';
+  const VALID_MODES = ['customers', 'bagging', 'ordering'];
+  const DEFAULT_MODE = 'customers';   // Rick 2026-08-08 — the continuous work is what he opens the page for
+  let currentMode = DEFAULT_MODE;
 
   function rememberedMode() {
     try {
       const m = localStorage.getItem(MODE_KEY);
-      return VALID_MODES.includes(m) ? m : 'ordering';
-    } catch { return 'ordering'; }   // private mode / storage disabled
+      return VALID_MODES.includes(m) ? m : DEFAULT_MODE;
+    } catch { return DEFAULT_MODE; }   // private mode / storage disabled
   }
+
+  let pendingCount        = null;   // null = not loaded yet, deliberately not 0
+  let baggingUnavailable  = null;
+
+  // ── Attention dots ─────────────────────────────────────────
+  // One dot per mode: "there is something in here for you". Two levels only —
+  //   alert (red)  a customer is affected, or money is
+  //   warn (amber) routine work waiting
+  //
+  // The guard that matters: a dot is only meaningful once that mode's data has
+  // loaded. An absent dot on an unloaded mode would read as "nothing to flag",
+  // which is the same silent-false-negative shape as F96 and F115. So a mode
+  // whose data has not loaded is left UNKNOWN (no dot, and no claim), and the
+  // dots are recomputed the moment the data arrives.
+  function setModeDot(mode, level) {
+    const el = document.querySelector(`.mode-dot[data-dot="${mode}"]`);
+    if (!el) return;
+    el.classList.remove('dot-warn', 'dot-alert');
+    if (!level) { el.hidden = true; el.removeAttribute('title'); return; }
+    el.classList.add(level === 'alert' ? 'dot-alert' : 'dot-warn');
+    el.hidden = false;
+  }
+
+  function updateModeDots() {
+    // Customers — pending accounts are routine but time-sensitive.
+    if (typeof pendingCount === 'number') {
+      setModeDot('customers', pendingCount > 0 ? 'warn' : null);
+    }
+
+    // Ordering — needs the cross-month gather, so only meaningful after a full
+    // load. Backordered / never-arrived means a customer is already affected;
+    // At Risk is still preventable.
+    if (fullDataLoaded) {
+      const risk = computeBackorderRisk();
+      const withdrawn = computeWithdrawnTitles();
+      if (risk.neverArrived.length || risk.backordered.length || withdrawn.length) {
+        setModeDot('ordering', 'alert');
+      } else {
+        setModeDot('ordering', risk.atRisk.length ? 'warn' : null);
+      }
+    }
+
+    // Bagging — set by renderThisWeek() once the week is known; anything in
+    // this week's box that will not physically arrive is a customer-facing
+    // problem, so it is an alert rather than a warning.
+    if (typeof baggingUnavailable === 'number') {
+      setModeDot('bagging', baggingUnavailable > 0 ? 'alert' : null);
+    }
+  }
+
 
   async function applyMode(mode, { initial = false } = {}) {
     currentMode = mode;
@@ -1263,6 +1316,7 @@
     // share today's full load, and sessions 5–6 split those.
     if (mode === 'bagging') await ensureBaggingData();
     else await ensureFullData();
+    updateModeDots();
 
     // Activate this mode's first tab unless one of its own is already active.
     // On the initial pass the click listeners are not registered yet (they are
@@ -2833,6 +2887,11 @@
       };
     });
 
+    // Anything in this week's box that will not physically arrive is a
+    // customer-facing problem, so it drives an ALERT dot, not a warning.
+    baggingUnavailable = arriving.filter(p => p.isUnavailable).length;
+    updateModeDots();
+
     if (!arriving.length) {
       headerEl.innerHTML = `
         <div style="color:var(--text-muted);font-size:0.85rem">
@@ -3087,6 +3146,8 @@
     } else {
       badge.style.display = 'none';
     }
+    pendingCount = items.length;   // drives the Customers attention dot
+    updateModeDots();
 
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load pending accounts: ${escapeHtml(error.message)}</div>`;
