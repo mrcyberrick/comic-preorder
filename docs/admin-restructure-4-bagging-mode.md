@@ -265,3 +265,53 @@ session that moves the UI, not in the cleanup after.
 short `tail`, is not evidence. Capture the tool's own exit code and grep the
 summary line explicitly — `PLAYWRIGHT_EXIT=1` would have ended this in one
 step.
+
+---
+
+## 8. Follow-on 2026-08-08 — Order Follow-Up placement, and a display collision
+
+Reported by Rick from staging: the Order Follow-Up panel *"sometimes shows on
+all the pages and other times only one."* Commit `169949c`. **Suite after:
+99 passed / 99 declared, 12.5 min.**
+
+### 8.1 Cause — two owners of one property
+
+`applyMode()` hid the panel by writing `style.display`. So does
+`renderBackorderRiskPanel()`, to hide itself when empty. On a **fresh load**:
+
+    applyMode() hides it → await ensureFullData() → loadData()
+      → renderBackorderRiskPanel() sets display back → visible in the wrong mode
+
+After one manual mode switch nothing re-renders, so it behaved — which is
+exactly why it read as flaky. It also reappeared whenever `loadData()` re-ran,
+i.e. after a paper-order submit or an invite.
+
+**Fixed by making the mechanisms independent, not by reordering them.**
+Mode-gating is now a class (`.chrome-off`, `display:none !important`); the
+renders keep owning inline display for emptiness. Reordering would have left
+the identical collision waiting for the next caller of `loadData()`.
+
+### 8.2 Placement — Rick's reasoning beat the original
+
+Both alert panels moved **Ordering → Customers**. His argument: the panel can
+trigger an **ad-hoc** order, and ad-hoc means *outside the monthly cycle*, so it
+belongs on the continuous surface. It also matches § 5.3 of the process map,
+which lists watching for expiring FOC dates under **continuous** activity — the
+walkthrough had already said this and the session-4 design had not followed it.
+
+The dot followed the panel, or it would point at a mode that no longer holds
+the detail. **One dot, on Customers**: red for never-arrived or
+withdrawn-with-reservations (a customer is already affected), amber for pending
+accounts or At Risk inside `FOC_DOT_DAYS`. Ordering carries none — a deliberate
+monthly visit, nothing in it goes stale while you are away.
+
+### 8.3 Why the suite missed it
+
+**Every existing mode test switched modes before asserting** — which is the path
+that worked. The bug only existed on first paint. The new test does a *fresh
+load* into Bagging and Ordering and asserts neither panel paints.
+
+Third time this session a real defect lived in the gap between what the test
+does and what the operator does. A green suite says the assertions hold, not
+that the screen is right — and Rick found this one in seconds by opening the
+page.
