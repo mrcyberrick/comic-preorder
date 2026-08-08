@@ -135,12 +135,13 @@ Fixtures torn down and **verified by live SELECT returning zero rows.**
 
 ## 6. Completion criteria
 
-- [ ] § 4 changes applied, every range re-verified against disk first
-- [ ] V1–V7 green
-- [ ] Ledger fixtures removed, confirmed by live SELECT (0 rows)
-- [ ] Real-browser check by Rick on staging
-- [ ] `order-loop-closure-f108.md` § 8 updated: deferred block → Complete
-- [ ] F121 process map W2/W3 marked resolved; `CLAUDE.md` line updated
+- [x] § 4 changes applied, every range re-verified against disk first
+- [x] V1–V7 green (§ 9)
+- [x] Ledger fixtures removed, **confirmed by live SELECT returning 0** for
+      `order_submissions`, `catalog` and `user_profiles` test rows
+- [ ] **Real-browser check by Rick on staging — owed, and it is his**
+- [x] `order-loop-closure-f108.md` § 8 updated: deferred block → Complete
+- [x] F121 process map W2/W3 marked resolved; `CLAUDE.md` line updated
 
 ---
 
@@ -166,4 +167,48 @@ Ledger rows written during testing are ordinary rows, deletable by
 
 ## 9. Deploy log
 
-*(empty — not started)*
+**Executed 2026-08-08. Staging only — `ff13d0f`. Production untouched.**
+Branch `feature/order-builder-record-split` → `staging` ff-only.
+**215 insertions, 53 deletions**, `admin.html` only.
+
+### 9.1 Gates
+
+| Gate | Evidence |
+|---|---|
+| **V1** | Download fires, **no dialog** (asserted explicitly — a dialog appearing at all is the regression), modal stays open, status button still reads `Mark Ordered` ⇒ ledger untouched |
+| **V2** | Record all-ticked ⇒ button reads `Ordered (3)` |
+| **V3** | Untick one of two ⇒ that code reads `Rejected`, the other `Ordered`; summary read `1 rejected` |
+| **V4** | **THE gate.** Reopened on the same cycle after recording: the code appears in `#order-builder-already-ordered` with its `.ob-already-include` control — the "your call" bucket, **not** auto-excluded |
+| **V5** | Rejected code reappears in the next export set (asserted on the record list, § 9.3) |
+| **V6** | Mark Ordered untouched — `git diff` over the whole commit shows no change to `orderType`, `mo-type`, `markOrderedCatalog` or the modal |
+| **V7** | **89 passed, exit 0** (86 after session 1, +2 pending spec, +1 net from this rewrite) |
+
+Fixtures verified gone by live SELECT: `order_submissions`, `catalog`, and
+`user_profiles` test rows all **0**.
+
+### 9.2 Spec 15 rewrite
+
+The `confirm-on-export (F108 § 4.2, V-B1)` block asserted the prompt this
+session removes — V-B1a *"confirming writes one row per exported code"* and
+V-B1b *"declining leaves the ledger untouched"*. Both were replaced by the
+V1/V2+V4/V3 tests above under
+`Order Builder — download and record are separate (F108 § 8)`.
+
+### 9.3 One drafting error worth keeping
+
+V3's first draft asserted the rejected title reappears in **`#ob-step-select`**.
+It does not, and that is correct behaviour: the select step lists **cycles**,
+**already-ordered cards** and **held-back** titles — it deliberately never names
+the titles it is *including*, which appear only in the summary count. The
+evidence lives in the **record list**, which is built by `buildExportRows()` and
+therefore *is* the export set. Test bug, not a code bug; re-pointed and green.
+
+Same lesson as session 1's two false failures: **on this codebase, a red test is
+about as likely to be the test's fault as the code's.** Read the diff before
+believing it.
+
+### 9.4 Still open
+
+- **Real-browser check on staging** — Rick's, and the last criterion.
+- **`catalog_month`** — § 7, unchanged and undecided.
+- **Not promoted to production.**

@@ -370,7 +370,9 @@ Both are asserted together in one spec deliberately, so a future "just disable e
 
 ### Deferred to its own session — decoupling "record the order" from "download the file"
 
-**Not started. Rick's decision 2026-08-06, after the walkthrough above exposed the timing flaw in confirm-on-export (§ 4.2, shipped earlier the same day).**
+**COMPLETE ON STAGING 2026-08-08 — `ff13d0f`. Runbook, gates and deploy log: `docs/order-builder-record-split.md`.** Both halves shipped: the action is split into **Generate & Download** (no prompt) and **Record submitted order** (the export set with per-title checkboxes, ticked = ordered / unticked = rejected → F117 zero row), and the Order Builder now writes **`order_type: 'monthly'`** instead of `'adhoc'`. `classifyForExport()` is deliberately unchanged — its routing was already correct, only the written value was wrong. V1–V7 green, **89/89 suite**, fixtures verified gone by live SELECT. **Real-browser check by Rick and production promotion both still owed.** One thing deliberately NOT decided: `catalog_month` on Order Builder writes still uses `currentCatalogMonth` while Mark Ordered files under the title's own month — see that plan's § 7, it is a modelling choice for Rick.
+
+**Original design note (Rick's decision 2026-08-06, after the walkthrough above exposed the timing flaw in confirm-on-export, § 4.2, shipped earlier the same day):**
 
 Confirm-on-export asks the question *before the answer is knowable*: the export produces a **file**; the order is placed on the supplier's site, and which titles were rejected only comes back after that. In Rick's words — it forces browser-swapping mid-flow, and the titles are "locked as Ordered after the fact," so a rejection then needs a negative adjustment rather than the intended zero row. **This is F101 § 4.2's original principle reasserting itself** ("generating a file is not proof of submission"), which § 3.4 reversed for the ad-hoc case. The reversal holds for ad-hoc — one or two titles, outcome known immediately — and does not survive the monthly cycle.
 
