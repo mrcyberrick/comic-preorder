@@ -110,12 +110,12 @@
       <p>All customer pre-orders for the current order cycle</p>
     </div>
     <div id="admin-controls" style="display:flex;align-items:center;gap:16px;padding-top:8px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" id="btn-invite-customer"
+      <button class="btn btn-primary btn-sm" id="btn-invite-customer" data-chrome="customers"
         style="display:flex;align-items:center;gap:6px;font-size:0.82rem">
         <span style="font-size:1rem;line-height:1">+</span> Invite Customer
       </button>
       <!-- Order Deadline -->
-      <div class="deadline-group" style="display:flex;align-items:center;gap:8px">
+      <div class="deadline-group" data-chrome="ordering" style="display:flex;align-items:center;gap:8px">
         <label for="deadline-input" style="font-size:0.82rem;color:var(--text-muted);font-weight:500;white-space:nowrap">Order Deadline</label>
         <input type="date" id="deadline-input"
           style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);
@@ -125,7 +125,7 @@
         <button class="btn btn-secondary btn-sm" id="btn-save-deadline">Save</button>
         <button class="btn btn-ghost btn-sm" id="btn-clear-deadline" title="Clear deadline — hides banner for customers" style="color:var(--text-muted)">✕</button>
       </div>
-      <div class="maint-group" style="display:flex;align-items:center;gap:8px">
+      <div class="maint-group" data-chrome="ordering" style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500" id="maint-label">Maintenance Mode</span>
         <label class="toggle-switch" title="Lock site for catalog update">
           <input type="checkbox" id="maint-toggle">
@@ -151,13 +151,13 @@
        See docs/admin-dashboard-process-map.md § 5.5 W1 and § 5.7.1. -->
 
   <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
-  <div id="backorder-risk-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
+  <div id="backorder-risk-panel" data-chrome="ordering" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Withdrawn Panel (F110 § 4.5) — sibling to Backorder Risk, hidden when
        empty, visually distinct (grey, not red/amber) since Backordered and
        Withdrawn look similar but mean opposite things (§ 2.1). -->
-  <div id="withdrawn-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
+  <div id="withdrawn-panel" data-chrome="ordering" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid #666;border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Export Bar -->
@@ -165,23 +165,38 @@
        job in any of the twenty mapped workflow steps. The two order-sheet
        buttons below stay: they open the Order Builder and carry the monthly
        order. -->
-  <div class="export-bar">
+  <div class="export-bar" data-chrome="ordering">
     <button class="btn btn-secondary btn-sm" id="btn-export-lunar">↓ Lunar Order Sheet</button>
     <button class="btn btn-secondary btn-sm" id="btn-export-prh">↓ PRH Order Sheet</button>
   </div>
 
-  <!-- Tabs -->
+  <!-- ── Mode switch (F121 session 4) ────────────────────────────────────
+       The dashboard serves three different rhythms — monthly ordering, weekly
+       bagging, and continuous account admin — and used to interleave all of
+       them in one tab strip. Rick's walkthrough mapped twenty workflow steps
+       across those three cadences (process map § 5.1–5.3); the tabs followed
+       none of them, which is F121.
+       Modes, not separate pages: keeping one admin.html means nothing is added
+       to the nav-sync set that CLAUDE.md already records as a drift source
+       (§ 5.7.2 P4). Each mode owns its tabs and, in time, its own fetch.  -->
+  <div class="admin-modes" role="tablist" aria-label="Dashboard mode">
+    <button class="admin-mode active" data-mode="ordering"  role="tab" aria-selected="true">Ordering<span class="admin-mode-sub">monthly</span></button>
+    <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span></button>
+    <button class="admin-mode"        data-mode="customers" role="tab" aria-selected="false">Customers<span class="admin-mode-sub">ongoing</span></button>
+  </div>
+
+  <!-- Tabs — filtered to the active mode by applyMode() -->
   <div class="admin-tabs">
-    <button class="admin-tab active" data-tab="by-customer">By Customer</button>
-    <button class="admin-tab" data-tab="by-distributor">By Distributor</button>
-    <button class="admin-tab" data-tab="this-week">This Week</button>
-    <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
-    <button class="admin-tab" data-tab="pending" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
-    <button class="admin-tab" data-tab="paper-orders">Paper Orders</button>
+    <button class="admin-tab active" data-tab="by-distributor" data-mode="ordering">By Distributor</button>
+    <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
+    <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
+    <button class="admin-tab" data-tab="by-customer" data-mode="customers">By Customer</button>
+    <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions</button>
+    <button class="admin-tab" data-tab="pending" data-mode="customers" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
   </div>
 
   <!-- Tab: By Customer -->
-  <div class="admin-section active" id="tab-by-customer">
+  <div class="admin-section" id="tab-by-customer">
     <!-- Search moved here from the retired "All Reservations" tab (F121
          session 2). That tab was a flat list of every reservation, rated
          below this one and By Distributor for reviewing orders — but it held
@@ -205,7 +220,7 @@
   </div>
 
   <!-- Tab: By Distributor -->
-  <div class="admin-section" id="tab-by-distributor">
+  <div class="admin-section active" id="tab-by-distributor">
     <!-- Cycle (catalog month) selector — lets a closed cycle be reviewed and
          printed after the next catalog import has moved the dashboard on.
          Every month is already in browser memory (allPreordersAllMonths), so
@@ -1145,7 +1160,147 @@
     }
   }
 
-  await loadData();
+  // ── Mode-aware loading (F121 session 4) ────────────────────
+  // Bagging is a WEEKLY job and needs almost none of what the monthly views
+  // need. renderThisWeek() reads only its own week-scoped query, profileMap,
+  // and orderLedger (via ledgerRejected) — verified against live code. It
+  // never touches allPreorders, allPreordersAllMonths, gatherCollapsed or the
+  // shipment-evidence sets.
+  //
+  // So Bagging skips fetchAllPreorders() — a paged read of every reservation
+  // ever made, carrying a 24-column catalog embed INCLUDING cover_url — and
+  // the whole weekly_shipment table. On production that is ~2,000 rows and
+  // ~11,700 catalog rows' worth of embed the weekly job never looks at.
+  // This is the load-cost win Option B was chosen for (process map § 4).
+  let fullDataLoaded    = false;
+  let baggingDataLoaded = false;
+
+  async function ensureFullData() {
+    if (fullDataLoaded) return;
+    fullDataLoaded    = true;
+    baggingDataLoaded = true;   // the full load is a superset
+    await loadData();
+  }
+
+  // Just enough for renderThisWeek(): customer names + the signed order ledger.
+  async function ensureBaggingData() {
+    if (baggingDataLoaded || fullDataLoaded) return;
+    baggingDataLoaded = true;
+    const [profilesRes] = await Promise.all([
+      db.from('user_profiles').select('id, full_name'),
+      loadOrderLedger(),
+    ]);
+    profileMap = {};
+    (profilesRes.data || []).forEach(u => profileMap[u.id] = u.full_name);
+  }
+
+  // ── Mode switch ────────────────────────────────────────────
+  // A mode is the job; a tab is a view within it. Switching modes hides the
+  // other modes' tabs AND their sections, then activates that mode's first
+  // tab — so a mode never opens showing a section belonging to another job.
+  // The mode is REMEMBERED, and that is what makes the light load real rather
+  // than theoretical. If every visit started in Ordering, the full fetch would
+  // always have run before Bagging could be reached and Bagging's cheap path
+  // would never execute. Rick's Friday routine is open-the-dashboard →
+  // Bagging; remembering it means that visit genuinely skips the 2,000-row
+  // preorders read and the weekly_shipment table.
+  const MODE_KEY = 'pulllist.admin.mode';
+  const VALID_MODES = ['ordering', 'bagging', 'customers'];
+  let currentMode = 'ordering';
+
+  function rememberedMode() {
+    try {
+      const m = localStorage.getItem(MODE_KEY);
+      return VALID_MODES.includes(m) ? m : 'ordering';
+    } catch { return 'ordering'; }   // private mode / storage disabled
+  }
+
+  async function applyMode(mode, { initial = false } = {}) {
+    currentMode = mode;
+    try { localStorage.setItem(MODE_KEY, mode); } catch { /* non-fatal */ }
+
+    document.querySelectorAll('.admin-mode').forEach(b => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+
+    const tabs = [...document.querySelectorAll('.admin-tab')];
+    tabs.forEach(t => { t.style.display = t.dataset.mode === mode ? '' : 'none'; });
+    const mine = tabs.filter(t => t.dataset.mode === mode);
+
+    // Page chrome follows its mode too. This is not cosmetic: Bagging does not
+    // load `gatherCollapsed`, so leaving the Order Builder buttons visible
+    // there would open a modal reporting NOTHING to export — silently wrong,
+    // which is worse than an error. Same for the Order Deadline field, which
+    // would render blank because loadData() never populated it. A control must
+    // not outlive the data behind it.
+    // The two alert panels manage their own display:none when empty, so they
+    // are only ever force-hidden here, never force-shown.
+    document.querySelectorAll('[data-chrome]').forEach(el => {
+      const belongs = el.dataset.chrome === mode;
+      if (!belongs) {
+        // Remember the EXACT prior value rather than assuming ''. The two
+        // alert panels carry inline display:none while empty and are shown by
+        // their own render functions; restoring them to '' would reveal an
+        // empty box on every return to Ordering.
+        if (el.dataset.chromeHidden !== '1') {
+          el.dataset.prevDisplay  = el.style.display || '';
+          el.dataset.chromeHidden = '1';
+          el.style.display = 'none';
+        }
+      } else if (el.dataset.chromeHidden === '1') {
+        el.style.display = el.dataset.prevDisplay || '';
+        delete el.dataset.chromeHidden;
+        delete el.dataset.prevDisplay;
+      }
+    });
+
+    // A single-tab mode needs no tab strip — the mode name already said it.
+    document.querySelector('.admin-tabs')?.classList.toggle('single-tab', mine.length <= 1);
+
+    // Only load what this mode needs. Bagging stays light; the other two
+    // share today's full load, and sessions 5–6 split those.
+    if (mode === 'bagging') await ensureBaggingData();
+    else await ensureFullData();
+
+    // Activate this mode's first tab unless one of its own is already active.
+    // On the initial pass the click listeners are not registered yet (they are
+    // wired further down, after this await), so go through activateTab()
+    // directly — and fire the tab's own lazy loader by hand, since a synthetic
+    // .click() would be a no-op at this point.
+    const active = tabs.find(t => t.classList.contains('active'));
+    if (initial) {
+      const target = (active && active.dataset.mode === mode) ? active : mine[0];
+      if (target) { activateTab(target); initialTabLoad(target.dataset.tab); }
+    } else if (!active || active.dataset.mode !== mode) {
+      mine[0]?.click();
+    }
+  }
+
+  // The per-tab lazy loaders are attached to click events further down. On a
+  // remembered-mode landing there is no click, so the first tab's data would
+  // never load. Only the tabs that are lazily populated need this; By
+  // Distributor and Paper Orders' pending list are rendered by loadData().
+  function initialTabLoad(tabName) {
+    if (tabName === 'this-week')     renderThisWeek();
+    if (tabName === 'by-customer')   renderByCustomer();
+    if (tabName === 'subscriptions') loadSubscriptions();
+    if (tabName === 'paper-orders')  initPaperOrdersTab();
+  }
+
+  function activateTab(tab) {
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`tab-${tab.dataset.tab}`)?.classList.add('active');
+  }
+
+  document.querySelectorAll('.admin-mode').forEach(btn => {
+    btn.addEventListener('click', () => applyMode(btn.dataset.mode));
+  });
+
+  await applyMode(rememberedMode(), { initial: true });
 
   // ── Order follow-up panel (F101 § 2.4/§ 4.5) ───────────────
   // Persistent, tab-independent. Three states, because "FOC passed without a
@@ -1657,13 +1812,11 @@
   }
 
   // ── Tabs ──────────────────────────────────────────────────
+  // Show/hide lives in activateTab() so the mode switch and a direct tab
+  // click cannot drift apart — applyMode() calls .click() on a mode's first
+  // tab and must land in exactly the same state as clicking it by hand.
   document.querySelectorAll('.admin-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
-    });
+    tab.addEventListener('click', () => activateTab(tab));
   });
 
   // ── Search (By Customer tab) ──────────────────────────────
