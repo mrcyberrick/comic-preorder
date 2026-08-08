@@ -1271,22 +1271,32 @@
     // .click() would be a no-op at this point.
     const active = tabs.find(t => t.classList.contains('active'));
     if (initial) {
+      // Selection only. The tab's DATA load is deferred to runInitialTabLoad()
+      // at the very end of this script — see that function for why.
       const target = (active && active.dataset.mode === mode) ? active : mine[0];
-      if (target) { activateTab(target); initialTabLoad(target.dataset.tab); }
+      if (target) activateTab(target);
     } else if (!active || active.dataset.mode !== mode) {
       mine[0]?.click();
     }
   }
 
-  // The per-tab lazy loaders are attached to click events further down. On a
-  // remembered-mode landing there is no click, so the first tab's data would
-  // never load. Only the tabs that are lazily populated need this; By
-  // Distributor and Paper Orders' pending list are rendered by loadData().
-  function initialTabLoad(tabName) {
-    if (tabName === 'this-week')     renderThisWeek();
-    if (tabName === 'by-customer')   renderByCustomer();
-    if (tabName === 'subscriptions') loadSubscriptions();
-    if (tabName === 'paper-orders')  initPaperOrdersTab();
+  // The per-tab lazy loaders fire on click. A remembered-mode landing has no
+  // click, so the first tab's data would never load — and calling them from
+  // applyMode() during init does not work either: they read `let` bindings
+  // declared much further down (renderThisWeek → weekAnchorMonday ~L2762,
+  // initPaperOrdersTab → paperCusts ~L3220), which are still in the temporal
+  // dead zone at that point. The call throws a ReferenceError inside an async
+  // function whose rejection nobody awaits, so it fails SILENTLY and the tab
+  // just renders empty.
+  //
+  // Hence: selection during applyMode(), data load only once the whole script
+  // body has been evaluated.
+  function runInitialTabLoad() {
+    const tab = document.querySelector('.admin-tab.active')?.dataset.tab;
+    if (tab === 'this-week')     renderThisWeek();
+    if (tab === 'subscriptions') loadSubscriptions();
+    if (tab === 'paper-orders')  initPaperOrdersTab();
+    // by-customer and by-distributor are rendered by loadData() already.
   }
 
   function activateTab(tab) {
@@ -4272,6 +4282,10 @@
     }
   });
 
+  // MUST stay last. The active tab was chosen during applyMode() near the top
+  // of init, but its data cannot load until every `let` in this script body has
+  // been initialised — see runInitialTabLoad()'s own comment.
+  runInitialTabLoad();
 
 })();
 </script>
