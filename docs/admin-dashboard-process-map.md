@@ -495,16 +495,33 @@ files, adding nothing to the sync set, and allowing one surface to ship at a tim
 A genuine page split can follow later if it earns itself; the reverse is far
 harder.
 
-### 5.7.3 Recommended sequencing
+### 5.7.3 Both remaining questions answered — 2026-08-07
 
-1. **W2/W3 first** — dated, real money, independent of B. Home:
-   `docs/order-loop-closure-f108.md` § 8.
-2. **The removals** (stats bar, Export All, Top Series → analytics) — cheap,
-   independent, immediately felt, and they shrink what B has to relocate.
-3. **B, one surface per sub-deploy, in this order:** **Bagging** (smallest, most
-   self-contained — proves the mode pattern at low risk) → **Customers** →
-   **Ordering** last, since it is the largest and the W2/W3 fixes should settle
-   first.
+Rick accepted both § 5.7.2 recommendations as put:
+
+- **P3** — **rehome the search, retire the list.** All Reservations' flat table
+  goes; a search lands on Customers that finds a reservation and jumps to its
+  customer.
+- **P4** — **one `admin.html`, three top-level modes.** Not three files. B in
+  behaviour (one job on screen, per-mode lazy fetch), with nothing added to the
+  nav-sync set and one surface shippable at a time.
+
+### 5.7.4 Session index
+
+| # | Session | Scope | Plan | Status |
+|---|---|---|---|---|
+| — | **W2/W3 Order Builder fixes** | `order_type`/`catalog_month` hardcode, confirm-on-export timing, rejection route | `docs/order-loop-closure-f108.md` § 8 | **Not started — dated, do first** |
+| **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the two specs asserting them | `docs/admin-restructure-1-removals.md` | **Planned 2026-08-07** |
+| 2 | Search rehome + All Reservations retire | Build search on By Customer, then delete the tab | not written | Not started |
+| 3 | Top Series → `analytics.html` | A move, not a deletion — needs re-skinning into analytics' card system | not written | Not started |
+| 4 | **Bagging** mode | Smallest, most self-contained — proves the mode pattern at low risk | not written | Not started |
+| 5 | **Customers** mode | Pending · By Customer (+ search from session 2) · Invite · paper customers + Manage · Subscriptions | not written | Not started |
+| 6 | **Ordering** mode | Largest and most consequential; goes last so the W2/W3 fixes settle first | not written | Not started |
+
+**Sequencing rationale.** W2/W3 is dated and independent of all of this. Session 1
+removes rather than moves, so every later session has less to relocate. Sessions
+4–6 run smallest-first so the mode pattern is proven on the surface where a
+mistake is cheapest.
 
 ---
 
