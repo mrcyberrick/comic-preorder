@@ -89,5 +89,16 @@ AS $$
   SELECT COUNT(*)::integer FROM updated;
 $$;
 
-REVOKE ALL ON FUNCTION public.auto_fulfill_past_on_sale(uuid) FROM PUBLIC;
+-- Least privilege: service_role only. This function is called by the import
+-- script and by nothing else — no client code path reaches it.
+--
+-- `anon` and `authenticated` are named explicitly and deliberately. Supabase
+-- bootstraps `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON
+-- FUNCTIONS TO anon, authenticated`, so every new function in `public` starts
+-- with those two grants — and `REVOKE ... FROM PUBLIC` does NOT remove them,
+-- because a role grant is not the PUBLIC grant. A file revoking only PUBLIC
+-- therefore leaves both roles able to execute. Without these two names this
+-- file re-opens that gap on any environment it is ever run against fresh
+-- (a rebuild, or a new tenant's project). See F124.
+REVOKE ALL ON FUNCTION public.auto_fulfill_past_on_sale(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.auto_fulfill_past_on_sale(uuid) TO service_role;

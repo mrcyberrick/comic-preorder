@@ -4,7 +4,7 @@
 **Decision:** Rick, 2026-08-08 — **Option 1** ("judge on the newest row").
 Option 2 (carry manual reservations forward on re-listing) is **not** taken here.
 
-**Status:** SQL written 2026-08-08, **not yet applied to either environment.**
+**Status:** **COMPLETE — applied and verified on BOTH environments 2026-08-08.**
 **Target:** staging first, then production. **DDL is Rick-in-the-loop** — the
 agent cannot run it (PostgREST has no SQL endpoint; it needs the SQL Editor).
 **Verified against live schema:** `catalog` § 4.3 — `item_code` NOT NULL,
@@ -142,4 +142,52 @@ harmless.
 
 ## 8. Deploy log
 
-*(empty — not applied)*
+**Applied 2026-08-08 to staging, then production. Verified by execution on both.**
+
+### 8.1 Gates
+
+| Gate | Staging | Production |
+|---|---|---|
+| **Pre-flight** — live body is the one being replaced | ✅ `prosrc` byte-identical to the repo's prior version | ✅ same |
+| **V1** grants | ✅ see § 8.3 | ✅ see § 8.3 |
+| **V2** re-dated title NOT fulfilled | ✅ **measured before AND after** | ✅ the 3 real rows stayed `false` |
+| **V3** normal title still fulfilled | ✅ | — (no fixture needed) |
+| **V4** NULL `on_sale_date` untouched | ✅ returned 0, row untouched | — |
+| **V5** idempotent | ✅ second call returned 0 | ✅ |
+| **V6** fixtures torn down | ✅ SELECT returns 0 | n/a |
+| **V7** live behaviour | ✅ | ✅ **`auto_fulfill_past_on_sale()` returned `0`; the old body would have returned `3`** |
+
+### 8.2 The A/B that made V2 conclusive
+
+The fixture was seeded and the **old** body was run against it first, establishing a
+baseline rather than asserting the new behaviour in isolation:
+
+| | Old body | Fixed body |
+|---|---|---|
+| Return value | `2` | `1` |
+| Re-dated reservation | `fulfilled = true` ← bug reproduced | `false` ✅ |
+| Normal reservation | `true` | `true` ✅ |
+
+On production the same proof came from real data: the function returned **`0`** where
+the old body would have returned **`3`**, and reservations `fe56b7ae` / `b346fb36` /
+`f0b8e7b9` — 5 copies, 3 customers — remained `fulfilled = false`. **The 2026-08-07
+manual repair is now durable**; before this, the next weekly import would have
+silently undone it.
+
+### 8.3 Gate V1 failed, and became its own finding
+
+The grant check found the function executable by roles that had no need for it —
+**pre-existing, not caused by this change**, and traced to a general fact about
+`REVOKE … FROM PUBLIC`. Filed and resolved the same session as **F124**; this
+plan's SQL file was corrected as part of it. Both environments verified by
+execution afterwards, including that `service_role` still executes so the weekly
+import is unaffected.
+
+### 8.4 Still owed
+
+- **Import scripts** (private scripts repo): F115's Step 9 pre-flight report and
+  `findUnverifiedFulfillments()` describe these rows as *"no shipment evidence"*,
+  which reads as *might not have arrived* rather than *is not due for two months*.
+  Unchanged — scripts-repo work.
+- **F122 Option 3** (the catalog-upsert root fix) remains open by decision — see
+  `technical-reference.md` § 13 F122.
