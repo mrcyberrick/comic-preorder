@@ -365,6 +365,74 @@ rest are structural.
 
 ---
 
+## 5.6 Product constraint — the process map is one tenant's process
+
+Raised by Rick 2026-08-07, on reading the § 5.5 options: *"moving off paper orders
+is a choice many stores will want to make for the best ROI. I do not want to bake
+this into the order process if we run fully online."*
+
+**This is a binding constraint on any structural change, and it is wider than
+paper.** § 5.1–5.3 is the process of *one* store. Phase 5 put a second tenant on
+production; Phase 6 opens self-service signup to stores whose processes nobody
+has seen. Any design that hardcodes this walkthrough makes every process
+difference a code change.
+
+**Paper is a leaf, not the trunk.** Of the eight monthly steps, **1.5 are
+paper-specific**:
+
+| Step | Paper-coupled? |
+|---|---|
+| 1 · download catalog + shipping files | No — universal |
+| 2a · **enter paper orders** | **Yes** |
+| 2b · Suggest Shelf Order | **No** — every store orders shelf copies for walk-ins |
+| 3 · maintenance on + export order sheets | No |
+| 4 · submit at distributor, rejections return | No |
+| 5 · print By Distributor for the store | No |
+| 6 · clear deadline + full import | No |
+| 7 · maintenance off | No |
+| 8 · print paper catalog | **Partly** — see below |
+
+Two consequences:
+
+- **Step 2 bundles two unrelated jobs** and should be split regardless of this
+  question. Paper entry is transitional; shelf-copy ordering is permanent.
+- **Step 8 is not strictly paper-coupled.** Its role in *Rick's* loop (§ 5.5 W7)
+  is to feed next month's step 2 — but a printed browsing catalogue is a
+  discovery tool for walk-ins, which an online-only shop with a physical store
+  may still want. **Do not delete it as part of removing paper.**
+
+**The capability check already exists in data.** `user_profiles.is_paper`
+(boolean, default `false`; set by `create-paper-customer`, § 4.x) means a tenant
+with zero `is_paper = true` rows is an online-only store. **No config flag, no
+per-tenant setting, no migration** is required to detect this — and nothing
+should be added. A settings toggle would be a second source of truth for
+something the data already answers.
+
+### What this rules in and out
+
+- **Rules OUT** any guided run built as a fixed list of N steps ("step 3 of 8").
+  That is the shape that forces a fork per tenant and breaks at Phase 6.
+- **Rules IN** a design where **cycle phases are fixed and the tasks inside a
+  phase are data-driven.** Phases are industry structure, not store structure —
+  a monthly catalogue, an FOC cycle, weekly shipments. Which tasks appear in a
+  phase follows from what the tenant actually has (`is_paper` rows, subscriptions,
+  distributors in use).
+- **Option B is unaffected** — Ordering / Bagging / Accounts are universal
+  cadences.
+- **Option C is slightly strengthened, with a higher execution bar.** Its value
+  was never enforcing a sequence; it is (a) the app knowing the cycle phase and
+  (b) giving step 4's rejections somewhere to land. **W5 already shows Rick
+  running a phase machine by hand** — Order Deadline as the "new catalog coming"
+  cue, cleared at step 6, set at step 7, with Maintenance Mode bracketing
+  steps 3–7. C done correctly formalises state that already exists rather than
+  inventing a procedure.
+
+**Desirable property this produces:** a tenant's dashboard gets *simpler* as they
+convert off paper. The ROI decision the operator makes is rewarded by the
+software rather than ignored by it.
+
+---
+
 ## 6. Decisions owed
 
 **Sequencing recommendation:** decision 1 is time-critical and should not wait
@@ -383,6 +451,8 @@ the actual F121 session.
 4. **Page structure (W4/W10).** Whether the monthly procedure gets a guided
    surface, whether the three cadences separate, and what remains on a default
    view. F121 is deliberately neutral; § 5 is now the input it was missing.
+   **Bounded by § 5.6** — phases may be fixed, task lists must be data-driven,
+   and no "step N of 8" may be hardcoded.
 5. **One vocabulary** for copies / titles / reservation rows — applied to every
    tile, header, panel and print surface at once, not tile by tile (§ 3.3 is what
    tile-by-tile produces).
