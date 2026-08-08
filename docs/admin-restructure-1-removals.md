@@ -152,8 +152,8 @@ of Done).
 - [x] Test fixtures torn down, **confirmed by live SELECT returning 0 rows** —
       not by "the teardown ran". Two orphans from a failed run were found and
       removed; see § 7.3.
-- [ ] **Real-browser check by Rick on staging** — the page is *shorter*, and
-      nothing he uses has moved. **Owed — this is Rick's, not the agent's.**
+- [x] **Real-browser check by Rick — confirmed 2026-08-08.** Promoted to
+      production in PR #109 (merge `9552ee6`); post-deploy write-smoke passed.
 - [x] Parent plan § 5.7.4 session index updated: session 1 → Complete
 - [x] `technical-reference.md` § 13 F121 + `CLAUDE.md` F121 line updated
 
@@ -169,7 +169,7 @@ untouched unless separately promoted.
 
 ## 7. Deploy log
 
-**Executed 2026-08-07 → 08. Staging only. Production untouched.**
+**Executed 2026-08-07 → 08. LIVE ON PRODUCTION 2026-08-08** — PR #109, merge `9552ee6`.
 
 Branch `feature/admin-removals` → `staging` ff-only, commit **`1ec32a7`**.
 **132 lines deleted, 23 added** across `admin.html` + `style.css`.
@@ -244,4 +244,5 @@ explanatory comments this session added.
   Note it stubs `approve-customer` deliberately: the real function emails, and
   a fake `@example.test` address hard-bounces on the live MailerSend sender
   domain (F99).
-- **Real-browser check on staging** — the one completion criterion still open.
+- ~~Real-browser check on staging~~ — **confirmed by Rick 2026-08-08; live in
+  production via PR #109, write-smoke passed. This session is fully closed.**

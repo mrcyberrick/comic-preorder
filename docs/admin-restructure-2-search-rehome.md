@@ -104,7 +104,7 @@ Fixtures torn down, **verified by live SELECT returning zero rows.**
 - [x] § 4 applied, every range re-verified against disk first
 - [x] V1–V7 green (§ 8)
 - [x] Fixtures gone, confirmed by live SELECT (0 rows)
-- [ ] **Real-browser check by Rick — owed**
+- [x] **Real-browser check by Rick — confirmed 2026-08-08**; promoted in PR #109, post-deploy write-smoke passed
 - [x] Parent § 5.7.4 session index updated
 
 ---
@@ -117,7 +117,7 @@ Single feature branch, client-only, no DB change. `git revert` the merge.
 
 ## 8. Deploy log
 
-**Executed 2026-08-08. Staging only — `649a4b6`. Production untouched.**
+**Executed 2026-08-08. LIVE ON PRODUCTION 2026-08-08** — staging `649a4b6`, promoted via PR #109, merge `9552ee6`.
 Branch `feature/admin-search-rehome` → `staging` ff-only.
 **66 insertions, 44 deletions**, `admin.html` only.
 

@@ -869,6 +869,85 @@ button { cursor: pointer; font-family: var(--font-body); }
 .list-table .col-sub { font-size: 0.75rem; color: var(--text-muted); }
 
 /* ── Admin ─────────────────────────────────────────────────── */
+/* ── Mode switch (F121 session 4) ───────────────────────────────────────
+   Sits ABOVE the tab strip and outranks it: a mode is the job you are doing
+   (monthly ordering / weekly bagging / ongoing account admin), a tab is a
+   view within that job. Styled as segmented buttons rather than a second
+   row of underlined tabs, so the two levels never read as one flat list —
+   that flatness is what F121 is about. */
+.admin-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.admin-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  transition: var(--transition);
+}
+.admin-mode:hover { color: var(--text-primary); border-color: var(--border-accent); }
+.admin-mode.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.admin-mode-sub {
+  font-family: var(--font-body);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.admin-mode.active .admin-mode-sub { color: var(--accent); }
+
+/* Attention dot — "there is something in here for you", nothing more.
+   Two levels only, because a third would need explaining:
+     red    = a customer is affected, or money is
+     yellow = routine work waiting
+   A dot is never shown speculatively: absent means "nothing to flag" ONLY
+   once that mode's data has loaded. See updateModeDots() for the guard that
+   keeps an unloaded mode from reading as clean. */
+.admin-mode { position: relative; }
+.mode-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+.mode-dot[hidden] { display: none; }
+.mode-dot.dot-warn { background: var(--warning); }
+.mode-dot.dot-alert { background: var(--accent); }
+.admin-mode.active .mode-dot { box-shadow: 0 0 0 2px var(--bg); }
+/* Mode-gating for page chrome.
+   A CLASS, not an inline style, and deliberately so: two of these elements
+   (#backorder-risk-panel, #withdrawn-panel) manage their OWN inline display to
+   hide themselves when empty. Having applyMode() write the same property was
+   the bug Rick hit -- on a fresh load the mode pass hid the panel, then
+   loadData() re-rendered it and set display back, so it appeared in the wrong
+   mode until you switched modes once. Now the two mechanisms are independent:
+   the render owns "is there anything to say", this class owns "should you be
+   seeing it here", and !important settles the overlap in the mode's favour. */
+[data-chrome].chrome-off { display: none !important; }
+
+/* A mode with a single tab needs no tab strip — the mode name already said it. */
+.admin-tabs.single-tab { display: none; }
+
 .admin-tabs {
   display: flex;
   gap: 2px;
