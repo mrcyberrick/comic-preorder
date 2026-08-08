@@ -117,7 +117,7 @@ only one that proves the restructure bought anything.
 ## 5. Completion criteria
 
 - [x] § 2 applied, ranges re-verified against disk first
-- [x] V1–V6 green (7/7 mode gates); V7 full suite in § 7.6
+- [x] V1–V7 green — **98 passed / 98 declared, 12.3 min** (§ 7.6)
 - [x] No fixtures seeded — every gate ran against existing staging data
 - [x] **Real-browser check by Rick 2026-08-08** — *"the UI looks good"* (§ 7.5)
 - [x] Parent § 5.7.4 index updated
@@ -214,3 +214,54 @@ Rick saw Ordering on his first load after the default changed. That is
 the default, and he had been on Ordering while testing the previous build. It
 self-corrected as soon as he chose Customers. Recorded so a later session does
 not "fix" it.
+
+### 7.6 V7 — and how it was misreported twice before it was true
+
+**Final: 98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`, 12.3 min.**
+
+Getting there took three wrong readings, recorded because the failure mode is
+general and cost more than the bug did.
+
+**The bug.** Session 4 hid `By Distributor` behind the Ordering mode and
+`This Week` behind Bagging. Two spec helpers clicked those tabs directly:
+
+- `15-order-export-ledger` → `openByDistributor()` — **24 tests**
+- `06-admin-this-week-bagging` → three sites
+
+Each click waited 60 s and retried, which is why the suite took **an hour**
+instead of twelve minutes. The slowness and the failures were one symptom; they
+were treated as two.
+
+Spec 06 needed a second fix: in Bagging there is only one tab, and
+`.admin-tabs.single-tab` **hides the strip by design** — the mode name already
+says what it is. `applyMode()` activates the tab itself, so the spec was
+clicking an element deliberately made invisible.
+
+**The misreporting, which was the worse half.**
+
+1. Read the **harness's** exit code — that reported the trailing `tail`
+   succeeding, not Playwright failing. Playwright's own code was `1`.
+2. `tail -4` cut off the `24 failed` line, leaving only `74 passed`.
+3. **Then the anomaly was explained instead of investigated.** A real signal —
+   74 where 98 was expected — was rationalised as concurrent suite runs
+   deleting each other's synthetic tenant. It was plausible, had circumstantial
+   support (two overlapping runs, two "flaky" tenant-dependent specs), and was
+   **wrong**. It was written into this deploy log as a durable lesson before
+   being checked. **That is worse than the misread: it converts a fixable
+   mistake into recorded false knowledge.** The claim "this suite cannot be run
+   concurrently with itself" is **withdrawn — unproven and probably false.**
+
+**What broke it open:** `playwright test --list`. Playwright *collects* 98, so
+the missing 24 were not skipped — they failed. One cheap command, available the
+whole time, and it should have preceded any theory.
+
+**The lesson that replaces the withdrawn one:** a UI restructure invalidates
+spec helpers **by construction**. Spec 17 was updated because it was being
+written; nobody asked which *existing* specs depended on tabs the same session
+had just hidden. Grepping the suite for affected selectors belongs in the
+session that moves the UI, not in the cleanup after.
+
+**And on verification hygiene:** `echo "EXIT=$?"` after a redirect, plus a
+short `tail`, is not evidence. Capture the tool's own exit code and grep the
+summary line explicitly — `PLAYWRIGHT_EXIT=1` would have ended this in one
+step.
