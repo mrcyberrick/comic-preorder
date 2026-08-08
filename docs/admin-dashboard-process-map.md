@@ -1,10 +1,21 @@
 # Admin Dashboard — Process Map (F121)
 
-**Status:** Planning — § 1–5 complete (2026-08-07). § 1–4 code-derived; **§ 5 is
-Rick's own walkthrough**, and is the authority where it and the code disagree.
-**Structure DECIDED 2026-08-07 — Option B, as modes within one `admin.html`
-(§ 5.7).** Remaining decisions in § 6. No code written yet. **Last verified
-against live code:** `admin.html` @ `40cc0e8`, 2026-08-07.
+**Status:** **In execution.** § 5 is Rick's own walkthrough and is the authority
+where it and the code disagree. **Structure DECIDED 2026-08-07 — Option B, as
+modes within one `admin.html` (§ 5.7).** **Sessions 1–3 and W2/W3 are LIVE IN
+PRODUCTION as of 2026-08-08** (PR #109, merge `9552ee6`, write-smoke passed —
+§ 5.7.6). **Session 4 (the mode switch) is COMPLETE on staging 2026-08-08, not yet promoted.** Sessions 5–6 not started. Remaining decisions in § 6.
+
+> ⚠ **§ 1–§ 4 are a snapshot of the page as it was on 2026-08-07, before any of
+> this shipped.** They are kept deliberately, because they are the evidence the
+> decisions were made from — but they are **no longer a description of the live
+> page**. The dashboard is now **6 tabs, not 8**; the stats bar, Export All,
+> All Reservations and Top Series are gone; the search lives on By Customer.
+> **Read § 5.7.4's session index for current state; re-read `admin.html` before
+> relying on any inventory line below.**
+
+**Last verified against live code:** `admin.html` @ `40cc0e8`, 2026-08-07 — i.e.
+**stale by design** for § 1–§ 4, per the warning above.
 
 **Visual companion:** the process map, the two undrawn loops, and the option
 comparison are rendered as diagrams at
@@ -547,15 +558,41 @@ implementation time**, and the pattern is consistent: the map is right about
 *what exists*, and reading the actual code is what settles *what to do about
 it*.
 
+### 5.7.6 Promoted to production 2026-08-08 — PR #109, merge `9552ee6`
+
+**Sessions 1–3 and the W2/W3 Order Builder work are LIVE ON PRODUCTION.**
+Client-only (`admin.html`, `style.css`); no schema change, no migration.
+
+Pre-flight that mattered: **production was verified to already hold 859
+`order_type = 'monthly'` rows** before merging. Had its CHECK constraint not
+accepted `'monthly'`, every *Record submitted order* click would have failed
+with a 400 **after the real order was already placed with the supplier** — the
+worst possible moment to find out. Confirmed against the live database rather
+than inferred from the staging result.
+
+Post-deploy verification (read-only): production serves the new build; the
+shared `.stats-bar` CSS survived and `mylist.html` / `arrivals.html` still use
+it; both order-sheet buttons intact; `preorders` 2,005 / `order_submissions`
+860 / `catalog` 11,724 all reading normally; ledger distribution unchanged.
+
+**Write-smoke PASSED** — confirmed by Rick 2026-08-08. Run by hand rather than
+by the agent: it needs a real browser session on production, the Playwright
+runner aborts on a prod `SUPABASE_URL` by design, and a service-key insert
+would bypass both the client code and RLS — proving nothing about what the
+smoke exists to test.
+
+**Sessions 1–3 and W2/W3 are therefore fully closed.** Remaining F121 work is
+sessions 4–6 (Bagging → Customers → Ordering modes).
+
 ### 5.7.4 Session index
 
 | # | Session | Scope | Plan | Status |
 |---|---|---|---|---|
-| — | **W2/W3 Order Builder fixes** | `order_type` hardcode, confirm-on-export timing, rejection route | `docs/order-builder-record-split.md` | **COMPLETE on staging 2026-08-08** (`ff13d0f`) — V1–V7 green, 89/89. Real-browser check + promotion owed. `catalog_month` deliberately left to Rick (that plan § 7). |
-| **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the spec asserting them | `docs/admin-restructure-1-removals.md` | **COMPLETE on staging 2026-08-08** (`1ec32a7`) — V1–V7 green, 86/86 suite. Real-browser check by Rick still owed. Not promoted. |
-| 2 | Search rehome + All Reservations retire | Search built on By Customer (filters, auto-expands, keeps full totals); tab deleted | `docs/admin-restructure-2-search-rehome.md` | **COMPLETE on staging 2026-08-08** (`649a4b6`) — V1–V7 green, 91/91, spec 16 added. Real-browser check owed. Not promoted. |
-| 3 | ~~Top Series → `analytics.html`~~ **Top Series deleted** | Decision corrected at implementation (§ 5.7.5) — moving it would have recreated F121's defect on the analytics page | — (§ 5.7.5) | **COMPLETE on staging 2026-08-08** (`6845326`) — 176 lines removed; `get_popular_series` kept for the customer catalog page. Not promoted. |
-| 4 | **Bagging** mode | Smallest, most self-contained — proves the mode pattern at low risk | not written | Not started |
+| — | **W2/W3 Order Builder fixes** | `order_type` hardcode, confirm-on-export timing, rejection route | `docs/order-builder-record-split.md` | **LIVE IN PRODUCTION 2026-08-08** (staging `ff13d0f` → PR #109, merge `9552ee6`) — V1–V7 green, 89/89, write-smoke passed. `catalog_month` deliberately left to Rick (that plan § 7). |
+| **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the spec asserting them | `docs/admin-restructure-1-removals.md` | **COMPLETE on staging 2026-08-08** (`1ec32a7`) — V1–V7 green, 86/86 suite. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
+| 2 | Search rehome + All Reservations retire | Search built on By Customer (filters, auto-expands, keeps full totals); tab deleted | `docs/admin-restructure-2-search-rehome.md` | **COMPLETE on staging 2026-08-08** (`649a4b6`) — V1–V7 green, 91/91, spec 16 added. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
+| 3 | ~~Top Series → `analytics.html`~~ **Top Series deleted** | Decision corrected at implementation (§ 5.7.5) — moving it would have recreated F121's defect on the analytics page | — (§ 5.7.5) | **COMPLETE on staging 2026-08-08** (`6845326`) — 176 lines removed; `get_popular_series` kept for the customer catalog page. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
+| 4 | **Mode switch** | 3-mode nav (Customers · Bagging · Ordering), chrome follows its mode, one attention dot, always lands on Customers | `docs/admin-restructure-4-bagging-mode.md` | **COMPLETE on staging 2026-08-08** — 98/98 suite, `PLAYWRIGHT_EXIT=0`; two rounds of Rick's feedback folded in (§ 8, § 9). Bagging's light load is **dormant** by design — see § 9.1. **Not promoted.** |
 | 5 | **Customers** mode | Pending · By Customer (+ search from session 2) · Invite · paper customers + Manage · Subscriptions | not written | Not started |
 | 6 | **Ordering** mode | Largest and most consequential; goes last so the W2/W3 fixes settle first | not written | Not started |
 

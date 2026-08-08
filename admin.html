@@ -110,12 +110,12 @@
       <p>All customer pre-orders for the current order cycle</p>
     </div>
     <div id="admin-controls" style="display:flex;align-items:center;gap:16px;padding-top:8px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" id="btn-invite-customer"
+      <button class="btn btn-primary btn-sm" id="btn-invite-customer" data-chrome="customers"
         style="display:flex;align-items:center;gap:6px;font-size:0.82rem">
         <span style="font-size:1rem;line-height:1">+</span> Invite Customer
       </button>
       <!-- Order Deadline -->
-      <div class="deadline-group" style="display:flex;align-items:center;gap:8px">
+      <div class="deadline-group" data-chrome="ordering" style="display:flex;align-items:center;gap:8px">
         <label for="deadline-input" style="font-size:0.82rem;color:var(--text-muted);font-weight:500;white-space:nowrap">Order Deadline</label>
         <input type="date" id="deadline-input"
           style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);
@@ -125,7 +125,7 @@
         <button class="btn btn-secondary btn-sm" id="btn-save-deadline">Save</button>
         <button class="btn btn-ghost btn-sm" id="btn-clear-deadline" title="Clear deadline — hides banner for customers" style="color:var(--text-muted)">✕</button>
       </div>
-      <div class="maint-group" style="display:flex;align-items:center;gap:8px">
+      <div class="maint-group" data-chrome="ordering" style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.82rem;color:var(--text-muted);font-weight:500" id="maint-label">Maintenance Mode</span>
         <label class="toggle-switch" title="Lock site for catalog update">
           <input type="checkbox" id="maint-toggle">
@@ -150,14 +150,30 @@
        with arrivals, catalog, mylist and subscriptions.
        See docs/admin-dashboard-process-map.md § 5.5 W1 and § 5.7.1. -->
 
+
+  <!-- ── Mode switch (F121 session 4) ────────────────────────────────────
+       The dashboard serves three different rhythms — monthly ordering, weekly
+       bagging, and continuous account admin — and used to interleave all of
+       them in one tab strip. Rick's walkthrough mapped twenty workflow steps
+       across those three cadences (process map § 5.1–5.3); the tabs followed
+       none of them, which is F121.
+       Modes, not separate pages: keeping one admin.html means nothing is added
+       to the nav-sync set that CLAUDE.md already records as a drift source
+       (§ 5.7.2 P4). Each mode owns its tabs and, in time, its own fetch.  -->
+  <div class="admin-modes" role="tablist" aria-label="Dashboard mode">
+    <button class="admin-mode active" data-mode="customers" role="tab" aria-selected="true">Customers<span class="admin-mode-sub">ongoing</span><span class="mode-dot" data-dot="customers" hidden></span></button>
+    <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span></button>
+    <button class="admin-mode"        data-mode="ordering"  role="tab" aria-selected="false">Ordering<span class="admin-mode-sub">monthly</span></button>
+  </div>
+
   <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
-  <div id="backorder-risk-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
+  <div id="backorder-risk-panel" data-chrome="customers" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Withdrawn Panel (F110 § 4.5) — sibling to Backorder Risk, hidden when
        empty, visually distinct (grey, not red/amber) since Backordered and
        Withdrawn look similar but mean opposite things (§ 2.1). -->
-  <div id="withdrawn-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
+  <div id="withdrawn-panel" data-chrome="customers" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid #666;border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Export Bar -->
@@ -165,19 +181,20 @@
        job in any of the twenty mapped workflow steps. The two order-sheet
        buttons below stay: they open the Order Builder and carry the monthly
        order. -->
-  <div class="export-bar">
+  <div class="export-bar" data-chrome="ordering">
     <button class="btn btn-secondary btn-sm" id="btn-export-lunar">↓ Lunar Order Sheet</button>
     <button class="btn btn-secondary btn-sm" id="btn-export-prh">↓ PRH Order Sheet</button>
   </div>
 
-  <!-- Tabs -->
+
+  <!-- Tabs — filtered to the active mode by applyMode() -->
   <div class="admin-tabs">
-    <button class="admin-tab active" data-tab="by-customer">By Customer</button>
-    <button class="admin-tab" data-tab="by-distributor">By Distributor</button>
-    <button class="admin-tab" data-tab="this-week">This Week</button>
-    <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
-    <button class="admin-tab" data-tab="pending" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
-    <button class="admin-tab" data-tab="paper-orders">Paper Orders</button>
+    <button class="admin-tab active" data-tab="by-customer" data-mode="customers">By Customer</button>
+    <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions</button>
+    <button class="admin-tab" data-tab="pending" data-mode="customers" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
+    <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
+    <button class="admin-tab" data-tab="by-distributor" data-mode="ordering">By Distributor</button>
+    <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
   </div>
 
   <!-- Tab: By Customer -->
@@ -1145,7 +1162,229 @@
     }
   }
 
-  await loadData();
+  // ── Mode-aware loading (F121 session 4) ────────────────────
+  // Bagging is a WEEKLY job and needs almost none of what the monthly views
+  // need. renderThisWeek() reads only its own week-scoped query, profileMap,
+  // and orderLedger (via ledgerRejected) — verified against live code. It
+  // never touches allPreorders, allPreordersAllMonths, gatherCollapsed or the
+  // shipment-evidence sets.
+  //
+  // So Bagging skips fetchAllPreorders() — a paged read of every reservation
+  // ever made, carrying a 24-column catalog embed INCLUDING cover_url — and
+  // the whole weekly_shipment table. On production that is ~2,000 rows and
+  // ~11,700 catalog rows' worth of embed the weekly job never looks at.
+  // This is the load-cost win Option B was chosen for (process map § 4).
+  let fullDataLoaded    = false;
+  let baggingDataLoaded = false;
+
+  async function ensureFullData() {
+    if (fullDataLoaded) return;
+    fullDataLoaded    = true;
+    baggingDataLoaded = true;   // the full load is a superset
+    await loadData();
+  }
+
+  // DORMANT as of 2026-08-08, kept deliberately.
+  //
+  // Every visit now lands on Customers (see landingMode()), which loads fully,
+  // so every route to Bagging arrives with the data already fetched and this
+  // early-returns. The light path is therefore currently unreachable.
+  //
+  // It is not deleted because the thing that made it unreachable is fixable:
+  // once the attention dot can be computed from a cheap count instead of the
+  // full cross-month gather (process map § 5.7.2 P1), a Bagging landing can
+  // surface the alert AND skip the 2,000-row read, and this becomes live
+  // again. Deleting it now would mean rebuilding it then.
+  //
+  // Just enough for renderThisWeek(): customer names + the signed order ledger.
+  async function ensureBaggingData() {
+    if (baggingDataLoaded || fullDataLoaded) return;
+    baggingDataLoaded = true;
+    const [profilesRes] = await Promise.all([
+      db.from('user_profiles').select('id, full_name'),
+      loadOrderLedger(),
+    ]);
+    profileMap = {};
+    (profilesRes.data || []).forEach(u => profileMap[u.id] = u.full_name);
+  }
+
+  // ── Mode switch ────────────────────────────────────────────
+  // A mode is the job; a tab is a view within it. Switching modes hides the
+  // other modes' tabs AND their sections, then activates that mode's first
+  // tab — so a mode never opens showing a section belonging to another job.
+  // The mode is REMEMBERED, and that is what makes the light load real rather
+  // than theoretical. If every visit started in Ordering, the full fetch would
+  // always have run before Bagging could be reached and Bagging's cheap path
+  // would never execute. Rick's Friday routine is open-the-dashboard →
+  // Bagging; remembering it means that visit genuinely skips the 2,000-row
+  // preorders read and the weekly_shipment table.
+  const VALID_MODES = ['customers', 'bagging', 'ordering'];
+  const DEFAULT_MODE = 'customers';   // Rick 2026-08-08 — the continuous work is what he opens the page for
+  let currentMode = DEFAULT_MODE;
+
+  // Every visit starts on Customers. Deliberately NOT the last-used mode.
+  //
+  // The Order Follow-Up and Withdrawn panels live here, and so does the only
+  // attention dot. Remembering the mode meant a Friday visit could land in
+  // Bagging and show NEITHER — the dot is computed from the full gather, which
+  // Bagging deliberately does not load, so the cross-surface signal built to
+  // cover that case was silently absent. An alarm that is missing rather than
+  // negative is the F96 shape, and it is not worth trading for a faster paint.
+  //
+  // Cost, stated plainly: Bagging's light load now only applies if you switch
+  // to it, and by then Customers has already fetched everything — so the
+  // saving is currently theoretical. Recovering it needs a cheap alert-count
+  // query so the dot can be computed without the full gather (process map
+  // § 5.7.2 P1); until then, correctness wins over bytes.
+  function landingMode() {
+    return DEFAULT_MODE;
+  }
+
+  const FOC_DOT_DAYS = 7;          // Rick 2026-08-08 — "act now" horizon for the Ordering dot
+  let pendingCount   = null;       // null = not loaded yet, deliberately not 0
+
+  // ── Attention dots ─────────────────────────────────────────
+  // One dot per mode: "there is something in here for you". Two levels only —
+  //   alert (red)  a customer is affected, or money is
+  //   warn (amber) routine work waiting
+  //
+  // The guard that matters: a dot is only meaningful once that mode's data has
+  // loaded. An absent dot on an unloaded mode would read as "nothing to flag",
+  // which is the same silent-false-negative shape as F96 and F115. So a mode
+  // whose data has not loaded is left UNKNOWN (no dot, and no claim), and the
+  // dots are recomputed the moment the data arrives.
+  function setModeDot(mode, level) {
+    const el = document.querySelector(`.mode-dot[data-dot="${mode}"]`);
+    if (!el) return;
+    el.classList.remove('dot-warn', 'dot-alert');
+    if (!level) { el.hidden = true; el.removeAttribute('title'); return; }
+    el.classList.add(level === 'alert' ? 'dot-alert' : 'dot-warn');
+    el.hidden = false;
+  }
+
+  function updateModeDots() {
+    // ONE dot, on Customers, because that is where both attention surfaces now
+    // live: Pending accounts, and the Order Follow-Up / Withdrawn panels
+    // (moved there 2026-08-08 — an ad-hoc order is by definition outside the
+    // monthly cycle, so it belongs on the continuous surface, not Ordering).
+    // Ordering carries no dot: it is a deliberate monthly visit, and nothing
+    // in it goes stale while you are away.
+    //
+    // Severity is the max of what is waiting:
+    //   red   never-arrived, or a withdrawn title still holding reservations.
+    //         A customer is already affected; this needs a call.
+    //   amber pending accounts, or At Risk with FOC inside FOC_DOT_DAYS —
+    //         work waiting, still preventable.
+    // Deliberately NOT "anything backordered": measured on production
+    // 2026-08-08 that was 6 backordered and ~98 at risk, i.e. permanently lit,
+    // and an always-on dot carries exactly as much information as a never-on
+    // one while training the operator to ignore it (F96).
+    let level = null;
+    const raise = (l) => { if (l === 'alert' || !level) level = (l === 'alert' ? 'alert' : (level || 'warn')); };
+
+    if (typeof pendingCount === 'number' && pendingCount > 0) raise('warn');
+
+    if (fullDataLoaded) {
+      const risk = computeBackorderRisk();
+      if (risk.neverArrived.length || computeWithdrawnTitles().length) raise('alert');
+      else {
+        const today = DateUtils.todayLocal();
+        const [y, m, d] = today.split('-').map(Number);
+        const horizon = DateUtils.fmtLocal(new Date(y, m - 1, d + FOC_DOT_DAYS));
+        const imminent = risk.atRisk.filter(e => {
+          const foc = e?.catalog?.foc_date;
+          return foc && foc >= today && foc <= horizon;
+        }).length;
+        if (imminent) raise('warn');
+      }
+    }
+
+    setModeDot('customers', level);
+  }
+
+
+  async function applyMode(mode, { initial = false } = {}) {
+    currentMode = mode;
+
+    document.querySelectorAll('.admin-mode').forEach(b => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+
+    const tabs = [...document.querySelectorAll('.admin-tab')];
+    tabs.forEach(t => { t.style.display = t.dataset.mode === mode ? '' : 'none'; });
+    const mine = tabs.filter(t => t.dataset.mode === mode);
+
+    // Page chrome follows its mode. A CLASS toggle, never an inline style.
+    // Two of these elements (#backorder-risk-panel, #withdrawn-panel) own
+    // their OWN inline display to hide themselves when empty. Writing the same
+    // property here is what made a panel appear in the wrong mode on a fresh
+    // load: applyMode() hid it, then loadData() re-rendered and un-hid it, and
+    // it only behaved after one manual mode switch. The two mechanisms are now
+    // independent — the render says whether there is anything to show, this
+    // says whether you should be seeing it here, and !important on
+    // .chrome-off settles the overlap in the mode's favour.
+    document.querySelectorAll('[data-chrome]').forEach(el => {
+      el.classList.toggle('chrome-off', el.dataset.chrome !== mode);
+    });
+
+    // A single-tab mode needs no tab strip — the mode name already said it.
+    document.querySelector('.admin-tabs')?.classList.toggle('single-tab', mine.length <= 1);
+
+    // Only load what this mode needs. Bagging stays light; the other two
+    // share today's full load, and sessions 5–6 split those.
+    if (mode === 'bagging') await ensureBaggingData();
+    else await ensureFullData();
+    updateModeDots();
+
+    // Activate this mode's first tab unless one of its own is already active.
+    // On the initial pass the click listeners are not registered yet (they are
+    // wired further down, after this await), so go through activateTab()
+    // directly — and fire the tab's own lazy loader by hand, since a synthetic
+    // .click() would be a no-op at this point.
+    const active = tabs.find(t => t.classList.contains('active'));
+    if (initial) {
+      // Selection only. The tab's DATA load is deferred to runInitialTabLoad()
+      // at the very end of this script — see that function for why.
+      const target = (active && active.dataset.mode === mode) ? active : mine[0];
+      if (target) activateTab(target);
+    } else if (!active || active.dataset.mode !== mode) {
+      mine[0]?.click();
+    }
+  }
+
+  // The per-tab lazy loaders fire on click. A remembered-mode landing has no
+  // click, so the first tab's data would never load — and calling them from
+  // applyMode() during init does not work either: they read `let` bindings
+  // declared much further down (renderThisWeek → weekAnchorMonday ~L2762,
+  // initPaperOrdersTab → paperCusts ~L3220), which are still in the temporal
+  // dead zone at that point. The call throws a ReferenceError inside an async
+  // function whose rejection nobody awaits, so it fails SILENTLY and the tab
+  // just renders empty.
+  //
+  // Hence: selection during applyMode(), data load only once the whole script
+  // body has been evaluated.
+  function runInitialTabLoad() {
+    const tab = document.querySelector('.admin-tab.active')?.dataset.tab;
+    if (tab === 'this-week')     renderThisWeek();
+    if (tab === 'subscriptions') loadSubscriptions();
+    if (tab === 'paper-orders')  initPaperOrdersTab();
+    // by-customer and by-distributor are rendered by loadData() already.
+  }
+
+  function activateTab(tab) {
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`tab-${tab.dataset.tab}`)?.classList.add('active');
+  }
+
+  document.querySelectorAll('.admin-mode').forEach(btn => {
+    btn.addEventListener('click', () => applyMode(btn.dataset.mode));
+  });
+
+  await applyMode(landingMode(), { initial: true });
 
   // ── Order follow-up panel (F101 § 2.4/§ 4.5) ───────────────
   // Persistent, tab-independent. Three states, because "FOC passed without a
@@ -1657,13 +1896,11 @@
   }
 
   // ── Tabs ──────────────────────────────────────────────────
+  // Show/hide lives in activateTab() so the mode switch and a direct tab
+  // click cannot drift apart — applyMode() calls .click() on a mode's first
+  // tab and must land in exactly the same state as clicking it by hand.
   document.querySelectorAll('.admin-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
-    });
+    tab.addEventListener('click', () => activateTab(tab));
   });
 
   // ── Search (By Customer tab) ──────────────────────────────
@@ -2924,6 +3161,8 @@
     } else {
       badge.style.display = 'none';
     }
+    pendingCount = items.length;   // drives the Customers attention dot
+    updateModeDots();
 
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load pending accounts: ${escapeHtml(error.message)}</div>`;
@@ -4119,6 +4358,10 @@
     }
   });
 
+  // MUST stay last. The active tab was chosen during applyMode() near the top
+  // of init, but its data cannot load until every `let` in this script body has
+  // been initialised — see runInitialTabLoad()'s own comment.
+  runInitialTabLoad();
 
 })();
 </script>
