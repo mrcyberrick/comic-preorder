@@ -462,7 +462,7 @@ process has answered the question C depended on.
 |---|---|
 | Stats bar — 7 tiles | **Delete.** Zero workflow steps (§ 5.5 W1). Resolves § 3.3 by removal. |
 | Export All (CSV) | **Delete.** No named job in any of the twenty steps. |
-| Top Series | **Move to `analytics.html`.** It is an analytics question, and analytics is the surface Rick values for *"what is working and what is not"*. Not a deletion — a correct home. |
+| Top Series | ~~Move to `analytics.html`.~~ **CORRECTED 2026-08-08 at implementation, Rick approving: DELETE.** See § 5.7.5. |
 | All Reservations | **Delete the tab; rehome the search** — see § 5.7.2 P3. |
 
 ### 5.7.2 Three problems B opens, with recommendations
@@ -506,6 +506,47 @@ Rick accepted both § 5.7.2 recommendations as put:
   behaviour (one job on screen, per-mode lazy fetch), with nothing added to the
   nav-sync set and one surface shippable at a time.
 
+### 5.7.5 Top Series — the "move it" decision was wrong, corrected at implementation
+
+**Recorded 2026-08-08. § 5.7.1 originally said "move to `analytics.html` — not
+a deletion, a correct home." Reading both ends at session 3 showed that was
+wrong, and Rick approved deleting it instead.**
+
+| | Analytics Operations cards | Top Series |
+|---|---|---|
+| Source | `usage_events` | `preorders JOIN catalog` |
+| Question | what people **did** | what is **reserved right now** |
+| Scope | rolling **30 / 90 days** | **one catalog month** |
+| Examples | *"reserve events, last 30 days"*, *"net subscribers, last 30 days"*, *"share of reserves, last 90 days"* | *"reservations in the August catalog"* |
+
+**Dropping a state-based, one-month card into a row of event-based, 30-day
+cards would have recreated F121's own defect on the analytics page** —
+similar-sounding numbers at different scopes with nothing on screen to
+distinguish them. A workstream that exists to remove that pattern must not
+plant it somewhere else.
+
+Three further facts pointed the same way:
+
+- **Rick only glances at it** (§ 5.4) — it is in neither acts-on list.
+- **Its counting unit remains undeterminable** (§ 3.4). An attempt to settle it
+  empirically at session 3 returned nothing, because F20 correctly pins
+  `get_popular_series` to `current_tenant_id()` and a service-role probe
+  carries no tenant claim. A number nobody acts on, whose unit nobody can
+  state, is a poor candidate for careful preservation.
+- **The job it half-did is already done properly.** "What should I stock" is
+  the shelf-copy suggested order, which computes per-title demand from real
+  reservations and writes it (`docs/shelf-copy-suggested-order.md`). Top Series
+  was a ranked list to read and act on by hand.
+
+**`get_popular_series` stays in the database** — `app.js`'s
+`Recommendations._getPopularSeries` still uses it for the customer catalog
+page. Only the admin surface is gone.
+
+**This is the sixth correction this workstream has made to its own plan at
+implementation time**, and the pattern is consistent: the map is right about
+*what exists*, and reading the actual code is what settles *what to do about
+it*.
+
 ### 5.7.4 Session index
 
 | # | Session | Scope | Plan | Status |
@@ -513,7 +554,7 @@ Rick accepted both § 5.7.2 recommendations as put:
 | — | **W2/W3 Order Builder fixes** | `order_type` hardcode, confirm-on-export timing, rejection route | `docs/order-builder-record-split.md` | **COMPLETE on staging 2026-08-08** (`ff13d0f`) — V1–V7 green, 89/89. Real-browser check + promotion owed. `catalog_month` deliberately left to Rick (that plan § 7). |
 | **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the spec asserting them | `docs/admin-restructure-1-removals.md` | **COMPLETE on staging 2026-08-08** (`1ec32a7`) — V1–V7 green, 86/86 suite. Real-browser check by Rick still owed. Not promoted. |
 | 2 | Search rehome + All Reservations retire | Search built on By Customer (filters, auto-expands, keeps full totals); tab deleted | `docs/admin-restructure-2-search-rehome.md` | **COMPLETE on staging 2026-08-08** (`649a4b6`) — V1–V7 green, 91/91, spec 16 added. Real-browser check owed. Not promoted. |
-| 3 | Top Series → `analytics.html` | A move, not a deletion — needs re-skinning into analytics' card system | not written | Not started |
+| 3 | ~~Top Series → `analytics.html`~~ **Top Series deleted** | Decision corrected at implementation (§ 5.7.5) — moving it would have recreated F121's defect on the analytics page | — (§ 5.7.5) | **COMPLETE on staging 2026-08-08** (`6845326`) — 176 lines removed; `get_popular_series` kept for the customer catalog page. Not promoted. |
 | 4 | **Bagging** mode | Smallest, most self-contained — proves the mode pattern at low risk | not written | Not started |
 | 5 | **Customers** mode | Pending · By Customer (+ search from session 2) · Invite · paper customers + Manage · Subscriptions | not written | Not started |
 | 6 | **Ordering** mode | Largest and most consequential; goes last so the W2/W3 fixes settle first | not written | Not started |
