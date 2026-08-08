@@ -146,14 +146,16 @@ of Done).
 
 ## 5. Completion criteria
 
-- [ ] § 3.1–3.5 applied; every range re-verified against disk before editing
-- [ ] § 3.6 spec block removed
-- [ ] V1–V7 all green
-- [ ] Test fixtures torn down, confirmed by live SELECT (0 rows)
-- [ ] Real-browser check by Rick on staging — the page is *shorter*, and nothing
-      he uses has moved
-- [ ] Parent plan § 5.7.3 sequencing updated: session 1 → Complete with date
-- [ ] `CLAUDE.md` § Current Migration Phase pointer advanced
+- [x] § 3.1–3.5 applied; every range re-verified against disk before editing
+- [x] § 3.6 spec block removed
+- [x] V1–V7 all green (§ 7)
+- [x] Test fixtures torn down, **confirmed by live SELECT returning 0 rows** —
+      not by "the teardown ran". Two orphans from a failed run were found and
+      removed; see § 7.3.
+- [ ] **Real-browser check by Rick on staging** — the page is *shorter*, and
+      nothing he uses has moved. **Owed — this is Rick's, not the agent's.**
+- [x] Parent plan § 5.7.4 session index updated: session 1 → Complete
+- [x] `technical-reference.md` § 13 F121 + `CLAUDE.md` F121 line updated
 
 ---
 
@@ -167,4 +169,79 @@ untouched unless separately promoted.
 
 ## 7. Deploy log
 
-*(empty — not started)*
+**Executed 2026-08-07 → 08. Staging only. Production untouched.**
+
+Branch `feature/admin-removals` → `staging` ff-only, commit **`1ec32a7`**.
+**132 lines deleted, 23 added** across `admin.html` + `style.css`.
+
+### 7.1 Applied
+
+| Change | Result |
+|---|---|
+| Stats bar markup + `#stats-scope-note` | Removed, replaced by a comment recording why and noting the CSS is shared |
+| `renderStats()` + its call in `loadData()` | Removed |
+| `Export All (CSV)` button + listener + `makeExportRows()` | Removed |
+| Four unguarded `#stat-pending` / `#stat-pending-wrap` writes | Removed; badge logic kept |
+| `body.printing-this-week .stats-bar` print selector | Removed (dead) |
+| Spec 15 stat-tile `describe` block (30 lines) | Removed |
+
+### 7.2 Gates
+
+| Gate | Evidence |
+|---|---|
+| **V1** | `node --check` on the extracted inline script: parses. Full suite load-time: zero console errors |
+| **V2** | `.stats-bar` absent from served `admin.html`; **still served in `style.css`**; `mylist.html` markup intact |
+| **V3** | `btn-export-all` absent; `btn-export-lunar` + `btn-export-prh` present and still open the Order Builder |
+| **V4** | **PASS** — approve click: row removed, badge updated, **zero console/page errors** |
+| **V5** | **PASS** — decline click: row removed, profile deleted, **zero console/page errors** |
+| **V6** | Print rule keeps `.export-bar`, drops the dead `.stats-bar` line |
+| **V7** | **86 passed (10.7m), exit 0**, clean stderr, synthetic tenant torn down |
+
+**Orphan grep (the exhaustive check):** zero remaining code references to
+`stat-total` / `stat-customers` / `stat-lunar` / `stat-prh` / `stat-value` /
+`stat-pending` / `stat-fulfilled` / `stats-scope-note` / `btn-export-all` /
+`makeExportRows` / `renderStats` in `admin.html`. The only hits are the two
+explanatory comments this session added.
+
+### 7.3 Three things worth carrying forward
+
+1. **The shared-CSS check was more load-bearing than the plan knew.** The plan
+   said five pages use the stats CSS. Measured: **four** now that admin's markup
+   is gone — `catalog` / `mylist` / `subscriptions` carry `class="stats-bar"`,
+   but **`arrivals.html` uses `.stat-value` / `.stat-label` with no wrapper**
+   (7 and 5 occurrences). A `class="stats-bar"`-only grep would have missed it
+   and the deletion would have silently broken the arrivals page.
+
+2. **Confirming the served bytes took two attempts.** The first fetch of the
+   plain URL returned the *old* build. Running the suite on that first response
+   would have tested the previous deploy and reported a meaningless green. This
+   is exactly the failure `CLAUDE.md` § Smoke-test ordering describes, and it
+   fired on the first try.
+
+3. **V4/V5 needed a purpose-built spec, and both of its first two failures were
+   the test's fault, not the code's.**
+   - Run 1 reported failure because the runner was invoked as
+     `.\run-smoke.ps1 2>&1` — PowerShell 5.1 wraps a native executable's stderr
+     in an ErrorRecord and forces a non-zero result **even on exit 0**. The only
+     captured line was a `NO_COLOR` warning. Re-running through Bash gave the
+     real result. **Never pipe `2>&1` from `run-smoke.ps1`.**
+   - V4 then failed on `toBeHidden` because **approve is also behind a
+     `confirm()`** (`admin.html:2954`) and Playwright auto-dismisses unhandled
+     dialogs — the handler returned early and the row never moved, which looks
+     identical to a broken handler. A dialog handler was already present on V5
+     and missing on V4.
+
+   Neither was a defect in the shipped change, but both would have been reported
+   as one by a less careful read.
+
+### 7.4 Open — Rick's call
+
+- **`tests/zz-tmp-v4v5-pending.spec.ts` is still in the suite.** It was written
+  as a temporary gate. The approve/decline click paths had **zero** coverage
+  before it, and this session showed that gap matters. **Keeping it is a scope
+  addition, so it is Rick's decision** — rename it to a permanent number, or
+  delete it. Left in place meanwhile (local-only, untracked, reversible).
+  Note it stubs `approve-customer` deliberately: the real function emails, and
+  a fake `@example.test` address hard-bounces on the live MailerSend sender
+  domain (F99).
+- **Real-browser check on staging** — the one completion criterion still open.

@@ -511,7 +511,7 @@ Rick accepted both § 5.7.2 recommendations as put:
 | # | Session | Scope | Plan | Status |
 |---|---|---|---|---|
 | — | **W2/W3 Order Builder fixes** | `order_type`/`catalog_month` hardcode, confirm-on-export timing, rejection route | `docs/order-loop-closure-f108.md` § 8 | **Not started — dated, do first** |
-| **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the two specs asserting them | `docs/admin-restructure-1-removals.md` | **Planned 2026-08-07** |
+| **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the spec asserting them | `docs/admin-restructure-1-removals.md` | **COMPLETE on staging 2026-08-08** (`1ec32a7`) — V1–V7 green, 86/86 suite. Real-browser check by Rick still owed. Not promoted. |
 | 2 | Search rehome + All Reservations retire | Build search on By Customer, then delete the tab | not written | Not started |
 | 3 | Top Series → `analytics.html` | A move, not a deletion — needs re-skinning into analytics' card system | not written | Not started |
 | 4 | **Bagging** mode | Smallest, most self-contained — proves the mode pattern at low risk | not written | Not started |
