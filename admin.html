@@ -1184,6 +1184,18 @@
     await loadData();
   }
 
+  // DORMANT as of 2026-08-08, kept deliberately.
+  //
+  // Every visit now lands on Customers (see landingMode()), which loads fully,
+  // so every route to Bagging arrives with the data already fetched and this
+  // early-returns. The light path is therefore currently unreachable.
+  //
+  // It is not deleted because the thing that made it unreachable is fixable:
+  // once the attention dot can be computed from a cheap count instead of the
+  // full cross-month gather (process map § 5.7.2 P1), a Bagging landing can
+  // surface the alert AND skip the 2,000-row read, and this becomes live
+  // again. Deleting it now would mean rebuilding it then.
+  //
   // Just enough for renderThisWeek(): customer names + the signed order ledger.
   async function ensureBaggingData() {
     if (baggingDataLoaded || fullDataLoaded) return;
@@ -1206,16 +1218,26 @@
   // would never execute. Rick's Friday routine is open-the-dashboard →
   // Bagging; remembering it means that visit genuinely skips the 2,000-row
   // preorders read and the weekly_shipment table.
-  const MODE_KEY = 'pulllist.admin.mode';
   const VALID_MODES = ['customers', 'bagging', 'ordering'];
   const DEFAULT_MODE = 'customers';   // Rick 2026-08-08 — the continuous work is what he opens the page for
   let currentMode = DEFAULT_MODE;
 
-  function rememberedMode() {
-    try {
-      const m = localStorage.getItem(MODE_KEY);
-      return VALID_MODES.includes(m) ? m : DEFAULT_MODE;
-    } catch { return DEFAULT_MODE; }   // private mode / storage disabled
+  // Every visit starts on Customers. Deliberately NOT the last-used mode.
+  //
+  // The Order Follow-Up and Withdrawn panels live here, and so does the only
+  // attention dot. Remembering the mode meant a Friday visit could land in
+  // Bagging and show NEITHER — the dot is computed from the full gather, which
+  // Bagging deliberately does not load, so the cross-surface signal built to
+  // cover that case was silently absent. An alarm that is missing rather than
+  // negative is the F96 shape, and it is not worth trading for a faster paint.
+  //
+  // Cost, stated plainly: Bagging's light load now only applies if you switch
+  // to it, and by then Customers has already fetched everything — so the
+  // saving is currently theoretical. Recovering it needs a cheap alert-count
+  // query so the dot can be computed without the full gather (process map
+  // § 5.7.2 P1); until then, correctness wins over bytes.
+  function landingMode() {
+    return DEFAULT_MODE;
   }
 
   const FOC_DOT_DAYS = 7;          // Rick 2026-08-08 — "act now" horizon for the Ordering dot
@@ -1283,7 +1305,6 @@
 
   async function applyMode(mode, { initial = false } = {}) {
     currentMode = mode;
-    try { localStorage.setItem(MODE_KEY, mode); } catch { /* non-fatal */ }
 
     document.querySelectorAll('.admin-mode').forEach(b => {
       const on = b.dataset.mode === mode;
@@ -1363,7 +1384,7 @@
     btn.addEventListener('click', () => applyMode(btn.dataset.mode));
   });
 
-  await applyMode(rememberedMode(), { initial: true });
+  await applyMode(landingMode(), { initial: true });
 
   // ── Order follow-up panel (F101 § 2.4/§ 4.5) ───────────────
   // Persistent, tab-independent. Three states, because "FOC passed without a
