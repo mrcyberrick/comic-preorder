@@ -547,6 +547,26 @@ implementation time**, and the pattern is consistent: the map is right about
 *what exists*, and reading the actual code is what settles *what to do about
 it*.
 
+### 5.7.6 Promoted to production 2026-08-08 — PR #109, merge `9552ee6`
+
+**Sessions 1–3 and the W2/W3 Order Builder work are LIVE ON PRODUCTION.**
+Client-only (`admin.html`, `style.css`); no schema change, no migration.
+
+Pre-flight that mattered: **production was verified to already hold 859
+`order_type = 'monthly'` rows** before merging. Had its CHECK constraint not
+accepted `'monthly'`, every *Record submitted order* click would have failed
+with a 400 **after the real order was already placed with the supplier** — the
+worst possible moment to find out. Confirmed against the live database rather
+than inferred from the staging result.
+
+Post-deploy verification (read-only): production serves the new build; the
+shared `.stats-bar` CSS survived and `mylist.html` / `arrivals.html` still use
+it; both order-sheet buttons intact; `preorders` 2,005 / `order_submissions`
+860 / `catalog` 11,724 all reading normally; ledger distribution unchanged.
+
+**Write-smoke owed** — it needs a real browser session on production, and the
+Playwright runner is deliberately barred from prod.
+
 ### 5.7.4 Session index
 
 | # | Session | Scope | Plan | Status |

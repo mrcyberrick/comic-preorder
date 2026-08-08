@@ -167,7 +167,7 @@ Ledger rows written during testing are ordinary rows, deletable by
 
 ## 9. Deploy log
 
-**Executed 2026-08-08. Staging only — `ff13d0f`. Production untouched.**
+**Executed 2026-08-08. LIVE ON PRODUCTION 2026-08-08** — staging `ff13d0f`, promoted via PR #109, merge `9552ee6`. Pre-flight confirmed production already held 859 `order_type = 'monthly'` rows, so the new value was known-accepted before merge.
 Branch `feature/order-builder-record-split` → `staging` ff-only.
 **215 insertions, 53 deletions**, `admin.html` only.
 

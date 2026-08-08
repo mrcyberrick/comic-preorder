@@ -169,7 +169,7 @@ untouched unless separately promoted.
 
 ## 7. Deploy log
 
-**Executed 2026-08-07 → 08. Staging only. Production untouched.**
+**Executed 2026-08-07 → 08. LIVE ON PRODUCTION 2026-08-08** — PR #109, merge `9552ee6`.
 
 Branch `feature/admin-removals` → `staging` ff-only, commit **`1ec32a7`**.
 **132 lines deleted, 23 added** across `admin.html` + `style.css`.

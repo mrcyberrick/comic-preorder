@@ -117,7 +117,7 @@ Single feature branch, client-only, no DB change. `git revert` the merge.
 
 ## 8. Deploy log
 
-**Executed 2026-08-08. Staging only — `649a4b6`. Production untouched.**
+**Executed 2026-08-08. LIVE ON PRODUCTION 2026-08-08** — staging `649a4b6`, promoted via PR #109, merge `9552ee6`.
 Branch `feature/admin-search-rehome` → `staging` ff-only.
 **66 insertions, 44 deletions**, `admin.html` only.
 
