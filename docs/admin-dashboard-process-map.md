@@ -1,9 +1,15 @@
 # Admin Dashboard — Process Map (F121)
 
 **Status:** Planning — § 1–5 complete (2026-08-07). § 1–4 code-derived; **§ 5 is
-Rick's own walkthrough, captured 2026-08-07**, and is the authority where it and
-the code disagree. **§ 6 decisions owed.** No code changes proposed yet, by
-design. **Last verified against live code:** `admin.html` @ `40cc0e8`, 2026-08-07.
+Rick's own walkthrough**, and is the authority where it and the code disagree.
+**Structure DECIDED 2026-08-07 — Option B, as modes within one `admin.html`
+(§ 5.7).** Remaining decisions in § 6. No code written yet. **Last verified
+against live code:** `admin.html` @ `40cc0e8`, 2026-08-07.
+
+**Visual companion:** the process map, the two undrawn loops, and the option
+comparison are rendered as diagrams at
+<https://claude.ai/code/artifact/4e5686c4-160a-49fa-a237-401076d6bcf9>
+(private artifact; this document is canonical where the two differ).
 
 **Finding:** `docs/technical-reference.md` § 13 **F121**. Also in scope for the
 structural decision: **F122** (fix direction 2 depends on how the page models a
@@ -433,6 +439,75 @@ software rather than ignored by it.
 
 ---
 
+## 5.7 DECIDED 2026-08-07 — Option B, separate surfaces by cadence
+
+**Rick:** *"B fits better as the order is not all fixed."*
+
+Option C is **rejected on its merits, not deferred** — the monthly step order is
+genuinely flexible, so a guided run would fight the operator every cycle. Do not
+revisit C in a later session without new information; the person who performs the
+process has answered the question C depended on.
+
+### 5.7.1 Surface allocation
+
+| Surface | Cadence | Contents |
+|---|---|---|
+| **Ordering** | Monthly | Order Deadline · Maintenance Mode · Order Builder (both distributors) · By Distributor + cycle selector + Print/Save Report + Mark Ordered · Paper Orders **bulk entry** + **catalog print** · Withdrawn panel |
+| **Bagging** | Weekly | This Week + week nav + Print Bagging List (both anchors) · link out to `arrivals.html` for the shipping check |
+| **Customers** | Continuous | Pending · By Customer · Invite Customer · Paper customer list + **Manage** · Subscriptions |
+
+**Removed from the dashboard entirely:**
+
+| Element | Disposition |
+|---|---|
+| Stats bar — 7 tiles | **Delete.** Zero workflow steps (§ 5.5 W1). Resolves § 3.3 by removal. |
+| Export All (CSV) | **Delete.** No named job in any of the twenty steps. |
+| Top Series | **Move to `analytics.html`.** It is an analytics question, and analytics is the surface Rick values for *"what is working and what is not"*. Not a deletion — a correct home. |
+| All Reservations | **Delete the tab; rehome the search** — see § 5.7.2 P3. |
+
+### 5.7.2 Three problems B opens, with recommendations
+
+**P1 — Order Follow-Up is continuously monitored but monthly-acted-on.** Rick
+watches it between cycles (§ 5.3 #6) and acting on it means placing an ad-hoc
+order. Putting it only on Ordering hides the alarm behind a surface he is not on.
+**Recommendation: it is an alert, not a workspace.** Persist a count badge on the
+Ordering nav item from every surface, with the detail panel on Ordering. Keeps
+one job on screen without muting the signal. Same treatment for Withdrawn.
+
+**P2 — Paper Orders splits cleanly, which de-risks B's main cost.** The option-B
+sketch warned it *"has to be split or duplicated"*. It does not — the cut is
+clean, because the two halves are already different UI:
+- **bulk entry + catalog print → Ordering** (monthly step 2 / step 8)
+- **paper customer list + Manage → Customers** (continuous #4)
+
+**P3 — All Reservations holds the page's only search box** (§ 5.5 W8). Deleting
+the tab deletes the search. **Recommendation: rehome the search rather than the
+list** — a search on Customers that finds a reservation and jumps to its customer.
+Confirm with Rick before deleting, since the search may be the part he uses.
+
+**P4 — File count vs. the nav-sync drift source.** `CLAUDE.md` § Files That Must
+Stay in Sync records the nav block across five HTML files as a known drift source.
+Three admin pages makes it seven. **Recommendation: keep ONE `admin.html` and
+make the three surfaces top-level modes**, each with its own lazy fetch, replacing
+the eight-tab strip with a three-mode switch. This is **B in behaviour** — one job
+on screen, and each mode fetches only its own slice (§ 4) — while touching no new
+files, adding nothing to the sync set, and allowing one surface to ship at a time.
+A genuine page split can follow later if it earns itself; the reverse is far
+harder.
+
+### 5.7.3 Recommended sequencing
+
+1. **W2/W3 first** — dated, real money, independent of B. Home:
+   `docs/order-loop-closure-f108.md` § 8.
+2. **The removals** (stats bar, Export All, Top Series → analytics) — cheap,
+   independent, immediately felt, and they shrink what B has to relocate.
+3. **B, one surface per sub-deploy, in this order:** **Bagging** (smallest, most
+   self-contained — proves the mode pattern at low risk) → **Customers** →
+   **Ordering** last, since it is the largest and the W2/W3 fixes should settle
+   first.
+
+---
+
 ## 6. Decisions owed
 
 **Sequencing recommendation:** decision 1 is time-critical and should not wait
@@ -448,11 +523,9 @@ the actual F121 session.
    removes § 3.3 rather than fixing it.
 3. **Rename the Paper Orders print buttons (§ 3.2 / W7)** — two strings, and it
    stops two pairs of buttons sharing a name across two unrelated jobs.
-4. **Page structure (W4/W10).** Whether the monthly procedure gets a guided
-   surface, whether the three cadences separate, and what remains on a default
-   view. F121 is deliberately neutral; § 5 is now the input it was missing.
-   **Bounded by § 5.6** — phases may be fixed, task lists must be data-driven,
-   and no "step N of 8" may be hardcoded.
+4. ~~**Page structure (W4/W10).**~~ **DECIDED 2026-08-07 — Option B**, built as
+   modes within one `admin.html` (§ 5.7). Remaining sub-decision: **P3**, whether
+   All Reservations' search is rehomed or dropped.
 5. **One vocabulary** for copies / titles / reservation rows — applied to every
    tile, header, panel and print surface at once, not tile by tile (§ 3.3 is what
    tile-by-tile produces).
