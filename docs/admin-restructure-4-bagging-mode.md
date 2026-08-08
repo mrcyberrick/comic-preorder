@@ -315,3 +315,53 @@ Third time this session a real defect lived in the gap between what the test
 does and what the operator does. A green suite says the assertions hold, not
 that the screen is right — and Rick found this one in seconds by opening the
 page.
+
+---
+
+## 9. Follow-on 2026-08-08 — always land on Customers
+
+Commit `8d4099e`. **Final suite: 98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`,
+12.4 min.**
+
+Rick: *"I land each time where I left-off... would it make sense to default to
+CUSTOMER? ... it might align better if this was surfacing the Order Follow-Up
+on each visit."*
+
+**Yes, and for a stronger reason than convenience.** After § 8 moved the alert
+panels to Customers, a remembered Bagging landing showed **neither the panel
+nor the dot** — the dot is computed from the full cross-month gather, which
+Bagging deliberately does not load. The cross-surface signal built to cover
+exactly that case was silently absent: an alarm that is *missing* rather than
+negative, which is the F96 shape, in code written the same day.
+
+Mode persistence and its `localStorage` key are removed. Every visit lands on
+Customers.
+
+### 9.1 The cost, stated rather than buried
+
+**This makes session 4's light-load path dormant.** Every route to Bagging now
+arrives via a Customers landing that has already fetched everything, so
+`ensureBaggingData()` early-returns and the 2,000-row skip never happens. V2
+was rewritten accordingly — it no longer asserts a landing that cannot occur.
+
+The code is kept, not deleted, because what made it unreachable is fixable:
+once the dot can be computed from a **cheap count** rather than the full gather
+(process map § 5.7.2 P1), a Bagging landing can surface the alert *and* skip
+the big read. Deleting it now would mean rebuilding it in session 6.
+
+**Worth naming: the load-cost win was the agent's framing, not Rick's ask.** He
+mentioned once that the page felt slow; that became this session's headline
+metric. When it collided with his ability to see an expiring FOC, it lost —
+correctly.
+
+### 9.2 Spec fallout, and a repeated mistake
+
+Two spec call sites clicked the By Distributor tab, which session 4 hid behind
+the Ordering mode. **Only one was fixed on the first pass**, despite the grep
+that found them having shown *both* — the second surfaced as a single failure
+in the next full run (`97/98`). Both now route through `openByDistributor()`,
+so one place knows the tab lives behind a mode.
+
+That is the second time in this session evidence was on screen and acted on
+only in part; the first was the `24 failed` line in § 7.6. **Reading the whole
+output is the fix, and it is cheaper than the re-runs it saves.**
