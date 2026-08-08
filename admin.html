@@ -174,7 +174,6 @@
   <div class="admin-tabs">
     <button class="admin-tab active" data-tab="by-customer">By Customer</button>
     <button class="admin-tab" data-tab="by-distributor">By Distributor</button>
-    <button class="admin-tab" data-tab="all-items">All Reservations</button>
     <button class="admin-tab" data-tab="this-week">This Week</button>
     <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
     <button class="admin-tab" data-tab="top-series">Top Series</button>
@@ -184,6 +183,23 @@
 
   <!-- Tab: By Customer -->
   <div class="admin-section active" id="tab-by-customer">
+    <!-- Search moved here from the retired "All Reservations" tab (F121
+         session 2). That tab was a flat list of every reservation, rated
+         below this one and By Distributor for reviewing orders — but it held
+         the page's ONLY search box, so retiring it would have taken the
+         search with it. What was worth keeping was finding a title fast, not
+         the list. Searching here filters to the customers holding a match and
+         expands them. -->
+    <div class="toolbar" style="margin-bottom:16px">
+      <div class="search-wrap">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <label for="admin-search" class="visually-hidden">Search reservations</label>
+        <input type="text" class="search-input" id="admin-search"
+               placeholder="Search title, series, publisher, code or customer…">
+      </div>
+    </div>
     <div id="customer-groups">
       <div class="empty-state"><p>Loading…</p></div>
     </div>
@@ -229,19 +245,10 @@
     </div>
   </div>
 
-  <!-- Tab: All Reservations flat -->
-  <div class="admin-section" id="tab-all-items">
-    <div class="toolbar" style="margin-bottom:16px">
-      <div class="search-wrap">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <label for="admin-search" class="visually-hidden">Search reservations</label>
-        <input type="text" class="search-input" id="admin-search" placeholder="Search any field…">
-      </div>
-    </div>
-    <div id="all-items-list"></div>
-  </div>
+  <!-- "All Reservations" tab retired 2026-08-08 (F121 session 2). A flat list
+       of every current-month reservation, which Rick rated below By Customer
+       and By Distributor for reviewing orders. Its search box moved to By
+       Customer above — that was the part worth keeping. -->
 
   <!-- Tab: This Week -->
   <div class="admin-section" id="tab-this-week">
@@ -1075,7 +1082,6 @@
 
     renderByCustomer();
     renderByDistributor();
-    renderAllItems();
     renderBackorderRiskPanel();
     renderWithdrawnPanel();
   }
@@ -1355,33 +1361,61 @@
   }
 
   // ── By Customer ───────────────────────────────────────────
-  function renderByCustomer() {
-    const grouped = {};
+  // The search predicate, extracted from the retired All Reservations tab so
+  // the two callers could never drift. Same fields it always matched on.
+  function matchesSearch(p, lc) {
+    const c = p.catalog || {};
+    return [p.customer_name, c.title, c.series_name, c.publisher, c.item_code]
+      .join(' ').toLowerCase().includes(lc);
+  }
+
+  // F121 session 2: takes the search that used to live on All Reservations.
+  // Searching narrows to the customers holding a match, shows only the
+  // matching rows inside them, and AUTO-EXPANDS them — finding the customer
+  // but still having to hunt through their list is not "finding a
+  // reservation".
+  function renderByCustomer(search = '') {
+    const lc = search.trim().toLowerCase();
+
+    // Full per-customer totals are computed BEFORE filtering, deliberately.
+    // A filtered header showing filtered subtotals reads as "this customer
+    // has 1 item" when they have twelve — which is the exact defect class
+    // F121 exists to remove, so the fix for it must not reintroduce it.
+    const grouped = {}, fullTotals = {};
     allPreorders.forEach(p => {
       const key = p.customer_name;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(p);
+      (fullTotals[key] ||= { qty: 0, value: 0, lunar: 0, prh: 0, all: 0 });
+      const qty = p.quantity || 1;
+      fullTotals[key].qty   += qty;
+      fullTotals[key].all   += 1;
+      fullTotals[key].value += (parseFloat(p.catalog?.price_usd) || 0) * qty;
+      if (p.catalog?.distributor === 'Lunar') fullTotals[key].lunar += qty;
+      if (p.catalog?.distributor === 'PRH')   fullTotals[key].prh   += qty;
+      if (lc && !matchesSearch(p, lc)) return;
+      (grouped[key] ||= []).push(p);
     });
 
     const container = document.getElementById('customer-groups');
     if (!Object.keys(grouped).length) {
-      container.innerHTML = `<div class="empty-state"><h3>No reservations yet</h3></div>`;
+      container.innerHTML = lc
+        ? `<div class="empty-state"><h3>No matches</h3><p>Nothing reserved this month matches “${escapeHtml(search.trim())}”.</p></div>`
+        : `<div class="empty-state"><h3>No reservations yet</h3></div>`;
       return;
     }
 
     container.innerHTML = Object.entries(grouped)
       .sort(([a],[b]) => a.localeCompare(b))
       .map(([name, items]) => {
-        const total      = items.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
-        const totalQty   = items.reduce((s, p) => s + (p.quantity||1), 0);
-        const lunarCount = items.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
-        const prhCount   = items.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
+        const t = fullTotals[name];
+        const showing = lc && items.length < t.all
+          ? ` · <strong style="color:var(--accent)">showing ${items.length} of ${t.all}</strong>`
+          : '';
         return `
-          <div class="customer-group">
+          <div class="customer-group${lc ? ' open' : ''}">
             <div class="customer-group-header">
               <div>
                 <div class="customer-group-name">${escapeHtml(name)}</div>
-                <div class="customer-group-meta">${totalQty} item${totalQty!==1?'s':''} · Est. $${total.toFixed(2)} · Lunar: ${lunarCount} · PRH: ${prhCount}</div>
+                <div class="customer-group-meta">${t.qty} item${t.qty!==1?'s':''} · Est. $${t.value.toFixed(2)} · Lunar: ${t.lunar} · PRH: ${t.prh}${showing}</div>
               </div>
               <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="m6 9 6 6 6-6"/>
@@ -1568,22 +1602,10 @@
   }
 
   // ── All Items (flat) ──────────────────────────────────────
-  function renderAllItems(search = '') {
-    const lc = search.toLowerCase();
-    const filtered = search
-      ? allPreorders.filter(p => {
-          const c = p.catalog || {};
-          return [p.customer_name, c.title, c.series_name, c.publisher, c.item_code]
-            .join(' ').toLowerCase().includes(lc);
-        })
-      : allPreorders;
-
-    document.getElementById('all-items-list').innerHTML =
-      filtered.length
-        ? renderMiniTable(filtered, true)
-        : `<div class="empty-state"><p>No matches</p></div>`;
-  }
-
+  // renderAllItems() removed 2026-08-08 (F121 session 2) with its tab. Its
+  // search predicate lives on as matchesSearch(), used by renderByCustomer().
+  // renderMiniTable() below is SHARED and stays — By Customer renders every
+  // one of its tables with it.
   function renderMiniTable(items, showCustomer = false) {
     return `
       <table class="list-table">
@@ -1646,9 +1668,9 @@
     });
   });
 
-  // ── Search (all items tab) ────────────────────────────────
+  // ── Search (By Customer tab) ──────────────────────────────
   document.getElementById('admin-search').addEventListener('input',
-    debounce(e => renderAllItems(e.target.value.trim()), 250));
+    debounce(e => renderByCustomer(e.target.value.trim()), 250));
 
   // ── Exports ───────────────────────────────────────────────
   // makeExportRows() removed 2026-08-07 (F121 session 1) alongside its only
