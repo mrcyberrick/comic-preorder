@@ -136,37 +136,19 @@
     </div>
   </div>
 
-  <!-- Summary Stats -->
-  <div class="stats-bar">
-    <div class="stat">
-      <div class="stat-value" id="stat-total">—</div>
-      <div class="stat-label">Total Reservations</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" id="stat-customers">—</div>
-      <div class="stat-label">Customers</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" style="color:var(--lunar)" id="stat-lunar">—</div>
-      <div class="stat-label">Lunar Items</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" style="color:var(--prh)" id="stat-prh">—</div>
-      <div class="stat-label">PRH Items</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" style="color:var(--success)" id="stat-value">—</div>
-      <div class="stat-label">Est. Order Value</div>
-    </div>
-    <div class="stat" id="stat-pending-wrap" style="display:none">
-      <div class="stat-value" style="color:var(--warning,#eab308)" id="stat-pending">—</div>
-      <div class="stat-label">Pending Approval</div>
-    </div>
-    <div class="stat" id="stat-fulfilled-wrap" style="display:none">
-      <div class="stat-value" style="color:var(--success,#22c55e)" id="stat-fulfilled">—</div>
-      <div class="stat-label">Fulfilled (excl. exports)</div>
-    </div>
-  </div>
+  <!-- Summary stats bar REMOVED 2026-08-07 — admin-restructure session 1 (F121).
+       Seven tiles that appeared in none of the twenty steps of the monthly,
+       weekly or continuous workflows, and in neither Rick's acts-on nor his
+       glances-at list. They were nonetheless the page's most prominent element,
+       which is why the PRH tile got reconciled against the Order Builder's
+       export count three times in one day — the tiles were compared because
+       they looked authoritative, not because a decision depended on them.
+       Relabelling them ("Copies", + a scope caption) was tried on 2026-08-07
+       and treated the symptom; this removes the cause. The pending COUNT is not
+       lost — the Pending tab badge still carries it.
+       The .stats-bar / .stat CSS deliberately STAYS in style.css: it is shared
+       with arrivals, catalog, mylist and subscriptions.
+       See docs/admin-dashboard-process-map.md § 5.5 W1 and § 5.7.1. -->
 
   <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
   <div id="backorder-risk-panel" style="display:none;margin-bottom:20px;padding:14px 16px;
@@ -179,8 +161,11 @@
        border:1px solid #666;border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Export Bar -->
+  <!-- "↓ Export All (CSV)" removed 2026-08-07 (F121 session 1) — it had no named
+       job in any of the twenty mapped workflow steps. The two order-sheet
+       buttons below stay: they open the Order Builder and carry the monthly
+       order. -->
   <div class="export-bar">
-    <button class="btn btn-secondary btn-sm" id="btn-export-all">↓ Export All (CSV)</button>
     <button class="btn btn-secondary btn-sm" id="btn-export-lunar">↓ Lunar Order Sheet</button>
     <button class="btn btn-secondary btn-sm" id="btn-export-prh">↓ PRH Order Sheet</button>
   </div>
@@ -189,16 +174,31 @@
   <div class="admin-tabs">
     <button class="admin-tab active" data-tab="by-customer">By Customer</button>
     <button class="admin-tab" data-tab="by-distributor">By Distributor</button>
-    <button class="admin-tab" data-tab="all-items">All Reservations</button>
     <button class="admin-tab" data-tab="this-week">This Week</button>
     <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
-    <button class="admin-tab" data-tab="top-series">Top Series</button>
     <button class="admin-tab" data-tab="pending" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
     <button class="admin-tab" data-tab="paper-orders">Paper Orders</button>
   </div>
 
   <!-- Tab: By Customer -->
   <div class="admin-section active" id="tab-by-customer">
+    <!-- Search moved here from the retired "All Reservations" tab (F121
+         session 2). That tab was a flat list of every reservation, rated
+         below this one and By Distributor for reviewing orders — but it held
+         the page's ONLY search box, so retiring it would have taken the
+         search with it. What was worth keeping was finding a title fast, not
+         the list. Searching here filters to the customers holding a match and
+         expands them. -->
+    <div class="toolbar" style="margin-bottom:16px">
+      <div class="search-wrap">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <label for="admin-search" class="visually-hidden">Search reservations</label>
+        <input type="text" class="search-input" id="admin-search"
+               placeholder="Search title, series, publisher, code or customer…">
+      </div>
+    </div>
     <div id="customer-groups">
       <div class="empty-state"><p>Loading…</p></div>
     </div>
@@ -244,19 +244,10 @@
     </div>
   </div>
 
-  <!-- Tab: All Reservations flat -->
-  <div class="admin-section" id="tab-all-items">
-    <div class="toolbar" style="margin-bottom:16px">
-      <div class="search-wrap">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <label for="admin-search" class="visually-hidden">Search reservations</label>
-        <input type="text" class="search-input" id="admin-search" placeholder="Search any field…">
-      </div>
-    </div>
-    <div id="all-items-list"></div>
-  </div>
+  <!-- "All Reservations" tab retired 2026-08-08 (F121 session 2). A flat list
+       of every current-month reservation, which Rick rated below By Customer
+       and By Distributor for reviewing orders. Its search box moved to By
+       Customer above — that was the part worth keeping. -->
 
   <!-- Tab: This Week -->
   <div class="admin-section" id="tab-this-week">
@@ -301,24 +292,23 @@
     </div>
   </div>
 
-  <!-- Tab: Top Series -->
-  <div class="admin-section" id="tab-top-series">
-    <div id="top-series-header" style="display:flex;align-items:center;justify-content:space-between;
-         flex-wrap:wrap;gap:12px;margin-bottom:20px">
-      <div style="font-size:0.82rem;color:var(--text-muted)" id="top-series-subtitle"></div>
-      <button class="btn btn-secondary btn-sm" id="btn-print-top-series"
-        style="display:flex;align-items:center;gap:6px">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-          <rect x="6" y="14" width="12" height="8"/>
-        </svg>
-        Print
-      </button>
-    </div>
-    <div id="top-series-list">
-      <div class="empty-state"><p>Loading…</p></div>
-    </div>
-  </div>
+  <!-- "Top Series" tab removed 2026-08-08 (F121 session 3). A ranked list of
+       series by reservation count for the current catalog month — glanced at,
+       never acted on, and its counting unit was undeterminable from the page
+       or the docs (process map § 3.4).
+
+       It was originally scheduled to MOVE to analytics.html. That was
+       reconsidered at implementation: analytics' Operations cards are all
+       EVENT-based over rolling windows ("reserve events, last 30 days"),
+       while this is STATE-based for one catalog month. Dropping it in beside
+       them would have recreated F121's own defect — similar-sounding numbers
+       at different scopes with no way to tell them apart from the screen.
+       The "what should I stock" job it half-did is already done properly by
+       the shelf-copy suggested order (docs/shelf-copy-suggested-order.md).
+
+       `get_popular_series` STAYS in the database: app.js's
+       Recommendations._getPopularSeries still uses it for the customer
+       catalog page. Only this admin surface is gone. -->
 
   <!-- Tab: Paper Orders -->
   <div class="admin-section" id="tab-paper-orders">
@@ -480,19 +470,37 @@
       background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
 
     <h2 id="order-builder-title" style="margin:0 0 4px;font-size:1.1rem">Order Builder</h2>
-    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.5">
-      Select the FOC cycle(s) you're ordering against this run. Everything held back is
-      listed below — nothing is dropped silently.
-    </p>
 
-    <div id="order-builder-cycles"></div>
-    <div id="order-builder-already-ordered"></div>
-    <div id="order-builder-heldback"></div>
+    <!-- STEP 1 — select cycles, download the file -->
+    <div id="ob-step-select">
+      <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.5">
+        Select the FOC cycle(s) you're ordering against this run. Everything held back is
+        listed below — nothing is dropped silently.
+      </p>
 
-    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+      <div id="order-builder-cycles"></div>
+      <div id="order-builder-already-ordered"></div>
+      <div id="order-builder-heldback"></div>
+    </div>
+
+    <!-- STEP 2 — record what the supplier actually accepted (F108 § 8).
+         Deliberately NOT reachable from the download: the file is not the
+         order. Rick submits it on the distributor's site and only then learns
+         which titles were rejected, so the question "record these as ordered?"
+         has no honest answer at download time. -->
+    <div id="ob-step-record" style="display:none"></div>
+
+    <div id="ob-foot-select" style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
       <span id="order-builder-summary" style="flex:1;font-size:0.8rem;color:var(--text-muted)"></span>
       <button class="btn btn-ghost" id="order-builder-cancel">Cancel</button>
+      <button class="btn btn-secondary" id="order-builder-record">Record submitted order →</button>
       <button class="btn btn-primary" id="order-builder-generate">Generate &amp; Download</button>
+    </div>
+
+    <div id="ob-foot-record" style="margin-top:24px;display:none;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+      <span id="ob-record-summary" style="flex:1;font-size:0.8rem;color:var(--text-muted)"></span>
+      <button class="btn btn-ghost" id="ob-record-back">← Back</button>
+      <button class="btn btn-primary" id="ob-record-save">Record order</button>
     </div>
   </div>
 </div>
@@ -1070,10 +1078,8 @@
     distributorViewMonth = currentCatalogMonth;
     renderDistributorMonthSelector();
 
-    renderStats();
     renderByCustomer();
     renderByDistributor();
-    renderAllItems();
     renderBackorderRiskPanel();
     renderWithdrawnPanel();
   }
@@ -1140,32 +1146,6 @@
   }
 
   await loadData();
-
-  // ── Stats ─────────────────────────────────────────────────
-  function renderStats() {
-    const customers  = new Set(allPreorders.map(p => p.user_id)).size;
-    const lunar      = allPreorders.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
-    const prh        = allPreorders.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
-    const value      = allPreorders.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity||1)), 0);
-    const fulfilled  = allPreorders.filter(p => p.fulfilled).length;
-
-    document.getElementById('stat-total').textContent     = allPreorders.reduce((s,p) => s+(p.quantity||1), 0);
-    document.getElementById('stat-customers').textContent = customers;
-    document.getElementById('stat-lunar').textContent     = lunar;
-    document.getElementById('stat-prh').textContent       = prh;
-    document.getElementById('stat-value').textContent     = `$${value.toFixed(2)}`;
-
-    // Show fulfilled count badge if any items are marked fulfilled this month
-    const fulfilledWrap = document.getElementById('stat-fulfilled-wrap');
-    if (fulfilledWrap) {
-      if (fulfilled > 0) {
-        fulfilledWrap.style.display = '';
-        document.getElementById('stat-fulfilled').textContent = fulfilled;
-      } else {
-        fulfilledWrap.style.display = 'none';
-      }
-    }
-  }
 
   // ── Order follow-up panel (F101 § 2.4/§ 4.5) ───────────────
   // Persistent, tab-independent. Three states, because "FOC passed without a
@@ -1379,33 +1359,61 @@
   }
 
   // ── By Customer ───────────────────────────────────────────
-  function renderByCustomer() {
-    const grouped = {};
+  // The search predicate, extracted from the retired All Reservations tab so
+  // the two callers could never drift. Same fields it always matched on.
+  function matchesSearch(p, lc) {
+    const c = p.catalog || {};
+    return [p.customer_name, c.title, c.series_name, c.publisher, c.item_code]
+      .join(' ').toLowerCase().includes(lc);
+  }
+
+  // F121 session 2: takes the search that used to live on All Reservations.
+  // Searching narrows to the customers holding a match, shows only the
+  // matching rows inside them, and AUTO-EXPANDS them — finding the customer
+  // but still having to hunt through their list is not "finding a
+  // reservation".
+  function renderByCustomer(search = '') {
+    const lc = search.trim().toLowerCase();
+
+    // Full per-customer totals are computed BEFORE filtering, deliberately.
+    // A filtered header showing filtered subtotals reads as "this customer
+    // has 1 item" when they have twelve — which is the exact defect class
+    // F121 exists to remove, so the fix for it must not reintroduce it.
+    const grouped = {}, fullTotals = {};
     allPreorders.forEach(p => {
       const key = p.customer_name;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(p);
+      (fullTotals[key] ||= { qty: 0, value: 0, lunar: 0, prh: 0, all: 0 });
+      const qty = p.quantity || 1;
+      fullTotals[key].qty   += qty;
+      fullTotals[key].all   += 1;
+      fullTotals[key].value += (parseFloat(p.catalog?.price_usd) || 0) * qty;
+      if (p.catalog?.distributor === 'Lunar') fullTotals[key].lunar += qty;
+      if (p.catalog?.distributor === 'PRH')   fullTotals[key].prh   += qty;
+      if (lc && !matchesSearch(p, lc)) return;
+      (grouped[key] ||= []).push(p);
     });
 
     const container = document.getElementById('customer-groups');
     if (!Object.keys(grouped).length) {
-      container.innerHTML = `<div class="empty-state"><h3>No reservations yet</h3></div>`;
+      container.innerHTML = lc
+        ? `<div class="empty-state"><h3>No matches</h3><p>Nothing reserved this month matches “${escapeHtml(search.trim())}”.</p></div>`
+        : `<div class="empty-state"><h3>No reservations yet</h3></div>`;
       return;
     }
 
     container.innerHTML = Object.entries(grouped)
       .sort(([a],[b]) => a.localeCompare(b))
       .map(([name, items]) => {
-        const total      = items.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
-        const totalQty   = items.reduce((s, p) => s + (p.quantity||1), 0);
-        const lunarCount = items.filter(p => p.catalog?.distributor === 'Lunar').reduce((s,p) => s+(p.quantity||1), 0);
-        const prhCount   = items.filter(p => p.catalog?.distributor === 'PRH').reduce((s,p) => s+(p.quantity||1), 0);
+        const t = fullTotals[name];
+        const showing = lc && items.length < t.all
+          ? ` · <strong style="color:var(--accent)">showing ${items.length} of ${t.all}</strong>`
+          : '';
         return `
-          <div class="customer-group">
+          <div class="customer-group${lc ? ' open' : ''}">
             <div class="customer-group-header">
               <div>
                 <div class="customer-group-name">${escapeHtml(name)}</div>
-                <div class="customer-group-meta">${totalQty} item${totalQty!==1?'s':''} · Est. $${total.toFixed(2)} · Lunar: ${lunarCount} · PRH: ${prhCount}</div>
+                <div class="customer-group-meta">${t.qty} item${t.qty!==1?'s':''} · Est. $${t.value.toFixed(2)} · Lunar: ${t.lunar} · PRH: ${t.prh}${showing}</div>
               </div>
               <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="m6 9 6 6 6-6"/>
@@ -1592,22 +1600,10 @@
   }
 
   // ── All Items (flat) ──────────────────────────────────────
-  function renderAllItems(search = '') {
-    const lc = search.toLowerCase();
-    const filtered = search
-      ? allPreorders.filter(p => {
-          const c = p.catalog || {};
-          return [p.customer_name, c.title, c.series_name, c.publisher, c.item_code]
-            .join(' ').toLowerCase().includes(lc);
-        })
-      : allPreorders;
-
-    document.getElementById('all-items-list').innerHTML =
-      filtered.length
-        ? renderMiniTable(filtered, true)
-        : `<div class="empty-state"><p>No matches</p></div>`;
-  }
-
+  // renderAllItems() removed 2026-08-08 (F121 session 2) with its tab. Its
+  // search predicate lives on as matchesSearch(), used by renderByCustomer().
+  // renderMiniTable() below is SHARED and stays — By Customer renders every
+  // one of its tables with it.
   function renderMiniTable(items, showCustomer = false) {
     return `
       <table class="list-table">
@@ -1670,36 +1666,14 @@
     });
   });
 
-  // ── Search (all items tab) ────────────────────────────────
+  // ── Search (By Customer tab) ──────────────────────────────
   document.getElementById('admin-search').addEventListener('input',
-    debounce(e => renderAllItems(e.target.value.trim()), 250));
+    debounce(e => renderByCustomer(e.target.value.trim()), 250));
 
   // ── Exports ───────────────────────────────────────────────
-  function makeExportRows(items) {
-    return items.map(p => {
-      const c   = p.catalog || {};
-      const qty = p.quantity || 1;
-      return {
-        Customer:    p.customer_name,
-        Distributor: c.distributor,
-        ItemCode:    c.item_code,
-        UPC:         c.upc,
-        ISBN:        c.isbn,
-        Title:       c.title,
-        Series:      c.series_name,
-        Publisher:   c.publisher,
-        Format:      c.format,
-        IssueNumber: c.issue_number,
-        VariantType: c.variant_type,
-        Quantity:    qty,
-        UnitPrice:   c.price_usd,
-        LineTotal:   ((parseFloat(c.price_usd)||0) * qty).toFixed(2),
-        FOCDate:     c.foc_date,
-        OnSaleDate:  c.on_sale_date,
-        ReservedOn:  p.created_at?.split('T')[0],
-      };
-    });
-  }
+  // makeExportRows() removed 2026-08-07 (F121 session 1) alongside its only
+  // caller, the "Export All (CSV)" button. exportToCsv() itself stays in
+  // app.js — mylist.html still uses it.
 
   // Consolidated order sheet — one row per title, total qty across all customers.
   // Fulfilled items are excluded: they are already in hand and must not be re-ordered.
@@ -1740,15 +1714,6 @@
     return Object.values(map).sort((a, b) => (a.ItemCode || '').localeCompare(b.ItemCode || ''));
   }
 
-  document.getElementById('btn-export-all').addEventListener('click', () => {
-    // Export All excludes fulfilled items — they are handled separately
-    const unfulfilled   = allPreorders.filter(p => !p.fulfilled);
-    const hadFulfilled  = unfulfilled.length < allPreorders.length;
-    const suffix        = hadFulfilled ? '-excl-fulfilled' : '';
-    exportToCsv(makeExportRows(unfulfilled),
-      `all-preorders-${DateUtils.todayLocal()}${suffix}.csv`);
-  });
-
   // Lunar/PRH order-entry format is unchanged (F101/F102 add a gate in
   // FRONT of this, not a new format): [code],[qty] per line, comma-delimited,
   // no header. Lunar falls back ItemCode → UPC → ISBN; PRH falls back
@@ -1765,10 +1730,20 @@
   const obAlready   = document.getElementById('order-builder-already-ordered');
   const obHeldback  = document.getElementById('order-builder-heldback');
   const obSummary   = document.getElementById('order-builder-summary');
+  const obStepSel   = document.getElementById('ob-step-select');
+  const obStepRec   = document.getElementById('ob-step-record');
+  const obFootSel   = document.getElementById('ob-foot-select');
+  const obFootRec   = document.getElementById('ob-foot-record');
+  const obRecSum    = document.getElementById('ob-record-summary');
 
   let builderDistributor   = null;
   let builderSelectedDates = new Set();
   let builderOverrides     = {}; // catalog_id -> { include: bool, qty: number }
+  // Step 2 state (F108 § 8). Keyed by export code, same key buildExportRows()
+  // groups on, so the record list and the downloaded file cannot diverge.
+  //   include:false ⇒ the supplier REJECTED it ⇒ writes a zero row (F117).
+  let builderStep       = 'select';   // 'select' | 'record'
+  let recordSelections  = {};         // code -> { include: bool, qty: number }
 
   async function openOrderBuilder(distributor) {
     builderDistributor = distributor;
@@ -1781,12 +1756,27 @@
     builderSelectedDates = new Set(futureDates.length ? [futureDates[0].foc] : []);
 
     obTitle.textContent = `${distributor} Order Builder`;
+    showBuilderStep('select');
     renderOrderBuilder();
     obOverlay.style.display = 'flex';
   }
 
+  // Which of the modal's two steps is on screen. Kept as one function so the
+  // body and the footer can never disagree about it.
+  function showBuilderStep(step) {
+    builderStep = step;
+    const onRecord = step === 'record';
+    obStepSel.style.display = onRecord ? 'none' : '';
+    obStepRec.style.display = onRecord ? '' : 'none';
+    obFootSel.style.display = onRecord ? 'none' : 'flex';
+    obFootRec.style.display = onRecord ? 'flex' : 'none';
+  }
+
   function closeOrderBuilder() {
     obOverlay.style.display = 'none';
+    // Always reopen on step 1 — a reopen landing mid-flow, on a record list
+    // built from a previous cycle selection, is how you record the wrong order.
+    showBuilderStep('select');
   }
 
   function renderOrderBuilder() {
@@ -2145,55 +2135,174 @@
     a.click();
     URL.revokeObjectURL(url);
 
-    toast(`${distributor} order sheet generated — ${consolidated.length} title${consolidated.length===1?'':'s'}`);
+    // ── No prompt here, deliberately (F108 § 8) ──────────────────────────
+    // Confirm-on-export used to fire at this point and ask "record these as
+    // ordered?". It asked before the answer was knowable: this produced a
+    // FILE, and which titles the supplier accepted is only known after the
+    // order is pasted into the distributor's site and submitted. Rick's
+    // walkthrough (2026-08-06) named the cost — browser-swapping mid-flow,
+    // and titles "locked as Ordered after the fact", so a rejection then
+    // needed a negative adjustment instead of the intended zero row.
+    // This is F101 § 4.2's original principle reasserting itself: generating
+    // a file is not proof of submission. Recording moved to step 2, which is
+    // reached when the operator comes BACK from the supplier.
+    toast(`${distributor} order sheet downloaded — ${consolidated.length} title${consolidated.length===1?'':'s'}. ` +
+          `Use "Record submitted order" when you're back from the supplier.`);
+  });
 
-    // ── Confirm-on-export (F108 § 4.2, order-loop-closure Session B) ──────
-    // Deliberately reverses F101 § 4.2's "written manually, not on export
-    // click" — with the operator's agreement (plan § 3.4): the ad-hoc process
-    // specifically benefits from capturing the order as a by-product of
-    // exporting it, rather than a remember-it-afterwards step. Measured
-    // proof this matters: the pre-existing manual Mark Ordered button was
-    // used ZERO times on production before this landed (§ 2.2).
-    //
-    // Explicit and AFTER the download, never automatic — generating a file
-    // is not proof of submission (same reasoning as the original Mark
-    // Ordered design). Declining leaves the ledger untouched (V-B1).
-    // order_type is always 'adhoc' here, matching Mark Ordered's own default
-    // (Rick, F102 resolution) — this is the ad-hoc path, not the reviewed
-    // monthly-cycle confirmation the import script performs at isNewMonth
-    // (§ 4.3, scripts repo).
-    const wantsConfirm = confirm(
-      `Record these ${consolidated.length} title${consolidated.length===1?'':'s'} as ordered?`);
-    if (wantsConfirm) {
-      const rows = consolidated.map(r => {
-        const code = distributor === 'PRH'
-          ? (r.ISBN || r.ItemCode || r.UPC || '')
-          : (r.ItemCode || r.UPC || r.ISBN || '');
-        return {
-          tenant_id:     TenantContext.current().id,
-          distributor,
-          order_code:    code,
-          item_code:     r.ItemCode || null,
-          title:         r.Title || null,
-          quantity:      r.TotalQty,
-          order_type:    'adhoc',
-          foc_date:      r.FOCDate || null,
-          catalog_month: currentCatalogMonth,
-          submitted_on:  DateUtils.todayLocal(),
-        };
-      }).filter(row => row.order_code);
+  // ── Step 2 — record what the supplier actually accepted ────────────────
+  // Built from buildExportRows(), the SAME function that produced the file, so
+  // the list you tick and the file you submitted cannot drift apart. Nothing
+  // is persisted between steps: the set is re-derivable from the cycle
+  // selection, so coming back tomorrow and re-selecting the same cycles
+  // reproduces it exactly (F108 § 8).
+  function renderRecordPanel() {
+    const distributor = builderDistributor;
+    const rows = buildExportRows(distributor, builderSelectedDates);
 
-      const { error } = await db.from('order_submissions').insert(rows);
-      if (error) {
-        toast(`Order recorded to file, but the ledger write failed: ${error.message}`, 'error');
-      } else {
-        await loadOrderLedger();
-        renderByDistributor();
-        renderBackorderRiskPanel();
-        toast(`Recorded ${rows.length} title${rows.length===1?'':'s'} on the order ledger`, 'success');
-      }
+    // Default every line to ordered-at-the-exported-quantity: the common case
+    // is that the supplier took the whole order. Unticking is the exception,
+    // and it is what records a rejection.
+    rows.forEach(r => {
+      const code = exportCodeForRow(r, distributor);
+      if (!recordSelections[code]) recordSelections[code] = { include: true, qty: r.TotalQty };
+    });
+
+    if (!rows.length) {
+      obStepRec.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem;margin:0">
+        Nothing in this cycle selection to record. Go back and pick the cycle(s) you submitted.</p>`;
+      obRecSum.textContent = '';
+      return;
     }
 
+    obStepRec.innerHTML = `
+      <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 6px;line-height:1.5">
+        These are the ${rows.length} title${rows.length===1?'':'s'} in the file you submitted to
+        ${escapeHtml(distributor)}. <strong style="color:var(--text-primary)">Untick anything the
+        supplier rejected</strong> — that records it as rejected rather than ordered.
+      </p>
+      <p style="color:var(--text-muted);font-size:0.76rem;margin:0 0 16px;line-height:1.5">
+        Adjust a quantity if they filled less than you asked for.
+      </p>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        ${rows.map(r => {
+          const code = exportCodeForRow(r, distributor);
+          const sel  = recordSelections[code];
+          return `
+          <div class="ob-rec-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+               border-bottom:1px solid var(--border);flex-wrap:wrap">
+            <input type="checkbox" class="ob-rec-cb" data-code="${escapeHtml(code)}"
+                   ${sel.include ? 'checked' : ''} aria-label="Ordered: ${escapeHtml(r.Title || code)}">
+            <span style="flex:1;min-width:180px;font-size:0.85rem">${escapeHtml(r.Title || '—')}</span>
+            <span style="font-family:monospace;font-size:0.72rem;color:var(--text-muted)">${escapeHtml(code)}</span>
+            <input type="number" min="0" class="ob-rec-qty" data-code="${escapeHtml(code)}"
+                   value="${sel.qty}" ${sel.include ? '' : 'disabled'}
+                   aria-label="Quantity ordered: ${escapeHtml(r.Title || code)}"
+                   style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
+                          color:var(--text-primary);padding:4px 6px;border-radius:var(--radius);font-size:0.82rem">
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    obStepRec.querySelectorAll('.ob-rec-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        recordSelections[cb.dataset.code].include = cb.checked;
+        const qtyInput = obStepRec.querySelector(`.ob-rec-qty[data-code="${CSS.escape(cb.dataset.code)}"]`);
+        if (qtyInput) qtyInput.disabled = !cb.checked;
+        updateRecordSummary();
+      });
+    });
+    obStepRec.querySelectorAll('.ob-rec-qty').forEach(inp => {
+      inp.addEventListener('input', () => {
+        recordSelections[inp.dataset.code].qty = Math.max(0, parseInt(inp.value) || 0);
+        updateRecordSummary();
+      });
+    });
+
+    updateRecordSummary();
+  }
+
+  // The export code for an already-built export row — same fallback chain the
+  // file generator uses, kept in one place so the two cannot diverge.
+  function exportCodeForRow(r, distributor) {
+    return distributor === 'PRH'
+      ? (r.ISBN || r.ItemCode || r.UPC || '')
+      : (r.ItemCode || r.UPC || r.ISBN || '');
+  }
+
+  function updateRecordSummary() {
+    const vals     = Object.values(recordSelections);
+    const ordered  = vals.filter(s => s.include && s.qty > 0).length;
+    const rejected = vals.length - ordered;
+    obRecSum.textContent = rejected
+      ? `${ordered} ordered · ${rejected} rejected`
+      : `${ordered} ordered`;
+  }
+
+  document.getElementById('order-builder-record').addEventListener('click', () => {
+    recordSelections = {};
+    renderRecordPanel();
+    showBuilderStep('record');
+  });
+
+  document.getElementById('ob-record-back').addEventListener('click', () => {
+    showBuilderStep('select');
+  });
+
+  document.getElementById('ob-record-save').addEventListener('click', async () => {
+    const distributor = builderDistributor;
+    const rows = buildExportRows(distributor, builderSelectedDates);
+    if (!rows.length) { toast('Nothing to record', 'error'); return; }
+
+    const btn = document.getElementById('ob-record-save');
+    btn.disabled = true;
+    btn.textContent = 'Recording…';
+
+    // order_type is 'monthly' here, NOT 'adhoc' (F108 § 8 / F121 W2). The
+    // Order Builder is how the MONTHLY cycle is submitted; Mark Ordered stays
+    // the ad-hoc path. This is not cosmetic: classifyForExport() routes
+    // 'adhoc' matches into the auto-excluded bucket instead of "already
+    // ordered — your call", which silently drops F102's remainder-defaulted
+    // quantity control on the following cycle.
+    const payload = rows.map(r => {
+      const code = exportCodeForRow(r, distributor);
+      const sel  = recordSelections[code] || { include: true, qty: r.TotalQty };
+      // Unticked (or zeroed) = the supplier refused it. A zero row IS the
+      // rejection record (F117/F108 § 4.4) — and because classifyForExport()
+      // gates on NET quantity > 0, that code correctly falls back into the
+      // next export rather than being excluded forever.
+      const qty = sel.include ? sel.qty : 0;
+      return {
+        tenant_id:     TenantContext.current().id,
+        distributor,
+        order_code:    code,
+        item_code:     r.ItemCode || null,
+        title:         r.Title || null,
+        quantity:      qty,
+        order_type:    'monthly',
+        foc_date:      r.FOCDate || null,
+        catalog_month: currentCatalogMonth,
+        submitted_on:  DateUtils.todayLocal(),
+      };
+    }).filter(row => row.order_code);
+
+    const { error } = await db.from('order_submissions').insert(payload);
+    btn.disabled = false;
+    btn.textContent = 'Record order';
+
+    if (error) {
+      toast(`Ledger write failed: ${error.message}`, 'error');
+      return;
+    }
+
+    await loadOrderLedger();
+    renderByDistributor();
+    renderBackorderRiskPanel();
+
+    const rejected = payload.filter(p => p.quantity <= 0).length;
+    toast(rejected
+      ? `Recorded ${payload.length - rejected} ordered, ${rejected} rejected`
+      : `Recorded ${payload.length} title${payload.length===1?'':'s'} on the order ledger`, 'success');
     closeOrderBuilder();
   });
 
@@ -2797,163 +2906,6 @@
   });
 
 
-  // ── Top Series Tab ────────────────────────────────────────
-  async function loadTopSeries() {
-    const container  = document.getElementById('top-series-list');
-    const subtitleEl = document.getElementById('top-series-subtitle');
-
-    container.innerHTML = `<div class="empty-state"><p>Loading…</p></div>`;
-
-    const { data, error } = await db.rpc('get_popular_series', {
-      p_catalog_month: currentCatalogMonth,
-    });
-
-    if (error) {
-      container.innerHTML = `<div class="alert alert-error">Failed to load: ${escapeHtml(error.message)}</div>`;
-      return;
-    }
-
-    if (!data || !data.length) {
-      container.innerHTML = `<div class="empty-state"><h3>No data yet</h3>
-        <p>Reservations will appear here once customers have reserved items this month.</p></div>`;
-      subtitleEl.textContent = '';
-      return;
-    }
-
-    // Format month label for display (e.g. "April 2026")
-    const [y, m] = (currentCatalogMonth || '').split('-');
-    const monthLabel = currentCatalogMonth
-      ? new Date(parseInt(y), parseInt(m) - 1, 1)
-          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      : '';
-
-    subtitleEl.textContent = `${data.length} series with reservations · ${monthLabel}`;
-
-    container.innerHTML = `
-      <table class="list-table" id="top-series-table">
-        <thead>
-          <tr>
-            <th style="width:40px;text-align:center">#</th>
-            <th>Series</th>
-            <th>Distributor</th>
-            <th style="text-align:center">Reservations</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.map((row, i) => `
-            <tr>
-              <td style="text-align:center;color:var(--text-muted);font-size:0.82rem">${i + 1}</td>
-              <td style="font-weight:600">${escapeHtml(row.series_name || '—')}</td>
-              <td><span class="badge badge-${(row.distributor || '').toLowerCase()}">${escapeHtml(row.distributor || '—')}</span></td>
-              <td style="text-align:center;font-family:var(--font-display);
-                         font-size:1.2rem;color:var(--accent)">${row.reservation_count}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
-  }
-
-  document.querySelector('[data-tab="top-series"]').addEventListener('click', () => {
-    const table = document.getElementById('top-series-table');
-    if (!table) loadTopSeries();
-  });
-
-  // ── Print Top Series ──────────────────────────────────────
-  // Opens a focused print window containing only the Top Series table —
-  // avoids fighting with the dark-mode admin UI in a global @media print rule.
-  document.getElementById('btn-print-top-series').addEventListener('click', () => {
-    const table = document.getElementById('top-series-table');
-    if (!table) return;
-
-    const [y, m] = (currentCatalogMonth || '').split('-');
-    const monthLabel = currentCatalogMonth
-      ? new Date(parseInt(y), parseInt(m) - 1, 1)
-          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      : '';
-
-    const rows = [...table.querySelectorAll('tbody tr')].map(tr => {
-      const cells = tr.querySelectorAll('td');
-      return {
-        rank:        cells[0]?.textContent.trim() || '',
-        series:      cells[1]?.textContent.trim() || '',
-        distributor: cells[2]?.textContent.trim() || '',
-        count:       cells[3]?.textContent.trim() || '',
-      };
-    });
-
-    const printWin = window.open('', '_blank', 'width=700,height=900');
-    printWin.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Top Series — ${monthLabel}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Georgia, serif; font-size: 12pt; color: #111; padding: 32px; }
-    .header { margin-bottom: 24px; padding-bottom: 14px; border-bottom: 2px solid #111; }
-    .store   { font-size: 9pt; color: #555; margin-bottom: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
-    .title   { font-size: 20pt; font-weight: 700; letter-spacing: 0.02em; }
-    .title span { color: #c0392b; }
-    .subtitle { font-size: 10pt; color: #444; margin-top: 6px; }
-    table  { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    thead tr { border-bottom: 2px solid #111; }
-    th { font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-         text-align: left; padding: 6px 8px; color: #333; }
-    th.center { text-align: center; }
-    tbody tr { border-bottom: 1px solid #ddd; }
-    tbody tr:nth-child(even) { background: #f7f7f7; }
-    td { padding: 7px 8px; font-size: 11pt; vertical-align: middle; }
-    td.rank  { text-align: center; color: #888; font-size: 9pt; width: 36px; }
-    td.count { text-align: center; font-weight: 700; font-size: 15pt; color: #c0392b; }
-    td.dist  { font-size: 9pt; color: #555; }
-    .footer  { margin-top: 24px; padding-top: 10px; border-top: 1px solid #ccc;
-               font-size: 8pt; color: #888; display: flex; justify-content: space-between; }
-    @media print {
-      body { padding: 16px; }
-      @page { margin: 0.75in; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="store">Ray &amp; Judy's Book Stop &middot; Rockaway, NJ</div>
-    <div class="title">PULL<span>LIST</span></div>
-    <div class="subtitle">Top Series by Reservations &mdash; ${monthLabel}</div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th class="center">#</th>
-        <th>Series</th>
-        <th>Distributor</th>
-        <th class="center">Reservations</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows.map(r => `
-        <tr>
-          <td class="rank">${escapeHtml(r.rank)}</td>
-          <td>${escapeHtml(r.series)}</td>
-          <td class="dist">${escapeHtml(r.distributor)}</td>
-          <td class="count">${escapeHtml(r.count)}</td>
-        </tr>`).join('')}
-    </tbody>
-  </table>
-  <div class="footer">
-    <span>PULLLIST Admin Report</span>
-    <span>Printed ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-  </div>
-</body>
-</html>`);
-    printWin.document.close();
-    printWin.focus();
-    setTimeout(() => {
-      printWin.print();
-      printWin.close();
-    }, 250);
-  });
-
-
 
   // ── Pending Accounts Tab ───────────────────────────────
   async function loadPendingAccounts() {
@@ -2962,18 +2914,15 @@
 
     const { items, error } = await Users.getPending();
 
-    // Update badge and stat
+    // Update the tab badge. The duplicate "Pending Approval" stat tile was
+    // removed 2026-08-07 (F121 session 1) — this badge is now the only carrier
+    // of the count, which is where Rick reads it anyway.
     const badge = document.getElementById('pending-badge');
-    const statWrap = document.getElementById('stat-pending-wrap');
-    const statEl   = document.getElementById('stat-pending');
     if (items.length > 0) {
       badge.textContent  = items.length;
       badge.style.display = 'inline';
-      statWrap.style.display = '';
-      statEl.textContent  = items.length;
     } else {
       badge.style.display = 'none';
-      statWrap.style.display = 'none';
     }
 
     if (error) {
@@ -3059,13 +3008,10 @@
         // Refresh badge count
         const remaining = document.querySelectorAll('#pending-table tbody tr').length;
         const badge = document.getElementById('pending-badge');
-        const statEl = document.getElementById('stat-pending');
         if (remaining > 0) {
           badge.textContent = remaining;
-          statEl.textContent = remaining;
         } else {
           badge.style.display = 'none';
-          document.getElementById('stat-pending-wrap').style.display = 'none';
         }
       });
     });
@@ -3100,10 +3046,8 @@
         const badge = document.getElementById('pending-badge');
         if (remaining > 0) {
           badge.textContent = remaining;
-          document.getElementById('stat-pending').textContent = remaining;
         } else {
           badge.style.display = 'none';
-          document.getElementById('stat-pending-wrap').style.display = 'none';
         }
       });
     });
