@@ -163,17 +163,17 @@
   <div class="admin-modes" role="tablist" aria-label="Dashboard mode">
     <button class="admin-mode active" data-mode="customers" role="tab" aria-selected="true">Customers<span class="admin-mode-sub">ongoing</span><span class="mode-dot" data-dot="customers" hidden></span></button>
     <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span></button>
-    <button class="admin-mode"        data-mode="ordering"  role="tab" aria-selected="false">Ordering<span class="admin-mode-sub">monthly</span><span class="mode-dot" data-dot="ordering" hidden></span></button>
+    <button class="admin-mode"        data-mode="ordering"  role="tab" aria-selected="false">Ordering<span class="admin-mode-sub">monthly</span></button>
   </div>
 
   <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
-  <div id="backorder-risk-panel" data-chrome="ordering" style="display:none;margin-bottom:20px;padding:14px 16px;
+  <div id="backorder-risk-panel" data-chrome="customers" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Withdrawn Panel (F110 § 4.5) — sibling to Backorder Risk, hidden when
        empty, visually distinct (grey, not red/amber) since Backordered and
        Withdrawn look similar but mean opposite things (§ 2.1). -->
-  <div id="withdrawn-panel" data-chrome="ordering" style="display:none;margin-bottom:20px;padding:14px 16px;
+  <div id="withdrawn-panel" data-chrome="customers" style="display:none;margin-bottom:20px;padding:14px 16px;
        border:1px solid #666;border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Export Bar -->
@@ -1241,47 +1241,43 @@
   }
 
   function updateModeDots() {
-    // Customers — pending accounts. Genuinely intermittent: usually nothing,
-    // occasionally something, and it clears when you act on it. That is what
-    // makes it a signal rather than a decoration.
-    if (typeof pendingCount === 'number') {
-      setModeDot('customers', pendingCount > 0 ? 'warn' : null);
-    }
-
-    // Ordering — deliberately NOT "is anything backordered". Measured on
-    // production 2026-08-08: 6 backordered and ~98 at risk, i.e. that dot
-    // would be red permanently, and a dot that is always on carries exactly
-    // as much information as one that is never on. Worse: it trains the
-    // operator to ignore it, which is how F96's alarm stopped being believed.
+    // ONE dot, on Customers, because that is where both attention surfaces now
+    // live: Pending accounts, and the Order Follow-Up / Withdrawn panels
+    // (moved there 2026-08-08 — an ad-hoc order is by definition outside the
+    // monthly cycle, so it belongs on the continuous surface, not Ordering).
+    // Ordering carries no dot: it is a deliberate monthly visit, and nothing
+    // in it goes stale while you are away.
     //
-    // So it reflects ACTION, not state:
-    //   red   never-arrived — the on-sale date passed and nothing shows it
-    //         came. A customer is already let down; this needs a phone call.
-    //   amber At Risk whose FOC falls inside the next 7 days — still
-    //         preventable, and it goes dark once ordered or once the window
-    //         passes. Standing backorders stay in the panel, where the detail
-    //         belongs, and out of the dot.
+    // Severity is the max of what is waiting:
+    //   red   never-arrived, or a withdrawn title still holding reservations.
+    //         A customer is already affected; this needs a call.
+    //   amber pending accounts, or At Risk with FOC inside FOC_DOT_DAYS —
+    //         work waiting, still preventable.
+    // Deliberately NOT "anything backordered": measured on production
+    // 2026-08-08 that was 6 backordered and ~98 at risk, i.e. permanently lit,
+    // and an always-on dot carries exactly as much information as a never-on
+    // one while training the operator to ignore it (F96).
+    let level = null;
+    const raise = (l) => { if (l === 'alert' || !level) level = (l === 'alert' ? 'alert' : (level || 'warn')); };
+
+    if (typeof pendingCount === 'number' && pendingCount > 0) raise('warn');
+
     if (fullDataLoaded) {
       const risk = computeBackorderRisk();
-      const soon = DateUtils.todayLocal();
-      const horizon = (() => {
-        const [y, m, d] = soon.split('-').map(Number);
-        const dt = new Date(y, m - 1, d + FOC_DOT_DAYS);
-        return DateUtils.fmtLocal(dt);
-      })();
-      // computeBackorderRisk() returns entries GROUPED BY EXPORT CODE, each
-      // carrying `.catalog` directly — NOT raw { p } reservation wrappers.
-      // Destructuring { p } here reads undefined on every row and the dot
-      // silently never fires. Confirmed against the function's own return
-      // shape rather than assumed.
-      const imminent = risk.atRisk.filter(e => {
-        const foc = e?.catalog?.foc_date;
-        return foc && foc >= soon && foc <= horizon;
-      }).length;
-
-      if (risk.neverArrived.length) setModeDot('ordering', 'alert');
-      else setModeDot('ordering', imminent ? 'warn' : null);
+      if (risk.neverArrived.length || computeWithdrawnTitles().length) raise('alert');
+      else {
+        const today = DateUtils.todayLocal();
+        const [y, m, d] = today.split('-').map(Number);
+        const horizon = DateUtils.fmtLocal(new Date(y, m - 1, d + FOC_DOT_DAYS));
+        const imminent = risk.atRisk.filter(e => {
+          const foc = e?.catalog?.foc_date;
+          return foc && foc >= today && foc <= horizon;
+        }).length;
+        if (imminent) raise('warn');
+      }
     }
+
+    setModeDot('customers', level);
   }
 
 
@@ -1299,31 +1295,17 @@
     tabs.forEach(t => { t.style.display = t.dataset.mode === mode ? '' : 'none'; });
     const mine = tabs.filter(t => t.dataset.mode === mode);
 
-    // Page chrome follows its mode too. This is not cosmetic: Bagging does not
-    // load `gatherCollapsed`, so leaving the Order Builder buttons visible
-    // there would open a modal reporting NOTHING to export — silently wrong,
-    // which is worse than an error. Same for the Order Deadline field, which
-    // would render blank because loadData() never populated it. A control must
-    // not outlive the data behind it.
-    // The two alert panels manage their own display:none when empty, so they
-    // are only ever force-hidden here, never force-shown.
+    // Page chrome follows its mode. A CLASS toggle, never an inline style.
+    // Two of these elements (#backorder-risk-panel, #withdrawn-panel) own
+    // their OWN inline display to hide themselves when empty. Writing the same
+    // property here is what made a panel appear in the wrong mode on a fresh
+    // load: applyMode() hid it, then loadData() re-rendered and un-hid it, and
+    // it only behaved after one manual mode switch. The two mechanisms are now
+    // independent — the render says whether there is anything to show, this
+    // says whether you should be seeing it here, and !important on
+    // .chrome-off settles the overlap in the mode's favour.
     document.querySelectorAll('[data-chrome]').forEach(el => {
-      const belongs = el.dataset.chrome === mode;
-      if (!belongs) {
-        // Remember the EXACT prior value rather than assuming ''. The two
-        // alert panels carry inline display:none while empty and are shown by
-        // their own render functions; restoring them to '' would reveal an
-        // empty box on every return to Ordering.
-        if (el.dataset.chromeHidden !== '1') {
-          el.dataset.prevDisplay  = el.style.display || '';
-          el.dataset.chromeHidden = '1';
-          el.style.display = 'none';
-        }
-      } else if (el.dataset.chromeHidden === '1') {
-        el.style.display = el.dataset.prevDisplay || '';
-        delete el.dataset.chromeHidden;
-        delete el.dataset.prevDisplay;
-      }
+      el.classList.toggle('chrome-off', el.dataset.chrome !== mode);
     });
 
     // A single-tab mode needs no tab strip — the mode name already said it.

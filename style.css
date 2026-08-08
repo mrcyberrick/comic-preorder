@@ -934,6 +934,17 @@ button { cursor: pointer; font-family: var(--font-body); }
 .mode-dot.dot-warn { background: var(--warning); }
 .mode-dot.dot-alert { background: var(--accent); }
 .admin-mode.active .mode-dot { box-shadow: 0 0 0 2px var(--bg); }
+/* Mode-gating for page chrome.
+   A CLASS, not an inline style, and deliberately so: two of these elements
+   (#backorder-risk-panel, #withdrawn-panel) manage their OWN inline display to
+   hide themselves when empty. Having applyMode() write the same property was
+   the bug Rick hit -- on a fresh load the mode pass hid the panel, then
+   loadData() re-rendered it and set display back, so it appeared in the wrong
+   mode until you switched modes once. Now the two mechanisms are independent:
+   the render owns "is there anything to say", this class owns "should you be
+   seeing it here", and !important settles the overlap in the mode's favour. */
+[data-chrome].chrome-off { display: none !important; }
+
 /* A mode with a single tab needs no tab strip — the mode name already said it. */
 .admin-tabs.single-tab { display: none; }
 
