@@ -1,8 +1,9 @@
 # Admin Dashboard — Process Map (F121)
 
-**Status:** Planning — § 1–4 complete (code-derived, 2026-08-07). **§ 5 blocked on
-the workflow interview with Rick.** No code changes proposed yet, by design.
-**Last verified against live code:** `admin.html` @ `40cc0e8`, 2026-08-07.
+**Status:** Planning — § 1–5 complete (2026-08-07). § 1–4 code-derived; **§ 5 is
+Rick's own walkthrough, captured 2026-08-07**, and is the authority where it and
+the code disagree. **§ 6 decisions owed.** No code changes proposed yet, by
+design. **Last verified against live code:** `admin.html` @ `40cc0e8`, 2026-08-07.
 
 **Finding:** `docs/technical-reference.md` § 13 **F121**. Also in scope for the
 structural decision: **F122** (fix direction 2 depends on how the page models a
@@ -140,11 +141,22 @@ builder would build from live cycles while the table shows history); its
 |---|---|---|
 | ↓ **Lunar Order Sheet** | Export bar | Order Builder → the file submitted to Lunar, from customer reservations |
 | ↓ **PRH Order Sheet** | Export bar | Order Builder → the file submitted to PRH |
-| Print **Lunar Order Sheet** | Paper Orders tab | A **blank shelf-copy browsing sheet** — catalog titles with a *future* FOC, no reservations |
+| Print **Lunar Order Sheet** | Paper Orders tab | **An in-store paper catalog** — future-FOC titles, each row carrying a **blank quantity box** for a customer to write in (`buildOrderSheetHtml()`, `:3673`) |
 | Print **PRH Order Sheet** | Paper Orders tab | Same, PRH |
 
-Two of these carry real money to a distributor. Two are a printed browsing aid.
-They differ by the words "↓" and "Print", and by which tab you are on.
+Two of these submit real money to a distributor. Two are a **customer-facing
+browsing catalog**. They differ by the words "↓" and "Print", and by which tab
+you are on.
+
+**Corrected 2026-08-07 from Rick's walkthrough** (§ 5.1 step 8): the second pair
+was first characterised here as a "shelf-copy browsing sheet". That was wrong on
+both counts. Shelf-copy seeding is the **Suggest Shelf Order** button on
+`mylist.html` (`docs/shelf-copy-suggested-order.md`), a different feature on a
+different page. These two buttons print *"a physical version of the catalog"* for
+the store — and the blank qty box is what customers write their orders in. It is
+a **paper order form**, which is where the Paper Orders tab's input comes from
+the following cycle (§ 5.4 W7). Named "Order Sheet", it is the one thing on the
+page that is genuinely an order form for a *customer* rather than a distributor.
 
 ### 3.3 The stats bar still mixes units after the 2026-08-07 relabel
 
@@ -229,29 +241,157 @@ it does not give the number.
 
 ---
 
-## 5. The workflow interview — OPEN, blocked on Rick
+## 5. The workflows, as Rick performs them
 
-Not derivable from code. F121's own evidence for doing this: the five-step
-walkthrough on 2026-08-06 took minutes and immediately exposed the
-confirm-on-export timing flaw (`docs/order-loop-closure-f108.md` § 8).
+Captured verbatim from Rick 2026-08-07. This is the authority for every
+attribution below; where the code and this section disagree, this section is
+what the store actually does.
 
-Questions are in the chat handoff. Answers land here as § 5.1 (monthly ordering),
-§ 5.2 (weekly bagging), § 5.3 (continuous admin), then § 6 becomes decidable.
+### 5.1 Monthly — the ordering cycle
+
+Rick's note: *"Not all steps need to go in the same order."*
+
+| # | Step | Surface |
+|---|---|---|
+| 1 | **Order deadline signals a new catalog is coming.** Download catalog files + any shipping files from the distributor sites | *(external)* — the deadline is read as a **cue**, not set here |
+| 2 | Enter paper orders — search each reserved title, add each paper customer, save. Then **as the admin, use Suggest Shelf Order to seed inventory**; review and adjust both | `admin.html` **Paper Orders** + **`mylist.html` Suggest Shelf Order** |
+| 3 | **Maintenance Mode ON.** Export/download the Lunar and PRH Order Sheets | Header toggle + **Export bar** → Order Builder |
+| 4 | Copy/paste the order-sheet lines into the distributor site and submit. **This is where a few titles come back rejected** for failing order requirements | *(external)* — **no app surface receives this** |
+| 5 | **Print the By Distributor report** to share with the store | By Distributor → Print / Save Report |
+| 6 | **Clear the order deadline** to review the new catalog before setting a new one. **Run the full import** with email notification = **N**. Commonly ~a week before the month changes | Header deadline ✕ + `import.js` |
+| 7 | **Maintenance Mode OFF.** The deadline is considered now and set quietly. The **next weekly import** sets notification = **Y** to announce the new catalog and deadline | Header toggle + header deadline |
+| 8 | **Print the Paper Orders report** — *"a physical version of the catalog"* for the store | Paper Orders → Print Lunar/PRH Order Sheet |
+
+### 5.2 Weekly — the bagging cycle
+
+| # | Step | Surface |
+|---|---|---|
+| 1 | Download shipping files (usually **Friday**) | *(external)* |
+| 2 | Run the import, notification = **Y**, to promote interest | `import.js` |
+| 3 | Print the **store report for This Week** | This Week (current anchor) → Print |
+| 4 | Print the **Bagging Report for NEXT week** — not shipped yet | This Week (**Next →** anchor) → Print |
+| 5 | Provide both reports to the store | — |
+| 6 | Sometimes post the HTML shipping-report link to Facebook | `weekly-pull-feed` (separate repo) |
+
+### 5.3 Continuous
+
+| # | Activity | Surface |
+|---|---|---|
+| 1 | Monitor site activity | **`analytics.html`** — *"useful to determine what is working and what is not"* |
+| 2 | Check for pending accounts | Pending tab |
+| 3 | View orders | **By Customer** |
+| 4 | Manage a customer to see upcoming titles | Paper Orders → Manage (impersonation) |
+| 5 | Check This Week arrivals show shipping | **`arrivals.html`** |
+| 6 | Watch for expiring FOC dates | **Order Follow-Up panel** — *"now visible as Order Follow-Up"*, previously done by scanning By Distributor |
+
+### 5.4 Acts on vs glances at — Rick's own split
+
+**Acts on:** expiring FOC → ad-hoc order · This Week bagging list → email inactive
+customers who have arrivals · Print Bagging List · By Distributor (review orders,
+print reports, verify paper orders).
+
+**Glances at:** Subscriptions, Top Series, *sometimes* All Reservations —
+*"All Reservations is not as useful as By Customer and By Distributor for
+reviewing orders."*
+
+**Never mentioned, in any of the 20 steps above or in either list:** the entire
+**stats bar** (7 tiles), the **Withdrawn panel**, and **Export All (CSV)**.
+
+### 5.5 What the walkthrough exposes
+
+Ten mismatches between the page and the process. W2–W3 are time-critical; the
+rest are structural.
+
+- **W1 — The stats bar serves no step of any workflow.** Seven tiles, the most
+  visually prominent element on the page, appearing in zero of twenty steps and
+  in neither the acts-on nor the glances-at list. The bar whose tiles were
+  reconciled against the Order Builder three times in one day (F121) is a bar
+  with **no job**. The reconcile attempts happened *because it is there and looks
+  authoritative*, not because a decision depended on it.
+- **W2 — Step 3's buttons are the Order Builder, and Rick has never used it.**
+  *"I have yet to use the order builder."* Since 2026-08-03 the export-bar
+  buttons **are** the Order Builder (F101/F102) — so his next monthly cycle is
+  the first real one, against a modal his step-3 mental model ("export/download")
+  does not describe. Two known defects are waiting for it:
+  - **confirm-on-export asks at step 3; rejections arrive at step 4.** Already
+    filed (`docs/order-loop-closure-f108.md` § 8) as a design flaw; his
+    walkthrough now confirms it against the real sequence.
+  - **`order_type: 'adhoc'` and `catalog_month: currentCatalogMonth` are both
+    hardcoded** (`admin.html:2206`, `:2208`). The monthly cycle therefore files
+    as ad-hoc, and titles gathered cross-month (F111) file under the *wrong*
+    month. `classifyForExport()` routes `adhoc` matches away from the "already
+    ordered — your call" bucket, so **F102's remainder-defaulted quantity
+    control silently drops on the following cycle** — the exact control that
+    exists because of the 12-against-7 surplus.
+  - Note the two ledger writers disagree: Mark Ordered files under the title's
+    **own** `catalog_month` (`:2243`), the Order Builder under the **current**
+    one. One table, two conventions.
+- **W3 — The rejection route Rick believes he has does not exist.** *"I now have
+  a way to flag them in the order builder from what I understand."* The Order
+  Builder has **no rejection path**. Zero-quantity rejection is the **Mark
+  Ordered** modal on the By Distributor tab (F108 Session B). At step 4 today,
+  the only route from "PRH rejected these three" into the app is per-title,
+  on a different surface, after the modal he was just in has closed.
+- **W4 — The monthly cycle is a procedure, and the page models it as tabs.**
+  Eight ordered steps bracketed by a Maintenance Mode window. The sequence
+  exists, is stable, and lives entirely in Rick's head; nothing in the software
+  knows the order or which step is current.
+- **W5 — Order Deadline and Maintenance Mode are cycle-phase markers, not
+  settings.** The deadline does **three** jobs: the customer-facing catalog
+  banner, the At Risk / ad-hoc edge (`missesOrderCycle()`), and — per step 1 —
+  Rick's own *"a new catalog is coming"* signal, cleared at step 6 and reset at
+  step 7 as a phase marker. Its tooltip describes only the first. Maintenance
+  Mode brackets steps 3–7 and is presented as a standalone toggle.
+- **W6 — Both workflows span pages the dashboard does not link to.** Monthly
+  needs `mylist.html` (Suggest Shelf Order, step 2); weekly needs
+  `arrivals.html` (continuous 5) and the `weekly-pull-feed` repo. The admin
+  dashboard is one surface in a workflow, not the workflow.
+- **W7 — The paper loop closes across two monthly cycles.** Step 8 prints a
+  catalog with a blank qty box → customers write orders on it in-store → the
+  *next* cycle's step 2 keys them in. The two ends of that loop are a print
+  button on the Paper Orders tab and a search box on the Paper Orders tab, and
+  nothing on either says they are the same loop.
+- **W8 — All Reservations may be valued for the wrong reason.** Rick rates it
+  below By Customer and By Distributor for reviewing orders — but it holds the
+  page's **only search box**. Its worth may be *search*, not *a flat list*.
+- **W9 — Weekly is two prints from one tab at two anchors.** Current week (store
+  report) and next week (bagging, not yet shipped). The print header does carry
+  the week range (`:2706`), so the output is unambiguous — but the tab is named
+  for its default anchor rather than its job.
+- **W10 — Analytics is used, valued, and already a separate page.** The one
+  continuous-cadence surface that was split out is the one Rick volunteers
+  praise for. That is the strongest available evidence that separating by
+  cadence works here.
 
 ---
 
-## 6. Decisions owed (cannot be settled before § 5)
+## 6. Decisions owed
 
-1. **Page structure** — one page with labelled cadence sections, or a split
-   (e.g. Ordering / Bagging / Accounts). F121 is deliberately neutral.
-2. **One vocabulary** for copies vs titles vs reservation rows, applied to every
-   tile, header, panel and print surface at once.
-3. **Whether § 3.1–3.4 are fixed inside this session** or filed as their own
-   finding(s) — per CLAUDE.md § Stop and ask, this is Rick's call, not the
-   agent's.
-4. **F122's fix direction** (judge on newest catalog row vs carry manual
-   reservations forward) — F122 § "Fix direction" defers this here explicitly.
-5. **Load-cost fix scope** — follows from decision 1.
+**Sequencing recommendation:** decision 1 is time-critical and should not wait
+for the structural work. Decisions 2–3 are cheap and independent. Decision 4 is
+the actual F121 session.
+
+1. **Fix the Order Builder before Rick's first monthly use (W2/W3).** Real money,
+   a known-wrong `order_type`, and a rejection route that does not exist. Already
+   has a home: `docs/order-loop-closure-f108.md` § 8 ("decoupling record from
+   download"). The walkthrough turns that from a design concern into a dated one.
+2. **Delete or reduce the stats bar (W1).** Zero workflow steps, and the direct
+   cause of the reconcile attempts. The cheapest large win available, and it
+   removes § 3.3 rather than fixing it.
+3. **Rename the Paper Orders print buttons (§ 3.2 / W7)** — two strings, and it
+   stops two pairs of buttons sharing a name across two unrelated jobs.
+4. **Page structure (W4/W10).** Whether the monthly procedure gets a guided
+   surface, whether the three cadences separate, and what remains on a default
+   view. F121 is deliberately neutral; § 5 is now the input it was missing.
+5. **One vocabulary** for copies / titles / reservation rows — applied to every
+   tile, header, panel and print surface at once, not tile by tile (§ 3.3 is what
+   tile-by-tile produces).
+6. **Whether § 3.1 and § 3.4 are fixed here or filed** — per CLAUDE.md
+   § Stop and ask. Note § 3.1 and § 3.2 may dissolve on their own under
+   decision 4.
+7. **F122's fix direction** (judge on newest catalog row vs carry manual
+   reservations forward) — F122 defers this here explicitly.
+8. **Load-cost fix scope (§ 4)** — follows from decision 4.
 
 ---
 
