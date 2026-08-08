@@ -169,8 +169,14 @@ Worth noting the near-miss in method: the first teardown query used
 it returned **all 17** profiles and read as mass orphaning. The correct query
 returns **1**.
 
-### 8.4 Still open
+### 8.4 Resolved / still open
 
-- Real-browser check on staging — Rick's.
-- The 2026-08-06 orphan above — file or ignore, Rick's call.
+- ~~Real-browser check on staging~~ — **confirmed by Rick 2026-08-08.**
+- ~~The 2026-08-06 orphan~~ — **RESOLVED 2026-08-08. Not an F95 regression**, and
+  deliberately not filed as one: F95's fix makes `deleteUser()` throw, so a real
+  delete failure shows up as a red test. A *silent* orphan means teardown never
+  ran — the process was killed between fixture setup and teardown. No in-process
+  teardown can cover that. Row deleted, recount 0, and the distinction is
+  recorded in `technical-reference.md` § 13 F95 so it is not rediscovered as a
+  regression.
 - **Not promoted to production.**
