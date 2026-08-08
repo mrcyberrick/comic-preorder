@@ -139,7 +139,8 @@ Fixtures torn down and **verified by live SELECT returning zero rows.**
 - [x] V1–V7 green (§ 9)
 - [x] Ledger fixtures removed, **confirmed by live SELECT returning 0** for
       `order_submissions`, `catalog` and `user_profiles` test rows
-- [ ] **Real-browser check by Rick on staging — owed, and it is his**
+- [x] **Real-browser check by Rick — confirmed 2026-08-08**; promoted in PR #109
+      (merge `9552ee6`) and the post-deploy write-smoke passed on production
 - [x] `order-loop-closure-f108.md` § 8 updated: deferred block → Complete
 - [x] F121 process map W2/W3 marked resolved; `CLAUDE.md` line updated
 

@@ -104,7 +104,7 @@ Fixtures torn down, **verified by live SELECT returning zero rows.**
 - [x] § 4 applied, every range re-verified against disk first
 - [x] V1–V7 green (§ 8)
 - [x] Fixtures gone, confirmed by live SELECT (0 rows)
-- [ ] **Real-browser check by Rick — owed**
+- [x] **Real-browser check by Rick — confirmed 2026-08-08**; promoted in PR #109, post-deploy write-smoke passed
 - [x] Parent § 5.7.4 session index updated
 
 ---
