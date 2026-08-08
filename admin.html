@@ -615,6 +615,17 @@
   let allPreordersAllMonths = [];
   let profileMap   = {};
 
+  // By Distributor search state (F121 session 5). Declared HERE, beside the
+  // other module state, not next to renderByDistributor() — that function
+  // takes `search = bdSearch` as a default parameter, which is evaluated at
+  // CALL time, and loadData() calls it during applyMode() far above the
+  // renderer. A `let` declared later is still in its temporal dead zone at
+  // that point and throws a ReferenceError, which kills the rest of
+  // loadData() — the alert panels never render and 28 specs fail on hidden
+  // panels with nothing pointing at the real cause. Same bug as session 4,
+  // same shape, caught by the same class of gate.
+  let bdSearch = '';
+
   // ── By Distributor cycle selector (2026-08-06) ──────────────
   // The By Distributor tab can review a CLOSED catalog month, so a cycle's
   // final order state stays reviewable and printable after the next import
@@ -1690,10 +1701,6 @@
   // Scoped to distributorViewMonth (the cycle selector), NOT allPreorders —
   // identical output when the selection is the current month, and able to
   // show a closed cycle otherwise.
-  // Search state for this tab, module-level so a re-render triggered by
-  // loadData() or the month selector does not silently drop what was typed.
-  let bdSearch = '';
-
   function renderByDistributor(search = bdSearch) {
     bdSearch = search;
     const lc  = search.trim().toLowerCase();
