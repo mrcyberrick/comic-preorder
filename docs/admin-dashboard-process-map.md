@@ -4,7 +4,7 @@
 where it and the code disagree. **Structure DECIDED 2026-08-07 — Option B, as
 modes within one `admin.html` (§ 5.7).** **Sessions 1–3 and W2/W3 are LIVE IN
 PRODUCTION as of 2026-08-08** (PR #109, merge `9552ee6`, write-smoke passed —
-§ 5.7.6). Sessions 4–6 not started. Remaining decisions in § 6.
+§ 5.7.6). **Session 4 (the mode switch) is COMPLETE on staging 2026-08-08, not yet promoted.** Sessions 5–6 not started. Remaining decisions in § 6.
 
 > ⚠ **§ 1–§ 4 are a snapshot of the page as it was on 2026-08-07, before any of
 > this shipped.** They are kept deliberately, because they are the evidence the
@@ -592,7 +592,7 @@ sessions 4–6 (Bagging → Customers → Ordering modes).
 | **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the spec asserting them | `docs/admin-restructure-1-removals.md` | **COMPLETE on staging 2026-08-08** (`1ec32a7`) — V1–V7 green, 86/86 suite. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
 | 2 | Search rehome + All Reservations retire | Search built on By Customer (filters, auto-expands, keeps full totals); tab deleted | `docs/admin-restructure-2-search-rehome.md` | **COMPLETE on staging 2026-08-08** (`649a4b6`) — V1–V7 green, 91/91, spec 16 added. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
 | 3 | ~~Top Series → `analytics.html`~~ **Top Series deleted** | Decision corrected at implementation (§ 5.7.5) — moving it would have recreated F121's defect on the analytics page | — (§ 5.7.5) | **COMPLETE on staging 2026-08-08** (`6845326`) — 176 lines removed; `get_popular_series` kept for the customer catalog page. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
-| 4 | **Bagging** mode | Smallest, most self-contained — proves the mode pattern at low risk | not written | Not started |
+| 4 | **Mode switch**, proved on Bagging | 3-mode nav (Customers · Bagging · Ordering), chrome follows its mode, Bagging loads light, attention dots | `docs/admin-restructure-4-bagging-mode.md` | **COMPLETE on staging 2026-08-08** — V1–V7 green; Bagging skips the 2,000-row fetch + `weekly_shipment`. Not promoted. |
 | 5 | **Customers** mode | Pending · By Customer (+ search from session 2) · Invite · paper customers + Manage · Subscriptions | not written | Not started |
 | 6 | **Ordering** mode | Largest and most consequential; goes last so the W2/W3 fixes settle first | not written | Not started |
 

@@ -3,7 +3,7 @@
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.2 **P4**, § 5.7.4.
 **Decision:** Option B, built as **modes within one `admin.html`** — Rick, 2026-08-07.
 
-**Status:** Planned 2026-08-08.
+**Status:** **COMPLETE on staging 2026-08-08** — four commits (`de52328`, `a1e406a`, `2189b09`, `b2c65be`). Not promoted.
 **Target:** **staging only.**
 **Branch:** `feature/admin-bagging-mode`
 **Last verified against live code:** `admin.html` @ `43191b6`, 2026-08-08.
@@ -42,16 +42,19 @@ lands here first.
 
 ### Allocation
 
+**As shipped** (revised from the plan's original after Rick's feedback — order
+is continuous → weekly → monthly, which is also how often each is used):
+
 | Mode | Contains |
 |---|---|
-| **Ordering** *(default)* | By Distributor · Paper Orders |
+| **Customers** *(default)* | By Customer · Subscriptions · Pending |
 | **Bagging** | This Week |
-| **Customers** | By Customer · Subscriptions · Pending |
+| **Ordering** | By Distributor · Paper Orders |
 
 ### OUT — stop and ask
 | Not touched | Why |
 |---|---|
-| **Page chrome** — Order Deadline, Maintenance Mode, Invite Customer, Order Builder buttons, Order Follow-Up and Withdrawn panels | Stays always-visible. Relocating chrome is sessions 5–6; doing it here would make the first structural change the largest one. |
+| ~~**Page chrome** stays always-visible~~ | **CHANGED DURING EXECUTION.** Chrome now follows its mode. Not a scope grab: Bagging does not load `gatherCollapsed`, so an always-visible Order Builder button there opens a modal reporting *nothing to export*. A control must not outlive the data behind it, so § 5.7.1's allocation arrived one session early. See § 7.2. |
 | **Splitting Paper Orders** (§ 5.7.2 P2 — bulk entry → Ordering, Manage → Customers) | Real work, and unnecessary to prove the pattern. The tab sits under Ordering whole for now. |
 | Ordering / Customers fetch isolation | Sessions 5–6. Only Bagging's is proved here. |
 | `renderThisWeek()` itself | Byte-unchanged. Only *when* its data loads changes. |
@@ -60,27 +63,30 @@ lands here first.
 
 ## 3. Design
 
-### 3.1 Default mode is Ordering, deliberately
+### 3.1 Default mode — planned Ordering, shipped Customers
 
-The page currently lands on By Customer with everything loaded. Landing on
-**Ordering** keeps load behaviour essentially unchanged for the default path,
-which keeps this session's risk in the one place it belongs — the Bagging path.
+**Planned** as Ordering, on the reasoning that it kept the default path's load
+behaviour unchanged and so concentrated risk on the Bagging path.
 
-It also keeps the **Order Follow-Up and Withdrawn panels visible on arrival**,
-since they stay in chrome (§ 2 OUT).
+**Rick overruled it, correctly** (2026-08-08): the continuous work — pending
+accounts, By Customer — is what he opens the dashboard for; Ordering is a
+monthly visit. The original choice optimised for the agent's risk management,
+not the operator's workflow.
 
-### 3.2 What Bagging deliberately does not show
+Landing on Customers also does a full load, so the Order Follow-Up and Withdrawn
+detail is present on arrival anyway.
 
-In Bagging mode the order alerts are not computed, because computing them needs
-`gatherCollapsed` — i.e. the exact fetch this mode exists to avoid. Loading it
-for a badge would defeat the change.
+### 3.2 P1's cross-surface alert — partly delivered, and partly proved unnecessary
 
-**Accepted, and it is a real trade-off worth naming:** § 5.7.2 P1 says the alerts
-should stay visible from every surface via a count badge. That needs either the
-full gather or a dedicated count query. **Deferred to session 6**, when Ordering's
-own fetch is isolated and the cheap-count question is on the table anyway. Until
-then the alerts are visible in the two modes that load fully, and Bagging is a
-deliberate destination you switch to for a weekly task.
+§ 5.7.2 P1 asked for the order alerts to stay visible from every surface. This
+session delivered that as **attention dots on the mode buttons** rather than a
+count badge — and measurement then cut three dots to two (§ 7.4).
+
+The Bagging-mode gap remains by design: computing an Ordering alert needs
+`gatherCollapsed`, the exact fetch Bagging exists to avoid. Since Bagging's own
+dot was removed for having no signal at all, the practical consequence is only
+that the *Ordering* dot is not computed while sitting in Bagging. Landing on
+Customers (a full load) means it is accurate in the normal flow.
 
 ### 3.3 Idempotent loaders
 
@@ -110,11 +116,11 @@ only one that proves the restructure bought anything.
 
 ## 5. Completion criteria
 
-- [ ] § 2 applied, ranges re-verified against disk first
-- [ ] V1–V7 green
-- [ ] Fixtures torn down, confirmed by live SELECT
-- [ ] Real-browser check by Rick
-- [ ] Parent § 5.7.4 index updated
+- [x] § 2 applied, ranges re-verified against disk first
+- [x] V1–V6 green (7/7 mode gates); V7 full suite in § 7.6
+- [x] No fixtures seeded — every gate ran against existing staging data
+- [x] **Real-browser check by Rick 2026-08-08** — *"the UI looks good"* (§ 7.5)
+- [x] Parent § 5.7.4 index updated
 
 ---
 
@@ -126,4 +132,85 @@ Single feature branch, client-only, no DB change. `git revert` the merge.
 
 ## 7. Deploy log
 
-*(empty — not started)*
+**Staging only, 2026-08-08.** Client-only; no DB change.
+
+| Commit | What |
+|---|---|
+| `de52328` | Mode switch + Bagging's light load |
+| `a1e406a` | Fix: defer initial tab load past the temporal dead zone |
+| `2189b09` | Rick's feedback — nav to top, land on Customers, attention dots |
+| `b2c65be` | Drop the Bagging dot; re-scope Ordering from state to action |
+
+### 7.1 V2 — what the session actually bought
+
+Landing in Bagging issues **no `fetchAllPreorders()` and no `weekly_shipment`
+read**, while This Week still renders with customer names and unavailable
+flags. **V2b is its control** — Ordering *does* still fetch, so V2 cannot pass
+by the fetch having been deleted or the selector being wrong.
+
+The mode is remembered in `localStorage`, which is what makes that real rather
+than theoretical: if every visit started in a full-loading mode, Bagging's
+cheap path would never execute.
+
+### 7.2 Three bugs the gates caught, all agent-introduced
+
+1. **Temporal dead zone.** `applyMode()` runs at ~L1300 and called
+   `renderThisWeek()`, but `let weekAnchorMonday` is not initialised until
+   ~L2760. The call threw a `ReferenceError` inside an async function nobody
+   awaits — it failed **completely silently** and the tab just looked empty.
+   Split into selection (`applyMode`) and data load (`runInitialTabLoad()`, the
+   last statement in the script). Chosen over `setTimeout(0)`, which would have
+   worked for the same reason but left nothing explaining it.
+2. **Chrome outliving its data.** Bagging does not load `gatherCollapsed`, so
+   leaving the Order Builder buttons visible there would have opened a modal
+   reporting **nothing to export** — silently wrong, worse than an error. Chrome
+   now follows its mode, pulling § 5.7.1's allocation forward one session
+   because it removes a bug class rather than adding a feature.
+3. **Restoring chrome cannot assume `display:''`.** The alert panels carry
+   inline `display:none` while empty; restoring to `''` would reveal an empty
+   box on every return to Ordering. The exact prior value is saved and restored.
+
+### 7.3 The instructive failure
+
+V2's first run passed its network check and failed on rendering; the second run
+did the opposite. Both were correct. The predicate matched on `cover_url`,
+which **This Week's own query also selects** (the bagging list shows covers). In
+run 1 the TDZ bug meant This Week never queried at all, so the bad predicate had
+nothing to catch — **the first bug was masking the bad test.** The real
+discriminator is `writer`, which only `fetchAllPreorders()` selects.
+
+### 7.4 Rick's feedback, and what measuring it changed
+
+Landing mode → **Customers**; order → **Customers · Bagging · Ordering**
+(continuous, weekly, monthly); mode nav moved **above** the alert panels, which
+had been pushing the primary navigation down the page.
+
+Attention dots were requested for all three modes. **Measurement cut that to
+two**, and the measurement is the point:
+
+| Mode | Measured on production 2026-08-08 | Outcome |
+|---|---|---|
+| Customers | 0 pending now, non-zero at other times | **kept** — genuinely intermittent |
+| Bagging | 117 arriving this week, **0 withdrawn, 0 codes net ≤ 0 in the whole 860-row ledger** | **removed** — could never fire |
+| Ordering | 6 backordered, ~98 at risk | **re-scoped** — would have been permanently red |
+
+Rick predicted the Bagging one unprompted. Checking it exposed the Ordering dot
+as the same defect wearing the opposite mask: **an always-on dot carries exactly
+as much information as a never-on one**, and is the more dangerous of the two
+because it trains the operator to ignore it — how F96's alarm stopped being
+believed. Ordering now means *action*: red = never-arrived (a customer is
+already let down), amber = At Risk with FOC inside 7 days (still preventable).
+
+A fourth agent bug was caught here by reading a return shape instead of
+assuming it: `computeBackorderRisk()` returns entries **grouped by export code**
+carrying `.catalog` directly, not raw `{ p }` wrappers. The filter destructured
+`{ p }` and would have read `undefined` on every row — the amber dot would never
+have fired, looking exactly like "nothing is at risk".
+
+### 7.5 Not a bug: landing on Ordering right after the change
+
+Rick saw Ordering on his first load after the default changed. That is
+`localStorage` working as designed — a **remembered** mode deliberately outranks
+the default, and he had been on Ordering while testing the previous build. It
+self-corrected as soon as he chose Customers. Recorded so a later session does
+not "fix" it.
