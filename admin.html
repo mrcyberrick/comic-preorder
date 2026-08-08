@@ -162,7 +162,7 @@
        (§ 5.7.2 P4). Each mode owns its tabs and, in time, its own fetch.  -->
   <div class="admin-modes" role="tablist" aria-label="Dashboard mode">
     <button class="admin-mode active" data-mode="customers" role="tab" aria-selected="true">Customers<span class="admin-mode-sub">ongoing</span><span class="mode-dot" data-dot="customers" hidden></span></button>
-    <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span><span class="mode-dot" data-dot="bagging" hidden></span></button>
+    <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span></button>
     <button class="admin-mode"        data-mode="ordering"  role="tab" aria-selected="false">Ordering<span class="admin-mode-sub">monthly</span><span class="mode-dot" data-dot="ordering" hidden></span></button>
   </div>
 
@@ -1218,8 +1218,8 @@
     } catch { return DEFAULT_MODE; }   // private mode / storage disabled
   }
 
-  let pendingCount        = null;   // null = not loaded yet, deliberately not 0
-  let baggingUnavailable  = null;
+  const FOC_DOT_DAYS = 7;          // Rick 2026-08-08 — "act now" horizon for the Ordering dot
+  let pendingCount   = null;       // null = not loaded yet, deliberately not 0
 
   // ── Attention dots ─────────────────────────────────────────
   // One dot per mode: "there is something in here for you". Two levels only —
@@ -1241,29 +1241,46 @@
   }
 
   function updateModeDots() {
-    // Customers — pending accounts are routine but time-sensitive.
+    // Customers — pending accounts. Genuinely intermittent: usually nothing,
+    // occasionally something, and it clears when you act on it. That is what
+    // makes it a signal rather than a decoration.
     if (typeof pendingCount === 'number') {
       setModeDot('customers', pendingCount > 0 ? 'warn' : null);
     }
 
-    // Ordering — needs the cross-month gather, so only meaningful after a full
-    // load. Backordered / never-arrived means a customer is already affected;
-    // At Risk is still preventable.
+    // Ordering — deliberately NOT "is anything backordered". Measured on
+    // production 2026-08-08: 6 backordered and ~98 at risk, i.e. that dot
+    // would be red permanently, and a dot that is always on carries exactly
+    // as much information as one that is never on. Worse: it trains the
+    // operator to ignore it, which is how F96's alarm stopped being believed.
+    //
+    // So it reflects ACTION, not state:
+    //   red   never-arrived — the on-sale date passed and nothing shows it
+    //         came. A customer is already let down; this needs a phone call.
+    //   amber At Risk whose FOC falls inside the next 7 days — still
+    //         preventable, and it goes dark once ordered or once the window
+    //         passes. Standing backorders stay in the panel, where the detail
+    //         belongs, and out of the dot.
     if (fullDataLoaded) {
       const risk = computeBackorderRisk();
-      const withdrawn = computeWithdrawnTitles();
-      if (risk.neverArrived.length || risk.backordered.length || withdrawn.length) {
-        setModeDot('ordering', 'alert');
-      } else {
-        setModeDot('ordering', risk.atRisk.length ? 'warn' : null);
-      }
-    }
+      const soon = DateUtils.todayLocal();
+      const horizon = (() => {
+        const [y, m, d] = soon.split('-').map(Number);
+        const dt = new Date(y, m - 1, d + FOC_DOT_DAYS);
+        return DateUtils.fmtLocal(dt);
+      })();
+      // computeBackorderRisk() returns entries GROUPED BY EXPORT CODE, each
+      // carrying `.catalog` directly — NOT raw { p } reservation wrappers.
+      // Destructuring { p } here reads undefined on every row and the dot
+      // silently never fires. Confirmed against the function's own return
+      // shape rather than assumed.
+      const imminent = risk.atRisk.filter(e => {
+        const foc = e?.catalog?.foc_date;
+        return foc && foc >= soon && foc <= horizon;
+      }).length;
 
-    // Bagging — set by renderThisWeek() once the week is known; anything in
-    // this week's box that will not physically arrive is a customer-facing
-    // problem, so it is an alert rather than a warning.
-    if (typeof baggingUnavailable === 'number') {
-      setModeDot('bagging', baggingUnavailable > 0 ? 'alert' : null);
+      if (risk.neverArrived.length) setModeDot('ordering', 'alert');
+      else setModeDot('ordering', imminent ? 'warn' : null);
     }
   }
 
@@ -2886,11 +2903,6 @@
         unavailableReason: isWithdrawn ? 'Withdrawn by the distributor' : isRejected ? 'Rejected by the supplier' : null,
       };
     });
-
-    // Anything in this week's box that will not physically arrive is a
-    // customer-facing problem, so it drives an ALERT dot, not a warning.
-    baggingUnavailable = arriving.filter(p => p.isUnavailable).length;
-    updateModeDots();
 
     if (!arriving.length) {
       headerEl.innerHTML = `
