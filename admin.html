@@ -465,19 +465,37 @@
       background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
 
     <h2 id="order-builder-title" style="margin:0 0 4px;font-size:1.1rem">Order Builder</h2>
-    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.5">
-      Select the FOC cycle(s) you're ordering against this run. Everything held back is
-      listed below — nothing is dropped silently.
-    </p>
 
-    <div id="order-builder-cycles"></div>
-    <div id="order-builder-already-ordered"></div>
-    <div id="order-builder-heldback"></div>
+    <!-- STEP 1 — select cycles, download the file -->
+    <div id="ob-step-select">
+      <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.5">
+        Select the FOC cycle(s) you're ordering against this run. Everything held back is
+        listed below — nothing is dropped silently.
+      </p>
 
-    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+      <div id="order-builder-cycles"></div>
+      <div id="order-builder-already-ordered"></div>
+      <div id="order-builder-heldback"></div>
+    </div>
+
+    <!-- STEP 2 — record what the supplier actually accepted (F108 § 8).
+         Deliberately NOT reachable from the download: the file is not the
+         order. Rick submits it on the distributor's site and only then learns
+         which titles were rejected, so the question "record these as ordered?"
+         has no honest answer at download time. -->
+    <div id="ob-step-record" style="display:none"></div>
+
+    <div id="ob-foot-select" style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
       <span id="order-builder-summary" style="flex:1;font-size:0.8rem;color:var(--text-muted)"></span>
       <button class="btn btn-ghost" id="order-builder-cancel">Cancel</button>
+      <button class="btn btn-secondary" id="order-builder-record">Record submitted order →</button>
       <button class="btn btn-primary" id="order-builder-generate">Generate &amp; Download</button>
+    </div>
+
+    <div id="ob-foot-record" style="margin-top:24px;display:none;gap:10px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+      <span id="ob-record-summary" style="flex:1;font-size:0.8rem;color:var(--text-muted)"></span>
+      <button class="btn btn-ghost" id="ob-record-back">← Back</button>
+      <button class="btn btn-primary" id="ob-record-save">Record order</button>
     </div>
   </div>
 </div>
@@ -1692,10 +1710,20 @@
   const obAlready   = document.getElementById('order-builder-already-ordered');
   const obHeldback  = document.getElementById('order-builder-heldback');
   const obSummary   = document.getElementById('order-builder-summary');
+  const obStepSel   = document.getElementById('ob-step-select');
+  const obStepRec   = document.getElementById('ob-step-record');
+  const obFootSel   = document.getElementById('ob-foot-select');
+  const obFootRec   = document.getElementById('ob-foot-record');
+  const obRecSum    = document.getElementById('ob-record-summary');
 
   let builderDistributor   = null;
   let builderSelectedDates = new Set();
   let builderOverrides     = {}; // catalog_id -> { include: bool, qty: number }
+  // Step 2 state (F108 § 8). Keyed by export code, same key buildExportRows()
+  // groups on, so the record list and the downloaded file cannot diverge.
+  //   include:false ⇒ the supplier REJECTED it ⇒ writes a zero row (F117).
+  let builderStep       = 'select';   // 'select' | 'record'
+  let recordSelections  = {};         // code -> { include: bool, qty: number }
 
   async function openOrderBuilder(distributor) {
     builderDistributor = distributor;
@@ -1708,12 +1736,27 @@
     builderSelectedDates = new Set(futureDates.length ? [futureDates[0].foc] : []);
 
     obTitle.textContent = `${distributor} Order Builder`;
+    showBuilderStep('select');
     renderOrderBuilder();
     obOverlay.style.display = 'flex';
   }
 
+  // Which of the modal's two steps is on screen. Kept as one function so the
+  // body and the footer can never disagree about it.
+  function showBuilderStep(step) {
+    builderStep = step;
+    const onRecord = step === 'record';
+    obStepSel.style.display = onRecord ? 'none' : '';
+    obStepRec.style.display = onRecord ? '' : 'none';
+    obFootSel.style.display = onRecord ? 'none' : 'flex';
+    obFootRec.style.display = onRecord ? 'flex' : 'none';
+  }
+
   function closeOrderBuilder() {
     obOverlay.style.display = 'none';
+    // Always reopen on step 1 — a reopen landing mid-flow, on a record list
+    // built from a previous cycle selection, is how you record the wrong order.
+    showBuilderStep('select');
   }
 
   function renderOrderBuilder() {
@@ -2072,55 +2115,174 @@
     a.click();
     URL.revokeObjectURL(url);
 
-    toast(`${distributor} order sheet generated — ${consolidated.length} title${consolidated.length===1?'':'s'}`);
+    // ── No prompt here, deliberately (F108 § 8) ──────────────────────────
+    // Confirm-on-export used to fire at this point and ask "record these as
+    // ordered?". It asked before the answer was knowable: this produced a
+    // FILE, and which titles the supplier accepted is only known after the
+    // order is pasted into the distributor's site and submitted. Rick's
+    // walkthrough (2026-08-06) named the cost — browser-swapping mid-flow,
+    // and titles "locked as Ordered after the fact", so a rejection then
+    // needed a negative adjustment instead of the intended zero row.
+    // This is F101 § 4.2's original principle reasserting itself: generating
+    // a file is not proof of submission. Recording moved to step 2, which is
+    // reached when the operator comes BACK from the supplier.
+    toast(`${distributor} order sheet downloaded — ${consolidated.length} title${consolidated.length===1?'':'s'}. ` +
+          `Use "Record submitted order" when you're back from the supplier.`);
+  });
 
-    // ── Confirm-on-export (F108 § 4.2, order-loop-closure Session B) ──────
-    // Deliberately reverses F101 § 4.2's "written manually, not on export
-    // click" — with the operator's agreement (plan § 3.4): the ad-hoc process
-    // specifically benefits from capturing the order as a by-product of
-    // exporting it, rather than a remember-it-afterwards step. Measured
-    // proof this matters: the pre-existing manual Mark Ordered button was
-    // used ZERO times on production before this landed (§ 2.2).
-    //
-    // Explicit and AFTER the download, never automatic — generating a file
-    // is not proof of submission (same reasoning as the original Mark
-    // Ordered design). Declining leaves the ledger untouched (V-B1).
-    // order_type is always 'adhoc' here, matching Mark Ordered's own default
-    // (Rick, F102 resolution) — this is the ad-hoc path, not the reviewed
-    // monthly-cycle confirmation the import script performs at isNewMonth
-    // (§ 4.3, scripts repo).
-    const wantsConfirm = confirm(
-      `Record these ${consolidated.length} title${consolidated.length===1?'':'s'} as ordered?`);
-    if (wantsConfirm) {
-      const rows = consolidated.map(r => {
-        const code = distributor === 'PRH'
-          ? (r.ISBN || r.ItemCode || r.UPC || '')
-          : (r.ItemCode || r.UPC || r.ISBN || '');
-        return {
-          tenant_id:     TenantContext.current().id,
-          distributor,
-          order_code:    code,
-          item_code:     r.ItemCode || null,
-          title:         r.Title || null,
-          quantity:      r.TotalQty,
-          order_type:    'adhoc',
-          foc_date:      r.FOCDate || null,
-          catalog_month: currentCatalogMonth,
-          submitted_on:  DateUtils.todayLocal(),
-        };
-      }).filter(row => row.order_code);
+  // ── Step 2 — record what the supplier actually accepted ────────────────
+  // Built from buildExportRows(), the SAME function that produced the file, so
+  // the list you tick and the file you submitted cannot drift apart. Nothing
+  // is persisted between steps: the set is re-derivable from the cycle
+  // selection, so coming back tomorrow and re-selecting the same cycles
+  // reproduces it exactly (F108 § 8).
+  function renderRecordPanel() {
+    const distributor = builderDistributor;
+    const rows = buildExportRows(distributor, builderSelectedDates);
 
-      const { error } = await db.from('order_submissions').insert(rows);
-      if (error) {
-        toast(`Order recorded to file, but the ledger write failed: ${error.message}`, 'error');
-      } else {
-        await loadOrderLedger();
-        renderByDistributor();
-        renderBackorderRiskPanel();
-        toast(`Recorded ${rows.length} title${rows.length===1?'':'s'} on the order ledger`, 'success');
-      }
+    // Default every line to ordered-at-the-exported-quantity: the common case
+    // is that the supplier took the whole order. Unticking is the exception,
+    // and it is what records a rejection.
+    rows.forEach(r => {
+      const code = exportCodeForRow(r, distributor);
+      if (!recordSelections[code]) recordSelections[code] = { include: true, qty: r.TotalQty };
+    });
+
+    if (!rows.length) {
+      obStepRec.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem;margin:0">
+        Nothing in this cycle selection to record. Go back and pick the cycle(s) you submitted.</p>`;
+      obRecSum.textContent = '';
+      return;
     }
 
+    obStepRec.innerHTML = `
+      <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 6px;line-height:1.5">
+        These are the ${rows.length} title${rows.length===1?'':'s'} in the file you submitted to
+        ${escapeHtml(distributor)}. <strong style="color:var(--text-primary)">Untick anything the
+        supplier rejected</strong> — that records it as rejected rather than ordered.
+      </p>
+      <p style="color:var(--text-muted);font-size:0.76rem;margin:0 0 16px;line-height:1.5">
+        Adjust a quantity if they filled less than you asked for.
+      </p>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+        ${rows.map(r => {
+          const code = exportCodeForRow(r, distributor);
+          const sel  = recordSelections[code];
+          return `
+          <div class="ob-rec-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+               border-bottom:1px solid var(--border);flex-wrap:wrap">
+            <input type="checkbox" class="ob-rec-cb" data-code="${escapeHtml(code)}"
+                   ${sel.include ? 'checked' : ''} aria-label="Ordered: ${escapeHtml(r.Title || code)}">
+            <span style="flex:1;min-width:180px;font-size:0.85rem">${escapeHtml(r.Title || '—')}</span>
+            <span style="font-family:monospace;font-size:0.72rem;color:var(--text-muted)">${escapeHtml(code)}</span>
+            <input type="number" min="0" class="ob-rec-qty" data-code="${escapeHtml(code)}"
+                   value="${sel.qty}" ${sel.include ? '' : 'disabled'}
+                   aria-label="Quantity ordered: ${escapeHtml(r.Title || code)}"
+                   style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
+                          color:var(--text-primary);padding:4px 6px;border-radius:var(--radius);font-size:0.82rem">
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    obStepRec.querySelectorAll('.ob-rec-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        recordSelections[cb.dataset.code].include = cb.checked;
+        const qtyInput = obStepRec.querySelector(`.ob-rec-qty[data-code="${CSS.escape(cb.dataset.code)}"]`);
+        if (qtyInput) qtyInput.disabled = !cb.checked;
+        updateRecordSummary();
+      });
+    });
+    obStepRec.querySelectorAll('.ob-rec-qty').forEach(inp => {
+      inp.addEventListener('input', () => {
+        recordSelections[inp.dataset.code].qty = Math.max(0, parseInt(inp.value) || 0);
+        updateRecordSummary();
+      });
+    });
+
+    updateRecordSummary();
+  }
+
+  // The export code for an already-built export row — same fallback chain the
+  // file generator uses, kept in one place so the two cannot diverge.
+  function exportCodeForRow(r, distributor) {
+    return distributor === 'PRH'
+      ? (r.ISBN || r.ItemCode || r.UPC || '')
+      : (r.ItemCode || r.UPC || r.ISBN || '');
+  }
+
+  function updateRecordSummary() {
+    const vals     = Object.values(recordSelections);
+    const ordered  = vals.filter(s => s.include && s.qty > 0).length;
+    const rejected = vals.length - ordered;
+    obRecSum.textContent = rejected
+      ? `${ordered} ordered · ${rejected} rejected`
+      : `${ordered} ordered`;
+  }
+
+  document.getElementById('order-builder-record').addEventListener('click', () => {
+    recordSelections = {};
+    renderRecordPanel();
+    showBuilderStep('record');
+  });
+
+  document.getElementById('ob-record-back').addEventListener('click', () => {
+    showBuilderStep('select');
+  });
+
+  document.getElementById('ob-record-save').addEventListener('click', async () => {
+    const distributor = builderDistributor;
+    const rows = buildExportRows(distributor, builderSelectedDates);
+    if (!rows.length) { toast('Nothing to record', 'error'); return; }
+
+    const btn = document.getElementById('ob-record-save');
+    btn.disabled = true;
+    btn.textContent = 'Recording…';
+
+    // order_type is 'monthly' here, NOT 'adhoc' (F108 § 8 / F121 W2). The
+    // Order Builder is how the MONTHLY cycle is submitted; Mark Ordered stays
+    // the ad-hoc path. This is not cosmetic: classifyForExport() routes
+    // 'adhoc' matches into the auto-excluded bucket instead of "already
+    // ordered — your call", which silently drops F102's remainder-defaulted
+    // quantity control on the following cycle.
+    const payload = rows.map(r => {
+      const code = exportCodeForRow(r, distributor);
+      const sel  = recordSelections[code] || { include: true, qty: r.TotalQty };
+      // Unticked (or zeroed) = the supplier refused it. A zero row IS the
+      // rejection record (F117/F108 § 4.4) — and because classifyForExport()
+      // gates on NET quantity > 0, that code correctly falls back into the
+      // next export rather than being excluded forever.
+      const qty = sel.include ? sel.qty : 0;
+      return {
+        tenant_id:     TenantContext.current().id,
+        distributor,
+        order_code:    code,
+        item_code:     r.ItemCode || null,
+        title:         r.Title || null,
+        quantity:      qty,
+        order_type:    'monthly',
+        foc_date:      r.FOCDate || null,
+        catalog_month: currentCatalogMonth,
+        submitted_on:  DateUtils.todayLocal(),
+      };
+    }).filter(row => row.order_code);
+
+    const { error } = await db.from('order_submissions').insert(payload);
+    btn.disabled = false;
+    btn.textContent = 'Record order';
+
+    if (error) {
+      toast(`Ledger write failed: ${error.message}`, 'error');
+      return;
+    }
+
+    await loadOrderLedger();
+    renderByDistributor();
+    renderBackorderRiskPanel();
+
+    const rejected = payload.filter(p => p.quantity <= 0).length;
+    toast(rejected
+      ? `Recorded ${payload.length - rejected} ordered, ${rejected} rejected`
+      : `Recorded ${payload.length} title${payload.length===1?'':'s'} on the order ledger`, 'success');
     closeOrderBuilder();
   });
 
