@@ -101,11 +101,11 @@ Fixtures torn down, **verified by live SELECT returning zero rows.**
 
 ## 6. Completion criteria
 
-- [ ] § 4 applied, every range re-verified against disk first
-- [ ] V1–V7 green
-- [ ] Fixtures gone, confirmed by SELECT
-- [ ] Real-browser check by Rick
-- [ ] Parent § 5.7.4 session index updated
+- [x] § 4 applied, every range re-verified against disk first
+- [x] V1–V7 green (§ 8)
+- [x] Fixtures gone, confirmed by live SELECT (0 rows)
+- [ ] **Real-browser check by Rick — owed**
+- [x] Parent § 5.7.4 session index updated
 
 ---
 
@@ -117,4 +117,60 @@ Single feature branch, client-only, no DB change. `git revert` the merge.
 
 ## 8. Deploy log
 
-*(empty — not started)*
+**Executed 2026-08-08. Staging only — `649a4b6`. Production untouched.**
+Branch `feature/admin-search-rehome` → `staging` ff-only.
+**66 insertions, 44 deletions**, `admin.html` only.
+
+### 8.1 Gates — all green, V1–V5 on the first run
+
+| Gate | Evidence |
+|---|---|
+| **V1** | Search filters to the holding customer, group **auto-expanded**, only matching rows shown |
+| **V2** | Non-matching customer absent (`toHaveCount(0)`) |
+| **V3** | Header reads `5 items` (full) **plus** `showing 1 of 2` |
+| **V4** | Clearing restores both groups, collapsed |
+| **V5** | `[data-tab="all-items"]`, `#tab-all-items`, `#all-items-list` all gone; By Customer still renders `table.list-table` via `renderMiniTable()`; `#admin-search` now inside `#tab-by-customer` |
+| **V6** | Specs 06 + 07 run directly: **9 passed** — the two that assert on `.customer-group-meta` and `#customer-groups` |
+| **V7** | **91 passed, exit 0** (89 + spec 16's 2) |
+
+Structure check: **7 tab buttons, 7 sections**, exactly paired — no orphaned
+section, no dangling button.
+
+### 8.2 New coverage — spec 16
+
+`tests/16-admin-customer-search.spec.ts`. The search had **zero** coverage, so
+the gates above could not otherwise be run. Every assertion is anchored to a
+seeded title or customer name — never `.first()`, never an exact group count —
+because staging carries real founding-tenant reservations that would satisfy a
+loose assertion and prove nothing (spec 15's standing warning).
+
+**V6 was nearly mis-reported.** The full-suite log is written by the `line`
+reporter, which overwrites lines with carriage returns, so grepping it for the
+two spec names returned **0 matches** even though both had run and passed.
+Running them directly gave 9/9. *A grep over a progress-reporter log is not
+evidence a test ran.*
+
+### 8.3 Out of scope, found during teardown — one orphaned test profile
+
+`pw-f5871cc8@example.test`, created **2026-08-06T18:30 UTC** — two days before
+this session, so **not from this work**. This session's own fixtures verified
+gone: `catalog`, `order_submissions`, and both `pw-scust*` / `pw-smini-*`
+profiles all returned **0**.
+
+It matches the `authenticatedPage` fixture's email shape, and **F95's fix
+(2026-08-02) made `deleteUser()` throw on failure** — so a clean failure should
+have surfaced as a test error rather than a silent orphan. Most likely an
+interrupted run on 2026-08-06 (the F117–F120 session). **Left in place
+deliberately, not deleted: it is the only evidence of how it got there**, and
+whether F95 needs re-opening is Rick's call, not an inline fix.
+
+Worth noting the near-miss in method: the first teardown query used
+`&email.like.pw-%25` instead of `&email=like.pw-*`, which PostgREST ignored —
+it returned **all 17** profiles and read as mass orphaning. The correct query
+returns **1**.
+
+### 8.4 Still open
+
+- Real-browser check on staging — Rick's.
+- The 2026-08-06 orphan above — file or ignore, Rick's call.
+- **Not promoted to production.**

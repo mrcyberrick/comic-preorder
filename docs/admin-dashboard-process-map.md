@@ -512,7 +512,7 @@ Rick accepted both § 5.7.2 recommendations as put:
 |---|---|---|---|---|
 | — | **W2/W3 Order Builder fixes** | `order_type` hardcode, confirm-on-export timing, rejection route | `docs/order-builder-record-split.md` | **COMPLETE on staging 2026-08-08** (`ff13d0f`) — V1–V7 green, 89/89. Real-browser check + promotion owed. `catalog_month` deliberately left to Rick (that plan § 7). |
 | **1** | **Removals** | Stats bar, Export All (+ `makeExportRows`), and the spec asserting them | `docs/admin-restructure-1-removals.md` | **COMPLETE on staging 2026-08-08** (`1ec32a7`) — V1–V7 green, 86/86 suite. Real-browser check by Rick still owed. Not promoted. |
-| 2 | Search rehome + All Reservations retire | Build search on By Customer, then delete the tab | not written | Not started |
+| 2 | Search rehome + All Reservations retire | Search built on By Customer (filters, auto-expands, keeps full totals); tab deleted | `docs/admin-restructure-2-search-rehome.md` | **COMPLETE on staging 2026-08-08** (`649a4b6`) — V1–V7 green, 91/91, spec 16 added. Real-browser check owed. Not promoted. |
 | 3 | Top Series → `analytics.html` | A move, not a deletion — needs re-skinning into analytics' card system | not written | Not started |
 | 4 | **Bagging** mode | Smallest, most self-contained — proves the mode pattern at low risk | not written | Not started |
 | 5 | **Customers** mode | Pending · By Customer (+ search from session 2) · Invite · paper customers + Manage · Subscriptions | not written | Not started |
