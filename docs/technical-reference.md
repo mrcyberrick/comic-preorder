@@ -3302,7 +3302,25 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `docs/sql/auto_fulfill_past_on_sale.sql` (grant block). Live function privileges on both environments.
 - **Related:** **F122** — the fix whose verification surfaced this. **F45** — the signature-precision lesson the remediation was built to avoid repeating. **F23** — the earlier `search_path` hardening pass over the same function set, which addressed a different property of the same objects.
 
-Next free finding ID: **F125**.
+#### F125 — `main` and `staging` are not a superset relationship: `supabase/migrations/` exists only on `main`, and no doc says so
+
+- **Status:** filed 2026-08-09, during the F121 session-6 production promotion (PR #114). **Open — informational, no fix applied.** Nothing is broken today and nothing was at risk in that promotion; both files were verified present after the merge.
+- **Severity:** **Low.** A latent trap in the promotion flow, not a defect. It has survived at least six promotions (PR #109–#114) without incident, because the documented flow happens to be immune to it.
+- **The fact.** `git ls-tree -r main -- supabase/migrations/` returns two files; the same command against `staging` returns **nothing**. The directory has never existed on `staging` — `git log --all` shows each file touched by exactly one commit, both on `main`:
+  | File | Commit | Sub-deploy |
+  |---|---|---|
+  | `20260531030927_phase_4_3_prod_constraints.sql` | `9111412` | Phase 4.3 |
+  | `20260531150558_phase_4_4_prod_rls_functions.sql` | `3ecb6b0` | Phase 4.4 |
+- **This was legitimate when it happened.** CLAUDE.md § Staging Only permits direct commits to `main` *"inside an explicitly-named Phase 4 cutover-window sub-deploy"*, which is exactly what 4.3 and 4.4 were. The finding is not that the commits were wrong; it is that they left a **structural asymmetry nobody wrote down**, and the mental model the deployment workflow implies — main = staging + prod `config.js` — has been false ever since.
+- **Why it is currently harmless.** `git merge staging --no-commit --no-ff` cannot drop them: staging never held these paths, so there is no deletion in its history to replay. The `git checkout main -- config.js` step touches one file by name. Both files were confirmed present on disk after PR #114's merge.
+- **Where it would bite.** Any promotion that reconstructs `main`'s tree from `staging` rather than merging into it — a squash promotion, a rebase-based flow, `git checkout staging -- .`, or a `git reset --hard staging` used to "fix" a messy main. Each would silently delete the only in-repo copies of the Phase 4.3/4.4 production DDL. It also quietly falsifies the reasoning *"staging is ahead of main"*, which is otherwise true and is the model the § Standard Deployment Workflow reads as.
+- **What would actually be lost, measured rather than assumed:** the executable SQL. The *knowledge* survives — `docs/phase-4.3-prod-schema-constraints.md` and `docs/phase-4.4-prod-schema-rls.md` are on both branches and describe the work — and the DDL is applied in the live production database, so a loss would be a repo-history loss, not an outage. That is what keeps this at Low rather than Medium.
+- **Note the asymmetry with `docs/sql/`,** which is where every migration since has gone: **9 files, identical on both branches.** So the convention that replaced this one is already correct and already followed; these two files are the residue of an earlier, pre-convention moment, not an ongoing practice.
+- **Fix direction (not applied, Rick's call):** the cheap and sufficient fix is **documentation** — one line in CLAUDE.md § Repository Structure recording that `supabase/migrations/` is main-only and why, so the next person to design a promotion flow knows before they design it. Copying the two files onto `staging` would also work and would make the superset claim true, but it puts prod-cutover DDL on a branch that must never run it, which is a worse trade. **Do not "fix" this by deleting them from `main`** — they are the only in-repo record of that DDL.
+- **How it was found:** a pre-flight `git diff --name-only main staging` during PR #114, run to confirm `config.js` was the only expected difference. The two `.sql` paths appeared in that list and had to be traced by hand, because no doc could answer whether they were expected. That hand-tracing is the cost this entry exists to remove.
+- **Related:** **F105** — the same class of failure, where a gate lived in a SQL file rather than in a plan's completion criteria and went unmet for 13 days. Both are cases of **real state recorded nowhere a session-opening read would find it**. **F59** — the merge-base regression check in the promotion flow, which is the other guard against a promotion silently producing the wrong tree.
+
+Next free finding ID: **F126**.
 
 ---
 
