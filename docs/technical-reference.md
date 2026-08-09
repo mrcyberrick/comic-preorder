@@ -2202,6 +2202,15 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Fix:** read `user_profiles.email` (which is denormalized from
   auth.users) instead, or query auth.users separately and join
   client-side as `admin.html` already does for the per-customer view.
+- **Measured 2026-08-09, and it changes the fix: `Preorders.getAll` has ZERO
+  call sites.** Grepped across every `.html` and `.js` in the repo — nothing
+  calls it. And the relation it embeds **does not exist**: a service-role read
+  of `public.auth_users` returns **404 `PGRST205`**, so the join would not
+  degrade to a null email as this entry predicted — it would fail outright the
+  moment anything invoked it. **Revised fix: delete the function.** Rewriting a
+  fragile join in dead code is work with no consumer. Noticed while scoping the
+  Accounts tab's "last seen" question (**F126**), which needed to know whether
+  any `auth.users` exposure already existed. It does not.
 
 #### F31 — stale comment in `UsageEvents._log`
 - **Status:** fixed 2026-05-10 — comment rewritten to name
@@ -3359,6 +3368,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   Rick's answer takes the first option's enforcement and the second's vocabulary, and costs one line (`catalog.html:245`, read by 8 sites in that file).
 - **Enforcement caveat that rides along, and must not be glossed:** that parity is **client-side only**, because `'pending'` itself is — measured, not assumed. See **F127**. "Paused" is a UI block, not a hard one, and must not be described as more than that.
 - **Still open here, and genuinely undecided:** whether a paused customer's existing reservations are cancelled, held, or left to the FOC/ordered locks. Untouched by the Accounts session; it has real money attached once a title is ordered (**F109**, **F117**).
+- **ALSO FOLDED IN 2026-08-09 — "Last seen", and surfacing invites nobody answered.** Rick, on reviewing the Accounts tab: *"Does last login exist as this would let me sort unanswered invites?"* His call was to fold it here rather than run it as its own session, since this entry already owns the account lifecycle and one session beats three touching the same rows.
+  - **It exists — `auth.users.last_sign_in_at` — but it is NOT reachable from the admin client.** There is no `public.auth_users` view: a service-role read returns **404 `PGRST205 Could not find the table 'public.auth_users'`**. Only the GoTrue admin API can read it, and the admin client must never hold a service key. **Fix shape: a SECURITY DEFINER RPC** returning `(id, last_sign_in_at, email_confirmed_at)`, tenant-scoped via `current_tenant_id()` internally and admin-only — the `get_ordered_codes()` pattern, and subject to **F124**'s grant lesson (name `anon` and `authenticated` explicitly; `REVOKE … FROM PUBLIC` alone does not lock it).
+  - **The cheap proxy was tested and FAILS — do not retry it.** `has_seen_welcome` is already fetched and looks like a free stand-in for "never signed in". Measured against `last_sign_in_at` on **production**: it agrees **8 of 12**. Brian Moss, Book Stop, Hector Gonzalez and The Comic Store Admin have all signed in but read `false` (they predate the welcome modal). Using it would flag four active customers as unanswered invites — a false positive is worse here than no column at all.
+  - **Why an unanswered invite is invisible today, and it is not the missing column.** `invite-customer` sets `status: 'active'` at the moment the invite is sent (`supabase/functions/invite-customer/index.ts:136`), while `register-customer` sets `'pending'`. So an invited customer is indistinguishable from a real active one whether or not they ever respond. A third state (`'invited'`) would need the `user_profiles_status_check` CHECK widened, and collides with this entry's own pause work — **decide the two together, not one then the other.**
+  - **Measured scale — production, 2026-08-09: exactly ONE.** `Ronald Burke`, invited **2026-03-17**, `status = 'active'`, email **never confirmed**, **never signed in** — almost five months. 12 non-paper profiles, 1 never signed in. Small, but it is a real customer who fell through with nothing on any screen to show it. **Operational now, ahead of any code: he needs a phone call.**
 - **Related:** **F121** — the restructure that surfaced this by giving accounts a home. **F13**/**F25** — `user_profiles` denormalisation and cascade questions that an edit path would have to respect (`email` is copied from `auth.users` with **no sync trigger**, so an email edit writes to one of two places and silently diverges them). **F10** — `preorders` FK is `ON DELETE NO ACTION`, which is why profile deletion already fails loudly and why any "remove" affordance here needs care.
 
 #### F127 — account `status` is not an authorization boundary: the pending gate is client-side only
