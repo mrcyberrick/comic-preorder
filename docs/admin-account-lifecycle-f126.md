@@ -3,7 +3,7 @@
 **Origin:** F126, filed 2026-08-09 while scoping the Accounts tab and deferred
 by Rick the same day. Reopened 2026-08-09 with all three open decisions answered.
 
-**Status:** **Planned, not started.**
+**Status:** **COMPLETE ON STAGING 2026-08-09** — V1–V9 green, **113/113**, `PLAYWRIGHT_EXIT=0`, 1 flaky (§ 7.4). **Rick's real-browser check owed; the RPC must be run on PRODUCTION before the client is promoted (§ 7.5).**
 **Target:** **staging only.**
 **Branch:** `feature/admin-account-lifecycle`
 **Findings:** **F126** (this), **F25** (the email trap that shaped it),
@@ -204,4 +204,117 @@ Client changes: `git revert`. The RPC: `DROP FUNCTION public.get_account_activit
 
 ## 7. Deploy log
 
-*(not started)*
+**Staging only, 2026-08-09.** One DB object (`get_account_activity`), plus
+`admin.html` and `app.js`. No schema change, no Edge Function.
+
+| Commit | What |
+|---|---|
+| `a5887f8` / `7f0180d` | Plan, then the `is_admin` cut |
+| `1607793` | **SQL gate fix** — `IS NOT TRUE`, not `NOT (...)` |
+| `54ca354` | Last seen, the filter, Edit name |
+| `d925473` | End the SQL file on a check that can actually fail |
+| `89545ea` | **The filter is "Never signed in", not "unanswered invite"** |
+
+**Suite: 112 passed, 1 flaky, `PLAYWRIGHT_EXIT=0`, 16.1 min.** All six F126
+gates green.
+
+### 7.1 The SQL gate was open, and reading it would never have shown that
+
+`IF NOT current_user_is_admin()` looked correct and was not.
+`current_user_is_admin()` returns **NULL**, not false, when there is no user
+identity — `auth.uid()` is NULL so its `user_profiles` lookup finds no row.
+`NOT NULL` is NULL, an `IF` on NULL is not taken, and execution fell straight
+**through** the gate.
+
+It returned `200 []` rather than data only because `current_tenant_id()` was
+*also* NULL and the WHERE matched nothing — **safe by a second accident.**
+
+Caught by **calling** the deployed function, not by reading it. The signature was
+right, the grants were right (`anon` correctly got `401 permission denied`), and
+the gate still did not fire. Fixed to `IS NOT TRUE`, which refuses on both false
+and NULL, then verified from outside: `403 admin only` for a caller with no
+identity, `401` for anon, `200` with rows for a real admin session.
+
+**Exposure, stated precisely rather than dramatically:** the real threat — a
+logged-in non-admin customer — was refused throughout, because their profile
+exists and the function returns `false`, not NULL. What was open was the
+no-identity path, which `anon` could not reach either.
+
+### 7.2 A verification step that cannot fail is not a verification step
+
+The file originally ended on VERIFY 3, which reports the return **signature** —
+identical before and after the gate fix. The Supabase SQL Editor shows the last
+statement's result, so that is what the operator saw, three times, while the
+probe kept reporting the gate open. **Three round-trips spent on a query that
+could not distinguish the two states.**
+
+VERIFY 4 now ends the file and reads the function body:
+
+    SELECT position('IS NOT TRUE' in prosrc) > 0 AS gate_fixed
+
+It can come back `false`. That is the whole point.
+
+### 7.3 "Unanswered invite" was not derivable — the label was corrected, not the data
+
+The filter shipped in `54ca354` as `created_by_admin AND never signed in`. It
+matched a **self-registered pending account** on staging.
+
+`created_by_admin` **defaults to `true`**, and `register-customer` never sets
+it, so a self-registered customer carries the same value as an invited one. The
+column cannot answer the question the filter was named for.
+
+Renamed to **"Never signed in"** — exactly what is knowable, the same
+operational signal Rick asked for, and the same action. Two exclusions make it
+actionable rather than merely true: **paper** customers never sign in by design
+(including them would bury the real cases under all ten), and **pending**
+accounts have their own queue where the action is approve-or-decline.
+
+`Ronald Burke`, the production case this exists for, is `active` and non-paper —
+he matches either way.
+
+**Found by looking at what the filter RETURNED on real data, not at whether it
+ran.** A green test would have told me nothing: my own fixtures were all
+`created_by_admin = true` and never-signed-in, so they passed under both the
+wrong predicate and the right one.
+
+### 7.4 Test defects, and one unexplained flake
+
+- **V1 requested two identities that cannot coexist.** `adminPage` and
+  `authenticatedPage` both derive from the same `page` fixture, so asking for
+  both yields ONE page signed in as whichever ran last. The admin half failed
+  with "admin only" — the assertion was right, the session was the customer's.
+  Verified the function was fine (a real admin session outside Playwright got
+  `200` with rows) **before** touching the test. The non-admin now gets its own
+  browser context. **This is undocumented in the suite and fails looking like a
+  permissions bug.**
+- **`window.db` is undefined.** `app.js` declares `const db` at the top level of
+  a classic script, so it lives in the global *lexical* environment, not on
+  `window`. All three RPC calls in the new specs would have thrown. A bare `db`
+  resolves inside `page.evaluate`; `declare const db: any` satisfies TypeScript.
+- **One flake, not explained.** V6 (Manage) timed out once waiting for the
+  Accounts **tab button** — static markup that exists before any JS — then
+  passed on retry. **The obvious explanation was checked and rejected:** a grep
+  for `429` matched, but on the *line number* in the source listing, not a rate
+  limit. No rate limiting, no other slow test in the run. Recorded as
+  transient-and-unexplained rather than given a tidy story; it is consistent
+  with **F107**'s repeated-full-suite conditions (this was the fourth run of the
+  day) but that is not evidence.
+
+### 7.5 Owed before production
+
+1. **Rick's real-browser check** on staging.
+2. **The RPC must be created on PRODUCTION before the client is promoted** —
+   `docs/sql/get-account-activity-rpc.sql`, and `gate_fixed = true` is the check
+   that matters, not the signature. If the client ships first, Last seen reads
+   **"unknown"** for every row: degraded by design rather than broken, but it
+   would look like a defect.
+
+### 7.6 Fixture teardown — verified by SELECT
+
+`TEST_PW_*` profiles **0**, `status = 'suspended'` **0** (no customer left
+blocked by a test), synthetic tenants **0**.
+
+Two leftovers were found and cleaned first — a profile and a tenant timestamped
+22:41 and 22:50, from the two suite runs **stopped mid-flight** when the build
+moved under them. Stopping a run skips its teardown; worth remembering, since
+that is a self-inflicted version of F95's pattern.
