@@ -247,6 +247,19 @@
         Print / Save Report
       </button>
     </div>
+    <!-- Search (F121 session 5). Same predicate as By Customer's, and the same
+         collapse behaviour: matching publisher groups auto-expand. -->
+    <div class="toolbar" style="margin-bottom:16px">
+      <div class="search-wrap">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <label for="bd-search" class="visually-hidden">Search this cycle</label>
+        <input type="text" class="search-input" id="bd-search"
+               placeholder="Search title, series, publisher, code or customer…">
+      </div>
+    </div>
+
     <div style="margin-bottom:24px">
       <h3 style="font-family:var(--font-display);font-size:1.4rem;letter-spacing:0.04em;margin-bottom:16px;color:var(--lunar)">
         LUNAR DISTRIBUTION
@@ -601,6 +614,17 @@
   // consumers stay month-scoped and untouched.
   let allPreordersAllMonths = [];
   let profileMap   = {};
+
+  // By Distributor search state (F121 session 5). Declared HERE, beside the
+  // other module state, not next to renderByDistributor() — that function
+  // takes `search = bdSearch` as a default parameter, which is evaluated at
+  // CALL time, and loadData() calls it during applyMode() far above the
+  // renderer. A `let` declared later is still in its temporal dead zone at
+  // that point and throws a ReferenceError, which kills the rest of
+  // loadData() — the alert panels never render and 28 specs fail on hidden
+  // panels with nothing pointing at the real cause. Same bug as session 4,
+  // same shape, caught by the same class of gate.
+  let bdSearch = '';
 
   // ── By Distributor cycle selector (2026-08-06) ──────────────
   // The By Distributor tab can review a CLOSED catalog month, so a cycle's
@@ -1677,8 +1701,11 @@
   // Scoped to distributorViewMonth (the cycle selector), NOT allPreorders —
   // identical output when the selection is the current month, and able to
   // show a closed cycle otherwise.
-  function renderByDistributor() {
-    const rows  = distributorRows();
+  function renderByDistributor(search = bdSearch) {
+    bdSearch = search;
+    const lc  = search.trim().toLowerCase();
+    const all = distributorRows();
+    const rows = lc ? all.filter(p => matchesSearch(p, lc)) : all;
     const lunar = rows.filter(p => p.catalog?.distributor === 'Lunar');
     const prh   = rows.filter(p => p.catalog?.distributor === 'PRH');
 
@@ -1725,7 +1752,6 @@
             <tr>
               <th></th>
               <th>Title</th>
-              <th>Publisher</th>
               <th>Code</th>
               <th>Price</th>
               <th>FOC Date</th>
@@ -1765,7 +1791,6 @@
                     ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.72rem">\u2713 Fulfilled — excluded from order exports</div>` : ''}
                   ${ledgerBadge(ledgerMatches)}
                 </td>
-                <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
                 <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(c.foc_date)}</td>
@@ -1817,8 +1842,50 @@
       `;
     }
 
-    document.getElementById('lunar-list').innerHTML = renderDistTable(groupByItem(lunar));
-    document.getElementById('prh-list').innerHTML   = renderDistTable(groupByItem(prh));
+    // Group titles by PUBLISHER (F121 session 5). Publisher was chosen over
+    // FOC cycle because Rick prints this tab's report for the store and the
+    // store scans it by publisher -- the print is the constraint that picks
+    // the cut.
+    function groupByPublisher(itemGroups) {
+      const map = {};
+      itemGroups.forEach(g => {
+        const pub = (g.catalog?.publisher || '').trim() || 'Unknown publisher';
+        (map[pub] ||= []).push(g);
+      });
+      return Object.entries(map).map(([publisher, groups]) => ({
+        publisher, groups,
+        titles: groups.length,
+        copies: groups.reduce((s, g) => s + g.totalQty, 0),
+        value:  groups.reduce((s, g) => s + ((parseFloat(g.catalog?.price_usd) || 0) * g.totalQty), 0),
+      })).sort((a, b) => a.publisher.localeCompare(b.publisher));
+    }
+
+    // The header states BOTH units explicitly. By Customer says "16 items",
+    // which does not say titles or copies; here they diverge materially (42
+    // titles can be 58 copies), and importing that ambiguity is precisely what
+    // F121 exists to remove.
+    function renderDistGroups(itemGroups) {
+      const pubs = groupByPublisher(itemGroups);
+      if (!pubs.length) {
+        return `<div class="empty-state"><p>${lc ? 'No matches in this cycle' : 'No reservations'}</p></div>`;
+      }
+      return pubs.map(p => `
+        <div class="customer-group${lc ? ' open' : ''}">
+          <div class="customer-group-header">
+            <div>
+              <div class="customer-group-name">${escapeHtml(p.publisher)}</div>
+              <div class="customer-group-meta">${p.titles} title${p.titles !== 1 ? 's' : ''} · ${p.copies} cop${p.copies === 1 ? 'y' : 'ies'} · Est. $${p.value.toFixed(2)}</div>
+            </div>
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
+          <div class="customer-group-body">${renderDistTable(p.groups)}</div>
+        </div>`).join('');
+    }
+
+    document.getElementById('lunar-list').innerHTML = renderDistGroups(groupByItem(lunar));
+    document.getElementById('prh-list').innerHTML   = renderDistGroups(groupByItem(prh));
 
     // ── Mark Ordered — event delegation on each distributor list ──
     // One click handler per container, attached fresh each time renderByDistributor runs.
@@ -1832,6 +1899,11 @@
       container.parentNode.replaceChild(fresh, container);
 
       fresh.addEventListener('click', e => {
+        // Collapse toggle rides the SAME delegated handler. A separate
+        // listener would be stripped by the clone-to-clear above on the
+        // next render.
+        const header = e.target.closest('.customer-group-header');
+        if (header) { header.closest('.customer-group')?.classList.toggle('open'); return; }
         const markOrderedBtn = e.target.closest('.mark-ordered-btn');
         if (markOrderedBtn) openMarkOrderedModal(markOrderedBtn.dataset.catalogId);
       });
@@ -4096,7 +4168,33 @@
       month: 'long', day: 'numeric', year: 'numeric'
     });
 
-    const rows = grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
+    // Grouped by PUBLISHER (F121 session 5) so the printed report matches the
+    // on-screen tab. Before this it was a flat title list with a Distributor
+    // column; the screen grouping one way and the print another would be two
+    // views of the same data organised differently -- F121 in miniature.
+    //
+    // Nothing is added or dropped, only reordered and interleaved with header
+    // rows: the same `grouped` array, sorted, with a subtotal line per
+    // publisher. Gate V4 compares row count and copy total against the
+    // pre-change build for exactly that reason.
+    const byPub = {};
+    grouped.forEach(g => {
+      const pub = (g.catalog?.publisher || '').trim() || 'Unknown publisher';
+      (byPub[pub] ||= []).push(g);
+    });
+    const orderedGroups = Object.keys(byPub).sort((a, b) => a.localeCompare(b));
+
+    const pubHeader = (pub) => {
+      const gs = byPub[pub];
+      const copies = gs.reduce((s, g) => s + g.totalQty, 0);
+      const value  = gs.reduce((s, g) => s + ((parseFloat(g.catalog?.price_usd) || 0) * g.totalQty), 0);
+      return `<tr class="pub-row"><td colspan="9"><strong>${escapeHtml(pub)}</strong>`
+           + ` — ${gs.length} title${gs.length !== 1 ? 's' : ''}, ${copies} cop${copies === 1 ? 'y' : 'ies'},`
+           + ` Est. $${value.toFixed(2)}</td></tr>`;
+    };
+
+
+    const rows = orderedGroups.map(pub => pubHeader(pub) + byPub[pub].map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
       const scanCode = c.distributor === 'Lunar'
         ? (c.upc || c.item_code || '—')
         : (c.isbn || c.upc || c.item_code || '—');
@@ -4161,7 +4259,7 @@
           <td class="col-foc">${foc}</td>
           <td class="col-status ${statusClass}">${status}</td>
         </tr>`;
-    }).join('');
+    }).join('')).join('');
 
     return `<!DOCTYPE html>
 <html>
@@ -4214,6 +4312,10 @@
     .col-cust   { width: 2.95in; }
     .col-foc    { width: 0.6in; }
     .col-status { width: 0.75in; }
+    /* Publisher band in the printed report (F121 session 5) — grey fill so it
+       reads as a divider on a mono printer, where colour is not available. */
+    .pub-row td { background:#e8e8e8; border-top:1.5pt solid #000; padding:3pt 4pt;
+                  font-size:8.5pt; page-break-after:avoid; }
 
     tbody tr { border-bottom: 1px solid #e8e8e8; }
     tbody tr:nth-child(even) { background: #f7f7f7; }
@@ -4344,6 +4446,11 @@
   // month and re-applies the closed-cycle export lock. Pure client-side
   // re-filter: every month is already in allPreordersAllMonths (F111/F113),
   // so switching cycles issues no network request.
+  // Search is debounced like By Customer's and re-renders in place; it does
+  // NOT touch the cycle selector, which keeps its own meaning.
+  document.getElementById('bd-search').addEventListener('input',
+    debounce(e => renderByDistributor(e.target.value.trim()), 250));
+
   document.getElementById('bd-month').addEventListener('change', (e) => {
     distributorViewMonth = e.target.value;
     applyCycleViewLock();

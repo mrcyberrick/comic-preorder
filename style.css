@@ -992,7 +992,17 @@ button { cursor: pointer; font-family: var(--font-body); }
 .customer-group-name { font-weight: 600; font-size: 0.9rem; }
 .customer-group-meta { font-size: 0.78rem; color: var(--text-muted); }
 .customer-group-body { display: none; border-top: 1px solid var(--border); }
-.customer-group.open .customer-group-body { display: block; }
+/* Horizontal scroll for the tables inside a collapsed group.
+   There was no overflow-x anywhere in this stylesheet, so every wide table
+   simply overflowed its container on a narrow screen. It shows up first on By
+   Distributor (9 columns) but By Customer had the same latent problem; the
+   Bagging list escapes it by being flex cards and Subscriptions by having only
+   four columns.
+   A scroll container rather than hidden columns: nothing is removed, and the
+   operator can always reach every field. Same approach analytics.html already
+   uses for its own tables (.tbl-wrap). */
+.customer-group-body > .list-table { min-width: 640px; }
+.customer-group.open .customer-group-body { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .export-bar {
   display: flex;
   gap: 10px;
