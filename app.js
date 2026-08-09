@@ -1068,6 +1068,21 @@ const Users = {
     return { data: result };
   },
 
+  // Rename a customer. The ONLY editable profile field (F126).
+  //
+  // Deliberately not here: `email`, because it is a denormalized copy of
+  // auth.users.email with no sync trigger (F25) and auth.users.email is the
+  // login identity — writing this copy alone would silently diverge them.
+  // And `is_admin`, which stays a Supabase-console task: it is a
+  // privilege-escalation surface and any guard here would be client-side.
+  async setName(userId, fullName) {
+    const { error } = await db
+      .from('user_profiles')
+      .update({ full_name: fullName })
+      .eq('id', userId);
+    return { error };
+  },
+
   // Set an account's status. One method for both directions, because Pause and
   // Resume are the same write and splitting them invites the two paths to drift.
   //
