@@ -3453,16 +3453,20 @@
     const q      = (document.getElementById('accounts-search')?.value || '').trim().toLowerCase();
     const filter = document.getElementById('accounts-filter')?.value || 'all';
 
-    let rows = accounts.filter(u => !u.is_admin || filter === 'all');
+    // Everyone, admins included — Rick's ask was "the Accounts tab that contains
+    // all users", and an admin is a user. The first cut excluded admins from the
+    // status filters but NOT from "All", so the counts could not reconcile and
+    // an admin appeared in one view and vanished from every other. Caught by the
+    // partition gate, which is the only reason that gate exists.
+    let rows = accounts;
 
     if (filter !== 'all') {
-      rows = rows.filter(u => {
-        const st = accountState(u).key;
-        // "Paper" means every paper customer, whatever their status — it is a
-        // TYPE, not a state, and an operator picking it wants the paper list.
-        if (filter === 'paper') return !!u.is_paper;
-        return st === filter;
-      });
+      // Filter on the state the ROW DISPLAYS, so filtering by "Paper" returns
+      // exactly the rows labelled Paper. The first cut matched `is_paper`
+      // instead — a type rather than a state — which meant a paper customer who
+      // was also pending appeared under two filters and under neither total.
+      // Status still wins the label (§ 3.4); paper rides along as a marker.
+      rows = rows.filter(u => accountState(u).key === filter);
     }
 
     if (q) {
@@ -3485,14 +3489,17 @@
     if (!container) return;
 
     const rows  = accountsMatching();
-    const total = accounts.filter(u => !u.is_admin).length;
+    const total = accounts.length;
 
-    // Counts are stated per state so the filter dropdown is never a guess.
+    // Counts are stated per state so the filter dropdown is never a guess, and
+    // they PARTITION the list: the four add up to the total, over the same set
+    // of people the filters return. Anything else and the numbers on this page
+    // stop reconciling, which is the whole of F121.
     const by = { active: 0, paper: 0, pending: 0, suspended: 0 };
-    accounts.filter(u => !u.is_admin).forEach(u => { by[accountState(u).key]++; });
+    accounts.forEach(u => { by[accountState(u).key]++; });
     if (summaryEl) {
       summaryEl.innerHTML =
-        `Showing <strong>${rows.length}</strong> of ${total} customer${total === 1 ? '' : 's'} · ` +
+        `Showing <strong>${rows.length}</strong> of ${total} account${total === 1 ? '' : 's'} · ` +
         `${by.active} active · ${by.paper} paper · ${by.pending} pending · ${by.suspended} paused`;
     }
 
@@ -3534,9 +3541,16 @@
                              text-transform:uppercase;color:${st.color}">${st.label}</span>
                 ${u.is_paper && st.key !== 'paper'
                   ? '<span style="font-size:0.68rem;color:var(--lunar);margin-left:6px">· paper</span>' : ''}
+                ${u.is_admin
+                  ? '<span style="font-size:0.68rem;color:var(--accent);margin-left:6px">· admin</span>' : ''}
               </td>
               <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(u.created_at?.split('T')[0])}</td>
               <td style="text-align:right">
+                <!-- Pause is suppressed on admins deliberately: catalog.html
+                     exempts admins from the block, so pausing one would write a
+                     status that changes nothing. Offering the button would be a
+                     lie about what it does. (No backticks in this comment: it
+                     lives inside a template literal.) -->
                 <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
                   ${st.key === 'pending' ? `
                     <button class="btn btn-primary btn-sm acct-approve" data-id="${u.id}" data-name="${name}">✓ Approve</button>
@@ -3545,7 +3559,7 @@
                   ${st.key === 'suspended' ? `
                     <button class="btn btn-primary btn-sm acct-resume" data-id="${u.id}" data-name="${name}">Resume</button>
                   ` : ''}
-                  ${st.key === 'active' || st.key === 'paper' ? `
+                  ${(st.key === 'active' || st.key === 'paper') && !u.is_admin ? `
                     <button class="btn btn-ghost btn-sm acct-pause" data-id="${u.id}" data-name="${name}"
                             style="color:var(--text-muted)" title="Pause — blocks reserving until resumed">Pause</button>
                   ` : ''}
