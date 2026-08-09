@@ -3,7 +3,9 @@
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.1, § 5.7.2 **P2**, § 5.7.4 row 6.
 **Decision:** Option B, built as **modes within one `admin.html`** — Rick, 2026-08-07.
 
-**Status:** **In execution 2026-08-09.**
+**Status:** **COMPLETE ON STAGING 2026-08-09** (`a6a7fbc`) — 103/103,
+`PLAYWRIGHT_EXIT=0`. **Rick's real-browser check and production promotion both
+owed.**
 **Target:** **staging only.**
 **Branch:** `feature/admin-ordering-mode`
 **Last verified against live code:** `admin.html` @ `851c897`, 2026-08-09 — every
@@ -221,12 +223,12 @@ Grep run this session, before any edit:
 
 ## 6. Completion criteria
 
-- [ ] § 3 applied, every range re-verified against disk immediately before edit
-- [ ] V1–V8 green, with Playwright's **own** exit code captured (session 4 § 7.6)
-- [ ] No fixtures seeded, or seeded and verified torn down by live SELECT
-- [ ] Real-browser check by Rick on staging
-- [ ] Parent § 5.7.4 index row 6 updated to Complete
-- [ ] `CLAUDE.md` F121 line advanced
+- [x] § 3 applied, every range re-verified against disk immediately before edit
+- [x] V1–V8 green, with Playwright's **own** exit code captured (session 4 § 7.6)
+- [x] No fixtures seeded, or seeded and verified torn down by live SELECT
+- [ ] **Real-browser check by Rick on staging** — owed
+- [x] Parent § 5.7.4 index row 6 updated
+- [x] `CLAUDE.md` F121 line advanced
 
 ---
 
@@ -239,4 +241,71 @@ change, no Edge Function change. `git revert` the merge.
 
 ## 8. Deploy log
 
-*(execution in progress — filled as commits land)*
+**Staging only, 2026-08-09.** Client-only (`admin.html`, `style.css`); no DB
+change, no schema change, no Edge Function change.
+
+| Commit | What |
+|---|---|
+| `71e6152` | This plan (doc-only, direct to staging) + two stale-status corrections |
+| `a6a7fbc` | The split, the rename, and the § 3.1 note move |
+
+**Suite: 103 passed / 103 declared, `PLAYWRIGHT_EXIT=0`, 13.9 min, zero
+failures, zero flaky.** 99 before this session + 4 new.
+
+| Gate | Evidence |
+|---|---|
+| V1 | spec 17 — each half visible on its own surface and **hidden on the other**; both directions asserted |
+| V2 | spec 17 — create on Ordering → name present in the Customers list **with no reload** |
+| V3 | spec 17 — 4 tab visits, **1** `is_paper=eq.true` request |
+| V4 | spec 15 + existing paper coverage unchanged and green |
+| V5 | spec 17 — paper pair reads "Catalog", export-bar pair still reads "Order Sheet", and neither paper button contains "Order Sheet" |
+| V6 | spec 15 `closed cycle:…` — extended to switch to Paper Orders and assert the buttons are **still disabled and the reason still on screen** |
+| V7 | full suite green; specs 06/15/16/17 cover By Distributor, the Order Builder, By Customer and Bagging |
+| V8 | 103/103 |
+
+### 8.1 Fixture teardown — verified by SELECT, not by the `finally` block
+
+V2 creates a real paper customer through the **real UI**, which means the
+`create-paper-customer` Edge Function makes a real auth user. Torn down with
+`deleteUser()` in a `finally`, then **confirmed by live query against staging**
+(URL asserted staging before running): `TEST_PW_Paper%` profiles = **0**, and
+staging's 9 genuine paper customers untouched.
+
+That check is not ceremony. F95 is the case where a teardown helper that never
+checked `res.ok` orphaned **292** profiles before anyone looked.
+
+### 8.2 What the pre-emptive grep caught
+
+Session 4 § 7.6's lesson — *"a UI restructure invalidates spec helpers by
+construction… grepping belongs in the session that moves the UI"* — was applied
+**before** the first edit rather than after the first red run.
+
+It found `#bd-month-note` asserted three times in spec 15. Left alone, those
+would have failed *after* the code was pushed, and the session-4 log records how
+expensive that shape of failure was to read correctly. Cost this time: one grep.
+
+The same grep also **ruled things out**, which is the half that usually goes
+unrecorded: no spec referenced `data-tab="paper-orders"`, the print buttons, or
+the "Order Sheet" strings, and spec 17's six `.admin-tab` assertions are all
+**named selectors with no hard counts** — so adding a Customers tab needed no
+repair, only extension.
+
+### 8.3 Two things checked rather than assumed
+
+- **Print leakage (the F119 shape).** F119 was a panel printing on the Bagging
+  List because it sat outside the print CSS's tab-scoped hide rule. The new
+  `#cycle-lock-note` is inside `.export-bar`, which that rule already hides
+  (`style.css:240`), and both report prints open their own `window.open`
+  document, so page CSS does not reach them. **No new print surface.**
+- **`.admin-section` really is hidden when inactive** (`style.css:973`), which
+  is what makes V1's four `toBeHidden()` assertions meaningful rather than
+  vacuous. Read before relying on it.
+
+### 8.4 One test deleted for asserting nothing
+
+The first draft of V2 also probed a `window.__paperCustNames?.()` hook that does
+not exist, guarded so that a missing hook silently skipped the check. It would
+have passed forever without testing anything — a green assertion that is really
+an absent one, which is the F96/F115 shape in miniature. Removed rather than
+made to work: the DB read plus the cross-mode render already prove the array is
+shared, and the create handler rendering the *other* surface is what proves it.
