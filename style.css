@@ -1007,6 +1007,11 @@ button { cursor: pointer; font-family: var(--font-body); }
   display: flex;
   gap: 10px;
   align-items: center;
+  /* Wrap added 2026-08-09 (F121 session 6): the cycle-view lock's explanation
+     now sits in this bar beside the buttons it disables, and a full sentence
+     next to two buttons overflows a phone. Wrapping puts it on its own line
+     there instead of pushing the bar off screen. */
+  flex-wrap: wrap;
   margin-bottom: 20px;
 }
 
