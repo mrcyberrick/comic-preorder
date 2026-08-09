@@ -1752,7 +1752,6 @@
             <tr>
               <th></th>
               <th>Title</th>
-              <th>Publisher</th>
               <th>Code</th>
               <th>Price</th>
               <th>FOC Date</th>
@@ -1792,7 +1791,6 @@
                     ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.72rem">\u2713 Fulfilled — excluded from order exports</div>` : ''}
                   ${ledgerBadge(ledgerMatches)}
                 </td>
-                <td style="color:var(--text-secondary)">${escapeHtml(c.publisher || '—')}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted);font-family:monospace">${escapeHtml(c.item_code || '—')}</td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
                 <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(c.foc_date)}</td>
