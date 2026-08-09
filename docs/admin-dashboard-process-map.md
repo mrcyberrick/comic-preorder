@@ -4,7 +4,7 @@
 where it and the code disagree. **Structure DECIDED 2026-08-07 — Option B, as
 modes within one `admin.html` (§ 5.7).** **Sessions 1–3 and W2/W3 are LIVE IN
 PRODUCTION as of 2026-08-08** (PR #109, merge `9552ee6`, write-smoke passed —
-§ 5.7.6). **Session 4 (the mode switch) is LIVE IN PRODUCTION 2026-08-08** (PR #110, merge `de0d7ca`) — the dashboard is now three modes on three cadences, not a tab strip. **Session 5a (publisher grouping, search, mobile scroll) is LIVE IN PRODUCTION 2026-08-08** (PR #111, merge `f031916`). **5b (cross-month search) and session 6 not started.** Remaining decisions in § 6.
+§ 5.7.6). **Session 4 (the mode switch) is LIVE IN PRODUCTION 2026-08-08** (PR #110, merge `de0d7ca`) — the dashboard is now three modes on three cadences, not a tab strip. **Session 5a (publisher grouping, search, mobile scroll) is LIVE IN PRODUCTION 2026-08-08** (PR #111, merge `f031916`). **Session 5b (cross-month search) is LIVE IN PRODUCTION 2026-08-09** (PR #113, merge `d12921e`). **Session 6 (Ordering mode + the Paper Orders split) in execution 2026-08-09** — `docs/admin-restructure-6-ordering-mode.md`. Remaining decisions in § 6.
 
 > ⚠ **§ 1–§ 4 are a snapshot of the page as it was on 2026-08-07, before any of
 > this shipped.** They are kept deliberately, because they are the evidence the
@@ -594,7 +594,7 @@ sessions 4–6 (Bagging → Customers → Ordering modes).
 | 3 | ~~Top Series → `analytics.html`~~ **Top Series deleted** | Decision corrected at implementation (§ 5.7.5) — moving it would have recreated F121's defect on the analytics page | — (§ 5.7.5) | **COMPLETE on staging 2026-08-08** (`6845326`) — 176 lines removed; `get_popular_series` kept for the customer catalog page. **LIVE IN PRODUCTION 2026-08-08** (PR #109). |
 | **4** | **Mode switch** | 3-mode nav (Customers · Bagging · Ordering), chrome follows its mode, one attention dot, always lands on Customers | `docs/admin-restructure-4-bagging-mode.md` | **COMPLETE on staging 2026-08-08** — 98/98 suite, `PLAYWRIGHT_EXIT=0`; two rounds of Rick's feedback folded in (§ 8, § 9). Bagging's light load is **dormant** by design — see § 9.1. **LIVE IN PRODUCTION 2026-08-08** (PR #110). |
 | 5 | **Customers** mode | Pending · By Customer (+ search from session 2) · Invite · paper customers + Manage · Subscriptions | not written | Not started |
-| 6 | **Ordering** mode | Largest and most consequential; goes last so the W2/W3 fixes settle first | not written | Not started |
+| 6 | **Ordering** mode + **Paper Orders split** | § 5.7.2 P2's deferred cut (create + entry + catalog print → Ordering; customer list + Manage/Claim → Customers), plus the two collisions the split worsens: the § 3.2 button-name clash and § 3.1's hidden cycle lock | `docs/admin-restructure-6-ordering-mode.md` | **In execution 2026-08-09** |
 
 **Sequencing rationale.** W2/W3 is dated and independent of all of this. Session 1
 removes rather than moves, so every later session has less to relocate. Sessions
