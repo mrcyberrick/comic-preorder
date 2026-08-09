@@ -239,11 +239,29 @@
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
 
-  // ── Pending account detection ────────────────────────────────
-  // Pending users can browse but cannot reserve or subscribe.
-  // Admins are never treated as pending regardless of their status field.
+  // ── Blocked account detection ────────────────────────────────
+  // Two statuses block reserving and subscribing, with the SAME effect and
+  // different reasons (Rick 2026-08-09):
+  //   pending    self-registered, not yet approved
+  //   suspended  paused by an admin — typically a customer who stopped
+  //              collecting their reservations
+  // Admins are never blocked regardless of their status field.
+  //
+  // `isBlocked` is the gate; `isPaused` only picks the wording, because telling
+  // a long-standing customer their account "is being reviewed" would be false.
+  //
+  // ⚠️ CLIENT-SIDE ONLY, and known to be (F127, measured): no `preorders` RLS
+  // policy references `status`, so a blocked user with a valid session can
+  // still write via a hand-crafted request. This is a UI gate — do not describe
+  // it as a hard block, and do not assume a later reader knows that.
   const isPending = !profile?.is_admin && profile?.status === 'pending';
-  if (isPending) {
+  const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
+  const isBlocked = isPending || isPaused;
+  const PAUSED_BTN_LABEL = '\uD83D\uDD12 Account paused';
+  const PAUSED_BANNER_BODY =
+    'You can still browse the catalog, but reservations are paused for now. ' +
+    'Give us a call and we can get you going again — (973)&nbsp;586-9182.';
+  if (isBlocked) {
     // Inject the pending banner below the page header
     const header = document.querySelector('.page-header');
     if (header) {
@@ -258,12 +276,14 @@
         '<div style="font-size:1.1rem;line-height:1;margin-top:2px">&#128274;</div>' +
         '<div>' +
           '<div style="font-weight:700;font-size:0.88rem;color:var(--warning,#eab308);margin-bottom:4px">' +
-            'Your account is being reviewed' +
+            (isPaused ? 'Your account is paused' : 'Your account is being reviewed') +
           '</div>' +
           '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
-            'You can browse the upcoming catalog while we confirm your details. ' +
+            (isPaused
+              ? PAUSED_BANNER_BODY
+              : 'You can browse the upcoming catalog while we confirm your details. ' +
             'Reservations will be available once Ray\u0026nbsp;&amp;\u0026nbsp;Judy\u2019s Book Stop approves your account. ' +
-            'Questions? Call us at (973)\u0026nbsp;586-9182.' +
+            'Questions? Call us at (973)\u0026nbsp;586-9182.') +
           '</div>' +
         '</div>';
       header.insertAdjacentElement('afterend', banner);
@@ -273,7 +293,7 @@
   // ── Welcome modal — first-time users only ─────────────────────
   // Non-blocking; runs after page init. Skipped for pending users
   // (they see the pending banner which already orients them).
-  if (!isPending) {
+  if (!isBlocked) {
     WelcomeModal.show(user.id, profile);
   }
 
@@ -900,10 +920,12 @@
 
     // Reserve button
     grid.querySelectorAll('.btn-reserve').forEach(btn => {
-      if (isPending) {
-        // Pending users see a locked button — no action, visual cue only
+      if (isBlocked) {
+        // Blocked users see a locked button — no action, visual cue only
         btn.disabled = true;
-        btn.title = 'Available once your account is approved';
+        btn.title = isPaused
+          ? 'Your account is paused \u2014 call the store to resume'
+          : 'Available once your account is approved';
         btn.style.opacity = '0.45';
         btn.style.cursor  = 'not-allowed';
         btn.textContent   = '\uD83D\uDD12 Pending';
@@ -968,7 +990,7 @@
   function maybeShowSubscribePrompt(comicObj) {
     if (promptShownThisLoad) return false;
     if (!comicObj || !comicObj.series_name) return false;
-    if (AdminContext.isActive() || isPending) return false;
+    if (AdminContext.isActive() || isBlocked) return false;
     if (!isStandardCover(comicObj)) return false;
 
     const subKey = `${comicObj.series_name}||${comicObj.distributor}`;
@@ -1200,8 +1222,8 @@
     const reserveBtn = document.getElementById('modal-reserve');
     const focLocked  = isFocLocked(comic.foc_date);
 
-    if (isPending) {
-      reserveBtn.textContent = '\uD83D\uDD12 Approval pending';
+    if (isBlocked) {
+      reserveBtn.textContent = isPaused ? PAUSED_BTN_LABEL : '\uD83D\uDD12 Approval pending';
       reserveBtn.className   = 'btn btn-ghost';
       reserveBtn.disabled    = true;
       reserveBtn.style.opacity = '0.5';
@@ -1229,7 +1251,7 @@
       reserveBtn.style.opacity = '';
       reserveBtn.title       = '';
     }
-    if (!isPending && !focLocked) {
+    if (!isBlocked && !focLocked) {
       // toggleReserve() repaints the card and the modal itself once the write
       // settles: no setTimeout guess at how long the round-trip takes.
       reserveBtn.onclick = () => {
@@ -1241,7 +1263,7 @@
     // ── Subscribe button ───────────────────────────────────
     const subscribeBtn = document.getElementById('modal-subscribe');
     const isStandardCoverItem = !comic.variant_type || comic.variant_type === 'Standard' || comic.variant_type === 'Primary Title';
-    if (comic.series_name && !AdminContext.isActive() && isStandardCoverItem && !isPending) {
+    if (comic.series_name && !AdminContext.isActive() && isStandardCoverItem && !isBlocked) {
       const subKey = `${comic.series_name}||${comic.distributor}`;
       const isSubscribed = mySubscriptions.has(subKey);
       subscribeBtn.style.display = '';
@@ -1296,7 +1318,7 @@
   }
 
   // Log catalog page view — real customers only, not admins or pending accounts
-  if (!profile?.is_admin && !isPending && !AdminContext.isActive()) {
+  if (!profile?.is_admin && !isBlocked && !AdminContext.isActive()) {
     UsageEvents.catalogView(user.id, { catalogMonth: currentMonth });
   }
 
