@@ -1068,13 +1068,30 @@ const Users = {
     return { data: result };
   },
 
-  // Suspend an account (pending or active)
-  async suspend(userId) {
+  // Set an account's status. One method for both directions, because Pause and
+  // Resume are the same write and splitting them invites the two paths to drift.
+  //
+  // status ∈ ('active', 'pending', 'suspended') — enforced by
+  // user_profiles_status_check; anything else returns a 400 rather than
+  // silently storing a value nothing reads.
+  //
+  // ⚠️ This is an ACCESS-CONTROL FLAG THE DATABASE DOES NOT ENFORCE. No
+  // `preorders` policy references `status`; the block lives entirely in
+  // catalog.html. A suspended user with a valid session can still write via a
+  // hand-crafted request — measured, see F127. Treat "paused" as a UI state.
+  async setStatus(userId, status) {
     const { error } = await db
       .from('user_profiles')
-      .update({ status: 'suspended' })
+      .update({ status })
       .eq('id', userId);
     return { error };
+  },
+
+  // Suspend an account (pending or active). Kept as a named alias — it is
+  // referenced by docs and predates setStatus() — but it now delegates, so
+  // there is one write path.
+  async suspend(userId) {
+    return Users.setStatus(userId, 'suspended');
   },
 
   // Remove profile row — auth user remains but loses all access

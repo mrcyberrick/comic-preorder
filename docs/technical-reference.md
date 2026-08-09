@@ -1155,8 +1155,27 @@ have findings.
 - `users view own profile` — SELECT where `auth.uid() = id`
 - `users update own profile` — UPDATE where `auth.uid() = id`
 - `admins view tenant profiles` — SELECT where `tenant_id = current_tenant_id() AND current_user_is_admin()`
-- No INSERT or DELETE policy. Profile creation/deletion goes through
-  service-role (Edge Functions).
+- `admins manage tenant profiles` — **ALL**, `TO authenticated`. Added to staging
+  2026-06-11 (Phase 5.0 S3) to reach prod parity; production already had it. This
+  is what makes admin-side Decline (`Users.deleteProfile`) and Pause
+  (`Users.suspend`, `status = 'suspended'`) work from a browser session.
+
+⚠️ **Corrected 2026-08-09.** This block previously listed only the three policies
+above and asserted *"No INSERT or DELETE policy. Profile creation/deletion goes
+through service-role (Edge Functions)."* That is **wrong for admins** and had been
+since 5.0 S3 — the same session whose own § 13 entry records creating the ALL
+policy, so the two halves of this document disagreed for two months.
+
+**Verified by execution on staging 2026-08-09**, with the anon key and a real
+admin JWT and **no service key in the request path**: `SELECT` over all tenant
+profiles returned **200 / 25 rows**; `PATCH status='suspended'` on another user
+returned **200** and persisted; `PATCH status='active'` restored it. Probe
+fixtures torn down, 0 rows remaining.
+
+Profile **creation** via Edge Function remains accurate — `create-paper-customer`
+and `invite-customer` need service role to make the `auth.users` row, which no
+client key can do. It is the *no admin write path* claim that was false. Instance
+of **F92**; corrected here rather than filed as a new ID.
 
 #### `catalog`
 - `users read tenant catalog` — SELECT, authenticated, where `tenant_id = current_tenant_id()`
@@ -2183,6 +2202,15 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Fix:** read `user_profiles.email` (which is denormalized from
   auth.users) instead, or query auth.users separately and join
   client-side as `admin.html` already does for the per-customer view.
+- **Measured 2026-08-09, and it changes the fix: `Preorders.getAll` has ZERO
+  call sites.** Grepped across every `.html` and `.js` in the repo — nothing
+  calls it. And the relation it embeds **does not exist**: a service-role read
+  of `public.auth_users` returns **404 `PGRST205`**, so the join would not
+  degrade to a null email as this entry predicted — it would fail outright the
+  moment anything invoked it. **Revised fix: delete the function.** Rewriting a
+  fragile join in dead code is work with no consumer. Noticed while scoping the
+  Accounts tab's "last seen" question (**F126**), which needed to know whether
+  any `auth.users` exposure already existed. It does not.
 
 #### F31 — stale comment in `UsageEvents._log`
 - **Status:** fixed 2026-05-10 — comment rewritten to name
@@ -3302,7 +3330,70 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `docs/sql/auto_fulfill_past_on_sale.sql` (grant block). Live function privileges on both environments.
 - **Related:** **F122** — the fix whose verification surfaced this. **F45** — the signature-precision lesson the remediation was built to avoid repeating. **F23** — the earlier `search_path` hardening pass over the same function set, which addressed a different property of the same objects.
 
-Next free finding ID: **F125**.
+#### F125 — `main` and `staging` are not a superset relationship: `supabase/migrations/` exists only on `main`, and no doc says so
+
+- **Status:** filed 2026-08-09, during the F121 session-6 production promotion (PR #114). **Open — informational, no fix applied.** Nothing is broken today and nothing was at risk in that promotion; both files were verified present after the merge.
+- **Severity:** **Low.** A latent trap in the promotion flow, not a defect. It has survived at least six promotions (PR #109–#114) without incident, because the documented flow happens to be immune to it.
+- **The fact.** `git ls-tree -r main -- supabase/migrations/` returns two files; the same command against `staging` returns **nothing**. The directory has never existed on `staging` — `git log --all` shows each file touched by exactly one commit, both on `main`:
+  | File | Commit | Sub-deploy |
+  |---|---|---|
+  | `20260531030927_phase_4_3_prod_constraints.sql` | `9111412` | Phase 4.3 |
+  | `20260531150558_phase_4_4_prod_rls_functions.sql` | `3ecb6b0` | Phase 4.4 |
+- **This was legitimate when it happened.** CLAUDE.md § Staging Only permits direct commits to `main` *"inside an explicitly-named Phase 4 cutover-window sub-deploy"*, which is exactly what 4.3 and 4.4 were. The finding is not that the commits were wrong; it is that they left a **structural asymmetry nobody wrote down**, and the mental model the deployment workflow implies — main = staging + prod `config.js` — has been false ever since.
+- **Why it is currently harmless.** `git merge staging --no-commit --no-ff` cannot drop them: staging never held these paths, so there is no deletion in its history to replay. The `git checkout main -- config.js` step touches one file by name. Both files were confirmed present on disk after PR #114's merge.
+- **Where it would bite.** Any promotion that reconstructs `main`'s tree from `staging` rather than merging into it — a squash promotion, a rebase-based flow, `git checkout staging -- .`, or a `git reset --hard staging` used to "fix" a messy main. Each would silently delete the only in-repo copies of the Phase 4.3/4.4 production DDL. It also quietly falsifies the reasoning *"staging is ahead of main"*, which is otherwise true and is the model the § Standard Deployment Workflow reads as.
+- **What would actually be lost, measured rather than assumed:** the executable SQL. The *knowledge* survives — `docs/phase-4.3-prod-schema-constraints.md` and `docs/phase-4.4-prod-schema-rls.md` are on both branches and describe the work — and the DDL is applied in the live production database, so a loss would be a repo-history loss, not an outage. That is what keeps this at Low rather than Medium.
+- **Note the asymmetry with `docs/sql/`,** which is where every migration since has gone: **9 files, identical on both branches.** So the convention that replaced this one is already correct and already followed; these two files are the residue of an earlier, pre-convention moment, not an ongoing practice.
+- **Fix direction (not applied, Rick's call):** the cheap and sufficient fix is **documentation** — one line in CLAUDE.md § Repository Structure recording that `supabase/migrations/` is main-only and why, so the next person to design a promotion flow knows before they design it. Copying the two files onto `staging` would also work and would make the superset claim true, but it puts prod-cutover DDL on a branch that must never run it, which is a worse trade. **Do not "fix" this by deleting them from `main`** — they are the only in-repo record of that DDL.
+- **How it was found:** a pre-flight `git diff --name-only main staging` during PR #114, run to confirm `config.js` was the only expected difference. The two `.sql` paths appeared in that list and had to be traced by hand, because no doc could answer whether they were expected. That hand-tracing is the cost this entry exists to remove.
+- **Related:** **F105** — the same class of failure, where a gate lived in a SQL file rather than in a plan's completion criteria and went unmet for 13 days. Both are cases of **real state recorded nowhere a session-opening read would find it**. **F59** — the merge-base regression check in the promotion flow, which is the other guard against a promotion silently producing the wrong tree.
+
+#### F126 — no profile-editing surface: name, email and `is_admin` are unreachable outside the Supabase console
+
+- **Status:** filed 2026-08-09 from Rick's Accounts-tab direction; **narrowed the same day to editing only** — the pause half was settled and moved into the Accounts session (see below). **Deferred by Rick's explicit choice** — *"The edit feature is a real need but can be logged for a future change."* **Scoped OUT of the Accounts session**, which renders **no Edit control at all** rather than a disabled one.
+- **Severity:** **Medium as a product gap, not a defect.** Nothing is broken; a capability the data model already supports has no way to be reached.
+- **What is missing.** There is no surface anywhere in the app that edits a `user_profiles` row. A customer's name or email cannot be corrected, and `is_admin` cannot be granted or revoked, except in the Supabase console. Rick's ask adds a second, operationally-driven need: **pause a customer who stops collecting their reservations**, returning them to Pending until they re-engage.
+- **Half the machinery already exists and has never been wired up:**
+  | Piece | State |
+  |---|---|
+  | `user_profiles.status` CHECK | `IN ('active', 'pending', 'suspended')` — all three legal |
+  | `Users.suspend(userId)` (`app.js`) | writes `status = 'suspended'` — **zero call sites in any HTML or JS** |
+  | `'suspended'` status | **no UI reads it, no UI writes it, no code branches on it** |
+  | `'pending'` status | fully wired — `catalog.html` blocks reserving and subscribing on it |
+  This was noticed and recorded at **5.0 S3 (2026-06-11)**: *"`Users.suspend` has no admin UI entry point in current `admin.html` (no Users tab)."* The Accounts tab is precisely the entry point that entry anticipated, more than a year of sessions ago.
+- **SETTLED 2026-08-09, and the pause half MOVED OUT of this entry.** The design question below was put to Rick, who answered it better than either option offered: **`'suspended'` exists as its own status but carries the same permission impact as `'pending'`.** That takes `'suspended'`'s correct semantics *and* `'pending'`'s existing enforcement, because the enforcement check is widened to cover both rather than the state being reused. **Pause therefore ships in the Accounts session, not here** — this entry now covers **profile editing only** (name, email, `is_admin`).
+  The question as posed, kept because the reasoning still governs any later change:
+  - **`'pending'`** — already enforced, restorable via the existing Approve button, but it **collides with the meaning of the Pending list** (*self-registered, never yet approved*). A paused long-standing customer appearing there is a different thing wearing the same label — the conflation F121 exists to remove.
+  - **`'suspended'`** — semantically correct and already in the CHECK, but **enforced nowhere**, so choosing it alone means implementing the block, not just the button.
+  Rick's answer takes the first option's enforcement and the second's vocabulary, and costs one line (`catalog.html:245`, read by 8 sites in that file).
+- **Enforcement caveat that rides along, and must not be glossed:** that parity is **client-side only**, because `'pending'` itself is — measured, not assumed. See **F127**. "Paused" is a UI block, not a hard one, and must not be described as more than that.
+- **Still open here, and genuinely undecided:** whether a paused customer's existing reservations are cancelled, held, or left to the FOC/ordered locks. Untouched by the Accounts session; it has real money attached once a title is ordered (**F109**, **F117**).
+- **ALSO FOLDED IN 2026-08-09 — "Last seen", and surfacing invites nobody answered.** Rick, on reviewing the Accounts tab: *"Does last login exist as this would let me sort unanswered invites?"* His call was to fold it here rather than run it as its own session, since this entry already owns the account lifecycle and one session beats three touching the same rows.
+  - **It exists — `auth.users.last_sign_in_at` — but it is NOT reachable from the admin client.** There is no `public.auth_users` view: a service-role read returns **404 `PGRST205 Could not find the table 'public.auth_users'`**. Only the GoTrue admin API can read it, and the admin client must never hold a service key. **Fix shape: a SECURITY DEFINER RPC** returning `(id, last_sign_in_at, email_confirmed_at)`, tenant-scoped via `current_tenant_id()` internally and admin-only — the `get_ordered_codes()` pattern, and subject to **F124**'s grant lesson (name `anon` and `authenticated` explicitly; `REVOKE … FROM PUBLIC` alone does not lock it).
+  - **The cheap proxy was tested and FAILS — do not retry it.** `has_seen_welcome` is already fetched and looks like a free stand-in for "never signed in". Measured against `last_sign_in_at` on **production**: it agrees **8 of 12**. Brian Moss, Book Stop, Hector Gonzalez and The Comic Store Admin have all signed in but read `false` (they predate the welcome modal). Using it would flag four active customers as unanswered invites — a false positive is worse here than no column at all.
+  - **Why an unanswered invite is invisible today, and it is not the missing column.** `invite-customer` sets `status: 'active'` at the moment the invite is sent (`supabase/functions/invite-customer/index.ts:136`), while `register-customer` sets `'pending'`. So an invited customer is indistinguishable from a real active one whether or not they ever respond. A third state (`'invited'`) would need the `user_profiles_status_check` CHECK widened, and collides with this entry's own pause work — **decide the two together, not one then the other.**
+  - **Measured scale — production, 2026-08-09: exactly ONE.** `Ronald Burke`, invited **2026-03-17**, `status = 'active'`, email **never confirmed**, **never signed in** — almost five months. 12 non-paper profiles, 1 never signed in. Small, but it is a real customer who fell through with nothing on any screen to show it. **Operational now, ahead of any code: he needs a phone call.**
+- **Related:** **F121** — the restructure that surfaced this by giving accounts a home. **F13**/**F25** — `user_profiles` denormalisation and cascade questions that an edit path would have to respect (`email` is copied from `auth.users` with **no sync trigger**, so an email edit writes to one of two places and silently diverges them). **F10** — `preorders` FK is `ON DELETE NO ACTION`, which is why profile deletion already fails loudly and why any "remove" affordance here needs care.
+
+#### F127 — account `status` is not an authorization boundary: the pending gate is client-side only
+
+- **Status:** filed 2026-08-09 while scoping the Accounts tab. **Open, deferred** — Rick's call the same day: ship `'suspended'` at **parity** with `'pending'` (a one-line client change) and file the enforcement gap **as its own finding so it is visible rather than assumed closed**, instead of widening the Accounts session into a `preorders` RLS change.
+- **Severity:** **Low–Medium.** Authorization gap, **not** data exposure: no cross-tenant read, no credential exposure, nothing readable that was not already readable. It requires an account that has self-registered and confirmed its email but **not yet been approved by an admin**, and the effect is that such an account can create reservation rows early. Same *shape* as **F109** — a guard that exists in the client and not in the database.
+- **Measured, not inferred.** Confirmed on **staging** 2026-08-09 by a throwaway probe: create an auth user → insert its profile at `status = 'pending'` → sign in **as that user** → `POST /rest/v1/preorders` with its own JWT and the browser key. **Result: HTTP 201, row persisted.** Fixture fully torn down; profile rows remaining = 0, which also evidences the preorder was cleared (F10's `ON DELETE NO ACTION` would have blocked the profile delete otherwise). The probe was written only after a doc read suggested this, precisely because CLAUDE.md § Verify before escalating requires a live check for a security claim — and the doc read alone would have been filed as fact.
+- **Root cause.** No policy on `preorders` references `status` at all:
+  | Policy | Condition |
+  |---|---|
+  | `users manage own preorders` | `auth.uid() = user_id AND tenant_id = current_tenant_id()` |
+  | `admins manage tenant preorders` | tenant + admin |
+  | `admins write tenant preorders` | tenant + admin (see **F16**) |
+  | `admins view tenant preorders` | SELECT, redundant |
+  The entire pending gate is `catalog.html:245` — `const isPending = !profile?.is_admin && profile?.status === 'pending'` — read by 8 sites in that one file, all of which hide or disable UI. Nothing downstream re-checks.
+- **Consequence for the account lifecycle being built (F126).** Because `'suspended'` is shipping at parity with `'pending'`, **it inherits this gap by construction.** A paused customer is paused in the UI. That is a deliberate, informed trade — the alternative was a production RLS change on the app's busiest table, whose policy set already carries F16's cross-tenant write defect — but it means **"paused" must not be described to anyone as a hard block.**
+- **Also unenforced, same cause:** `subscriptions.html` has **no status check at all**, so a pending or suspended user can subscribe by ordinary use of the page — no crafted request needed. Worth confirming empirically before any fix, the same way this entry was.
+- **Fix direction (not applied).** Add a status predicate to the `users manage own preorders` policy (and the equivalent on `subscriptions`), e.g. requiring the caller's profile to be `'active'`. **Do this as its own session with its own gates:** it touches the policy set F16 already flags, it must not break admin impersonation (`AdminContext` writes preorders on a customer's behalf while the *admin* is the authenticated user), and the import script's service-role writes must remain unaffected. A `SECURITY DEFINER` helper mirroring `current_user_is_admin()` is the likely shape, since a subquery against `user_profiles` inside a `user_profiles`-adjacent policy is how **RLS recursion** was caused before (see § Known Issues).
+- **Related:** **F109** (client-side-only cancel guard — same shape, and the entry that established the fix direction is a trigger/policy rather than more client code). **F126** (the lifecycle work that inherits this). **F16** (the `preorders` policy defect any fix here must not compound). **F10** (the FK that made the teardown self-verifying).
+
+Next free finding ID: **F128**.
 
 ---
 

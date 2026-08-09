@@ -200,9 +200,13 @@
   <!-- Tabs — filtered to the active mode by applyMode() -->
   <div class="admin-tabs">
     <button class="admin-tab active" data-tab="by-customer" data-mode="customers">By Customer</button>
+    <!-- Accounts replaces BOTH the Pending and Paper Customers tabs (2026-08-09).
+         Those were two filtered views of one table, and between them they still
+         could not show an ordinary active customer with nothing reserved this
+         month — 10 of 25 profiles on staging had no surface anywhere. One list,
+         with those two as filters over it. -->
+    <button class="admin-tab" data-tab="accounts" data-mode="customers" id="tab-btn-accounts">Accounts <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
     <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions</button>
-    <button class="admin-tab" data-tab="pending" data-mode="customers" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
-    <button class="admin-tab" data-tab="paper-customers" data-mode="customers">Paper Customers</button>
     <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
     <button class="admin-tab" data-tab="by-distributor" data-mode="ordering">By Distributor</button>
     <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
@@ -324,39 +328,48 @@
     </div>
   </div>
 
-  <!-- Tab: Pending Accounts -->
-  <div class="admin-section" id="tab-pending">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
-      <p style="font-size:0.85rem;color:var(--text-secondary);margin:0">
-        Self-registered accounts awaiting approval. Approving sends a magic-link email so the customer can start reserving immediately.
-      </p>
-      <button class="btn btn-secondary btn-sm" id="btn-refresh-pending" style="flex-shrink:0">&#8635; Refresh</button>
+  <!-- Tab: Accounts (2026-08-09) -->
+  <!-- Replaces the Pending and Paper Customers tabs. Those were two filtered
+       views of user_profiles that between them still could not show an ordinary
+       active customer who happens to have nothing reserved this catalog month —
+       By Customer is preorder-derived, so such a person was invisible to the
+       admin entirely.
+       Every row states ONE status and its actions follow from it (plan § 3.4).
+       is_paper and status are orthogonal columns, so paper is shown as a MARKER
+       beside the status rather than as a competing status — one cell must not
+       claim two states.
+       NO Edit control is rendered: profile editing is F126, deferred by Rick,
+       and a disabled button would be the exact pattern F121 spent six sessions
+       removing. -->
+  <div class="admin-section" id="tab-accounts">
+    <div class="toolbar accounts-toolbar" style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="search-wrap" style="flex:1;min-width:200px">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <label for="accounts-search" class="visually-hidden">Search accounts</label>
+        <input type="text" class="search-input" id="accounts-search"
+               placeholder="Search name or email…">
+      </div>
+      <label for="accounts-filter" class="visually-hidden">Filter accounts</label>
+      <select id="accounts-filter"
+              style="background:var(--bg-elevated);border:1px solid var(--border);
+                     color:var(--text-primary);padding:7px 10px;border-radius:var(--radius);
+                     font-size:0.85rem">
+        <option value="all">All accounts</option>
+        <option value="active">Active</option>
+        <option value="paper">Paper</option>
+        <option value="pending">Pending approval</option>
+        <option value="suspended">Paused</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh-accounts" title="Reload from the server">&#8635;</button>
+      <button class="btn btn-primary btn-sm" id="btn-new-user">
+        <span style="font-size:1rem;line-height:1">+</span> New user
+      </button>
     </div>
-    <div id="pending-list">
+    <div id="accounts-summary" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px"></div>
+    <div id="accounts-list">
       <div class="empty-state"><p>Loading…</p></div>
-    </div>
-  </div>
-
-  <!-- Tab: Paper Customers (F121 session 6) -->
-  <!-- Moved here from the Paper Orders tab, which used to hold both halves of
-       the paper workflow. The cut follows process map § 5.7.2 P2: MANAGING a
-       paper customer is continuous account admin (§ 5.3 #4), while KEYING IN
-       their written order is monthly step 2 — two cadences, and the whole
-       point of the mode restructure is that one job is on screen at a time.
-       The Add form stays on Ordering with the entry flow, because a new paper
-       customer appears at exactly one moment: handing in their first sheet,
-       mid-entry (Rick, 2026-08-09). -->
-  <div class="admin-section" id="tab-paper-customers">
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Paper Customers</div>
-        <div style="font-size:0.78rem;color:var(--text-muted)">
-          <strong>Manage</strong> opens their pull list · <strong>Claim</strong> merges history when they go digital
-        </div>
-      </div>
-      <div id="paper-customer-list">
-        <p style="color:var(--text-muted);font-size:0.82rem">Loading…</p>
-      </div>
     </div>
   </div>
 
@@ -488,10 +501,15 @@
     <button id="invite-modal-close" style="position:absolute;top:14px;right:16px;
       background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
 
-    <h2 style="margin:0 0 6px;font-size:1.1rem">Invite Customer</h2>
-    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 24px;line-height:1.6">
-      A branded email will be sent with a link to set up their account.<br>
-      Their profile will be created automatically.
+    <h2 style="margin:0 0 6px;font-size:1.1rem" id="invite-modal-title">New User</h2>
+    <!-- One button, two outcomes, decided by the email field (Rick 2026-08-09):
+         no email = paper customer, email = invite. #invite-mode-hint states
+         WHICH before the click rather than after it in a toast — the operator
+         should never have to submit to find out what a control does. -->
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.6">
+      Leave the email blank for a <strong>paper customer</strong> — no email is
+      sent and they never log in. Add an email to send a branded
+      <strong>invite</strong> instead.
     </p>
 
     <div style="display:flex;flex-direction:column;gap:16px">
@@ -508,19 +526,20 @@
       <div>
         <label for="invite-email" style="display:block;font-size:0.78rem;font-weight:600;
                        color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
-          EMAIL ADDRESS
+          EMAIL ADDRESS <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— optional</span>
         </label>
-        <input id="invite-email" type="email" placeholder="jane@example.com"
+        <input id="invite-email" type="email" placeholder="Leave blank for a paper customer"
           style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
                  color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
                  font-size:0.9rem;box-sizing:border-box">
       </div>
+      <div id="invite-mode-hint" style="font-size:0.78rem;color:var(--text-muted);line-height:1.5"></div>
     </div>
 
     <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-ghost" id="invite-cancel-btn">Cancel</button>
       <button class="btn btn-primary" id="invite-send-btn">
-        Send Invite
+        Add Paper Customer
       </button>
     </div>
 
@@ -1444,7 +1463,9 @@
     if (tab === 'this-week')       renderThisWeek();
     if (tab === 'subscriptions')   loadSubscriptions();
     if (tab === 'paper-orders')    initPaperOrdersTab();
-    if (tab === 'paper-customers') initPaperCustomersTab();
+    // 'accounts' is deliberately absent: ensureAccounts() runs eagerly at init
+    // so the pending badge and the attention dot are right on arrival, not only
+    // after the tab is opened.
     // by-customer and by-distributor are rendered by loadData() already.
   }
 
@@ -2865,12 +2886,29 @@
   const inviteResult   = document.getElementById('invite-result');
   const inviteSendBtn  = document.getElementById('invite-send-btn');
 
+  const inviteHintEl = document.getElementById('invite-mode-hint');
+
+  // The modal's outcome is decided by the email field, so the button and the
+  // hint restate it on every keystroke. An operator must never have to submit
+  // to discover which of two things a control does.
+  function inviteMode() {
+    return inviteEmailEl.value.trim() ? 'invite' : 'paper';
+  }
+
+  function syncInviteMode() {
+    const paper = inviteMode() === 'paper';
+    inviteSendBtn.textContent = paper ? 'Add Paper Customer' : 'Send Invite';
+    inviteHintEl.textContent  = paper
+      ? 'No email will be sent. A placeholder account is created and you order on their behalf.'
+      : 'A branded email will be sent with a link to set up their account.';
+  }
+
   function openInviteModal() {
     inviteNameEl.value  = '';
     inviteEmailEl.value = '';
     inviteResult.style.display = 'none';
-    inviteSendBtn.textContent  = 'Send Invite';
     inviteSendBtn.disabled     = false;
+    syncInviteMode();
     inviteOverlay.style.display = 'flex';
     setTimeout(() => inviteNameEl.focus(), 50);
   }
@@ -2879,7 +2917,10 @@
     inviteOverlay.style.display = 'none';
   }
 
+  inviteEmailEl.addEventListener('input', syncInviteMode);
+
   document.getElementById('btn-invite-customer').addEventListener('click', openInviteModal);
+  document.getElementById('btn-new-user').addEventListener('click', openInviteModal);
   document.getElementById('invite-modal-close').addEventListener('click', closeInviteModal);
   document.getElementById('invite-cancel-btn').addEventListener('click', closeInviteModal);
   inviteOverlay.addEventListener('click', e => { if (e.target === inviteOverlay) closeInviteModal(); });
@@ -2893,13 +2934,43 @@
     const name  = inviteNameEl.value.trim();
     const email = inviteEmailEl.value.trim();
 
-    // Validate
-    if (!name)  { inviteNameEl.focus();  return; }
-    if (!email || !email.includes('@')) { inviteEmailEl.focus(); return; }
+    // Validate. Email is OPTIONAL now — blank means paper customer — but a
+    // non-blank one still has to look like an address, or a typo silently
+    // becomes an invite to nowhere.
+    if (!name) { inviteNameEl.focus(); return; }
+    if (email && !email.includes('@')) { inviteEmailEl.focus(); return; }
 
     inviteSendBtn.disabled    = true;
-    inviteSendBtn.textContent = 'Sending…';
     inviteResult.style.display = 'none';
+
+    // ── Paper branch: no email, no invite, no message sent ──
+    if (!email) {
+      inviteSendBtn.textContent = 'Adding…';
+      const { data: sessionData } = await db.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        toast('Session expired — sign out and back in', 'error');
+        inviteSendBtn.disabled = false; syncInviteMode(); return;
+      }
+      const { error } = await PaperCustomers.create(name, token);
+      if (error) {
+        inviteResult.style.display    = 'block';
+        inviteResult.style.background = 'rgba(239,68,68,0.12)';
+        inviteResult.style.border     = '1px solid rgba(239,68,68,0.3)';
+        inviteResult.style.color      = '#fca5a5';
+        inviteResult.textContent      = `Could not create customer: ${error}`;
+        inviteSendBtn.disabled = false; syncInviteMode(); return;
+      }
+      toast(`${name} added as a paper customer`);
+      closeInviteModal();
+      await refreshPaperCusts();
+      renderPendingOrders();
+      await ensureAccounts({ force: true });
+      renderAccounts();
+      return;
+    }
+
+    inviteSendBtn.textContent = 'Sending…';
 
     try {
       // Call Edge Function — sends branded invite email via MailerSend SMTP
@@ -2935,6 +3006,9 @@
 
       // Refresh customer list in background
       await loadData();
+      // The invited profile is a new account, so Accounts must see it too.
+      await ensureAccounts({ force: true });
+      renderAccounts();
 
     } catch (err) {
       inviteResult.style.display    = 'block';
@@ -3326,176 +3400,333 @@
 
 
 
-  // ── Pending Accounts Tab ───────────────────────────────
-  async function loadPendingAccounts() {
-    const container = document.getElementById('pending-list');
-    container.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
+  // ── Accounts Tab (2026-08-09) ──────────────────────────
+  // One list of every user in the tenant. Replaces the Pending and Paper
+  // Customers tabs, which were two filtered views of this same table and which
+  // between them still could not show an ordinary active customer with nothing
+  // reserved this month — By Customer is preorder-derived, so that person was
+  // invisible to the admin entirely (10 of 25 profiles on staging).
+  //
+  // Own fetch, deliberately: loadData() selects only `id, full_name` for
+  // profileMap, and four other consumers depend on that shape. Widening it to
+  // carry status/email/is_paper for one surface would make every consumer pay.
+  let accounts        = [];
+  let accountsLoaded  = false;
+  let accountsSort    = { key: 'full_name', dir: 1 };
 
-    const { items, error } = await Users.getPending();
-
-    // Update the tab badge. The duplicate "Pending Approval" stat tile was
-    // removed 2026-08-07 (F121 session 1) — this badge is now the only carrier
-    // of the count, which is where Rick reads it anyway.
-    const badge = document.getElementById('pending-badge');
-    if (items.length > 0) {
-      badge.textContent  = items.length;
-      badge.style.display = 'inline';
-    } else {
-      badge.style.display = 'none';
-    }
-    pendingCount = items.length;   // drives the Customers attention dot
-    updateModeDots();
-
+  async function ensureAccounts({ force = false } = {}) {
+    if (accountsLoaded && !force) return;
+    const { data, error } = await db
+      .from('user_profiles')
+      .select('id, full_name, email, status, is_paper, is_admin, created_at');
     if (error) {
-      container.innerHTML = `<div class="alert alert-error">Failed to load pending accounts: ${escapeHtml(error.message)}</div>`;
+      document.getElementById('accounts-list').innerHTML =
+        `<div class="alert alert-error">Failed to load accounts: ${escapeHtml(error.message)}</div>`;
       return;
     }
+    accounts       = data || [];
+    accountsLoaded = true;
 
-    if (!items.length) {
+    // The badge and the Customers attention dot both count pending approvals.
+    // Derived from this one fetch now, so there is a single source for it.
+    pendingCount = accounts.filter(u => u.status === 'pending').length;
+    const badge  = document.getElementById('pending-badge');
+    if (badge) {
+      badge.textContent   = pendingCount;
+      badge.style.display = pendingCount > 0 ? 'inline' : 'none';
+    }
+    updateModeDots();
+  }
+
+  // One row states ONE status. `is_paper` and `status` are orthogonal columns,
+  // so a paper customer can also be pending or paused — status wins the label
+  // and paper rides alongside as a marker. A single cell claiming two states is
+  // the F121 defect at table scale.
+  function accountState(u) {
+    if (u.status === 'pending')   return { key: 'pending',   label: 'Pending',  color: 'var(--warning)' };
+    if (u.status === 'suspended') return { key: 'suspended', label: 'Paused',   color: 'var(--text-muted)' };
+    if (u.is_paper)               return { key: 'paper',     label: 'Paper',    color: 'var(--lunar)' };
+    return { key: 'active', label: 'Active', color: 'var(--success, #4ade80)' };
+  }
+
+  function accountsMatching() {
+    const q      = (document.getElementById('accounts-search')?.value || '').trim().toLowerCase();
+    const filter = document.getElementById('accounts-filter')?.value || 'all';
+
+    // Everyone, admins included — Rick's ask was "the Accounts tab that contains
+    // all users", and an admin is a user. The first cut excluded admins from the
+    // status filters but NOT from "All", so the counts could not reconcile and
+    // an admin appeared in one view and vanished from every other. Caught by the
+    // partition gate, which is the only reason that gate exists.
+    let rows = accounts;
+
+    if (filter !== 'all') {
+      // Filter on the state the ROW DISPLAYS, so filtering by "Paper" returns
+      // exactly the rows labelled Paper. The first cut matched `is_paper`
+      // instead — a type rather than a state — which meant a paper customer who
+      // was also pending appeared under two filters and under neither total.
+      // Status still wins the label (§ 3.4); paper rides along as a marker.
+      rows = rows.filter(u => accountState(u).key === filter);
+    }
+
+    if (q) {
+      rows = rows.filter(u =>
+        (u.full_name || '').toLowerCase().includes(q) ||
+        (u.email     || '').toLowerCase().includes(q));
+    }
+
+    const { key, dir } = accountsSort;
+    return rows.sort((a, b) => {
+      const av = (a[key] || '').toString().toLowerCase();
+      const bv = (b[key] || '').toString().toLowerCase();
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }
+
+  function renderAccounts() {
+    const container = document.getElementById('accounts-list');
+    const summaryEl = document.getElementById('accounts-summary');
+    if (!container) return;
+
+    const rows  = accountsMatching();
+    const total = accounts.length;
+
+    // Counts are stated per state so the filter dropdown is never a guess, and
+    // they PARTITION the list: the four add up to the total, over the same set
+    // of people the filters return. Anything else and the numbers on this page
+    // stop reconciling, which is the whole of F121.
+    const by = { active: 0, paper: 0, pending: 0, suspended: 0 };
+    accounts.forEach(u => { by[accountState(u).key]++; });
+    if (summaryEl) {
+      summaryEl.innerHTML =
+        `Showing <strong>${rows.length}</strong> of ${total} account${total === 1 ? '' : 's'} · ` +
+        `${by.active} active · ${by.paper} paper · ${by.pending} pending · ${by.suspended} paused`;
+    }
+
+    if (!rows.length) {
       container.innerHTML = `
         <div class="empty-state">
-          <h3>No pending accounts</h3>
-          <p>All self-registered accounts have been reviewed.</p>
+          <h3>No matching accounts</h3>
+          <p>Try a different search or filter.</p>
         </div>`;
       return;
     }
 
+    const caret = (k) => accountsSort.key === k ? (accountsSort.dir === 1 ? ' ▲' : ' ▼') : '';
+
     container.innerHTML = `
-      <table class="list-table" id="pending-table">
+      <table class="list-table" id="accounts-table" style="min-width:640px">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Requested</th>
+            <th><button class="acct-sort" data-key="full_name">Name${caret('full_name')}</button></th>
+            <th><button class="acct-sort" data-key="email">Email${caret('email')}</button></th>
+            <th>Status</th>
+            <th><button class="acct-sort" data-key="created_at">Created${caret('created_at')}</button></th>
             <th style="text-align:right">Actions</th>
           </tr>
         </thead>
         <tbody>
-          ${items.map(u => `
-            <tr id="pending-row-${u.id}">
-              <td style="font-weight:600">${escapeHtml(u.full_name || '—')}</td>
-              <td style="color:var(--text-secondary);font-size:0.85rem">${escapeHtml(u.email || '—')}</td>
+          ${rows.map(u => {
+            const st    = accountState(u);
+            const name  = escapeHtml(u.full_name || '—');
+            const isPaperEmail = (u.email || '').endsWith('@paper.pulllist.local');
+            return `
+            <tr id="acct-row-${u.id}">
+              <td style="font-weight:600">${name}</td>
+              <td style="color:var(--text-secondary);font-size:0.85rem">${
+                isPaperEmail ? '<span style="color:var(--text-muted)">— no email —</span>' : escapeHtml(u.email || '—')
+              }</td>
+              <td>
+                <span style="font-size:0.72rem;font-weight:700;letter-spacing:0.04em;
+                             text-transform:uppercase;color:${st.color}">${st.label}</span>
+                ${u.is_paper && st.key !== 'paper'
+                  ? '<span style="font-size:0.68rem;color:var(--lunar);margin-left:6px">· paper</span>' : ''}
+                ${u.is_admin
+                  ? '<span style="font-size:0.68rem;color:var(--accent);margin-left:6px">· admin</span>' : ''}
+              </td>
               <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(u.created_at?.split('T')[0])}</td>
               <td style="text-align:right">
-                <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-                  <button class="btn btn-primary btn-sm pending-approve-btn"
-                    data-id="${u.id}" data-name="${escapeHtml(u.full_name || '')}">
-                    ✓ Approve
-                  </button>
-                  <button class="btn btn-danger btn-sm pending-decline-btn"
-                    data-id="${u.id}" data-name="${escapeHtml(u.full_name || '')}">
-                    ✕ Decline
-                  </button>
+                <!-- Pause is suppressed on admins deliberately: catalog.html
+                     exempts admins from the block, so pausing one would write a
+                     status that changes nothing. Offering the button would be a
+                     lie about what it does. (No backticks in this comment: it
+                     lives inside a template literal.) -->
+                <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+                  ${st.key === 'pending' ? `
+                    <button class="btn btn-primary btn-sm acct-approve" data-id="${u.id}" data-name="${name}">✓ Approve</button>
+                    <button class="btn btn-danger btn-sm acct-decline" data-id="${u.id}" data-name="${name}">✕ Decline</button>
+                  ` : ''}
+                  ${st.key === 'suspended' ? `
+                    <button class="btn btn-primary btn-sm acct-resume" data-id="${u.id}" data-name="${name}">Resume</button>
+                  ` : ''}
+                  ${(st.key === 'active' || st.key === 'paper') && !u.is_admin ? `
+                    <button class="btn btn-ghost btn-sm acct-pause" data-id="${u.id}" data-name="${name}"
+                            style="color:var(--text-muted)" title="Pause — blocks reserving until resumed">Pause</button>
+                  ` : ''}
+                  <button class="btn btn-secondary btn-sm acct-manage" data-id="${u.id}" data-name="${name}"
+                          title="Open this customer's pull list">Manage</button>
+                  ${u.is_paper ? `
+                    <button class="btn btn-ghost btn-sm acct-claim" data-id="${u.id}" data-name="${name}"
+                            style="color:var(--text-muted)" title="Merge into a real account when the customer goes digital">Claim…</button>
+                  ` : ''}
                 </div>
               </td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>`;
 
-    // Approve handler
-    container.querySelectorAll('.pending-approve-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const { id, name } = btn.dataset;
-        if (!confirm(`Approve ${name} and send them an invitation email?`)) return;
+    wireAccountRowActions(container);
+  }
 
-        btn.disabled = true;
-        btn.textContent = 'Approving…';
-
-        const { data: sessionData } = await db.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) { toast('Session expired — please sign out and back in', 'error'); return; }
-
-        const { data, error } = await Users.approve(id, token);
-
-        if (error) {
-          toast(`Failed to approve: ${error}`, 'error');
-          btn.disabled = false;
-          btn.textContent = '✓ Approve';
-          return;
-        }
-
-        // Remove row and refresh counts
-        const row = document.getElementById(`pending-row-${id}`);
-        if (row) row.remove();
-        toast(`${name} approved — invitation email sent`);
-
-        // Check if table is now empty
-        const tbody = document.querySelector('#pending-table tbody');
-        if (!tbody?.children.length) {
-          container.innerHTML = '<div class="empty-state"><h3>No pending accounts</h3><p>All self-registered accounts have been reviewed.</p></div>';
-        }
-
-        // Refresh badge count
-        const remaining = document.querySelectorAll('#pending-table tbody tr').length;
-        const badge = document.getElementById('pending-badge');
-        if (remaining > 0) {
-          badge.textContent = remaining;
-        } else {
-          badge.style.display = 'none';
-        }
+  function wireAccountRowActions(container) {
+    container.querySelectorAll('.acct-sort').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const k = btn.dataset.key;
+        accountsSort = { key: k, dir: accountsSort.key === k ? -accountsSort.dir : 1 };
+        renderAccounts();
       });
     });
 
-    // Decline handler
-    container.querySelectorAll('.pending-decline-btn').forEach(btn => {
+    // Manage — identical behaviour to the old Paper Customers list, now
+    // available for EVERY customer. This is the door that replaces scrolling
+    // catalog.html's unbounded impersonation <select>.
+    container.querySelectorAll('.acct-manage').forEach(btn => {
+      btn.addEventListener('click', () => {
+        AdminContext.set(btn.dataset.id, btn.dataset.name);
+        window.location.href = 'catalog.html';
+      });
+    });
+
+    container.querySelectorAll('.acct-approve').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { id, name } = btn.dataset;
+        if (!confirm(`Approve ${name} and send them an invitation email?`)) return;
+        btn.disabled = true; btn.textContent = 'Approving…';
+
+        const { data: sessionData } = await db.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) { toast('Session expired — please sign out and back in', 'error'); btn.disabled = false; btn.textContent = '✓ Approve'; return; }
+
+        const { error } = await Users.approve(id, token);
+        if (error) {
+          toast(`Failed to approve: ${error}`, 'error');
+          btn.disabled = false; btn.textContent = '✓ Approve';
+          return;
+        }
+        toast(`${name} approved — invitation email sent`);
+        await ensureAccounts({ force: true });
+        renderAccounts();
+      });
+    });
+
+    container.querySelectorAll('.acct-decline').forEach(btn => {
       btn.addEventListener('click', async () => {
         const { id, name } = btn.dataset;
         if (!confirm(`Decline and remove ${name}'s account? This cannot be undone.`)) return;
-
-        btn.disabled = true;
-        btn.textContent = 'Removing…';
+        btn.disabled = true; btn.textContent = 'Removing…';
 
         const { error } = await Users.deleteProfile(id);
         if (error) {
-          toast(`Failed to remove: ${error.message}`, 'error');
-          btn.disabled = false;
-          btn.textContent = '✕ Decline';
+          // F10: the preorders FK is ON DELETE NO ACTION, so this fails loudly
+          // and deliberately if the customer already holds reservations. That
+          // is a guard, not a bug — say so rather than showing a raw 409.
+          toast(`Could not remove ${name}: ${error.message}`, 'error');
+          btn.disabled = false; btn.textContent = '✕ Decline';
           return;
         }
-
-        const row = document.getElementById(`pending-row-${id}`);
-        if (row) row.remove();
         toast(`${name}'s request removed`);
+        await ensureAccounts({ force: true });
+        renderAccounts();
+      });
+    });
 
-        const tbody = document.querySelector('#pending-table tbody');
-        if (!tbody?.children.length) {
-          container.innerHTML = '<div class="empty-state"><h3>No pending accounts</h3><p>All self-registered accounts have been reviewed.</p></div>';
-        }
+    // Pause / Resume. Writes an already-legal `status` value; no schema change.
+    // NOTE: this is a UI block, not a hard one — `status` is not enforced at the
+    // database boundary (F127, measured). Do not describe it as more.
+    const setStatus = async (btn, next, verb) => {
+      const { id, name } = btn.dataset;
+      if (next === 'suspended' && !confirm(
+        `Pause ${name}?\n\nThey stay signed in but cannot reserve or subscribe until resumed.`)) return;
+      const original = btn.textContent;
+      btn.disabled = true; btn.textContent = `${verb}…`;
+      const { error } = await Users.setStatus(id, next);
+      if (error) {
+        toast(`Could not ${verb.toLowerCase()} ${name}: ${error.message}`, 'error');
+        btn.disabled = false; btn.textContent = original;
+        return;
+      }
+      toast(next === 'suspended' ? `${name} paused` : `${name} resumed`);
+      await ensureAccounts({ force: true });
+      renderAccounts();
+    };
+    container.querySelectorAll('.acct-pause').forEach(btn =>
+      btn.addEventListener('click', () => setStatus(btn, 'suspended', 'Pausing')));
+    container.querySelectorAll('.acct-resume').forEach(btn =>
+      btn.addEventListener('click', () => setStatus(btn, 'active', 'Resuming')));
 
-        const remaining = document.querySelectorAll('#pending-table tbody tr').length;
-        const badge = document.getElementById('pending-badge');
-        if (remaining > 0) {
-          badge.textContent = remaining;
-        } else {
-          badge.style.display = 'none';
+    container.querySelectorAll('.acct-claim').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { id, name } = btn.dataset;
+        const realId = prompt(
+          `Merge "${name}" into a real customer account.\n\n` +
+          `Paste the real customer's user UUID.\n` +
+          `(Find it in Supabase → Authentication → Users)`
+        );
+        if (!realId?.trim()) return;
+        if (!confirm(
+          `This will move all of ${name}'s preorders and subscriptions ` +
+          `to the real account and permanently delete the paper account.\n\nContinue?`
+        )) return;
+
+        const { data: sessionData } = await db.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) { toast('Session expired — sign out and back in', 'error'); return; }
+
+        const { error } = await PaperCustomers.claim(id, realId.trim(), token);
+        if (error) {
+          toast(`Claim failed: ${error.message}`, 'error');
+          return;
         }
+        toast(`✓ ${name}'s history merged — paper account removed`);
+        await ensureAccounts({ force: true });
+        renderAccounts();
+        // The Ordering-side entry pane reads its own paperCusts array.
+        await refreshPaperCusts();
+        renderPendingOrders();
+        await loadData();
       });
     });
   }
 
-  // Load pending accounts eagerly so the badge populates on page load
-  loadPendingAccounts();
+  // Eager, so the pending badge and the Customers attention dot are correct on
+  // arrival rather than only after the tab is opened. Same reason the old
+  // loadPendingAccounts() ran eagerly.
+  ensureAccounts().then(renderAccounts);
 
-  // Refresh button
-  document.getElementById('btn-refresh-pending').addEventListener('click', loadPendingAccounts);
-
-  // Tab click also reloads
-  document.querySelector('[data-tab="pending"]').addEventListener('click', loadPendingAccounts);
+  document.getElementById('btn-refresh-accounts').addEventListener('click', async () => {
+    await ensureAccounts({ force: true });
+    renderAccounts();
+  });
+  document.getElementById('accounts-filter').addEventListener('change', renderAccounts);
+  document.getElementById('accounts-search').addEventListener('input', debounce(renderAccounts, 200));
+  document.querySelector('[data-tab="accounts"]').addEventListener('click', async () => {
+    await ensureAccounts();
+    renderAccounts();
+  });
 
 
   // ── Paper customers — ONE array, TWO surfaces (F121 session 6) ─────────
-  // The paper workflow now spans two modes: Ordering ▸ Paper Orders holds the
-  // create form and the keying-in flow (monthly step 2), Customers ▸ Paper
-  // Customers holds the list with Manage and Claim (continuous § 5.3 #4).
-  // Both read this same array — the entry pane for its per-title customer
-  // dropdowns, the list for the table itself — so the LOAD is shared and
-  // idempotent rather than duplicated per tab.
+  // The paper workflow spans two modes: Ordering ▸ Paper Orders holds the
+  // create form and the keying-in flow (monthly step 2), while MANAGING a paper
+  // customer — Manage, Claim — now lives on Customers ▸ Accounts alongside
+  // every other user (2026-08-09).
   //
-  // The old `dataset.loaded` flag was parked on #paper-customer-list, which is
-  // precisely the element that moved to the other mode, so the guard had to
-  // move regardless. Same shape as session 4's ensureFullData/ensureBaggingData:
-  // switching back and forth must not refetch.
+  // This array therefore backs ONE surface now, not two: the entry pane's
+  // per-title customer dropdowns. Accounts has its own `accounts` array over the
+  // whole table, because it needs status/email/is_paper that PaperCustomers.list()
+  // does not return and does not need the paper-only scoping that it does.
+  // Two arrays with genuinely different shapes and scopes, not a duplicate.
   let paperCusts   = [];             // [{ id, full_name, created_at }]
   let paperCustsLoaded = false;
   const pendingOrders = new Map();   // catalogId → { catalog, customerQtys: Map<uid, qty> }
@@ -3512,11 +3743,8 @@
     renderPendingOrders();
   }
 
-  // Customers ▸ Paper Customers — the list, Manage and Claim.
-  async function initPaperCustomersTab() {
-    await ensurePaperCusts();
-    renderPaperCustomerList();
-  }
+  // initPaperCustomersTab() removed 2026-08-09 — the Paper Customers tab it
+  // served is now a filter on Customers ▸ Accounts.
 
   async function refreshPaperCusts() {
     const { items } = await PaperCustomers.list();
@@ -3548,8 +3776,11 @@
       nameInput.value = '';
       toast(`${name} added`);
       await refreshPaperCusts();
-      renderPaperCustomerList();
       renderPendingOrders(); // refresh customer dropdowns on existing rows
+      // Accounts lists every user, so a new paper customer belongs there too.
+      // Forced, not lazy: the operator may switch straight to it.
+      await ensureAccounts({ force: true });
+      renderAccounts();
     }
     btn.disabled = false;
     btn.textContent = 'Add';
@@ -3790,87 +4021,11 @@
       : 'Submit Reservations';
   }
 
-  // ── Paper customer list ──────────────────────────────────
-  function renderPaperCustomerList() {
-    const container = document.getElementById('paper-customer-list');
-    if (!paperCusts.length) {
-      // "Add one above" was true while the create form sat directly above this
-      // table. After the session-6 split it is in another mode, so the copy has
-      // to name where it went — a restructure silently falsifies exactly this
-      // kind of positional instruction.
-      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;margin:0">No paper customers yet. Add one under <strong>Ordering ▸ Paper Orders</strong>, where the written orders are keyed in.</p>';
-      return;
-    }
-    container.innerHTML = `
-      <table class="list-table" style="min-width:420px">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Added</th>
-            <th style="text-align:right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${paperCusts.map(pc => `
-            <tr>
-              <td style="font-weight:600">${escapeHtml(pc.full_name)}</td>
-              <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(pc.created_at?.split('T')[0])}</td>
-              <td style="text-align:right">
-                <div style="display:flex;gap:8px;justify-content:flex-end">
-                  <button class="btn btn-secondary btn-sm paper-manage-btn"
-                    data-id="${pc.id}" data-name="${escapeHtml(pc.full_name)}">
-                    Manage Pull List
-                  </button>
-                  <button class="btn btn-ghost btn-sm paper-claim-btn"
-                    data-id="${pc.id}" data-name="${escapeHtml(pc.full_name)}"
-                    style="color:var(--text-muted)" title="Merge into a real account when customer goes digital">
-                    Claim…
-                  </button>
-                </div>
-              </td>
-            </tr>`).join('')}
-        </tbody>
-      </table>`;
-
-    // Manage: set AdminContext then go to catalog to enter orders on their behalf
-    container.querySelectorAll('.paper-manage-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        AdminContext.set(btn.dataset.id, btn.dataset.name);
-        window.location.href = 'catalog.html';
-      });
-    });
-
-    // Claim: merge paper account into a real account
-    container.querySelectorAll('.paper-claim-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const realId = prompt(
-          `Merge "${btn.dataset.name}" into a real customer account.\n\n` +
-          `Paste the real customer's user UUID.\n` +
-          `(Find it in Supabase → Authentication → Users)`
-        );
-        if (!realId?.trim()) return;
-        if (!confirm(
-          `This will move all of ${btn.dataset.name}'s preorders and subscriptions ` +
-          `to the real account and permanently delete the paper account.\n\nContinue?`
-        )) return;
-
-        const { data: sessionData } = await db.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) { toast('Session expired — sign out and back in', 'error'); return; }
-
-        const { error } = await PaperCustomers.claim(btn.dataset.id, realId.trim(), token);
-        if (error) {
-          toast(`Claim failed: ${error.message}`, 'error');
-        } else {
-          toast(`✓ ${btn.dataset.name}'s history merged — paper account removed`);
-          await refreshPaperCusts();
-          renderPaperCustomerList();
-          renderPendingOrders();
-          await loadData(); // refresh main dashboard customer count
-        }
-      });
-    });
-  }
+  // renderPaperCustomerList() removed 2026-08-09. Its container
+  // (#paper-customer-list) and its tab are gone: every paper customer is now a
+  // row on Customers > Accounts, filtered by type, with the same Manage and
+  // Claim actions available to every other user. The claim handler moved with
+  // it to wireAccountRowActions().
 
   // ── Submit pending reservations ──────────────────────────
   document.getElementById('paper-submit-btn').addEventListener('click', async () => {
@@ -4635,13 +4790,12 @@
   });
 
   // ── Load tab on first click ──────────────────────────────
-  // Both paper tabs are safe to call on every click: ensurePaperCusts() is the
-  // guard, so the second and later clicks re-render from memory and issue no
-  // request. That is deliberately different from the old per-element
-  // `dataset.loaded` flag, which lived on an element that has since moved to
-  // the other mode.
+  // Safe to call on every click: ensurePaperCusts() is the guard, so the second
+  // and later clicks re-render from memory and issue no request. Deliberately
+  // different from the old per-element `dataset.loaded` flag, which lived on an
+  // element that has since moved surface twice.
+  // (The Accounts tab wires its own click listener next to its render code.)
   document.querySelector('[data-tab="paper-orders"]').addEventListener('click', initPaperOrdersTab);
-  document.querySelector('[data-tab="paper-customers"]').addEventListener('click', initPaperCustomersTab);
 
   // MUST stay last. The active tab was chosen during applyMode() near the top
   // of init, but its data cannot load until every `let` in this script body has
