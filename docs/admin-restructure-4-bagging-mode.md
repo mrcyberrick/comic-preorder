@@ -3,7 +3,7 @@
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.2 **P4**, § 5.7.4.
 **Decision:** Option B, built as **modes within one `admin.html`** — Rick, 2026-08-07.
 
-**Status:** **COMPLETE on staging 2026-08-08** — four commits (`de52328`, `a1e406a`, `2189b09`, `b2c65be`). Not promoted.
+**Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-08** — PR #110, merge `de0d7ca`. Six commits on staging (`de52328`, `a1e406a`, `2189b09`, `b2c65be`, `169949c`, `8d4099e`).
 **Target:** **staging only.**
 **Branch:** `feature/admin-bagging-mode`
 **Last verified against live code:** `admin.html` @ `43191b6`, 2026-08-08.
@@ -365,3 +365,29 @@ so one place knows the tab lives behind a mode.
 That is the second time in this session evidence was on screen and acted on
 only in part; the first was the `24 failed` line in § 7.6. **Reading the whole
 output is the fix, and it is cheaper than the re-runs it saves.**
+
+---
+
+## 10. Production — PR #110, merge `de0d7ca`, 2026-08-08
+
+Promoted with 17 staging commits. Client-only for the app (`admin.html`,
+`style.css`); the SQL file in the diff was already applied to production by
+hand on 2026-08-08, so merging changed nothing in Postgres.
+
+**Post-deploy verification, read-only:**
+
+| Check | Result |
+|---|---|
+| New build served on `pulllist.app` | ✅ first attempt — modes, `landingMode()`, panel on Customers |
+| Shared `.stats-bar` CSS survived | ✅ still served; `mylist.html` uses it, `arrivals.html` has its 7 `.stat-value` uses |
+| `.chrome-off` rule present | ✅ — the mode-gating that replaced the display collision |
+| Row counts | ✅ `preorders` 2,005 · `order_submissions` 860 · `catalog` 11,724 |
+
+**Write-smoke is Rick's** — it needs a real browser session on production, the
+Playwright runner is barred from prod by design, and a service-key insert would
+bypass the client code and RLS, proving nothing about what the smoke tests.
+
+**Known and deliberate on production:** Bagging will feel no faster than before.
+The light-load path is dormant (§ 9.1) because landing on Customers loads
+everything up front — the right trade, since the alert cannot be seen from
+Bagging otherwise, and recoverable later with a cheap alert-count query.
