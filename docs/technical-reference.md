@@ -1155,8 +1155,27 @@ have findings.
 - `users view own profile` — SELECT where `auth.uid() = id`
 - `users update own profile` — UPDATE where `auth.uid() = id`
 - `admins view tenant profiles` — SELECT where `tenant_id = current_tenant_id() AND current_user_is_admin()`
-- No INSERT or DELETE policy. Profile creation/deletion goes through
-  service-role (Edge Functions).
+- `admins manage tenant profiles` — **ALL**, `TO authenticated`. Added to staging
+  2026-06-11 (Phase 5.0 S3) to reach prod parity; production already had it. This
+  is what makes admin-side Decline (`Users.deleteProfile`) and Pause
+  (`Users.suspend`, `status = 'suspended'`) work from a browser session.
+
+⚠️ **Corrected 2026-08-09.** This block previously listed only the three policies
+above and asserted *"No INSERT or DELETE policy. Profile creation/deletion goes
+through service-role (Edge Functions)."* That is **wrong for admins** and had been
+since 5.0 S3 — the same session whose own § 13 entry records creating the ALL
+policy, so the two halves of this document disagreed for two months.
+
+**Verified by execution on staging 2026-08-09**, with the anon key and a real
+admin JWT and **no service key in the request path**: `SELECT` over all tenant
+profiles returned **200 / 25 rows**; `PATCH status='suspended'` on another user
+returned **200** and persisted; `PATCH status='active'` restored it. Probe
+fixtures torn down, 0 rows remaining.
+
+Profile **creation** via Edge Function remains accurate — `create-paper-customer`
+and `invite-customer` need service role to make the `auth.users` row, which no
+client key can do. It is the *no admin write path* claim that was false. Instance
+of **F92**; corrected here rather than filed as a new ID.
 
 #### `catalog`
 - `users read tenant catalog` — SELECT, authenticated, where `tenant_id = current_tenant_id()`
