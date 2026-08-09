@@ -3,10 +3,11 @@
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.1, § 5.7.2 **P2**, § 5.7.4 row 6.
 **Decision:** Option B, built as **modes within one `admin.html`** — Rick, 2026-08-07.
 
-**Status:** **COMPLETE ON STAGING 2026-08-09** (`a6a7fbc`) — 103/103,
-`PLAYWRIGHT_EXIT=0`. **Rick's real-browser check and production promotion both
-owed.**
-**Target:** **staging only.**
+**Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-09** — staging `a6a7fbc`
+(103/103, `PLAYWRIGHT_EXIT=0`), promoted via **PR #114, merge `54d0dc3`**.
+Rick's real-browser check passed on staging; **post-deploy write-smoke PASSED**
+(Rick, 2026-08-09). See § 9.
+**Target:** staging first, then production (promotion at Rick's explicit request).
 **Branch:** `feature/admin-ordering-mode`
 **Last verified against live code:** `admin.html` @ `851c897`, 2026-08-09 — every
 line range below was read from disk this session, not recalled.
@@ -226,7 +227,8 @@ Grep run this session, before any edit:
 - [x] § 3 applied, every range re-verified against disk immediately before edit
 - [x] V1–V8 green, with Playwright's **own** exit code captured (session 4 § 7.6)
 - [x] No fixtures seeded, or seeded and verified torn down by live SELECT
-- [ ] **Real-browser check by Rick on staging** — owed
+- [x] **Real-browser check by Rick on staging** — passed 2026-08-09
+- [x] Promoted to production (PR #114, merge `54d0dc3`); write-smoke passed
 - [x] Parent § 5.7.4 index row 6 updated
 - [x] `CLAUDE.md` F121 line advanced
 
@@ -309,3 +311,70 @@ have passed forever without testing anything — a green assertion that is reall
 an absent one, which is the F96/F115 shape in miniature. Removed rather than
 made to work: the DB read plus the cross-mode render already prove the array is
 shared, and the create handler rendering the *other* surface is what proves it.
+
+---
+
+## 9. Production — PR #114, merge `54d0dc3`, 2026-08-09
+
+Client-only (`admin.html`, `style.css`). **No DB change, no schema change, no
+Edge Function change, no `config.js` change.** This closes F121's restructure:
+all six sessions plus the W2/W3 Order Builder fixes are now live.
+
+### 9.1 Pre-flight
+
+| Check | Result |
+|---|---|
+| `config.js` preserved via `git checkout main -- config.js` | ✅ identical to prod HEAD, **absent from the PR diff** (asserted, not assumed) |
+| F59 merge-base | ✅ `admin.html` **and** `style.css` both differ from main |
+| Prod-only migrations survive the merge | ✅ both `phase_4_3` / `phase_4_4` files still present |
+| Print leakage (the F119 shape) | ✅ `#cycle-lock-note` is inside `.export-bar`, already covered by the bagging print's hide rule |
+
+**On F59:** `app.js`, `mylist.html` and `arrivals.html` reported *"identical to
+main"*. That is **correct here, not a regression** — this session touched only
+`admin.html` and `style.css`. The gate asks whether the files that *should* have
+changed did; both did. Recorded because a future reader meeting three WARNs in
+this log should not read them as a near-miss.
+
+### 9.2 Post-deploy verification (read-only)
+
+| Check | Result |
+|---|---|
+| New build served on `pulllist.app` | ✅ `#cycle-lock-note`, the `paper-customers` tab, `ensurePaperCusts`, `initPaperCustomersTab` all present |
+| Rename landed | ✅ "Print Lunar/PRH Catalog" served; **zero** "Print … Order Sheet" |
+| Old element gone | ✅ **zero** `id="bd-month-note"` |
+| Export-bar pair unchanged | ✅ `btn-export-lunar` intact — the distributor buttons were deliberately not renamed |
+| Shared `.stats-bar` CSS survived | ✅ still served (used by `mylist.html` / `arrivals.html`) |
+| `.export-bar { flex-wrap }` | ✅ served, byte-identical to `main` |
+| Row counts | ✅ `preorders` 2,005 · `order_submissions` 864 · `catalog` 11,724 · `user_profiles` 27 · **paper customers 15** |
+
+**Write-smoke PASSED** — Rick, 2026-08-09. Run by hand, as always: it needs a
+real browser session on production, the Playwright runner aborts on a prod
+`SUPABASE_URL` by design, and a service-key insert would bypass both the client
+code and RLS, proving nothing about what the smoke exists to test.
+
+**Production has 15 paper customers**, so the new `Customers ▸ Paper Customers`
+tab lands with real content rather than an empty state — which is worth knowing,
+because the empty-state copy this session rewrote (§ 3.3) will not be what Rick
+sees.
+
+### 9.3 A verification near-miss worth recording
+
+The first post-deploy pass reported `.export-bar flex-wrap` = **0** and looked
+like a CSS deploy failure. It was not: the check used `grep -A6`, and the rule
+sits **eight** lines into the block behind a four-line comment the same session
+had added. The measuring instrument was wrong, not the thing measured.
+
+Cheap to catch here — the fix was to print the served rule and read it. But the
+shape is the one this workstream keeps meeting (session 4 § 7.6's `tail -4`
+hiding a `24 failed` line): **a truncating window produces a confident wrong
+number, and a wrong number invites a theory.** Print the whole thing and look at
+it before explaining it.
+
+### 9.4 Branch asymmetry, noticed and not filed
+
+`main` carries two `supabase/migrations/*.sql` files (`phase_4_3`, `phase_4_4`)
+that have **never existed on `staging`**. Merges handle this correctly — they are
+not deletions from staging's history — and both survived this promotion, verified
+explicitly. But the branches are not a clean superset relationship, and nothing
+in `CLAUDE.md` or any reference doc records that. Surfaced to Rick 2026-08-09;
+**not filed as a finding without his call**, per § Stop and ask.
