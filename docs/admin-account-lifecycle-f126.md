@@ -22,8 +22,9 @@ half the size it looked:
 | Feared | Actually |
 |---|---|
 | Widen `user_profiles_status_check` for an `'invited'` state | **No schema change.** "Unanswered invite" is derived: `created_by_admin AND last_sign_in_at IS NULL`. |
-| An Edge Function to edit email | **None.** Email is read-only; only `full_name` and `is_admin` are editable, and both live in `user_profiles`. |
+| An Edge Function to edit email | **None.** Email is read-only; **`full_name` is the only editable field.** |
 | Decide what pause does to existing reservations | **Already the shipped behaviour** — pause blocks *new* reservations and leaves existing ones alone. This is documentation, not code. |
+| A privilege-escalation surface for `is_admin` | **Cut 2026-08-09** — stays a Supabase-console task (§ 2 OUT). Removes the control, its two guards, and a gate. |
 
 **One DB object remains: a single SECURITY DEFINER RPC.** That is the whole
 backend surface of this session.
@@ -38,7 +39,7 @@ backend surface of this session.
    `last_sign_in_at` and `email_confirmed_at` for the caller's tenant, admin-only.
 2. **A sortable "Last seen" column** on Accounts.
 3. **An "Invited, never responded" filter**, derived — no new status.
-4. **An Edit control**: `full_name` and `is_admin`. Email displayed, **read-only**.
+4. **An Edit control: `full_name` only.** Email displayed, **read-only**.
 5. **Document** that pause leaves existing reservations untouched — in the
    confirm dialog, so the operator reads it at the moment of the decision.
 
@@ -47,6 +48,7 @@ backend surface of this session.
 | Not touched | Why |
 |---|---|
 | **Editing email** | Rick 2026-08-09. `user_profiles.email` is a denormalized copy of `auth.users.email` with **no sync trigger (F25)**, and `auth.users.email` is the *login identity*. Editing the profile copy alone would look like it worked and silently not move the login. Doing it properly needs the GoTrue admin API → service role → an Edge Function. Out. |
+| **Editing `is_admin`** | **CUT 2026-08-09, Rick's call, in favour of keeping it a Supabase-console task.** It was planned, then cut on being told what it is: a **privilege-escalation surface**. Granting or revoking admin is rare, consequential, and irreversible-by-the-victim — an operator who revokes their own admin loses the surface they would need to undo it. **The database already permits it** (the `admins manage tenant profiles` ALL policy lets any admin PATCH `is_admin` on anyone, today, with no UI), so this is not closing a hole — it is declining to *open a door* to one, and the two client-side guards that door would have needed are guards a hand-crafted request ignores anyway (the **F127** shape). A rare, dangerous action belongs where it is deliberate. |
 | **RLS enforcement of `status`** | **F127**, still its own session. This one does not make "paused" any harder than it already is. |
 | **Cancelling a paused customer's reservations** | Rick 2026-08-09: leave them. Pause blocks new reservations; the already-ordered copies are still the store's to sell. Avoids any interaction with F109/F117 money. |
 | **An `'invited'` status value** | Superseded by § 3.3. |
@@ -124,24 +126,29 @@ analytics. All to express something two existing columns already imply.
 a proxy for "never signed in" agrees only **8 of 12** on production. Four
 signed-in customers read `false`. It would have been free; it is also wrong.
 
-### 3.4 Edit — two fields, and two guards on the second
+### 3.4 Edit — one field, and the two it deliberately does not touch
 
-`full_name` is unremarkable. **`is_admin` is a privilege-escalation surface** and
-needs guards the UI must not omit:
+**`full_name` only.** A text input and a save. That is the whole control.
 
-1. **You cannot revoke your own admin.** One misclick otherwise locks the
-   operator out of the surface they would need to undo it.
-2. **You cannot revoke the last admin.** Same failure, one step removed.
+The two omissions are the interesting part, and both are visible on screen
+rather than mysterious:
 
-Neither is enforced by the database — the `admins manage tenant profiles` ALL
-policy permits any admin to PATCH `is_admin` on anyone, and **that is already
-true today**; this session only makes it reachable from the UI. Worth stating
-plainly rather than discovering later: these guards are client-side, like
-F127's, and a hand-crafted request bypasses them.
+- **Email is read-only**, labelled *"login address — to change it, re-invite the
+  customer"*. See § 2 OUT and **F25**.
+- **`is_admin` is absent entirely** — not disabled, absent. Cut by Rick
+  2026-08-09 once it was clear the control would be a privilege-escalation
+  surface whose only protections would be client-side. Granting admin stays a
+  Supabase-console task: rare, consequential, and better done somewhere the
+  operator has to mean it.
 
-Email renders read-only with the reason on screen — *"login address; to change
-it, re-invite the customer"* — so the constraint is visible rather than
-mysterious.
+**Absent, not disabled** — the same rule the Accounts tab already follows for
+Edit itself. A greyed-out "Grant admin" checkbox would invite exactly one
+question ("why can't I?") and answer it nowhere, which is the pattern F121 spent
+six sessions removing.
+
+**What this leaves the session with is one editable field**, no
+privilege-escalation surface, and no client-side guard that a crafted request
+could walk through.
 
 ### 3.5 Pause — the confirm dialog gains a sentence
 
@@ -164,8 +171,8 @@ implementation. The confirm text says so, at the moment the decision is made:
 | **V3** | RPC leaks nothing else | Returned columns are exactly `id`, `last_sign_in_at`, `email_confirmed_at` |
 | **V4** | Last seen renders and sorts | Never-signed-in reads **"never"**, not blank; sort puts them together |
 | **V5** | **The one that matters** — the invite filter finds the real case | On production data the filter would return `Ronald Burke` and nothing else; on staging, a seeded equivalent |
-| **V6** | Edit writes | `full_name` change persists and re-renders; `is_admin` toggle persists |
-| **V7** | Edit guards hold | Own-admin revoke blocked; last-admin revoke blocked |
+| **V6** | Edit writes | `full_name` change persists and re-renders across By Customer and Accounts |
+| **V7** | Edit offers nothing else | Email input is `readonly`; **no `is_admin` control exists in the DOM at all** — asserted as an absence, so re-adding it later is a conscious act |
 | **V8** | Pause unchanged | A paused customer keeps their reservations and still appears on the bagging list |
 | **V9** | Full suite | Green |
 
