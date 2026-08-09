@@ -3320,7 +3320,27 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **How it was found:** a pre-flight `git diff --name-only main staging` during PR #114, run to confirm `config.js` was the only expected difference. The two `.sql` paths appeared in that list and had to be traced by hand, because no doc could answer whether they were expected. That hand-tracing is the cost this entry exists to remove.
 - **Related:** **F105** — the same class of failure, where a gate lived in a SQL file rather than in a plan's completion criteria and went unmet for 13 days. Both are cases of **real state recorded nowhere a session-opening read would find it**. **F59** — the merge-base regression check in the promotion flow, which is the other guard against a promotion silently producing the wrong tree.
 
-Next free finding ID: **F126**.
+#### F126 — no user-management surface: profiles cannot be edited, and the account lifecycle stops at "approved"
+
+- **Status:** filed 2026-08-09 from Rick's Accounts-tab direction. **Deferred by Rick's explicit choice** — *"The edit feature is a real need but can be logged for a future change."* **Scoped OUT of the Accounts session**, which builds the list, the filters, the row-level Manage jump and one New user button, and deliberately renders **no Edit control at all** rather than a disabled one.
+- **Severity:** **Medium as a product gap, not a defect.** Nothing is broken; a capability the data model already supports has no way to be reached.
+- **What is missing.** There is no surface anywhere in the app that edits a `user_profiles` row. A customer's name or email cannot be corrected, and `is_admin` cannot be granted or revoked, except in the Supabase console. Rick's ask adds a second, operationally-driven need: **pause a customer who stops collecting their reservations**, returning them to Pending until they re-engage.
+- **Half the machinery already exists and has never been wired up:**
+  | Piece | State |
+  |---|---|
+  | `user_profiles.status` CHECK | `IN ('active', 'pending', 'suspended')` — all three legal |
+  | `Users.suspend(userId)` (`app.js`) | writes `status = 'suspended'` — **zero call sites in any HTML or JS** |
+  | `'suspended'` status | **no UI reads it, no UI writes it, no code branches on it** |
+  | `'pending'` status | fully wired — `catalog.html` blocks reserving and subscribing on it |
+  This was noticed and recorded at **5.0 S3 (2026-06-11)**: *"`Users.suspend` has no admin UI entry point in current `admin.html` (no Users tab)."* The Accounts tab is precisely the entry point that entry anticipated, more than a year of sessions ago.
+- **The design question this raises, and it must not be answered casually.** Rick's pause is *"puts them back to Pending"* — i.e. `status = 'pending'`. That is **not** what `Users.suspend()` does. So the app has two candidate off-states:
+  - **`'pending'`** — already enforced end-to-end, and the customer can be restored with the existing Approve button. But it **collides with the meaning of the Pending list**, which is *self-registered, never yet approved*. A paused long-standing customer appearing there is a different thing wearing the same label — the exact conflation F121 exists to remove.
+  - **`'suspended'`** — semantically correct and already in the CHECK, but **enforced nowhere**, so choosing it means implementing the block, not just the button.
+  **Neither is free, and picking the cheap one recreates F121's defect on a brand-new surface.** A likely resolution is `'suspended'` plus a filter, with the Accounts list distinguishing *never approved* from *paused* — but that is a decision for the session, on evidence, not an assumption to inherit from this entry.
+- **Also in scope when this is built:** whether a paused customer's existing reservations are cancelled, held, or left to the FOC/ordered locks. Untouched here; it has real money attached once a title is ordered (**F109**, **F117**).
+- **Related:** **F121** — the restructure that surfaced this by giving accounts a home. **F13**/**F25** — `user_profiles` denormalisation and cascade questions that an edit path would have to respect (`email` is copied from `auth.users` with **no sync trigger**, so an email edit writes to one of two places and silently diverges them). **F10** — `preorders` FK is `ON DELETE NO ACTION`, which is why profile deletion already fails loudly and why any "remove" affordance here needs care.
+
+Next free finding ID: **F127**.
 
 ---
 
