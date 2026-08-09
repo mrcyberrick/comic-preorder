@@ -362,9 +362,11 @@
         <option value="pending">Pending approval</option>
         <option value="suspended">Paused</option>
         <!-- Not a status — a cross-cutting question ("did they ever turn up?").
-             Derived from created_by_admin + never-signed-in, so no fourth
-             status value was needed. See the F126 plan § 3.3. -->
-        <option value="invited">Invited, never responded</option>
+             so no fourth status value was needed. Deliberately NOT called
+             "unanswered invite": created_by_admin defaults to true and
+             register-customer never sets it, so the data cannot tell an
+             invited customer from a self-registered one. See F126 § 3.3. -->
+        <option value="never">Never signed in</option>
       </select>
       <button class="btn btn-secondary btn-sm" id="btn-refresh-accounts" title="Reload from the server">&#8635;</button>
       <button class="btn btn-primary btn-sm" id="btn-new-user">
@@ -3492,13 +3494,26 @@
     return { sort: Date.parse(ts), text: formatDate(ts.split('T')[0]), muted: false };
   }
 
-  // An unanswered invite: the store created the account AND the customer has
-  // never signed in. Derived rather than stored — see the plan § 3.3 for why a
-  // fourth `status` value was rejected. Unanswerable without the RPC, so it
-  // returns false rather than guessing when activity is unknown.
-  function isUnansweredInvite(u) {
+  // "Has an account, has never used it."
+  //
+  // NOT called "unanswered invite", though that is what Rick asked for, because
+  // the data cannot support that claim: `created_by_admin` DEFAULTS TO TRUE and
+  // `register-customer` never sets it, so a self-registered customer carries the
+  // same value as an invited one. The first cut filtered on it and pulled in a
+  // self-registered pending account on staging — caught by looking at what the
+  // filter actually returned rather than at whether it ran.
+  //
+  // What IS knowable is "never signed in", which is the same operational signal
+  // and the same action: call them. Two exclusions make it actionable rather
+  // than merely true:
+  //   is_paper   they never sign in BY DESIGN — including them would bury the
+  //              real cases under every paper customer in the store
+  //   pending    already has its own filter and its own queue; the action there
+  //              is approve-or-decline, not chase
+  // Unanswerable without the RPC, so it returns false rather than guessing.
+  function isNeverSignedIn(u) {
     if (!activityById || u.is_paper) return false;
-    if (!u.created_by_admin) return false;
+    if (u.status === 'pending') return false;
     return !activityById.get(u.id)?.last_sign_in_at;
   }
 
@@ -3513,12 +3528,12 @@
     // partition gate, which is the only reason that gate exists.
     let rows = accounts;
 
-    if (filter === 'invited') {
+    if (filter === 'never') {
       // NOT one of the four states — a cross-cutting question ("did this person
       // ever turn up?") rather than a status. Deliberately excluded from the
       // partition check for that reason; see the summary line, which still
       // reports the four states that DO partition.
-      rows = rows.filter(isUnansweredInvite);
+      rows = rows.filter(isNeverSignedIn);
     } else if (filter !== 'all') {
       // Filter on the state the ROW DISPLAYS, so filtering by "Paper" returns
       // exactly the rows labelled Paper. The first cut matched `is_paper`
@@ -3565,15 +3580,15 @@
     // stop reconciling, which is the whole of F121.
     const by = { active: 0, paper: 0, pending: 0, suspended: 0 };
     accounts.forEach(u => { by[accountState(u).key]++; });
-    const invites = accounts.filter(isUnansweredInvite).length;
+    const neverIn = accounts.filter(isNeverSignedIn).length;
     if (summaryEl) {
       summaryEl.innerHTML =
         `Showing <strong>${rows.length}</strong> of ${total} account${total === 1 ? '' : 's'} · ` +
         `${by.active} active · ${by.paper} paper · ${by.pending} pending · ${by.suspended} paused` +
         // Stated only when there ARE some, and worded as the action it implies.
         // Not added to the partition above — it cross-cuts those four.
-        (invites
-          ? ` · <strong style="color:var(--warning)">${invites} never answered their invite</strong>`
+        (neverIn
+          ? ` · <strong style="color:var(--warning)">${neverIn} never signed in</strong>`
           : '');
     }
 
@@ -3606,7 +3621,7 @@
             const name  = escapeHtml(u.full_name || '—');
             const isPaperEmail = (u.email || '').endsWith('@paper.pulllist.local');
             const seen  = lastSeenOf(u);
-            const stale = isUnansweredInvite(u);
+            const stale = isNeverSignedIn(u);
             return `
             <tr id="acct-row-${u.id}">
               <td style="font-weight:600">${name}</td>
@@ -3621,7 +3636,7 @@
                 ${u.is_admin
                   ? '<span style="font-size:0.68rem;color:var(--accent);margin-left:6px">· admin</span>' : ''}
                 ${stale
-                  ? '<span style="font-size:0.68rem;color:var(--warning);margin-left:6px">· invite unanswered</span>' : ''}
+                  ? '<span style="font-size:0.68rem;color:var(--warning);margin-left:6px">· never signed in</span>' : ''}
               </td>
               <td style="font-size:0.78rem;color:var(--text-muted)">${formatDate(u.created_at?.split('T')[0])}</td>
               <td style="font-size:0.78rem;color:${seen.muted ? 'var(--text-muted)' : (seen.text === 'never' ? 'var(--warning)' : 'var(--text-muted)')}"
