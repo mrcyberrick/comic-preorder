@@ -184,6 +184,16 @@
   <div class="export-bar" data-chrome="ordering">
     <button class="btn btn-secondary btn-sm" id="btn-export-lunar">↓ Lunar Order Sheet</button>
     <button class="btn btn-secondary btn-sm" id="btn-export-prh">↓ PRH Order Sheet</button>
+    <!-- Cycle-view lock reason (F121 session 6; process map § 3.1). This text
+         used to live inside the By Distributor tab as #bd-month-note, while the
+         two buttons it explains sit HERE, in page-level chrome. Both are in
+         Ordering mode — but on different TABS, so switching to Paper Orders
+         left two dead buttons with their reason on a tab you had just left.
+         A disabled control and the reason it is disabled have to travel
+         together. It also now names the month, which it never did: from a tab
+         that shows neither the selector nor the table, "a closed cycle" does
+         not say WHICH. -->
+    <span id="cycle-lock-note" style="display:none;font-size:0.75rem;color:var(--warning);line-height:1.5"></span>
   </div>
 
 
@@ -192,6 +202,7 @@
     <button class="admin-tab active" data-tab="by-customer" data-mode="customers">By Customer</button>
     <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions</button>
     <button class="admin-tab" data-tab="pending" data-mode="customers" id="tab-btn-pending">Pending <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
+    <button class="admin-tab" data-tab="paper-customers" data-mode="customers">Paper Customers</button>
     <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
     <button class="admin-tab" data-tab="by-distributor" data-mode="ordering">By Distributor</button>
     <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
@@ -236,7 +247,9 @@
                 style="background:var(--bg-elevated);border:1px solid var(--border);
                        color:var(--text-primary);padding:6px 10px;border-radius:var(--radius);
                        font-size:0.85rem"></select>
-        <span id="bd-month-note" style="display:none;font-size:0.75rem;color:var(--warning)"></span>
+        <!-- #bd-month-note removed 2026-08-09 (F121 session 6) — it explained
+             the export-bar buttons from inside this tab. See #cycle-lock-note
+             in the export bar, which is visible from every Ordering tab. -->
       </div>
       <button class="btn btn-secondary btn-sm" id="btn-print-reserved"
               style="display:flex;align-items:center;gap:6px">
@@ -324,6 +337,29 @@
     </div>
   </div>
 
+  <!-- Tab: Paper Customers (F121 session 6) -->
+  <!-- Moved here from the Paper Orders tab, which used to hold both halves of
+       the paper workflow. The cut follows process map § 5.7.2 P2: MANAGING a
+       paper customer is continuous account admin (§ 5.3 #4), while KEYING IN
+       their written order is monthly step 2 — two cadences, and the whole
+       point of the mode restructure is that one job is on screen at a time.
+       The Add form stays on Ordering with the entry flow, because a new paper
+       customer appears at exactly one moment: handing in their first sheet,
+       mid-entry (Rick, 2026-08-09). -->
+  <div class="admin-section" id="tab-paper-customers">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Paper Customers</div>
+        <div style="font-size:0.78rem;color:var(--text-muted)">
+          <strong>Manage</strong> opens their pull list · <strong>Claim</strong> merges history when they go digital
+        </div>
+      </div>
+      <div id="paper-customer-list">
+        <p style="color:var(--text-muted);font-size:0.82rem">Loading…</p>
+      </div>
+    </div>
+  </div>
+
   <!-- "Top Series" tab removed 2026-08-08 (F121 session 3). A ranked list of
        series by reservation count for the current catalog month — glanced at,
        never acted on, and its counting unit was undeterminable from the page
@@ -345,7 +381,17 @@
   <!-- Tab: Paper Orders -->
   <div class="admin-section" id="tab-paper-orders">
 
-    <!-- Print order sheets -->
+    <!-- Print the paper catalog (F121 session 6 rename; process map § 3.2).
+         These were "Print Lunar/PRH Order Sheet", two words away from the
+         export bar's "↓ Lunar/PRH Order Sheet" — which submit real money to a
+         distributor. These print a browsing CATALOG for the store, every row
+         carrying a blank qty box a customer writes their order into; it is
+         the far end of the loop this tab's search box starts next cycle
+         (§ 5.5 W7). Before the split the two pairs at least sat on different
+         tabs; now both live in Ordering, so the clash got worse. The printed
+         page itself is renamed too — it is the artifact that ends up in a
+         customer's hands, so renaming only the button would have moved the
+         collision rather than removed it. -->
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" id="btn-print-lunar-order"
         style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
@@ -353,7 +399,7 @@
           <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
           <rect x="6" y="14" width="12" height="8"/>
         </svg>
-        Print Lunar Order Sheet
+        Print Lunar Catalog
       </button>
       <button class="btn btn-secondary btn-sm" id="btn-print-prh-order"
         style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
@@ -361,7 +407,7 @@
           <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
           <rect x="6" y="14" width="12" height="8"/>
         </svg>
-        Print PRH Order Sheet
+        Print PRH Catalog
       </button>
     </div>
 
@@ -420,18 +466,9 @@
       </div>
     </div>
 
-    <!-- Paper customer list -->
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Paper Customers</div>
-        <div style="font-size:0.78rem;color:var(--text-muted)">
-          <strong>Manage</strong> opens their pull list · <strong>Claim</strong> merges history when they go digital
-        </div>
-      </div>
-      <div id="paper-customer-list">
-        <p style="color:var(--text-muted);font-size:0.82rem">Loading…</p>
-      </div>
-    </div>
+    <!-- The paper customer LIST moved to Customers ▸ Paper Customers
+         (F121 session 6). Managing an existing paper customer — Manage, Claim —
+         is continuous work; this tab is the monthly keying-in job. -->
 
   </div>
 
@@ -1165,7 +1202,11 @@
   // dump, and it is page-level rather than part of this tab.
   function applyCycleViewLock() {
     const past = isViewingPastCycle();
-    const note = document.getElementById('bd-month-note');
+    // The note lives in the EXPORT BAR now, beside the buttons it explains,
+    // not inside the By Distributor tab (F121 session 6; process map § 3.1).
+    // The old placement meant switching to Paper Orders — same mode, different
+    // tab — showed two disabled buttons with their reason off screen.
+    const note = document.getElementById('cycle-lock-note');
 
     ['btn-export-lunar', 'btn-export-prh'].forEach(id => {
       const btn = document.getElementById(id);
@@ -1179,8 +1220,15 @@
 
     if (note) {
       if (past) {
+        // Name the month. Read from a tab that shows neither the selector nor
+        // the table, "a closed cycle" does not say WHICH one — and the whole
+        // reason this moved is that it is now read from such a tab.
+        const sel   = document.getElementById('bd-month');
+        const label = sel?.selectedOptions?.[0]?.textContent?.replace(/\s*\(current\)$/, '').trim();
         note.style.display = '';
-        note.textContent = '⚠ Viewing a closed cycle — order-sheet exports disabled; recording an order is still allowed.';
+        note.textContent = label
+          ? `⚠ Viewing the closed ${label} cycle on By Distributor — order-sheet exports disabled. Recording an order is still allowed.`
+          : '⚠ Viewing a closed cycle on By Distributor — order-sheet exports disabled. Recording an order is still allowed.';
       } else {
         note.style.display = 'none';
         note.textContent = '';
@@ -1384,7 +1432,7 @@
   // click, so the first tab's data would never load — and calling them from
   // applyMode() during init does not work either: they read `let` bindings
   // declared much further down (renderThisWeek → weekAnchorMonday ~L2762,
-  // initPaperOrdersTab → paperCusts ~L3220), which are still in the temporal
+  // initPaperOrdersTab → paperCusts ~L3499), which are still in the temporal
   // dead zone at that point. The call throws a ReferenceError inside an async
   // function whose rejection nobody awaits, so it fails SILENTLY and the tab
   // just renders empty.
@@ -1393,9 +1441,10 @@
   // body has been evaluated.
   function runInitialTabLoad() {
     const tab = document.querySelector('.admin-tab.active')?.dataset.tab;
-    if (tab === 'this-week')     renderThisWeek();
-    if (tab === 'subscriptions') loadSubscriptions();
-    if (tab === 'paper-orders')  initPaperOrdersTab();
+    if (tab === 'this-week')       renderThisWeek();
+    if (tab === 'subscriptions')   loadSubscriptions();
+    if (tab === 'paper-orders')    initPaperOrdersTab();
+    if (tab === 'paper-customers') initPaperCustomersTab();
     // by-customer and by-distributor are rendered by loadData() already.
   }
 
@@ -3435,19 +3484,47 @@
   document.querySelector('[data-tab="pending"]').addEventListener('click', loadPendingAccounts);
 
 
-  // ── Paper Orders Tab ──────────────────────────────────────
+  // ── Paper customers — ONE array, TWO surfaces (F121 session 6) ─────────
+  // The paper workflow now spans two modes: Ordering ▸ Paper Orders holds the
+  // create form and the keying-in flow (monthly step 2), Customers ▸ Paper
+  // Customers holds the list with Manage and Claim (continuous § 5.3 #4).
+  // Both read this same array — the entry pane for its per-title customer
+  // dropdowns, the list for the table itself — so the LOAD is shared and
+  // idempotent rather than duplicated per tab.
+  //
+  // The old `dataset.loaded` flag was parked on #paper-customer-list, which is
+  // precisely the element that moved to the other mode, so the guard had to
+  // move regardless. Same shape as session 4's ensureFullData/ensureBaggingData:
+  // switching back and forth must not refetch.
   let paperCusts   = [];             // [{ id, full_name, created_at }]
+  let paperCustsLoaded = false;
   const pendingOrders = new Map();   // catalogId → { catalog, customerQtys: Map<uid, qty> }
 
-  async function initPaperOrdersTab() {
+  async function ensurePaperCusts() {
+    if (paperCustsLoaded) return;
     await refreshPaperCusts();
-    renderPaperCustomerList();
+    paperCustsLoaded = true;
+  }
+
+  // Ordering ▸ Paper Orders — create + entry + catalog print.
+  async function initPaperOrdersTab() {
+    await ensurePaperCusts();
     renderPendingOrders();
+  }
+
+  // Customers ▸ Paper Customers — the list, Manage and Claim.
+  async function initPaperCustomersTab() {
+    await ensurePaperCusts();
+    renderPaperCustomerList();
   }
 
   async function refreshPaperCusts() {
     const { items } = await PaperCustomers.list();
     paperCusts = items;
+    // Any successful load counts, including the re-reads after create and
+    // claim — so a create-first path never leaves the guard false and makes
+    // the next tab visit refetch what is already in memory.
+    paperCustsLoaded = true;
   }
 
   // ── Create customer ──────────────────────────────────────
@@ -3717,7 +3794,11 @@
   function renderPaperCustomerList() {
     const container = document.getElementById('paper-customer-list');
     if (!paperCusts.length) {
-      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;margin:0">No paper customers yet. Add one above.</p>';
+      // "Add one above" was true while the create form sat directly above this
+      // table. After the session-6 split it is in another mode, so the copy has
+      // to name where it went — a restructure silently falsifies exactly this
+      // kind of positional instruction.
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;margin:0">No paper customers yet. Add one under <strong>Ordering ▸ Paper Orders</strong>, where the written orders are keyed in.</p>';
       return;
     }
     container.innerHTML = `
@@ -3833,7 +3914,10 @@
     btn.disabled = false;
   });
 
-  // ── Print Order Sheets (Paper Orders tab) ─────────────────
+  // ── Print the paper Catalog (Ordering ▸ Paper Orders) ─────
+  // Renamed from "Order Sheets" 2026-08-09 (F121 session 6) — see the button
+  // markup for why. This is the browsing catalog customers write on, not the
+  // file submitted to a distributor.
   // Fetches all catalog items for the current month + distributor, filtered to
   // publishers that appear in the all-time reserve history, then opens a focused
   // print window with the formatted order sheet.
@@ -3971,7 +4055,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${distributor} Order Sheet — ${monthLabel}</title>
+  <title>${distributor} Catalog — ${monthLabel}</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -4143,7 +4227,7 @@
   <div class="page-header">
     <div class="ph-left">
       <div class="ph-logo">PULL<span>LIST</span></div>
-      <div class="ph-dist">${escapeHtml(distributor)} Order Sheet &mdash; ${escapeHtml(monthLabel)}</div>
+      <div class="ph-dist">${escapeHtml(distributor)} Catalog &mdash; ${escapeHtml(monthLabel)}</div>
     </div>
     <div class="ph-right">
       ${items.length.toLocaleString()} titles
@@ -4551,12 +4635,13 @@
   });
 
   // ── Load tab on first click ──────────────────────────────
-  document.querySelector('[data-tab="paper-orders"]').addEventListener('click', () => {
-    if (!document.getElementById('paper-customer-list').dataset.loaded) {
-      initPaperOrdersTab();
-      document.getElementById('paper-customer-list').dataset.loaded = '1';
-    }
-  });
+  // Both paper tabs are safe to call on every click: ensurePaperCusts() is the
+  // guard, so the second and later clicks re-render from memory and issue no
+  // request. That is deliberately different from the old per-element
+  // `dataset.loaded` flag, which lived on an element that has since moved to
+  // the other mode.
+  document.querySelector('[data-tab="paper-orders"]').addEventListener('click', initPaperOrdersTab);
+  document.querySelector('[data-tab="paper-customers"]').addEventListener('click', initPaperCustomersTab);
 
   // MUST stay last. The active tab was chosen during applyMode() near the top
   // of init, but its data cannot load until every `let` in this script body has
