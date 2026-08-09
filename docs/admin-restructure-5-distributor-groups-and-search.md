@@ -252,3 +252,105 @@ runner is barred from prod by design.
 result row carries its catalog month; the group header never describes one month
 while rows from three sit beneath it; and on By Distributor the search states
 that it overrides the cycle selector.
+
+---
+
+## 9. Print follow-ups — LIVE IN PRODUCTION 2026-08-09 (PR #112, merge `d0b817b`)
+
+Four print-only fixes after Rick reviewed the report **on paper**. Rick:
+*"Spacing is much better"*, *"presents well"*, *"print looks great"*.
+
+### 9.1 The trailing space was a bug I introduced, not a layout problem
+
+The report has **eight** columns; session 5a's publisher band spans
+`colspan="9"`. Under `table-layout: fixed` the browser allocates a **ninth
+phantom column** — the empty strip down the right-hand side. It appeared
+exactly when the bands did.
+
+**Two earlier attempts treated the symptom**, and both are worth recording:
+
+1. Narrowed **Customers** 2.95 → 2.0in to widen Title. Rick rejected it:
+   *"you simply reduced the customer column which is valuable space."* Correct —
+   that column carries content; the space I was chasing did not exist there.
+2. Tightened the sheet margins, buying width the table could not use because
+   the phantom column was still absorbing it.
+
+**Counting the header cells found the cause in seconds and should have been the
+first move.** A `colspan` is a *structural* claim about the table; when it is
+wrong it surfaces as a layout defect somewhere else entirely. Same shape as
+§ 7.6's suite misreport: reaching for a plausible explanation instead of the
+cheap check that settles it.
+
+Final: margins 0.25in, **Customers keeps 2.95in**, Title 3.0 → 3.55in funded by
+Status (0.75 → 0.5, it holds the word "Open") and Dist (0.7 → 0.6). Columns
+total exactly the 10.5in printable width. `TITLE_MAX` 42 → 50.
+
+### 9.2 Band shading → rules and typography
+
+Browsers do not print background fills unless the operator ticks *"Background
+graphics"*, so the grey band rendered on screen and vanished on paper — and the
+comment beside it claimed it read well on a mono printer, which was never tested
+and was backwards.
+
+Replaced with how print has always marked a section: **1.5pt rule above,
+hairline below, bold uppercase, air**. Nothing to enable, identical on colour or
+mono, no toner spent. `print-color-adjust: exact` was rejected — it depends on a
+setting we do not control and grey fills print muddy on a laser.
+
+**General rule for this report:** anything that must survive printing belongs in
+weight, size, rules, spacing or capitalisation — never a background. Text colour
+is fine; fills are what browsers drop.
+
+---
+
+## 10. Status — 5b COMPLETE on staging
+
+**5a and its print follow-ups are live in production.** 5b (cross-month search)
+is planned at § 2.5 and unstarted. Its three rules stand as gates:
+
+1. every result row carries its **catalog month**;
+2. the group header **never describes one month** while rows from three sit
+   beneath it;
+3. on By Distributor the search **states that it overrides the cycle selector**.
+
+Get those wrong and cross-month search rebuilds the exact confusion F121 exists
+to remove.
+
+---
+
+## 11. 5b deploy log — staging 2026-08-09, `60035df`
+
+Search now spans every catalog month on **both** By Distributor and By Customer.
+Client-only; the data was already in memory (`allPreordersAllMonths`, paged
+since F113). **99 passed, `PLAYWRIGHT_EXIT=0`.**
+
+**The unsearched view is unchanged on both tabs** — By Distributor still shows
+the selected cycle, By Customer the current month. `allPreorders` was **not**
+widened (F111 § 4.4).
+
+### The three gates, as built
+
+| Rule | Implementation |
+|---|---|
+| Every result carries its month | `.month-tag` beside the title, shown **only** when the row's month differs from the surface's own scope, so the normal view stays uncluttered |
+| No header describes a scope it does not cover | By Customer keeps its current-month totals — what the operator knows them to mean — and appends `showing N of M · K from other months`. By Distributor's publisher bands append `N other months` when a group spans more than the selected cycle |
+| The override is stated, not silent | By Distributor shows *"Searching all catalog months — the cycle selector above is ignored while a search is active"* |
+
+**No toggle** — search is always cross-month. A toggle is more state to
+remember, and session 4 removed one of those for good reason.
+
+### Why this was the risky piece
+
+It would have been easy to widen the search and leave the totals quietly
+describing one month while rows from three sat beneath them. That is **F121
+reappearing inside its own fix** — a number that does not describe what is under
+it. The three rules above exist for that single reason, which is why they were
+written as gates in § 2.5 before any code.
+
+### Owed
+
+**Rick's real-browser check.** 5b has no dedicated spec — the suite confirms
+nothing regressed, not that the month tags, header notes and override notice
+read correctly. All three are visual and confirmable in about a minute. Given
+how many defects in sessions 4 and 5 were found by opening the page rather than
+by the suite, that check is the actual gate here.

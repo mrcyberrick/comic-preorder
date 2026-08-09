@@ -259,6 +259,8 @@
                placeholder="Search title, series, publisher, code or customer…">
       </div>
     </div>
+    <div id="bd-search-note" style="display:none;margin:-8px 0 14px;font-size:0.78rem;
+         color:var(--warning);line-height:1.5"></div>
 
     <div style="margin-bottom:24px">
       <h3 style="font-family:var(--font-display);font-size:1.4rem;letter-spacing:0.04em;margin-bottom:16px;color:var(--lunar)">
@@ -1643,6 +1645,12 @@
     // has 1 item" when they have twelve — which is the exact defect class
     // F121 exists to remove, so the fix for it must not reintroduce it.
     const grouped = {}, fullTotals = {};
+    // Search spans EVERY catalog month (5b); the unsearched view stays
+    // current-month, so nothing about the default changes. fullTotals is still
+    // built from allPreorders so the header keeps meaning "this customer, this
+    // month" -- and the note below says how many matches came from elsewhere,
+    // rather than letting one number silently describe two scopes.
+    const otherMonth = {};
     allPreorders.forEach(p => {
       const key = p.customer_name;
       (fullTotals[key] ||= { qty: 0, value: 0, lunar: 0, prh: 0, all: 0 });
@@ -1655,6 +1663,17 @@
       if (lc && !matchesSearch(p, lc)) return;
       (grouped[key] ||= []).push(p);
     });
+    if (lc) {
+      // Pull in matches from OTHER months and tally them per customer so the
+      // header can state it explicitly.
+      allPreordersAllMonths.forEach(p => {
+        if (p.catalog?.catalog_month === currentCatalogMonth) return;
+        if (!matchesSearch(p, lc)) return;
+        const key = p.customer_name;
+        (grouped[key] ||= []).push(p);
+        otherMonth[key] = (otherMonth[key] || 0) + 1;
+      });
+    }
 
     const container = document.getElementById('customer-groups');
     if (!Object.keys(grouped).length) {
@@ -1669,7 +1688,8 @@
       .map(([name, items]) => {
         const t = fullTotals[name];
         const showing = lc && items.length < t.all
-          ? ` · <strong style="color:var(--accent)">showing ${items.length} of ${t.all}</strong>`
+          ? ` · <strong style="color:var(--accent)">showing ${items.length} of ${t.all}</strong>${
+              otherMonth[name] ? ` · ${otherMonth[name]} from other months` : ''}`
           : '';
         return `
           <div class="customer-group${lc ? ' open' : ''}">
@@ -1704,8 +1724,16 @@
   function renderByDistributor(search = bdSearch) {
     bdSearch = search;
     const lc  = search.trim().toLowerCase();
-    const all = distributorRows();
-    const rows = lc ? all.filter(p => matchesSearch(p, lc)) : all;
+    // Search spans EVERY catalog month (F121 session 5b). Without a search the
+    // tab shows the selected cycle exactly as before, so the month selector
+    // keeps its meaning; with one, the selector is deliberately overridden and
+    // says so on screen -- the two contradict each other by construction, and
+    // letting one silently win is how F121 happened in the first place.
+    // Reads allPreordersAllMonths directly: allPreorders must NOT be widened
+    // (F111 § 4.4, 15+ month-scoped consumers).
+    const rows = lc
+      ? allPreordersAllMonths.filter(p => matchesSearch(p, lc))
+      : distributorRows();
     const lunar = rows.filter(p => p.catalog?.distributor === 'Lunar');
     const prh   = rows.filter(p => p.catalog?.distributor === 'PRH');
 
@@ -1784,7 +1812,10 @@
                     : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`}
                 </td>
                 <td>
-                  <div class="col-title">${escapeHtml(c.title)}</div>
+                  <div class="col-title">${escapeHtml(c.title)}${
+                    lc && c.catalog_month && c.catalog_month !== distributorViewMonth
+                      ? `<span class="month-tag">${escapeHtml(c.catalog_month)}</span>` : ''
+                  }</div>
                   ${c.variant_type && c.variant_type !== 'Standard'
                     ? `<div class="col-sub" style="color:var(--warning)">${escapeHtml(c.variant_type)}</div>` : ''}
                   ${allFulfilled
@@ -1866,15 +1897,32 @@
     // F121 exists to remove.
     function renderDistGroups(itemGroups) {
       const pubs = groupByPublisher(itemGroups);
+      // When a search is active the groups can contain titles from several
+      // catalog months, so the header must say so. A header describing one
+      // month while rows from three sit beneath it is F121 reappearing inside
+      // its own fix -- the single rule this session must not break.
+      const monthsOf = (gs) => new Set(gs.map(g => g.catalog?.catalog_month).filter(Boolean));
       if (!pubs.length) {
-        return `<div class="empty-state"><p>${lc ? 'No matches in this cycle' : 'No reservations'}</p></div>`;
+        // "in this cycle" would be wrong here: the search deliberately is NOT
+        // cycle-scoped, and the notice directly above says so. A message
+        // describing a scope it does not have is the F121 defect this session
+        // exists to avoid. Compact, too -- an empty distributor during a search
+        // is routine and should not occupy half a screen.
+        return lc
+          ? `<div style="padding:10px 2px;color:var(--text-muted);font-size:0.85rem">No matches in any catalog month</div>`
+          : `<div class="empty-state"><p>No reservations</p></div>`;
       }
       return pubs.map(p => `
         <div class="customer-group${lc ? ' open' : ''}">
           <div class="customer-group-header">
             <div>
               <div class="customer-group-name">${escapeHtml(p.publisher)}</div>
-              <div class="customer-group-meta">${p.titles} title${p.titles !== 1 ? 's' : ''} · ${p.copies} cop${p.copies === 1 ? 'y' : 'ies'} · Est. $${p.value.toFixed(2)}</div>
+              <div class="customer-group-meta">${p.titles} title${p.titles !== 1 ? 's' : ''} · ${p.copies} cop${p.copies === 1 ? 'y' : 'ies'} · Est. $${p.value.toFixed(2)}${(() => {
+                if (!lc) return '';
+                const ms = monthsOf(p.groups);
+                const other = [...ms].filter(m => m !== distributorViewMonth).length;
+                return other ? ` · <strong style="color:var(--accent)">${other} other month${other !== 1 ? 's' : ''}</strong>` : '';
+              })()}</div>
             </div>
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="m6 9 6 6 6-6"/>
@@ -1882,6 +1930,16 @@
           </div>
           <div class="customer-group-body">${renderDistTable(p.groups)}</div>
         </div>`).join('');
+    }
+
+    // Say plainly that the cycle selector is being overridden. Silently
+    // letting a search win over a visible control is the F121 pattern.
+    const bdNote = document.getElementById('bd-search-note');
+    if (bdNote) {
+      bdNote.style.display = lc ? '' : 'none';
+      bdNote.textContent = lc
+        ? `Searching all catalog months — the cycle selector above is ignored while a search is active. ${rows.length} matching reservation${rows.length === 1 ? '' : 's'}.`
+        : '';
     }
 
     document.getElementById('lunar-list').innerHTML = renderDistGroups(groupByItem(lunar));
@@ -1946,7 +2004,10 @@
                 </td>
                 ${showCustomer ? `<td style="font-weight:500">${escapeHtml(p.customer_name)}</td>` : ''}
                 <td>
-                  <div class="col-title">${escapeHtml(c.title || '—')}</div>
+                  <div class="col-title">${escapeHtml(c.title || '—')}${
+                    c.catalog_month && c.catalog_month !== currentCatalogMonth
+                      ? `<span class="month-tag">${escapeHtml(c.catalog_month)}</span>` : ''
+                  }</div>
                   ${c.series_name ? `<div class="col-sub">${escapeHtml(c.series_name)}</div>` : ''}
                   ${p.fulfilled
                     ? `<div class="col-sub" style="color:var(--success,#22c55e);font-size:0.7rem">\u2713 Fulfilled${p.fulfilled_at ? ' &middot; ' + formatDate(p.fulfilled_at.split('T')[0]) : ''}</div>`
