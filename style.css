@@ -1389,3 +1389,24 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--text-muted);
   letter-spacing: 0.03em;
 }
+
+/* Catalog-month tag on a search result (F121 session 5b).
+   Cross-month search is only safe if every row says which month it came from --
+   an unattributable result is the original F121 complaint. Shown ONLY when the
+   row's month differs from the one the surface is otherwise scoped to, so the
+   normal view stays uncluttered. */
+.month-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  font-family: var(--font-body);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
