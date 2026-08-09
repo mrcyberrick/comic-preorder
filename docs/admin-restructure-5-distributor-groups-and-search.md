@@ -158,7 +158,7 @@ grouping.
 | **V1** publisher groups render, collapsed | ✅ both distributors; header `N titles · M copies · Est. $X` |
 | **V2** default view unchanged | ✅ selected month only, cycle selector untouched |
 | **V3** search filters and auto-expands | ✅ reuses `matchesSearch()` |
-| **V4** printed report parity | **Owed — Rick's print check.** Same array, sorted and interleaved with publisher bands; nothing added or dropped |
+| **V4** printed report parity | ✅ **Rick 2026-08-08: "Print is fine"** — same array, sorted and interleaved with publisher bands; nothing added or dropped |
 | **V6** cycle selector still works | ✅ |
 | **V7** full suite | ✅ **98 passed / 98 declared**, 12.4 min |
 
@@ -193,3 +193,41 @@ seeded title belongs to.
 Doing that grep *before* running anything is session 4's lesson applied, and it
 is a completion criterion in § 5 for that reason. It worked: the helper was
 never the failure this time.
+
+### 8.3 Mobile overflow — found by Rick, and broader than this session
+
+Rick, on staging: the collapsible groups lacked horizontal scroll and did not
+wrap, unlike the Bagging list and Subscriptions.
+
+**The cause predates session 5 entirely: there was no `overflow-x` anywhere in
+`style.css`.** No table in the app had a scroll container. Bagging escapes it by
+being flex cards; Subscriptions by having only four columns. By Distributor has
+nine, so it is simply where it first bites — **By Customer had the same latent
+problem** and is fixed by the same rule.
+
+Fixed with a **scroll container, not hidden columns**: nothing is removed and
+every field stays reachable. Merged into the existing `.customer-group.open`
+rule rather than added as a near-duplicate, and it reuses the pattern
+`analytics.html` already applies to its own tables.
+
+**Also removed the Publisher column from the distributor table.** Session 5a
+made publisher the *group header*, so the column repeated it on every row — a
+redundancy the grouping itself created. Nine columns to eight.
+
+**Asserted at 375px, behaviourally.** Per this project's standing lesson (two
+production incidents from responsive issues checked by reading rather than
+rendering), the test measures the rendered box: the **page** must not scroll
+sideways, and the container's `overflow-x` must be **computed** `auto`, not
+merely declared — a rule can be present and still lose the cascade.
+
+### 8.4 Four defects found by opening the page
+
+Across sessions 4 and 5, Rick found four things a green suite did not: the alert
+panel painting in the wrong mode, the remembered landing hiding the alert
+entirely, a dot that could never fire, and this overflow. **Three were in code
+written the same day.**
+
+The pattern is consistent and worth stating: the suite is good at *"did I break
+what existed"* and structurally blind to *"is this right on a real screen"*.
+Every one of these was cheap to fix and would have been expensive to discover in
+production.
