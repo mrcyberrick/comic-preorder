@@ -3,7 +3,7 @@
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.4.
 **Origin:** Rick's suggestions 2026-08-08 after using the session-4 build.
 
-**Status:** Planned 2026-08-08, not started.
+**Status:** **5a COMPLETE on staging 2026-08-08** (`ad39d04` + TDZ fix) — publisher grouping, search, matching print. **98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`.** Rick's print check owed. **5b (cross-month search) not started.**
 **Target:** **staging only.**
 **Last verified against live code:** `admin.html` @ `8d4099e`.
 
@@ -144,3 +144,52 @@ before Rick prints it rather than after.
 ## 7. Deploy log
 
 *(empty — not started)*
+
+---
+
+## 8. Deploy log — 5a, staging, 2026-08-08
+
+Split from the plan as written: **5a** is publisher grouping + search + matching
+print; **5b** is cross-month search. Smaller sub-deploys, and 5b builds on 5a's
+grouping.
+
+| Gate | Result |
+|---|---|
+| **V1** publisher groups render, collapsed | ✅ both distributors; header `N titles · M copies · Est. $X` |
+| **V2** default view unchanged | ✅ selected month only, cycle selector untouched |
+| **V3** search filters and auto-expands | ✅ reuses `matchesSearch()` |
+| **V4** printed report parity | **Owed — Rick's print check.** Same array, sorted and interleaved with publisher bands; nothing added or dropped |
+| **V6** cycle selector still works | ✅ |
+| **V7** full suite | ✅ **98 passed / 98 declared**, 12.4 min |
+
+*(V5 belongs to 5b.)*
+
+### 8.1 The same temporal dead zone, reproduced after documenting it
+
+`renderByDistributor(search = bdSearch)` — a **default parameter is evaluated at
+call time**. `loadData()` calls that function during `applyMode()` near the top
+of init, while `let bdSearch` was declared beside the renderer ~1,000 lines
+below, still in its temporal dead zone. The `ReferenceError` killed the rest of
+`loadData()`, so `renderBackorderRiskPanel()` and `renderWithdrawnPanel()` never
+ran.
+
+**28 of 35 spec-15 tests failed on hidden alert panels**, and not one of them
+pointed at the cause. Runtime went 5.6 min → 19 min on the timeouts.
+
+This is **session 4 § 7.2's bug, in code written after documenting it**. The
+lesson that evidently did not stick when written down: **function hoisting does
+not protect a `let` that an early caller reads.** Declaring state next to the
+code that uses it is the natural instinct and is wrong in this file, because
+`loadData()` reaches almost everything from near the top. `bdSearch` now sits
+with the other module state.
+
+### 8.2 Spec helpers, fixed before the run rather than after
+
+Collapsed publisher groups would have left every spec-15 status-button click
+operating on hidden rows. `openByDistributor()` now expands all groups, so specs
+stay **publisher-agnostic** — a test should not need to know which publisher its
+seeded title belongs to.
+
+Doing that grep *before* running anything is session 4's lesson applied, and it
+is a completion criterion in § 5 for that reason. It worked: the helper was
+never the failure this time.
