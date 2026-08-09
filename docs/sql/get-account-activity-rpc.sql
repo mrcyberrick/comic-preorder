@@ -55,7 +55,17 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NOT current_user_is_admin() THEN
+  -- `IS NOT TRUE`, not `NOT (...)`. current_user_is_admin() returns NULL — not
+  -- false — when there is no user identity (auth.uid() is NULL, so its
+  -- user_profiles lookup finds no row). `NOT NULL` evaluates to NULL, an IF on
+  -- NULL is not taken, and execution falls straight THROUGH the gate.
+  --
+  -- Caught 2026-08-09 by probing the deployed function with a service-role
+  -- call: it returned HTTP 200 [] instead of refusing. The empty result made it
+  -- look safe, but only because current_tenant_id() was ALSO null and the WHERE
+  -- matched nothing — safety by a second accident, not by the gate.
+  -- `IS NOT TRUE` is true for both false and NULL, so it refuses either way.
+  IF current_user_is_admin() IS NOT TRUE THEN
     RAISE EXCEPTION 'get_account_activity: admin only'
       USING ERRCODE = '42501';
   END IF;
@@ -82,16 +92,22 @@ WHERE routine_name = 'get_account_activity';
 --           If `anon` appears, the REVOKE did not take — stop and re-run it.
 
 
--- ── VERIFY 2: the function returns rows for the founding tenant ─────────────
--- Run as the SQL Editor's postgres superuser. current_user_is_admin() reads
--- user_profiles for auth.uid(), which is NULL here, so this is EXPECTED TO
--- RAISE 42501 — that is the gate working, not a failure.
+-- ── VERIFY 2: the gate refuses a caller with no user identity ───────────────
+-- Run as the SQL Editor's postgres superuser, where auth.uid() is NULL:
 --
 --   SELECT * FROM public.get_account_activity();
 --
--- Verify it properly from the APP instead (gate V1): an admin session gets
--- rows, a non-admin session gets 42501. Reading the SQL is not evidence —
--- F124 is the case where the SQL looked right and the grants were wrong.
+-- EXPECTED: ERROR 42501 "get_account_activity: admin only".
+--
+-- If it returns an EMPTY TABLE instead of erroring, the `IS NOT TRUE` fix
+-- above did not take — re-run the CREATE OR REPLACE. That empty result is
+-- precisely the failure this file was corrected for: it LOOKS safe (no rows)
+-- while the gate has actually been skipped, and it is only empty because
+-- current_tenant_id() happened to be null too.
+--
+-- Verify the positive path from the APP (gate V1): an admin session gets rows,
+-- a non-admin authenticated session gets 42501. Reading the SQL is not
+-- evidence — this file has now been wrong twice in ways reading did not show.
 
 
 -- ── VERIFY 3: nothing beyond the three columns is exposed ───────────────────
