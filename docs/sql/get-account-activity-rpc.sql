@@ -120,6 +120,23 @@ WHERE n.nspname = 'public' AND p.proname = 'get_account_activity';
 --                 email_confirmed_at timestamp with time zone)
 
 
+-- ── VERIFY 4: IS THE GATE ACTUALLY FIXED? ───────────────────────────────────
+-- KEEP THIS LAST. The Supabase SQL Editor shows the result of the FINAL
+-- statement, so whatever ends this file is what the operator sees — and the
+-- first version of this file ended on VERIFY 3, whose output (the return
+-- signature) is IDENTICAL before and after the gate fix. That cost three
+-- round-trips of pasting a result that could not answer the question.
+--
+-- A verification step must DISCRIMINATE between the states you care about.
+-- One that returns the same thing either way is decoration.
+SELECT position('IS NOT TRUE' in prosrc) > 0 AS gate_fixed
+FROM pg_proc
+WHERE proname = 'get_account_activity';
+-- EXPECTED: gate_fixed = true
+--   false  → the CREATE OR REPLACE above did not take. Re-run it and check
+--            the editor for an error before re-running the rest of the file.
+
+
 -- ── ROLLBACK ────────────────────────────────────────────────────────────────
 -- Additive and read-only; nothing else references it.
 --   DROP FUNCTION IF EXISTS public.get_account_activity();
