@@ -4,7 +4,7 @@
 where it and the code disagree. **Structure DECIDED 2026-08-07 — Option B, as
 modes within one `admin.html` (§ 5.7).** **Sessions 1–3 and W2/W3 are LIVE IN
 PRODUCTION as of 2026-08-08** (PR #109, merge `9552ee6`, write-smoke passed —
-§ 5.7.6). **Session 4 (the mode switch) is LIVE IN PRODUCTION 2026-08-08** (PR #110, merge `de0d7ca`) — the dashboard is now three modes on three cadences, not a tab strip. **Session 5 is planned** (`docs/admin-restructure-5-distributor-groups-and-search.md`); session 6 not started. Remaining decisions in § 6.
+§ 5.7.6). **Session 4 (the mode switch) is LIVE IN PRODUCTION 2026-08-08** (PR #110, merge `de0d7ca`) — the dashboard is now three modes on three cadences, not a tab strip. **Session 5a (publisher grouping, search, mobile scroll) is LIVE IN PRODUCTION 2026-08-08** (PR #111, merge `f031916`). **5b (cross-month search) and session 6 not started.** Remaining decisions in § 6.
 
 > ⚠ **§ 1–§ 4 are a snapshot of the page as it was on 2026-08-07, before any of
 > this shipped.** They are kept deliberately, because they are the evidence the
