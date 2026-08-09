@@ -4326,10 +4326,28 @@
     .col-cust   { width: 2.95in; }
     .col-foc    { width: 0.6in; }
     .col-status { width: 0.5in; }
-    /* Publisher band in the printed report (F121 session 5) — grey fill so it
-       reads as a divider on a mono printer, where colour is not available. */
-    .pub-row td { background:#e8e8e8; border-top:1.5pt solid #000; padding:3pt 4pt;
-                  font-size:8.5pt; page-break-after:avoid; }
+    /* Publisher band — RULES AND TYPE, NOT FILL (2026-08-09, Rick: "shading is
+       lost on the print out").
+       Browsers do not print background colours unless the operator ticks
+       "Background graphics", so a grey fill renders on screen and vanishes on
+       paper. Rather than force it with print-color-adjust -- which depends on a
+       setting we do not control, spends toner, and prints muddy on a laser --
+       the band is drawn the way print has always drawn one: a heavy rule above,
+       a hairline below, bold small-caps, and air. Works on any printer, colour
+       or mono, with no settings to get right. */
+    .pub-row td {
+      background: none;
+      border-top: 1.5pt solid #000;
+      border-bottom: 0.5pt solid #bbb;
+      padding: 7pt 3px 2pt 2px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      page-break-after: avoid;
+    }
+    /* First band on a page should not add a gap above the header rule. */
+    thead + tbody .pub-row:first-child td { padding-top: 3pt; }
 
     tbody tr { border-bottom: 1px solid #e8e8e8; }
     tbody tr:nth-child(even) { background: #f7f7f7; }
