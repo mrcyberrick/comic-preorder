@@ -3,7 +3,7 @@
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.4.
 **Origin:** Rick's suggestions 2026-08-08 after using the session-4 build.
 
-**Status:** **5a COMPLETE on staging 2026-08-08** (`ad39d04` + TDZ fix) — publisher grouping, search, matching print. **98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`.** Rick's print check owed. **5b (cross-month search) not started.**
+**Status:** **5a LIVE IN PRODUCTION 2026-08-08** — PR #111, merge `f031916`. Staging (`ad39d04` + TDZ fix) — publisher grouping, search, matching print. **98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`.** Rick's print check owed. **5b (cross-month search) not started.**
 **Target:** **staging only.**
 **Last verified against live code:** `admin.html` @ `8d4099e`.
 
@@ -231,3 +231,24 @@ The pattern is consistent and worth stating: the suite is good at *"did I break
 what existed"* and structurally blind to *"is this right on a real screen"*.
 Every one of these was cheap to fix and would have been expensive to discover in
 production.
+
+### 8.5 Production — PR #111, merge `f031916`, 2026-08-08
+
+Client-only; no DB change. Verified read-only after deploy: search box and
+publisher grouping served; the `overflow-x` rule live in `style.css`; the
+distributor table's Publisher column gone (the one remaining `<th>Publisher</th>`
+is the Paper Orders shelf-copy sheet, a different and deliberately ungrouped
+table).
+
+Held the PR until the suite finished rather than promoting on the earlier 98/98,
+which predated the mobile fix and the column removal — a 9→8 column change is
+exactly the shape that broke spec helpers twice in these sessions. Final:
+**99 passed / 99 declared, `PLAYWRIGHT_EXIT=0`.**
+
+**Write-smoke is Rick's** — a real browser session on production; the Playwright
+runner is barred from prod by design.
+
+**5b (cross-month search) is not started.** Its three rules stand as gates: every
+result row carries its catalog month; the group header never describes one month
+while rows from three sit beneath it; and on By Distributor the search states
+that it overrides the cycle selector.

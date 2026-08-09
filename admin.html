@@ -4160,7 +4160,10 @@
   // out of sync (Open/Partial/Fulfilled only, no ledger awareness) until now.
 
   function buildReservedReportHtml(grouped, monthLabel, customerCount) {
-    const TITLE_MAX = 42; // truncate titles to keep rows on one line
+    // Raised 42 -> 62 alongside the column rebalance. The cell is nowrap +
+    // ellipsis so CSS clips as a backstop, but THIS was the binding limit and
+    // it was cutting titles that had room to spare. 62 tracks 3.0in -> 4.3in.
+    const TITLE_MAX = 50;
     const trunc = (s, n) => (s && s.length > n) ? s.slice(0, n - 1) + '…' : (s || '');
     const totalCopies = grouped.reduce((s, g) => s + g.totalQty, 0);
 
@@ -4188,7 +4191,7 @@
       const gs = byPub[pub];
       const copies = gs.reduce((s, g) => s + g.totalQty, 0);
       const value  = gs.reduce((s, g) => s + ((parseFloat(g.catalog?.price_usd) || 0) * g.totalQty), 0);
-      return `<tr class="pub-row"><td colspan="9"><strong>${escapeHtml(pub)}</strong>`
+      return `<tr class="pub-row"><td colspan="8"><strong>${escapeHtml(pub)}</strong>`
            + ` — ${gs.length} title${gs.length !== 1 ? 's' : ''}, ${copies} cop${copies === 1 ? 'y' : 'ies'},`
            + ` Est. $${value.toFixed(2)}</td></tr>`;
     };
@@ -4272,7 +4275,12 @@
     /* Landscape letter: 11in − 0.7in margins = 10.3in usable width */
     @page {
       size: letter landscape;
-      margin: 0.4in 0.35in 0.5in 0.35in;
+      /* Side margins 0.35in -> 0.2in (2026-08-09, Rick): the columns already
+         summed to the full 10.3in printable width, so the slack Rick marked
+         was the SHEET margin, not a column. Reclaiming it gives the title
+         real estate without taking it from Customers, which is valuable.
+         Printable width becomes 11 - 0.4 = 10.6in. */
+      margin: 0.4in 0.25in 0.5in 0.25in;
       @bottom-left   { content: "Printed ${printDate}"; font-family: Arial, sans-serif; font-size: 6.5pt; color: #999; }
       @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, sans-serif; font-size: 6.5pt; color: #444; font-weight: 700; }
       @bottom-right  { content: "rjbookstop.com"; font-family: Arial, sans-serif; font-size: 6.5pt; color: #999; }
@@ -4304,18 +4312,42 @@
 
     /* ── Column widths — total ≤ 10.3in ── */
     /* Title:3.0 + Dist:0.7 + Code:1.2 + Price:0.55 + Qty:0.55 + Cust:2.95 + FOC:0.6 + Status:0.75 = 10.3in */
-    .col-title  { width: 3.0in; }
-    .col-dist   { width: 0.7in; }
+    /* Rebalanced 2026-08-09 from Rick's marked-up print: the title truncated
+       at 42 chars while Customers held 2.95in for what is usually ONE short
+       name, and Status held 0.75in for the word "Open". That dead space goes
+       to the title -- the column actually being read. Same 10.3in total, so
+       the table still fits the sheet.
+       Was: Title 3.0 / Dist 0.7 / Cust 2.95 / Status 0.75 */
+    .col-title  { width: 3.55in; }
+    .col-dist   { width: 0.6in; }
     .col-code   { width: 1.2in; }
     .col-price  { width: 0.55in; }
     .col-qty    { width: 0.55in; }
     .col-cust   { width: 2.95in; }
     .col-foc    { width: 0.6in; }
-    .col-status { width: 0.75in; }
-    /* Publisher band in the printed report (F121 session 5) — grey fill so it
-       reads as a divider on a mono printer, where colour is not available. */
-    .pub-row td { background:#e8e8e8; border-top:1.5pt solid #000; padding:3pt 4pt;
-                  font-size:8.5pt; page-break-after:avoid; }
+    .col-status { width: 0.5in; }
+    /* Publisher band — RULES AND TYPE, NOT FILL (2026-08-09, Rick: "shading is
+       lost on the print out").
+       Browsers do not print background colours unless the operator ticks
+       "Background graphics", so a grey fill renders on screen and vanishes on
+       paper. Rather than force it with print-color-adjust -- which depends on a
+       setting we do not control, spends toner, and prints muddy on a laser --
+       the band is drawn the way print has always drawn one: a heavy rule above,
+       a hairline below, bold small-caps, and air. Works on any printer, colour
+       or mono, with no settings to get right. */
+    .pub-row td {
+      background: none;
+      border-top: 1.5pt solid #000;
+      border-bottom: 0.5pt solid #bbb;
+      padding: 7pt 3px 2pt 2px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      page-break-after: avoid;
+    }
+    /* First band on a page should not add a gap above the header rule. */
+    thead + tbody .pub-row:first-child td { padding-top: 3pt; }
 
     tbody tr { border-bottom: 1px solid #e8e8e8; }
     tbody tr:nth-child(even) { background: #f7f7f7; }
