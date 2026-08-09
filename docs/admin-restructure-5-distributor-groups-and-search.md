@@ -303,7 +303,7 @@ is fine; fills are what browsers drop.
 
 ---
 
-## 10. Status — 5b NOT started
+## 10. Status — 5b COMPLETE on staging
 
 **5a and its print follow-ups are live in production.** 5b (cross-month search)
 is planned at § 2.5 and unstarted. Its three rules stand as gates:
@@ -315,3 +315,42 @@ is planned at § 2.5 and unstarted. Its three rules stand as gates:
 
 Get those wrong and cross-month search rebuilds the exact confusion F121 exists
 to remove.
+
+---
+
+## 11. 5b deploy log — staging 2026-08-09, `60035df`
+
+Search now spans every catalog month on **both** By Distributor and By Customer.
+Client-only; the data was already in memory (`allPreordersAllMonths`, paged
+since F113). **99 passed, `PLAYWRIGHT_EXIT=0`.**
+
+**The unsearched view is unchanged on both tabs** — By Distributor still shows
+the selected cycle, By Customer the current month. `allPreorders` was **not**
+widened (F111 § 4.4).
+
+### The three gates, as built
+
+| Rule | Implementation |
+|---|---|
+| Every result carries its month | `.month-tag` beside the title, shown **only** when the row's month differs from the surface's own scope, so the normal view stays uncluttered |
+| No header describes a scope it does not cover | By Customer keeps its current-month totals — what the operator knows them to mean — and appends `showing N of M · K from other months`. By Distributor's publisher bands append `N other months` when a group spans more than the selected cycle |
+| The override is stated, not silent | By Distributor shows *"Searching all catalog months — the cycle selector above is ignored while a search is active"* |
+
+**No toggle** — search is always cross-month. A toggle is more state to
+remember, and session 4 removed one of those for good reason.
+
+### Why this was the risky piece
+
+It would have been easy to widen the search and leave the totals quietly
+describing one month while rows from three sat beneath them. That is **F121
+reappearing inside its own fix** — a number that does not describe what is under
+it. The three rules above exist for that single reason, which is why they were
+written as gates in § 2.5 before any code.
+
+### Owed
+
+**Rick's real-browser check.** 5b has no dedicated spec — the suite confirms
+nothing regressed, not that the month tags, header notes and override notice
+read correctly. All three are visual and confirmable in about a minute. Given
+how many defects in sessions 4 and 5 were found by opening the page rather than
+by the suite, that check is the actual gate here.
