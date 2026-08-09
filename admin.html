@@ -1903,7 +1903,14 @@
       // its own fix -- the single rule this session must not break.
       const monthsOf = (gs) => new Set(gs.map(g => g.catalog?.catalog_month).filter(Boolean));
       if (!pubs.length) {
-        return `<div class="empty-state"><p>${lc ? 'No matches in this cycle' : 'No reservations'}</p></div>`;
+        // "in this cycle" would be wrong here: the search deliberately is NOT
+        // cycle-scoped, and the notice directly above says so. A message
+        // describing a scope it does not have is the F121 defect this session
+        // exists to avoid. Compact, too -- an empty distributor during a search
+        // is routine and should not occupy half a screen.
+        return lc
+          ? `<div style="padding:10px 2px;color:var(--text-muted);font-size:0.85rem">No matches in any catalog month</div>`
+          : `<div class="empty-state"><p>No reservations</p></div>`;
       }
       return pubs.map(p => `
         <div class="customer-group${lc ? ' open' : ''}">
