@@ -21,7 +21,7 @@ half the size it looked:
 
 | Feared | Actually |
 |---|---|
-| Widen `user_profiles_status_check` for an `'invited'` state | **No schema change.** "Unanswered invite" is derived: `created_by_admin AND last_sign_in_at IS NULL`. |
+| Widen `user_profiles_status_check` for an `'invited'` state | **No schema change.** The filter is derived — and became **"Never signed in"** at implementation, because `created_by_admin` cannot support the word "invite" (§ 3.3). |
 | An Edge Function to edit email | **None.** Email is read-only; **`full_name` is the only editable field.** |
 | Decide what pause does to existing reservations | **Already the shipped behaviour** — pause blocks *new* reservations and leaves existing ones alone. This is documentation, not code. |
 | A privilege-escalation surface for `is_admin` | **Cut 2026-08-09** — stays a Supabase-console task (§ 2 OUT). Removes the control, its two guards, and a gate. |
@@ -38,7 +38,8 @@ backend surface of this session.
 1. **`get_account_activity()`** — one SECURITY DEFINER RPC exposing
    `last_sign_in_at` and `email_confirmed_at` for the caller's tenant, admin-only.
 2. **A sortable "Last seen" column** on Accounts.
-3. **An "Invited, never responded" filter**, derived — no new status.
+3. **A "Never signed in" filter**, derived — no new status. (Planned as
+   "Invited, never responded"; **corrected at implementation** — see § 3.3.)
 4. **An Edit control: `full_name` only.** Email displayed, **read-only**.
 5. **Document** that pause leaves existing reservations untouched — in the
    confirm dialog, so the operator reads it at the moment of the decision.
@@ -66,7 +67,7 @@ RETURNS TABLE(id uuid, last_sign_in_at timestamptz, email_confirmed_at timestamp
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
-  IF NOT current_user_is_admin() THEN
+  IF current_user_is_admin() IS NOT TRUE THEN   -- NOT `NOT (...)` — see § 7.1
     RAISE EXCEPTION 'get_account_activity: admin only' USING ERRCODE = '42501';
   END IF;
   RETURN QUERY
@@ -106,25 +107,37 @@ customer who has never signed in shows *"never"*, not an empty cell. An empty
 cell is the F115/F96 shape — an absent signal indistinguishable from a negative
 one, which is exactly why the `has_seen_welcome` shortcut was rejected (§ 3.3).
 
-### 3.3 "Invited, never responded" — derived, and why that beats a status
+### 3.3 "Never signed in" — derived, and renamed at implementation
 
-`created_by_admin = true AND last_sign_in_at IS NULL`.
+**Planned as `created_by_admin = true AND last_sign_in_at IS NULL`, labelled
+"Invited, never responded". That predicate is WRONG and shipped for one commit
+before real staging data exposed it (§ 7.3).**
 
-- `invite-customer` sets `created_by_admin: true` and `status: 'active'`
-  (`supabase/functions/invite-customer/index.ts:136–138`).
-- `register-customer` (self-signup) sets `'pending'`.
+`created_by_admin` **defaults to `true`** and `register-customer` never sets it,
+so a self-registered customer carries the same value as an invited one. The
+column cannot distinguish them, and the label claimed it could.
 
-So the pair already separates *invited* from *self-registered* — the missing
-half was only ever "did they ever turn up", which the RPC now supplies.
+**Shipped instead: `never signed in AND NOT paper AND NOT pending`.** That is
+exactly what the data supports, it is the same operational signal Rick asked for,
+and it implies the same action — call them. The two exclusions make it actionable
+rather than merely true:
 
-**Rejected: adding an `'invited'` status.** It needs the CHECK widened on both
-environments, `invite-customer` changed, and **every** status consumer taught a
-fourth value — `catalog.html`'s block, the Accounts filters, By Customer,
-analytics. All to express something two existing columns already imply.
+| Excluded | Why |
+|---|---|
+| `is_paper` | Paper customers never sign in **by design**. Including them buries the real cases under every paper customer in the store (10 of 21 on staging). |
+| `status = 'pending'` | Already has its own filter and its own queue, where the action is approve-or-decline rather than chase. |
+
+`Ronald Burke` — the production case this exists for — is `active` and non-paper,
+so he matches either way.
+
+**Still rejected: adding an `'invited'` status.** It needs the CHECK widened on
+both environments, `invite-customer` changed, and **every** status consumer
+taught a fourth value — `catalog.html`'s block, the Accounts filters, By
+Customer, analytics.
 
 **Also rejected, and already measured — do not retry it:** `has_seen_welcome` as
 a proxy for "never signed in" agrees only **8 of 12** on production. Four
-signed-in customers read `false`. It would have been free; it is also wrong.
+signed-in customers read `false`.
 
 ### 3.4 Edit — one field, and the two it deliberately does not touch
 
