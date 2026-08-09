@@ -4163,7 +4163,7 @@
     // Raised 42 -> 62 alongside the column rebalance. The cell is nowrap +
     // ellipsis so CSS clips as a backstop, but THIS was the binding limit and
     // it was cutting titles that had room to spare. 62 tracks 3.0in -> 4.3in.
-    const TITLE_MAX = 51;
+    const TITLE_MAX = 50;
     const trunc = (s, n) => (s && s.length > n) ? s.slice(0, n - 1) + '…' : (s || '');
     const totalCopies = grouped.reduce((s, g) => s + g.totalQty, 0);
 
@@ -4191,7 +4191,7 @@
       const gs = byPub[pub];
       const copies = gs.reduce((s, g) => s + g.totalQty, 0);
       const value  = gs.reduce((s, g) => s + ((parseFloat(g.catalog?.price_usd) || 0) * g.totalQty), 0);
-      return `<tr class="pub-row"><td colspan="9"><strong>${escapeHtml(pub)}</strong>`
+      return `<tr class="pub-row"><td colspan="8"><strong>${escapeHtml(pub)}</strong>`
            + ` — ${gs.length} title${gs.length !== 1 ? 's' : ''}, ${copies} cop${copies === 1 ? 'y' : 'ies'},`
            + ` Est. $${value.toFixed(2)}</td></tr>`;
     };
@@ -4280,7 +4280,7 @@
          was the SHEET margin, not a column. Reclaiming it gives the title
          real estate without taking it from Customers, which is valuable.
          Printable width becomes 11 - 0.4 = 10.6in. */
-      margin: 0.4in 0.2in 0.5in 0.2in;
+      margin: 0.4in 0.25in 0.5in 0.25in;
       @bottom-left   { content: "Printed ${printDate}"; font-family: Arial, sans-serif; font-size: 6.5pt; color: #999; }
       @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, sans-serif; font-size: 6.5pt; color: #444; font-weight: 700; }
       @bottom-right  { content: "rjbookstop.com"; font-family: Arial, sans-serif; font-size: 6.5pt; color: #999; }
@@ -4318,7 +4318,7 @@
        to the title -- the column actually being read. Same 10.3in total, so
        the table still fits the sheet.
        Was: Title 3.0 / Dist 0.7 / Cust 2.95 / Status 0.75 */
-    .col-title  { width: 3.65in; }
+    .col-title  { width: 3.55in; }
     .col-dist   { width: 0.6in; }
     .col-code   { width: 1.2in; }
     .col-price  { width: 0.55in; }
