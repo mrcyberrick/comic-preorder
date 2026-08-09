@@ -4,7 +4,9 @@
 restructure closed. *"Paper Customers should be something more of a way to manage
 users. I see this as the Accounts tab that contains all users."*
 
-**Status:** **In execution 2026-08-09.**
+**Status:** **COMPLETE ON STAGING 2026-08-09** (`40b8bc4` + `617cbd7`) — V1–V8
+green, **108/108**, `PLAYWRIGHT_EXIT=0`, zero flaky. **Rick's real-browser check
+and production promotion both owed.**
 **Target:** **staging only.**
 **Branch:** `feature/admin-accounts-tab`
 **Findings:** **F126** (profile editing — deferred, OUT), **F127** (status is not
@@ -193,12 +195,12 @@ Per session 4 § 7.6, run **before** the first edit:
 
 ## 5. Completion criteria
 
-- [ ] § 3 applied, every range re-verified against disk immediately before edit
-- [ ] V1–V8 green, Playwright's **own** exit code captured
-- [ ] All seeded fixtures torn down, verified by live SELECT
-- [ ] `technical-reference.md` § RLS `user_profiles` corrected (§ 3.2), citing F92
-- [ ] Real-browser check by Rick on staging
-- [ ] F126 / F127 cross-references accurate
+- [x] § 3 applied, every range re-verified against disk immediately before edit
+- [x] V1–V8 green, Playwright's **own** exit code captured — **108/108, `PLAYWRIGHT_EXIT=0`**
+- [x] All seeded fixtures torn down, verified by live SELECT (§ 8.4)
+- [x] `technical-reference.md` § RLS `user_profiles` corrected (§ 3.2), citing F92
+- [ ] **Real-browser check by Rick on staging** — owed
+- [x] F126 / F127 cross-references accurate
 
 ## 6. Rollback
 
@@ -209,4 +211,94 @@ any suspended row readable and restorable by the same PATCH.
 
 ## 7. Deploy log
 
-*(execution in progress)*
+**Staging only, 2026-08-09.** Client-only (`admin.html`, `catalog.html`,
+`app.js`); no DB change, no schema change, no Edge Function change.
+
+| Commit | What |
+|---|---|
+| `ec40938` | This plan (doc-only) + the stale `user_profiles` RLS correction |
+| `40b8bc4` | The Accounts tab, the Pause/Resume path, the one-button New user |
+| `617cbd7` | Filters must partition the list — two defects the gate caught |
+
+**Suite: 108 passed / 108 declared, `PLAYWRIGHT_EXIT=0`, 14.3 min, zero
+failures, zero flaky.**
+
+### 7.1 The gate that earned its place
+
+**V2 was written expecting to be a formality and caught two real defects on its
+first run** — both mine, both invisible on screen:
+
+1. **"All" silently included admins that every status filter excluded.** So the
+   counts could not reconcile: an admin appeared in one view and vanished from
+   every other. Accounts now lists everyone (Rick's ask was literally *"contains
+   all users"*), with an `admin` marker and **Pause suppressed on admin rows** —
+   `catalog.html` exempts admins from the block, so the button would have
+   written a status that changes nothing.
+2. **The Paper filter matched a TYPE (`is_paper`) while the rows displayed a
+   STATE.** A pending paper customer was counted under two filters and shown
+   under a label it did not carry. Filtering now matches the state the row
+   displays.
+
+**That second one is F121's own defect — numbers on a page that do not
+reconcile — reappearing inside the feature built to remove it.** Recorded
+because the lesson is not "write more tests": it is that a *partition* assertion
+(the parts sum to the whole) catches a class of incoherence that per-element
+assertions never will, and it cost four lines.
+
+### 7.2 Three test defects, each of a different kind
+
+Worth separating, because only one was staleness:
+
+- **V6 asserted a URL that can never appear.** Cloudflare Pages serves clean
+  URLs, so `window.location.href = 'catalog.html'` lands on `/catalog`. Every
+  other spec in the suite already matches `/\/catalog/`; this one did not, and
+  timed out while the page snapshot showed the catalog rendering perfectly
+  behind it. **Read the snapshot before theorising** — it said "catalog page" in
+  its second line.
+- **V6 then asserted the wrong element**, which exposed real behaviour:
+  `#catalog-subtitle` only gains *"managing <name>"* inside
+  `updateReservedStat()`, called on reserve/unreserve and **never on plain page
+  load**. Arriving via Manage shows a fully-active impersonation session whose
+  subtitle still reads "browse and reserve items". Pre-existing `catalog.html`
+  behaviour, not caused by this session; the orange banner is the real signal
+  and was correct throughout. Left alone rather than fixed — out of scope, and
+  surfaced to Rick instead.
+- **The repointed approve test would have asserted nothing.** It stubs the
+  `approve-customer` Edge Function so no real mail is sent (F99, sender
+  reputation). But Accounts re-reads `user_profiles` after a successful approve
+  rather than optimistically removing the row — the more honest behaviour, since
+  the old code showed success even when the write had not landed. Against a stub
+  returning only `{"ok":true}` the row stays genuinely pending, so the new
+  assertion would have been checking a state nothing changed. The stub now
+  applies the function's DB effect before fulfilling.
+
+### 7.3 One self-inflicted break, stated plainly
+
+A Python `open(path, 'w')` truncates before writing. Mine then raised a
+`UnicodeEncodeError` and left **`catalog.html` at 0 bytes**. The file is tracked
+and its changes were uncommitted, so `git checkout --` restored it and the three
+edits were redone. Every later write encodes to bytes *first* and opens the file
+only once the encode has succeeded.
+
+Separately, an HTML comment containing backticks was placed inside a JS template
+literal and terminated the string, breaking the whole script. The `node --check`
+gate caught it before it left the machine.
+
+### 7.4 Fixture teardown — verified by SELECT
+
+The V3 pause fixture creates a real auth user and pauses it. Verified after the
+run: `TEST_PW_*` profiles **0**, `status = 'suspended'` profiles **0** (so no
+customer was left blocked by a test), synthetic tenants **0**.
+
+**Four orphaned `TEST_PW_Pending` profiles were also found and removed** — left
+by earlier interrupted runs, not by this one, along with three `pw-*` profiles
+and two synthetic tenants from the same interruptions. Cleaned in F95's required
+order (preorders first, or the `ON DELETE NO ACTION` FK 409s the profile
+delete). **This is F95's pattern in miniature**: nothing here was broken, but
+that finding reached 292 orphans by nobody looking.
+
+### 7.5 Owed
+
+- **Rick's real-browser check on staging.**
+- **Production promotion** — his call, not requested.
+- The `#catalog-subtitle` impersonation gap (§ 7.2) — surfaced, not filed.
