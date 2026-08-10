@@ -2167,41 +2167,63 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   preferred, switch to SECURITY DEFINER with `SET search_path = public`.
 
 #### F25 — `user_profiles.email` is denormalized from `auth.users.email`
-- **Status:** open. **Measured and half-addressed 2026-08-10** — see below.
-- No trigger keeps it in sync. If a user changes their auth email, the
-  profile email drifts. Population happens at registration time only.
-- **Fix:** add a trigger on `auth.users` UPDATE that syncs to
-  `user_profiles.email`, or remove the column and join to `auth.users`
-  every read.
+- **Status:** open, but **materially re-scoped 2026-08-10 — the stated mechanism has never fired and has no code path to fire through.**
+- **As originally filed:** "No trigger keeps it in sync. If a user changes their auth email, the profile email drifts." **Fix: add a trigger on `auth.users` UPDATE, or remove the column and join.**
 
-**Measured 2026-08-10, and the consequence is not cosmetic.** Rick spotted
-em-dashes in the new Accounts tab's Email column. On **production, 6 of 27
-profiles** had `email` NULL while `auth.users` held a perfectly good address —
+**Re-measured 2026-08-10, and the original framing is wrong in a way that matters.**
+Rick spotted em-dashes in the new Accounts tab's Email column. On **production, 6
+of 27 profiles** had `email` NULL while `auth.users` held a good address —
 Albert Abaunza, Alex Alvarez, Book Stop, Brian Moss, Mike Neubauer, Rick
-Sedivec. All non-paper. They pre-date the column's population, so nothing had
-ever filled them.
+Sedivec. All non-paper.
+
+**Those are NOT drift.** They are `NULL`, not stale-but-different: never
+populated, not populated-then-diverged. Three checks establish the difference:
+
+| Question | Answer |
+|---|---|
+| Any code path that changes `auth.users.email`? | **None.** Both `db.auth.updateUser()` call sites (`index.html:767`, `forgot-password.html:267`) pass `{ password }`. The three `auth/v1/admin/users/` calls are two DELETEs (`claim-paper-customer`, `register-tenant`) and one GET (`send-my-list`). |
+| Do all creation paths set `user_profiles.email`? | **Yes** — `register-customer`, `invite-customer`, `create-paper-customer` all set it. Every new row is correct. |
+| Were the 6 NULLs drift? | **No.** NULL, never populated. Historical rows predating the column's population. |
+
+**So the drift half of this finding is theoretical.** Email is effectively
+**immutable** in this application — which is not an accident, it is the design:
+the Accounts Edit control states it on screen, *"Email cannot be changed here —
+it is their login address. To move it, re-invite them."* A denormalized copy of
+an immutable value is a legitimate cache, not a defect.
+
+**A sync trigger was written and then WITHDRAWN (Rick, 2026-08-10).** His
+objection was correct and worth recording: it would have added a trigger to the
+platform-managed `auth` schema, with a failure mode that could block a
+customer's email change, to defend against a scenario the application prevents
+by design. *"Correcting a problem that we created in an effort to make something
+that does not match the system's configuration."*
+
+**The real defect, and its actual consequence:**
 
 | Surface | Reads | Effect of the NULLs |
 |---|---|---|
 | `admin.html` Accounts | `user_profiles.email` | An em-dash. Cosmetic — and the only reason anyone noticed. |
-| **`analytics.html` win-back list** | `user_profiles.email` | **`winbackRows.map(r => r.email).filter(Boolean)` SILENTLY DROPS them.** A marketing list missing 6 of 27 customers with nothing on screen saying so. **This is the real cost, and it predates the Accounts tab entirely.** |
-| `notify-customers` | **`auth.users` directly** (`index.ts:129`) | **Unaffected.** Customer notifications have always gone to the right addresses. |
+| **`analytics.html` win-back list** | `user_profiles.email` | **`winbackRows.map(r => r.email).filter(Boolean)` SILENTLY DROPS them.** A marketing list missing 6 of 27 customers with nothing on screen saying so. **This predates the Accounts tab entirely** and is the whole cost of the finding. |
+| `notify-customers` | **`auth.users` directly** (`index.ts:129`) | **Unaffected.** Customer notifications have always reached the right addresses. |
 
-**The silent-drop is the F96 shape** — an absent signal indistinguishable from
+The silent-drop is the **F96 shape** — an absent signal indistinguishable from
 "there was nothing to send". Noted here rather than filed separately (Rick's
-call, 2026-08-10): it is a *consequence* of this finding, not a second defect.
+call, 2026-08-10): it is a consequence of this finding, not a second defect.
 
-**Addressed 2026-08-10:**
-1. `docs/sql/backfill-user-profiles-email.sql` — repairs the 6 rows. Fills NULLs
-   only; never overwrites, so genuine divergence is left for a human to judge.
-2. `docs/sql/sync-user-profiles-email-trigger.sql` — **the durable fix this
-   entry has always specified.** An `AFTER UPDATE OF email ON auth.users`
-   trigger, so the copy stops drifting the next time a customer changes their
-   address.
+**APPLIED 2026-08-10 to BOTH environments.** staging 1 row, production **6 rows** (Rick Sedivec, Albert Abaunza, Alex Alvarez, Mike Neubauer, Brian Moss, Book Stop). Post-check on both: `still_null = 0`, profile/auth mismatches = **0**, row counts unchanged (19 / 27). **The analytics win-back list went from drawing on 6 of 12 non-paper customers to 12 of 12** — the actual point of the fix, and it doubled.
 
-**F25 stays OPEN until both are applied to both environments**, and arguably
-beyond: the trigger closes the *drift* half, but the column remains a copy, and
-the "remove it and join" option is still the cleaner end state.
+Applied via PostgREST with `email=is.null` as the request filter rather than by pasting the file, so an already-populated row **could not match**: the no-overwrite guarantee is structural, not a promise in a WHERE clause someone might edit.
+
+**Fix — one file, and it is sufficient:**
+`docs/sql/backfill-user-profiles-email.sql`. Fills NULLs only, never overwrites.
+Because every creation path already populates the column and nothing ever
+changes it, **the backfill closes this finding for all practical purposes.**
+
+**Residual, stated so nobody re-derives it:** an email changed **manually in the
+Supabase console** would still drift, since no trigger exists. That is an
+out-of-band admin action, not an application path, and it is not worth a trigger
+on `auth.users` to defend against. If self-service email change is ever built,
+**this finding reopens properly** and the sync must be built with it.
 
 #### F28 — `toISOString()` used for date math in two places
 - **Status:** **resolved 2026-05-14 (Phase 3.8) — retained deliberately as a standing anti-pattern record, not an open defect.** Verdict line added 2026-07-28; the paragraph below previously carried the disposition with no status verdict, which left the entry ambiguous to anyone counting open findings.
