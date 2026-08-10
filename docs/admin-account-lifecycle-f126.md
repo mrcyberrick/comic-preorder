@@ -3,7 +3,7 @@
 **Origin:** F126, filed 2026-08-09 while scoping the Accounts tab and deferred
 by Rick the same day. Reopened 2026-08-09 with all three open decisions answered.
 
-**Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-10** — staging `54ca354` + `89545ea` (V1–V9 green, 112 passed, `PLAYWRIGHT_EXIT=0`), promoted via **PR #116, merge `aa35d7f`**. Rick's real-browser check passed; RPC applied to production ahead of the client merge. **Post-deploy write-smoke owed** (§ 8).
+**Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-10** — staging `54ca354` + `89545ea` (V1–V9 green, 112 passed, `PLAYWRIGHT_EXIT=0`), promoted via **PR #116, merge `aa35d7f`**. Rick's real-browser check passed; RPC applied to production ahead of the client merge. **post-deploy write-smoke PASSED** (Rick, 2026-08-10).
 **Target:** **staging only.**
 **Branch:** `feature/admin-account-lifecycle`
 **Findings:** **F126** (this), **F25** (the email trap that shaped it),
@@ -363,7 +363,7 @@ That is the whole point of the session, and it is worth stating that he was
 was going to run. What changed is that he is now visible from a screen Rick opens
 anyway, next to a filter that names the condition.
 
-**He still needs a phone call.** Shipping the surface is not the fix.
+**He was called on 2026-08-10 and the loop is closed.** Worth keeping as the shape of this work: shipping the surface was never the fix — making him visible was.
 
 ### 8.3 Owed
 
