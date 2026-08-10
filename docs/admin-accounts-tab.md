@@ -4,10 +4,11 @@
 restructure closed. *"Paper Customers should be something more of a way to manage
 users. I see this as the Accounts tab that contains all users."*
 
-**Status:** **COMPLETE ON STAGING 2026-08-09** (`40b8bc4` + `617cbd7`) — V1–V8
-green, **108/108**, `PLAYWRIGHT_EXIT=0`, zero flaky. **Rick's real-browser check
-and production promotion both owed.**
-**Target:** **staging only.**
+**Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-09** — staging `40b8bc4` +
+`617cbd7` (V1–V8 green, **108/108**, `PLAYWRIGHT_EXIT=0`, zero flaky), promoted
+via **PR #115, merge `88f542b`**. Rick's real-browser check passed on staging;
+**post-deploy write-smoke owed** (§ 8.6).
+**Target:** staging first, then production (promotion at Rick's explicit request).
 **Branch:** `feature/admin-accounts-tab`
 **Findings:** **F126** (profile editing — deferred, OUT), **F127** (status is not
 an authorization boundary — filed, OUT).
@@ -199,7 +200,8 @@ Per session 4 § 7.6, run **before** the first edit:
 - [x] V1–V8 green, Playwright's **own** exit code captured — **108/108, `PLAYWRIGHT_EXIT=0`**
 - [x] All seeded fixtures torn down, verified by live SELECT (§ 8.4)
 - [x] `technical-reference.md` § RLS `user_profiles` corrected (§ 3.2), citing F92
-- [ ] **Real-browser check by Rick on staging** — owed
+- [x] **Real-browser check by Rick on staging** — passed 2026-08-09
+- [x] Promoted to production (PR #115, merge `88f542b`); write-smoke owed
 - [x] F126 / F127 cross-references accurate
 
 ## 6. Rollback
@@ -302,3 +304,75 @@ that finding reached 292 orphans by nobody looking.
 - **Rick's real-browser check on staging.**
 - **Production promotion** — his call, not requested.
 - The `#catalog-subtitle` impersonation gap (§ 7.2) — surfaced, not filed.
+
+---
+
+## 8. Production — PR #115, merge `88f542b`, 2026-08-09
+
+Client-only (`admin.html`, `catalog.html`, `app.js`). **No DB change, no schema
+change, no Edge Function change, no `config.js` change.**
+
+**This is the first customer-facing promotion in this workstream** —
+`catalog.html` now blocks a `suspended` account exactly as it blocks a
+`pending` one. Nobody is affected today: production carries **0 suspended
+profiles**, so the path is live but unexercised until an admin pauses someone.
+
+### 8.1 Pre-flight
+
+| Check | Result |
+|---|---|
+| `config.js` preserved via `git checkout main -- config.js` | ✅ identical to prod HEAD, **absent from the PR diff** |
+| F59 merge-base | ✅ `app.js`, `catalog.html`, `admin.html` all differ from main |
+| Prod-only migrations survive the merge (**F125**) | ✅ both present |
+
+`mylist.html` and `arrivals.html` reported *identical to main*, which is correct
+— this session never touched them.
+
+### 8.2 Post-deploy verification (read-only)
+
+| Check | Result |
+|---|---|
+| Accounts tab served | ✅ `data-tab="accounts"`, `ensureAccounts`, `acct-pause`, `acct-resume`, `btn-new-user`, `accounts-summary` |
+| Retired tabs gone | ✅ **0** each for `data-tab="pending"`, `data-tab="paper-customers"`, `#pending-list`, `#paper-customer-list` |
+| Customer-facing half served | ✅ `isBlocked` ×10, `isPaused` ×7, "Your account is paused", `PAUSED_BTN_LABEL` |
+| `Users.setStatus` in `app.js` | ✅ served |
+| Row counts | ✅ `preorders` 2,005 · `order_submissions` 864 · `catalog` 11,724 · `user_profiles` 27 (15 paper) |
+| Status split | ✅ 27 active / 0 pending / **0 suspended** |
+
+### 8.3 What the partition gate bought
+
+Recorded because the assertion was written expecting to be a formality and
+instead caught two defects that were **invisible on screen** (§ 7.1): admins
+appearing in "All" but in no status filter, and the Paper filter matching a TYPE
+while the rows displayed a STATE. The second is **F121's own defect —
+irreconcilable numbers — reappearing inside the feature built to remove it.**
+
+The transferable part is not "write more tests". It is that a **partition**
+assertion (the parts sum to the whole) catches a class of incoherence that
+per-element assertions never will, and it cost four lines.
+
+### 8.4 Deliberately absent, and why it matters that it is absent
+
+**No Edit control is rendered** — not a disabled one (**F126**). A spec asserts
+its absence (`no Edit control is rendered`), so adding one later is a conscious
+act rather than a drift. A disabled button is precisely the pattern F121 spent
+six sessions removing.
+
+### 8.5 Two findings adjusted by this session's measurements
+
+- **F126** gained the "Last seen" / unanswered-invite scope (Rick's call: fold,
+  do not run separately), with the `has_seen_welcome` dead end recorded at
+  **8/12** so nobody retries it, and the real cause named: `invite-customer`
+  sets `status:'active'` the instant an invite is sent.
+- **F30**'s fix direction was **corrected**: `Preorders.getAll` has **zero call
+  sites** and the relation it embeds does not exist (404 `PGRST205`), so the
+  join would fail outright rather than degrade to a null email as filed. Delete
+  the function; do not rewrite the join.
+
+### 8.6 Owed
+
+- **Post-deploy write-smoke** — Rick's, by hand: it needs a real browser session
+  on production, the Playwright runner aborts on a prod `SUPABASE_URL` by
+  design, and a service-key insert would bypass both the client code and RLS.
+- **`Ronald Burke` needs a phone call** — invited 2026-03-17, never confirmed,
+  never signed in. Operational, and not waiting on any code.
