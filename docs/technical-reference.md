@@ -2167,12 +2167,41 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   preferred, switch to SECURITY DEFINER with `SET search_path = public`.
 
 #### F25 — `user_profiles.email` is denormalized from `auth.users.email`
-- **Status:** open
+- **Status:** open. **Measured and half-addressed 2026-08-10** — see below.
 - No trigger keeps it in sync. If a user changes their auth email, the
   profile email drifts. Population happens at registration time only.
 - **Fix:** add a trigger on `auth.users` UPDATE that syncs to
   `user_profiles.email`, or remove the column and join to `auth.users`
   every read.
+
+**Measured 2026-08-10, and the consequence is not cosmetic.** Rick spotted
+em-dashes in the new Accounts tab's Email column. On **production, 6 of 27
+profiles** had `email` NULL while `auth.users` held a perfectly good address —
+Albert Abaunza, Alex Alvarez, Book Stop, Brian Moss, Mike Neubauer, Rick
+Sedivec. All non-paper. They pre-date the column's population, so nothing had
+ever filled them.
+
+| Surface | Reads | Effect of the NULLs |
+|---|---|---|
+| `admin.html` Accounts | `user_profiles.email` | An em-dash. Cosmetic — and the only reason anyone noticed. |
+| **`analytics.html` win-back list** | `user_profiles.email` | **`winbackRows.map(r => r.email).filter(Boolean)` SILENTLY DROPS them.** A marketing list missing 6 of 27 customers with nothing on screen saying so. **This is the real cost, and it predates the Accounts tab entirely.** |
+| `notify-customers` | **`auth.users` directly** (`index.ts:129`) | **Unaffected.** Customer notifications have always gone to the right addresses. |
+
+**The silent-drop is the F96 shape** — an absent signal indistinguishable from
+"there was nothing to send". Noted here rather than filed separately (Rick's
+call, 2026-08-10): it is a *consequence* of this finding, not a second defect.
+
+**Addressed 2026-08-10:**
+1. `docs/sql/backfill-user-profiles-email.sql` — repairs the 6 rows. Fills NULLs
+   only; never overwrites, so genuine divergence is left for a human to judge.
+2. `docs/sql/sync-user-profiles-email-trigger.sql` — **the durable fix this
+   entry has always specified.** An `AFTER UPDATE OF email ON auth.users`
+   trigger, so the copy stops drifting the next time a customer changes their
+   address.
+
+**F25 stays OPEN until both are applied to both environments**, and arguably
+beyond: the trigger closes the *drift* half, but the column remains a copy, and
+the "remove it and join" option is still the cleaner end state.
 
 #### F28 — `toISOString()` used for date math in two places
 - **Status:** **resolved 2026-05-14 (Phase 3.8) — retained deliberately as a standing anti-pattern record, not an open defect.** Verdict line added 2026-07-28; the paragraph below previously carried the disposition with no status verdict, which left the entry ambiguous to anyone counting open findings.
