@@ -1021,6 +1021,61 @@ a seeded title or `data-catalog-id` — never `.first()` and never an exact
 count. A `.first()` assertion in the initial draft failed against a real
 staging title, which is how this got caught.
 
+### How to run it — targeted while iterating, full suite once as the gate
+
+**Do NOT run the full suite after every change.** It is `workers: 1`,
+`fullyParallel: false` (specs share staging state — spec 15 mutates
+`app_settings.order_deadline` globally), so a full pass is **~16 minutes**. A
+single spec is **~17 seconds**.
+
+```powershell
+# While iterating — run only what you touched
+npx playwright test 17-admin-modes --grep "V1 — get_account_activity"
+npx playwright test 15-order-export-ledger
+
+# Once, before promotion — this is the gate
+.un-smoke.ps1
+```
+
+**Measured, 2026-08-09** (Rick asked whether the suite was earning its keep —
+a fair question, and the numbers said *barely*). Seven full runs, ~100 minutes
+of wall clock, which caught **2 real feature defects**, **4 of the agent's own
+broken tests**, and **1 unexplained flake**. Five of those seven runs should
+have been targeted; doing so would have saved ~70 minutes and caught the
+identical two defects.
+
+### What this suite is actually good at — and what it is not
+
+Calibrate expectations before deciding a green run means anything:
+
+- **Good at regression.** Did a change break something that already worked.
+  Every UI restructure this year was caught this way.
+- **Good at invariants you state explicitly.** The Accounts partition
+  assertion (`the parts sum to the whole`) caught two defects **on a build
+  whose real-browser check had already passed** — admins visible in one view
+  and absent from another, and a filter matching a *type* while rows displayed
+  a *state*. Neither was visible on screen. Four lines of assertion.
+- **Bad at brand-new paths**, because a test written alongside the code
+  inherits the code's wrong assumption. On 2026-08-09 the two defects that
+  mattered most — an open SQL gate and a filter keyed on a column that
+  defaults to `true` — were both found by **probing the deployed thing and
+  reading what came back**, not by the suite. Purpose-built fixtures passed
+  under both the wrong predicate and the right one.
+
+**So: a green suite says the assertions hold, not that the feature is right.**
+For new work, the cheap high-yield checks are (a) call the deployed endpoint
+and read the response, and (b) look at what a new query or filter *returns on
+real data* — not merely whether it runs.
+
+### A verification step that cannot fail is not a verification step
+
+Filed the same day, from a SQL file whose final statement reported the
+function's **return signature** — identical before and after the fix it was
+meant to confirm. The Supabase SQL Editor shows the last statement's result, so
+the operator pasted the same meaningless output three times while the gate was
+still open. **Before asking anyone to run a check, ask what its output looks
+like when the thing has FAILED.** If that is the same, it is decoration.
+
 **Rules:**
 - Local-only. Never committed. Never runs against production.
 - `SUPABASE_URL` in `.env` must be staging; runner aborts if it's prod
