@@ -581,7 +581,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
               <td style="text-align:right">
                 <button class="btn btn-danger btn-sm unsub-btn"
                   data-series="${escapeHtml(sub.series_name)}"
-                  data-distributor="${escapeHtml(sub.distributor)}">
+                  data-distributor="${escapeHtml(sub.distributor)}"${
+                    AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"' : ''
+                  }>
                   Unsubscribe
                 </button>
               </td>
@@ -593,6 +595,13 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     // Unsubscribe buttons
     container.querySelectorAll('.unsub-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        // Admins have no write permission on subscriptions by design (Rick,
+        // 2026-08-10): there is no admin write policy on the table, so an
+        // impersonated DELETE is filtered to zero rows by RLS and PostgREST
+        // still returns success — the toast below would report a change that
+        // did not happen. Buttons render disabled above; this is belt-and-
+        // braces, matching the subscribe paths. See F128.
+        if (AdminContext.isActive()) return;
         if (!(await confirmDialog(`Unsubscribe from "${btn.dataset.series}"?`))) return;
         btn.disabled = true;
         const targetUserId = AdminContext.resolveUserId(user.id);
