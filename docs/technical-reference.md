@@ -2561,7 +2561,8 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 - **Related:** **F6** — same capture mechanism, same class of gate, resolved 2026-07-28. **F105** — the process finding this precondition is the live test case for. **F83** — the Format B duplicate-UPC batch abort, which is the loud half of this table's collision behavior. **F7** — looks identical, closed won't-fix; the difference is that `reservation_history` has a `user_id` giving it transitive tenant scope and `weekly_shipment` has no such column.
 
 #### F13 — `reservation_history.user_id` cascades on auth user delete
-- **Status:** **OPEN — RE-CLASSIFIED 2026-08-10 from "dormant, intent unclear" to a LIVE data-loss path with measured production exposure.** This was listed for months among the "documented and dormant" structural findings. It is not dormant: the deletion it describes is performed by **a button Rick uses**, and it destroys **28% of the production archive** when it fires.
+- **Status:** **RESOLVED — LIVE ON BOTH ENVIRONMENTS 2026-08-11** (staging v21, production v18). Re-classified 2026-08-10 from *"dormant, intent unclear"* to a **LIVE data-loss path with measured production exposure**, then fixed and deployed the following day. Nothing was lost. Detail below.
+- **Original re-classification note:** This was listed for months among the "documented and dormant" structural findings. It is not dormant: the deletion it describes is performed by **a button Rick uses**, and it destroys **28% of the production archive** when it fires.
 - **Measured on production 2026-08-10 (independently re-verified, not taken from a report):**
 
   | | |
@@ -2643,7 +2644,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   preferred, switch to SECURITY DEFINER with `SET search_path = public`.
 
 #### F25 — `user_profiles.email` is denormalized from `auth.users.email`
-- **Status:** open, but **materially re-scoped 2026-08-10 — the stated mechanism has never fired and has no code path to fire through.**
+- **Status:** **CLOSED as resolved 2026-08-11** — verified clean on both databases (29/29 production, 19/19 staging profiles matching `auth.users` exactly). Re-scoped 2026-08-10 on the finding that **the stated mechanism has never fired and has no code path to fire through**, then closed. Detail below.
 - **CLOSED as resolved 2026-08-11 — verified clean on BOTH databases, and the drift mechanism has no code path to fire through.**
   - **Measured:** **29/29 production** and **19/19 staging** profiles match `auth.users` exactly. Zero NULLs, zero orphans in either direction, on either environment.
   - **No writer can cause the drift.** `auth.users.email` is written by GoTrue; every application path that creates or changes a profile (`register-customer`, `invite-customer`, `create-paper-customer`, `claim-paper-customer`, and F126's Accounts edit) writes both sides or neither — and F126 **deliberately cut email editing** for exactly this reason, leaving `full_name` as the only editable field. The one uncontrolled path would be a user changing their email directly in GoTrue, which this app exposes nowhere.
@@ -3596,7 +3597,8 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F105 — a blocking pre-flight gate went unmet and Phase 5.5 closed anyway with its completion criteria recorded as ticked; the gap survived 13 days and was found by an unrelated audit
 
-- **Status:** filed 2026-07-28 (surfaced while closing F6 on production, during a § 13 findings-index cleanup). **Open — process finding, no code or schema fix.** No plan doc.
+- **Status:** **RESOLVED 2026-08-11 — it now has an actual mechanism, not a deferral.** Every `docs/sql/*.sql` carries a parseable `-- STATUS: staging=… | prod=…` line (12 of 14 previously recorded nothing), and `/promote-prod` gained a **step 0** that greps for anything not `prod=APPLIED`/`N/A` and requires a per-file decision before the merge. Verified by running it verbatim: it flagged four files including two written hours earlier, and **now reports CLEAN**. It would have printed `prod=PENDING` on all four promotions inside F6's 13-day window (PRs #86/#89/#90/#91) instead of passing silently. Chosen over this entry's own suggestion of grepping for prose phrases, which drowns in finding text. **The residual is cultural, not technical:** the line is only worth having if it is updated the moment a file runs.
+- **Original filing:** filed 2026-07-28 (surfaced while closing F6 on production, during a § 13 findings-index cleanup). **Was: open — process finding, no code or schema fix.** No plan doc.
 - **Severity:** **Medium.** No damage occurred in the instance that exposed it — but the mechanism is a gate that reports itself satisfied while unsatisfied, and it recurs on every future tenant onboarding. Severity reflects the mechanism, not this instance's luck.
 - **Symptom:** `docs/sql/f6-app-settings-pk-rekey.sql` carried an explicit, unambiguous gate — *"Run: STAGING first, verify, then PRODUCTION as part of 5.5 pre-flight"* and *"WHY THIS MUST LAND BEFORE TENANT 2"*. Staging ran 2026-07-08. Tenant 2 (`comicstore`) went live on production **2026-07-15**. The production run did not happen until **2026-07-28**, 13 days later, and only because a findings-index audit re-read F6's status line and noticed its precondition had a date attached that had already passed. Phase 5.5 and Phase 5 were both recorded Complete on 2026-07-15 with Phase Completion Criteria described as all ticked.
 - **What made it invisible, in order:**
