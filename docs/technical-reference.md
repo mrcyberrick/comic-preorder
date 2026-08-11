@@ -128,10 +128,27 @@ mechanism diverges from the others.
 | Import | Node.js, run from local scripts folder, never committed |
 | Hosting | Cloudflare Pages — prod: `https://pulllist.app/`; staging: `https://staging.pulllist.pages.dev/` (legacy GH Pages still warm as a rollback target, not tied to a phase gate — Rick's call 2026-07-15) |
 
-`pgcrypto` provides `gen_random_uuid()` (used by newer tables); `uuid-ossp`
-provides `uuid_generate_v4()` (used by `catalog` and `preorders`, predating
-the move to `pgcrypto`). Both produce v4 UUIDs and are interchangeable for
-this project's purposes; see finding F27.
+**Corrected 2026-08-11.** This previously read *"`pgcrypto` provides
+`gen_random_uuid()` (used by newer tables); `uuid-ossp` provides
+`uuid_generate_v4()` (used by `catalog` and `preorders`, **predating the move
+to `pgcrypto`**)."* Two things were wrong, and the first is the entire basis
+on which **F27** was filed:
+
+- **`gen_random_uuid()` is NOT provided by `pgcrypto` here — it comes from
+  `pg_catalog`,** i.e. Postgres core, where it has lived since **PG 13**. The
+  tell is in the stored defaults themselves: `uuid_generate_v4` renders
+  **schema-qualified** as `extensions.uuid_generate_v4()`, while
+  `gen_random_uuid()` renders **unqualified**, which is what a `pg_catalog`
+  resolution looks like. Identical on both environments.
+- **There was no "move to `pgcrypto`", and if anything the direction is the
+  reverse.** `uuid-ossp`'s `uuid_generate_v4()` backs `catalog`, `preorders`
+  **and `order_submissions`** — and `order_submissions` was created on
+  **2026-08-03**, making it the newest table in the schema. So `uuid-ossp` is
+  a live convention, not legacy residue narrowing toward removal.
+
+Both still produce v4 UUIDs and remain interchangeable for this project's
+purposes. **Do not drop either extension** — see **F27**, closed won't-fix on
+the corrected facts.
 
 `supabase_vault` is installed but no application code references it. The
 `pg_stat_statements` extension is the standard Supabase performance-tracking
@@ -2444,7 +2461,12 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   Coordinated with the F4 cleanup.
 
 #### F10 — `preorders` FKs to `user_profiles` and `catalog` are NO ACTION
-- **Status:** open
+- **Status:** **CLOSED won't-fix 2026-08-11 — "intent unclear" is settled by use: NO ACTION is the correct and desirable behaviour here, and today's F127 work closed its last reachable edge.**
+  - **The application does NOT have the test helper's bug.** F95's orphaned-profile incident is what gave this finding its reputation, but that was the *Playwright* `deleteUser()` failing silently. `Users.deleteProfile` has exactly **one** caller — the admin Decline handler (`admin.html:3761–3780`) — and that caller **checks `error`, names F10 in a comment, and toasts on failure**. It does not fail silently.
+  - **And it is barely reachable.** Decline renders only for `status='pending'`. The single pending profile on each environment holds **zero** preorders, so the blocking case cannot currently arise through the UI at all. (24 of 29 production profiles *would* block a delete — but no UI path attempts one.)
+  - **NO ACTION is protective, not accidental.** It is what makes it impossible to erase a customer who still holds reservations without dealing with those reservations first. `CASCADE` here would silently destroy live reservation data on a profile delete; `SET NULL` would orphan rows against a NOT NULL column. The current behaviour fails **loudly and safely**, which is what you want on the app's busiest table.
+  - **Contrast with F13, deliberately.** F13 is the same *shape* — a cascade rule nobody chose — but the opposite *sign*: there the rule destroys an archive silently, so it needed fixing. Here the rule refuses a destructive delete, so it does not. The two entries should be read together; "unresolved FK intent" is not by itself a defect.
+  - **What would reopen this:** a UI path being added that deletes a profile which may hold preorders (e.g. a general "delete customer" control, which **F126** deliberately did **not** build), without first clearing or reassigning those rows — the shape `claim-paper-customer` had for `reservation_history` until 2026-08-11.
 - Differs from the prior documentation, which described both as CASCADE.
   Means deleting a `user_profiles` row fails if any preorder references
   it, and deleting a `catalog` row fails if any preorder references it.
@@ -2600,7 +2622,12 @@ production-staging URL bug unrelated to multi-tenancy (F35).
 
 #### F25 — `user_profiles.email` is denormalized from `auth.users.email`
 - **Status:** open, but **materially re-scoped 2026-08-10 — the stated mechanism has never fired and has no code path to fire through.**
-- **As originally filed:** "No trigger keeps it in sync. If a user changes their auth email, the profile email drifts." **Fix: add a trigger on `auth.users` UPDATE, or remove the column and join.**
+- **CLOSED as resolved 2026-08-11 — verified clean on BOTH databases, and the drift mechanism has no code path to fire through.**
+  - **Measured:** **29/29 production** and **19/19 staging** profiles match `auth.users` exactly. Zero NULLs, zero orphans in either direction, on either environment.
+  - **No writer can cause the drift.** `auth.users.email` is written by GoTrue; every application path that creates or changes a profile (`register-customer`, `invite-customer`, `create-paper-customer`, `claim-paper-customer`, and F126's Accounts edit) writes both sides or neither — and F126 **deliberately cut email editing** for exactly this reason, leaving `full_name` as the only editable field. The one uncontrolled path would be a user changing their email directly in GoTrue, which this app exposes nowhere.
+  - **The sync trigger was written and then deliberately WITHDRAWN** (`3bc3f62`, 2026-08-10) after the backfill (`5653f4e`, applied to both environments per `ee87bc4`) brought the two into alignment: a trigger to defend against a mechanism with no live trigger path is machinery that can itself fail, on the app's most security-relevant table. That was a judgement call and it is recorded here so it is not silently reversed.
+  - **What would reopen this:** exposing an email-change path — either a GoTrue self-service email change, or the Edge Function F126 would need to edit email properly. **Either one makes this finding live again**, and the withdrawn trigger in `docs/sql/` is the ready-made fix at that point.
+- ~~**As originally filed:** "No trigger keeps it in sync. If a user changes their auth email, the profile email drifts." **Fix: add a trigger on `auth.users` UPDATE, or remove the column and join."**~~ Retained for the record.
 
 **Re-measured 2026-08-10, and the original framing is wrong in a way that matters.**
 Rick spotted em-dashes in the new Accounts tab's Email column. On **production, 6
@@ -2677,7 +2704,12 @@ on `auth.users` to defend against. If self-service email change is ever built,
   `DateUtils.weekRange()` (new helpers in `app.js`, phase 3.8).
 
 #### F30 — `Preorders.getAll` join `auth_users:user_id ( email )` is fragile
-- **Status:** open
+- **Status:** **CLOSED won't-fix 2026-08-11 — this entry has been wrong in BOTH its original and its revised form, and the revision was the more dangerous of the two.**
+  - **Measured on both environments:** `GET /rest/v1/preorders?select=id,auth_users:user_id(email)&limit=1` returns **HTTP 200 with correct emails** on staging *and* production. The embed works.
+  - **What it actually is:** `auth_users:` is a **response-key alias**, not a relation name. The embed target is the `user_id` **column**, and PostgREST resolves it through `preorders_user_id_fkey` → `public.user_profiles`. Proved three ways: asking that same embed for `full_name` / `is_paper` / `tenant_id` returns them; embedding by constraint name returns the identical row; and PostgREST's OpenAPI shows exactly **one** FK on `preorders.user_id`, pointing at `user_profiles`. So it is **FK-enforced after all** — which is the opposite of this finding's title.
+  - **The 2026-08-09 revision is the dangerous error.** It cited F126's real `PGRST205` 404 for `public.auth_users` and concluded the embed "does not exist / would fail outright." That 404 is about a **table** named `auth_users`, which indeed does not exist — a different thing from an alias. The revision reads as a fresh measurement, so it is more likely to be believed than the original. **Deleted.**
+  - **Zero call sites**, confirmed independently by grep and `git log -S`. So even the corrected concern is moot: nothing consumes it.
+  - **What would reopen this:** a second FK being added to `preorders.user_id` (which would make the embed ambiguous and require disambiguation), or the alias being re-pointed at something that genuinely lacks an FK. The premise this finding depends on — "the join is by-convention and unenforced" — is simply false.
 - PostgREST embedded join relies on the by-convention UUID match
   between `preorders.user_id` and `auth.users.id`. There is no FK to
   enforce the relationship. Silent failure mode: email column becomes
@@ -2735,7 +2767,12 @@ on `auth.users` to defend against. If self-service email change is ever built,
   the safe form.
 
 #### F27 — both `pgcrypto` and `uuid-ossp` installed
-- **Status:** open
+- **Status:** **CLOSED won't-fix 2026-08-11 — and the finding's premise is INVERTED.** It reads as "one of these two extensions is redundant, drop it." The measurement says otherwise: **`uuid-ossp` is the one in active use**, and it was adopted *again* on 2026-08-03 by `order_submissions` — so this is not legacy residue narrowing toward removal, it is a live convention.
+  - **Measured on both environments** (PostgREST OpenAPI column defaults, identical on staging and production): `extensions.uuid_generate_v4()` backs `order_submissions.id`, `preorders.id` and `catalog.id`; a bare, **unqualified** `gen_random_uuid()` backs five other tables.
+  - **The unqualified rendering is the tell.** `uuid_generate_v4` renders schema-qualified (`extensions.`) while `gen_random_uuid` does not, which means the latter resolves from **`pg_catalog`** — i.e. Postgres core, where it has lived since **PG 13** — and needs no extension at all. **So `technical-reference.md`'s own claim that "pgcrypto provides `gen_random_uuid()`" is wrong, and that sentence is the entire basis of this finding.** Corrected 2026-08-11.
+  - **DO NOT DROP EITHER EXTENSION.** `uuid-ossp` is load-bearing for three tables including the newest one. `pgcrypto` may well be unused, but dropping a Supabase-default extension to tidy a non-problem is a destructive change with no upside.
+  - **What would reopen this:** evidence that `pgcrypto` is *not* a Supabase platform default here — i.e. that this project installed it deliberately for something — or a Postgres downgrade below 13, which is not a thing that happens. The premise this finding depends on is "both were chosen by this project and one is redundant"; the first half is false.
+  - Confirmation SQL for the F92 `pg_catalog` pass is written but **unrun**: join `pg_extension` for both extensions and `pg_proc`/`pg_namespace` for both functions. If `gen_random_uuid` shows `pg_catalog`, this closure stands; if it shows *only* `extensions`, this reasoning is wrong and the entry must be reopened.
 - `catalog.id` and `preorders.id` use `uuid_generate_v4()` (uuid-ossp);
   every newer table uses `gen_random_uuid()` (pgcrypto). Both produce v4
   UUIDs. uuid-ossp is essentially legacy at this point.
@@ -3311,7 +3348,9 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F94 — Cloudflare Turnstile intermittently stuck "Verifying..." → "Verification failed" on the first several real-human attempts against a freshly-deployed widget, resolving on retry
 
-- **Status:** filed 2026-07-24 (native-customer-signup workstream, S4 write-smoke), **open — informational, monitor during/after the 24-hour soak. No code defect found; no fix action pending unless it recurs.**
+- **Status:** **CLOSED as unreproduced 2026-08-11.** Filed 2026-07-24 (native-customer-signup, S4 write-smoke) as informational, to be monitored during a 24-hour soak. That soak, and two and a half weeks beyond it, have elapsed with **no recurrence**, and a live native signup cleared Turnstile normally on 2026-08-11. **No code defect was ever found** and the abuse gate worked correctly throughout — the original symptom was first-attempt friction on a freshly-deployed widget, which is consistent with the edge-propagation hypothesis and inconsistent with a defect in our code.
+  - **Closed rather than left open** because an informational entry with no owner, no action and no recurrence is exactly the kind of backlog padding that makes the index untrustworthy — and per **F105**, an index nobody trusts is how a real gate gets missed.
+  - **What would reopen this:** a cluster of Turnstile failures **not** immediately following a widget deployment. A single failure right after a deploy is the already-explained case and should not reopen it.
 - **Severity:** Low–Medium. No data-integrity or security issue — `register-customer`'s abuse gate correctly refused every unverified submission (client-side "Please complete the verification," no fetch ever sent; confirmed via live SELECT that zero rows were created by the failed attempts). But it is customer-facing: a real prospective customer hitting this on a first attempt could bounce before retrying.
 - **Symptom:** during the live prod write-smoke on `rjbookstop.pulllist.app` (real Turnstile widget, real human), the first submission attempt returned a 500 from `register-customer` itself (response body not captured before Rick retried); a retry then succeeded end-to-end (pending row, correct founding `tenant_id`, magic link, admin approve, login all worked). Several subsequent attempts in the same normal browser window got stuck on the Turnstile widget's own "Verifying..." state, eventually surfacing Cloudflare's own "Verification failed" / Troubleshoot prompt. An incognito Chrome window and a private Brave tab both eventually succeeded.
 - **Root cause:** unconfirmed, two candidates considered and neither ruled out: (a) Cloudflare edge-propagation timing — the widget's hostname authorization and/or the `_headers` CSP fix (same session) may not have been fully propagated to every edge node in the first few minutes after deploy, consistent with all successes coming later in the session; (b) Brave's Shields (built-in fingerprinting protection, active even in private/incognito windows, unlike a conventional extension) interfering with Turnstile's non-interactive verification — weakened as the sole explanation by Chrome incognito also needing a retry to succeed. Rick's own read: "likely network propagation related."
@@ -3411,7 +3450,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F100 — `weekly-pull-feed` publishes to GitHub Pages from two independent deployers with no ordering guarantee between them; this, not cancelled Actions runs, is what broke F98
 
-- **Status:** filed 2026-07-26 at the opening of the weekly-pipeline hardening session, while verifying F98's recorded mechanism before rewriting the publish path. **Open — deferred; nothing left broken.** The F98 single-commit fix neutralizes the harm on the import path (one commit ⇒ both deployers publish the *identical* tree, so their ordering stops mattering), so this finding tracks the residual structural hazard, not an active outage.
+- **Status:** **RESOLVED 2026-08-11 — the redundant deployer is gone.** Rick chose option (a) on 2026-08-11: **delete `deploy-pages.yml`** and keep GitHub's built-in builder. Applied and pushed (`mrcyberrick/weekly-pull-feed` `4b4bdba5`); confirmed absent via the GitHub contents API (**404**), with `send-newsletter.yml` untouched.
+  - **The premise was verified BEFORE deleting, not after.** The Pages API reports **`build_type: legacy`**, source branch `main`, path `/` — so the built-in builder publishes on every push regardless of the workflow, and removing it leaves exactly one publisher. **Had `build_type` been `workflow`, deleting that file would have stopped publishing the site entirely.** That check is the whole reason this was safe to do.
+  - **Keeping the built-in builder preserves F98's fix rather than competing with it.** F98's single-commit publish makes both deployers publish an identical tree, so what was removed is the redundancy, not a behaviour.
+  - **Verification owed on the next publish:** `/deployments` should show **one** deployment per push, not two. That is the observation that turns this from "should be fixed" into "is fixed", and it costs nothing to look.
+  - **A local-clone trap worth recording:** during this work `git cat-file -e origin/main:<path>` reported the file **absent** while `git ls-tree` and the GitHub API both reported it **present**. `cat-file -e` tests whether the *blob object* exists in the **local** object database, not whether the path exists in the commit tree — and this clone had never fetched that blob. Using it as a "does this path exist upstream" check produced a confidently wrong answer that nearly closed this finding without doing anything. **Use `ls-tree` or the API for path existence.** The F98 single-commit fix neutralizes the harm on the import path (one commit ⇒ both deployers publish the *identical* tree, so their ordering stops mattering), so this finding tracks the residual structural hazard, not an active outage.
 - **Severity:** Low as long as publishing stays single-commit; Medium the moment anything pushes `main` more than once in quick succession. No data-integrity or security exposure and no PULLLIST customer data involved — the blast radius is the marketing newsletter's served assets.
 - **Symptom:** none directly observable. This is the mechanism *behind* F98's contiguous tail of 404ing thumbnails.
 - **Diagnosis (verified against the live Pages, Deployments, and Actions APIs — this corrects F98):** the repo deploys to the `github-pages` environment from **two** independent publishers that neither coordinate nor share a concurrency group:
@@ -3568,7 +3611,11 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F107 — Playwright suite hit a Supabase GoTrue `429 over_request_rate_limit` on the 3rd run of two separate back-to-back-triple gate-verification sequences
 
-- **Status:** filed 2026-08-02 during the test-infrastructure maintenance session's V1/V4 gate verification (`docs/test-infra-maintenance-f91-f95-f103.md`). **Open — informational, not reproduced under normal (single-run) conditions.** No plan doc.
+- **Status:** **CLOSED as an artifact of gate-verification pressure, 2026-08-11.** Filed 2026-08-02 after the suite hit a GoTrue `429 over_request_rate_limit` on the 3rd run of two back-to-back-triple sequences — six full runs in ~45 minutes. It was never reproduced under normal use.
+  - **Evidence for closing:** a **full suite run on 2026-08-10 completed 113/113 in 16.8 minutes with zero 429s.** Single-run usage does not approach the limit.
+  - **The underlying pressure is now reduced by documentation, not luck.** CLAUDE.md records the targeted-spec-while-iterating guidance (~17s per spec vs ~16 min for the suite), so the six-runs-in-45-minutes pattern that produced this should not recur as routine practice.
+  - **One open thread worth noting, tracked elsewhere:** staging GoTrue carries **813 orphaned Playwright auth users** (833 `auth.users` vs 19 `user_profiles`) — historical residue from before F95's `deleteUser()` fix, which now deletes the GoTrue user and throws. Production is clean. That is a plausible contributor to rate-limit pressure and is worth a one-time cleanup, but it is a **separate** concern from this entry and does not keep it open.
+  - **What would reopen this:** a 429 during a **single** suite run, which would mean the limit is being approached by normal usage rather than by repetition.
 - **Severity:** Low, tentative. Observed exactly twice, both times on the *third* run of a rapid three-consecutive-full-suite sequence executed for gate verification (6 full runs total across ~45 minutes), never on a sequence's first or second run. A normal pre-push workflow runs the suite once, not six times in under an hour, so this has not been shown to affect ordinary usage of the suite.
 - **Symptom:** `10-post-reserve-prompt.spec.ts` → `declined series is never re-prompted on a later page load` flaked twice (Playwright auto-retried and the overall suite still exited 0 both times):
   - Run 3 of the first triple (immediately after the F91 fix, V1 gate): `page.fill: Test timeout of 60000ms exceeded … waiting for locator('#search')`, no root cause visible in the captured snapshot.
