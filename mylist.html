@@ -740,6 +740,62 @@ function confirmDialog(message, okLabel = 'Remove') {
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
 
+  // ── Blocked account detection ────────────────────────────────
+  // Ported from catalog.html's gate (2026-08-10) — same predicate, same
+  // isBlocked/isPaused split; see that file for the full rationale. Two
+  // statuses block changing reservation quantities, with the SAME effect and
+  // different reasons (Rick 2026-08-09):
+  //   pending    self-registered, not yet approved
+  //   suspended  paused by an admin — typically a customer who stopped
+  //              collecting their reservations
+  // Admins are never blocked regardless of their status field.
+  //
+  // `isBlocked` is the gate; `isPaused` only picks the wording, because telling
+  // a long-standing customer their account "is being reviewed" would be false.
+  //
+  // ⚠️ CLIENT-SIDE ONLY, and known to be (F127, measured): no `preorders`
+  // RLS policy references `status`, so a blocked user with a valid session
+  // can still write via a hand-crafted request. This is a UI gate — do not
+  // describe it as a hard block, and do not assume a later reader knows that.
+  //
+  // Remove/cancel stays enabled while blocked (Rick 2026-08-10) — a blocked
+  // customer must still be able to cancel a reservation. Only the qty
+  // stepper is gated below.
+  const isPending = !profile?.is_admin && profile?.status === 'pending';
+  const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
+  const isBlocked = isPending || isPaused;
+  const BLOCKED_TITLE = isPaused
+    ? 'Your account is paused — call the store to resume'
+    : 'Available once your account is approved';
+  if (isBlocked) {
+    const header = document.querySelector('.page-header');
+    if (header) {
+      const banner = document.createElement('div');
+      banner.id = 'pending-banner';
+      banner.style.cssText = [
+        'background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.35);',
+        'border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;',
+        'display:flex;align-items:flex-start;gap:12px;',
+      ].join('');
+      banner.innerHTML =
+        '<div style="font-size:1.1rem;line-height:1;margin-top:2px">&#128274;</div>' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--warning,#eab308);margin-bottom:4px">' +
+            (isPaused ? 'Your account is paused' : 'Your account is being reviewed') +
+          '</div>' +
+          '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
+            (isPaused
+              ? 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
+                'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+              : 'You can view your reservations while we confirm your details. ' +
+                'Quantity changes will be available once Ray&nbsp;&amp;&nbsp;Judy’s Book Stop approves your account. ' +
+                'Questions? Call us at (973)&nbsp;586-9182.') +
+          '</div>' +
+        '</div>';
+      header.insertAdjacentElement('afterend', banner);
+    }
+  }
+
   let allItems = [];
   let allUpcoming = []; // all future reservations across all months
   let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
@@ -945,7 +1001,8 @@ function confirmDialog(message, okLabel = 'Remove') {
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
             const isOrdered  = isFulfilled || isCodeOrdered(c);
-            const isLocked   = focLocked || isOrdered;
+            const isLocked   = focLocked || isOrdered || isBlocked;
+            const stepperTitle = isBlocked ? ` title="${escapeHtml(BLOCKED_TITLE)}"` : '';
             const cover = c.cover_url
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
@@ -974,9 +1031,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td style="color:var(--text-muted); font-size:0.8rem">${formatDate(c.on_sale_date)}</td>
                 <td>
                   <div style="display:flex;align-items:center;gap:4px">
-                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}>−</button>
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}${stepperTitle}>−</button>
                     <span class="qty-display" style="min-width:20px;text-align:center;font-weight:600">${item.quantity || 1}</span>
-                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}>+</button>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}${stepperTitle}>+</button>
                   </div>
                 </td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
@@ -1005,7 +1062,8 @@ function confirmDialog(message, okLabel = 'Remove') {
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
           const isOrdered  = isFulfilled || isCodeOrdered(c);
-          const isLocked   = focLocked || isOrdered;
+          const isLocked   = focLocked || isOrdered || isBlocked;
+          const stepperTitle = isBlocked ? ` title="${escapeHtml(BLOCKED_TITLE)}"` : '';
           const lineTotal = ((parseFloat(c.price_usd) || 0) * qty).toFixed(2);
           const cover = c.cover_url
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
@@ -1035,9 +1093,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                 </div>
                 <div class="mobile-card-actions">
                   <div class="mobile-qty">
-                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}>−</button>
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}${stepperTitle}>−</button>
                     <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
-                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}>+</button>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}${stepperTitle}>+</button>
                   </div>
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
