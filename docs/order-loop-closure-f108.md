@@ -388,10 +388,15 @@ Mark Ordered stays as-is for the genuine ad-hoc path. The `isNewMonth` import pr
 
 **Also unresolved and belonging to that session — `order_type` on confirm-on-export.** It hardcodes `'adhoc'` (plan § 4.2, written on the assumption that confirm-on-export served the *ad-hoc* process). Rick uses the Order Builder for the **monthly** cycle, so a monthly order recorded that way is mislabelled — and the consequence is not cosmetic: `classifyForExport()` routes `adhoc` matches to the "Ad-hoc ordered — excluded automatically" bucket instead of "Already ordered — your call", which **silently drops the F102 remainder-defaulted quantity control** on the next cycle. Order Builder should write `'monthly'`; Mark Ordered keeps `'adhoc'`.
 
-### Session C
-- [ ] Unavailable state shared with F110; **V-C1** green
-- [ ] Customer arrival date live; full suite green; real-browser check at mobile width
-- [ ] Fixtures torn down, verified by live SELECT returning zero rows
+### Session C — § 4.6 built 2026-08-11, live on STAGING, not promoted
+- [x] **Customer arrival date live on staging** (`c3a6b52`) — **full suite GREEN: unit 151/151, Playwright 113/113 in 16.2m, zero flaky.** Verified by reading the run's stage markers and counts, **not** by exit code: `run-smoke.ps1` has previously skipped its entire Playwright stage and still exited 0.
+- [ ] **Real-browser check at mobile width — STILL OWED.** The suite asserts behaviour, not that a chip renders legibly at 375px. Two production incidents came from treating those as the same thing, so this stays unticked until someone looks.
+- [x] **No fixtures were created**, so there is nothing to tear down. Stated rather than left blank — an empty teardown line reads the same whether it was done or skipped.
+- [ ] ~~Unavailable state shared with F110; **V-C1** green~~ — **V-C1 was found to contradict shipped behaviour and has been restated** (see § 7 gate list). It cannot be ticked in its original form, and satisfying it as written would mean reversing Rick's F120 decision. It also cannot be observed on live data: production holds **zero** ledger codes netting ≤ 0.
+
+**Scope note — § 4.6 reaches TWO surfaces, not one, and the measurement is why.** The section does not enumerate surfaces and the obvious reading is the current-month table. Measured against production first: of **1,237** future-dated unfulfilled reservations, **1,125 (649 titles)** are ordered in the ledger and **zero** are in the current catalog month — they are `2026-07` (766), `2026-06` (345), `2026-05` (14). The narrow reading would therefore have rendered for **no customer at all**. Every affected reservation lives in **Upcoming Arrivals**, which now carries the chip (no date — its group header already *is* the on-sale date). This is the same defect **F110** hit on this page, where the withdrawn flag reached only the current-month table while the real prior-month case lived in that grid.
+
+**Deliberate deviation:** the shipped token **"Order placed"** is kept rather than this plan's heading literal "Ordered" — spec 15 asserts on it, and churning shipped copy for a heading is not worth the regression risk.
 
 ---
 
