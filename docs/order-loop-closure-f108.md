@@ -390,7 +390,7 @@ Mark Ordered stays as-is for the genuine ad-hoc path. The `isNewMonth` import pr
 
 ### Session C — § 4.6 built 2026-08-11, live on STAGING, not promoted
 - [x] **Customer arrival date live on staging** (`c3a6b52`) — **full suite GREEN: unit 151/151, Playwright 113/113 in 16.2m, zero flaky.** Verified by reading the run's stage markers and counts, **not** by exit code: `run-smoke.ps1` has previously skipped its entire Playwright stage and still exited 0.
-- [ ] **Real-browser check at mobile width — STILL OWED.** The suite asserts behaviour, not that a chip renders legibly at 375px. Two production incidents came from treating those as the same thing, so this stays unticked until someone looks.
+- [x] **Real-browser check GREEN, desktop AND mobile (Rick, 2026-08-11).** Confirmed by eye on both surfaces — the current-month table and the Upcoming Arrivals grid. Recorded as its own gate rather than folded into the suite pass, because the suite asserts behaviour and not whether a chip renders legibly at 375px; two production incidents came from treating those as the same thing.
 - [x] **No fixtures were created**, so there is nothing to tear down. Stated rather than left blank — an empty teardown line reads the same whether it was done or skipped.
 - [ ] ~~Unavailable state shared with F110; **V-C1** green~~ — **V-C1 was found to contradict shipped behaviour and has been restated** (see § 7 gate list). It cannot be ticked in its original form, and satisfying it as written would mean reversing Rick's F120 decision. It also cannot be observed on live data: production holds **zero** ledger codes netting ≤ 0.
 
