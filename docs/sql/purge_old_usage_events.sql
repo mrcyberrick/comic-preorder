@@ -1,6 +1,22 @@
--- STATUS: staging=UNVERIFIED | prod=UNVERIFIED
---         Phase 3.5 era. Applied state NOT confirmed against either environment on
---         2026-08-10. Verify before relying on this line.
+-- STATUS: staging=APPLIED | prod=APPLIED  (verified 2026-08-11)
+--         Phase 3.5 era; the applied state was unverified until now. The
+--         function is PRESENT on both environments -- read from each project's
+--         PostgREST OpenAPI spec (`/rpc/purge_old_usage_events`), which lists
+--         it WITHOUT invoking it. Deliberate: calling it would delete rows,
+--         so existence was established from the spec rather than by running it.
+--
+--         RETENTION EVIDENCE, and the two environments do NOT agree:
+--           production  1,448 rows, 0 older than 90 days  -> purge is running
+--           staging     4,801 rows, 61 older than 90 days -> it is NOT
+--         So the function being deployed does not mean it is being INVOKED.
+--         Production is healthy and is what matters; staging's 61 stale rows
+--         are analytics-only, on the environment nobody reports from, and are
+--         recorded here rather than filed as a finding.
+--
+--         Note the distinction this line now makes: "APPLIED" means the DDL
+--         exists, NOT that anything schedules it. Related: F90 (the 90-day
+--         purge forecloses adoption-trend analytics -- production's 0 confirms
+--         the purge really is destroying that history on schedule).
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.

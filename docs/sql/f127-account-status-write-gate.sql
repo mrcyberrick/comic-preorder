@@ -1,5 +1,14 @@
--- STATUS: staging=APPLIED 2026-08-10 | prod=PENDING
---         Gates V1/V2/V3/V4 + full suite + real-browser green on staging. Promotion is Rick's call.
+-- STATUS: staging=APPLIED 2026-08-10 | prod=APPLIED 2026-08-11
+--         Staging: gates V1/V2/V3/V4 + full suite + real-browser all green.
+--         Production: run by Rick 2026-08-11. V2 returned false for an
+--         unidentified caller -- the F126 NULL hazard, closed there too.
+--         VERIFIED INDEPENDENTLY: POST /rest/v1/rpc/current_user_is_active
+--         returns HTTP 200 on production, where it 404'd earlier the same day.
+--         STILL OWED ON PRODUCTION, and this line does NOT claim otherwise:
+--         V1 (all four policies present and RESTRICTIVE -- needs pg_policies)
+--         and V3 (a pending account must get 403 where it previously got 201
+--         -- needs a seeded account). Both were proven on staging; neither has
+--         been observed on production.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.
