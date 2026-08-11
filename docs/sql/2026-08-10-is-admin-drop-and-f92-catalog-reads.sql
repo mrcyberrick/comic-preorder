@@ -78,12 +78,29 @@ WHERE  schemaname = 'public'
 
 UNION ALL
 
-SELECT 'function', p.oid::regprocedure::text, 'body references is_admin('
-FROM   pg_proc p
-JOIN   pg_namespace n ON n.oid = p.pronamespace
-WHERE  n.nspname = 'public'
-  AND  p.proname <> 'is_admin'
-  AND  pg_get_functiondef(p.oid) ~ '(^|[^_[:alnum:]])is_admin[[:space:]]*\('
+-- CORRECTED 2026-08-11. This previously called pg_get_functiondef() with only
+-- a schema filter and FAILED on production with:
+--     ERROR: 42809: "array_agg" is an aggregate function
+-- pg_get_functiondef() raises that on any AGGREGATE, and the planner is free to
+-- evaluate it BEFORE the nspname filter, so filtering by schema alone does not
+-- protect it. Two fixes, both needed:
+--   * p.prokind = 'f'  -- normal functions only ('a' aggregate, 'w' window,
+--                         'p' procedure). This is the actual guard.
+--   * OFFSET 0         -- optimisation barrier, so the filters are applied
+--                         before pg_get_functiondef() runs rather than
+--                         whenever the planner feels like it.
+SELECT 'function', s.sig, 'body references is_admin('
+FROM (
+  SELECT p.oid::regprocedure::text AS sig,
+         pg_get_functiondef(p.oid) AS def
+  FROM   pg_proc p
+  JOIN   pg_namespace n ON n.oid = p.pronamespace
+  WHERE  n.nspname = 'public'
+    AND  p.prokind = 'f'
+    AND  p.proname <> 'is_admin'
+  OFFSET 0
+) s
+WHERE s.def ~ '(^|[^_[:alnum:]])is_admin[[:space:]]*\('
 
 UNION ALL
 
