@@ -3,7 +3,7 @@
 **Origin:** F126, filed 2026-08-09 while scoping the Accounts tab and deferred
 by Rick the same day. Reopened 2026-08-09 with all three open decisions answered.
 
-**Status:** **COMPLETE ON STAGING 2026-08-09** — V1–V9 green, **113/113**, `PLAYWRIGHT_EXIT=0`, 1 flaky (§ 7.4). **Rick's real-browser check owed; the RPC must be run on PRODUCTION before the client is promoted (§ 7.5).**
+**Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-10** — staging `54ca354` + `89545ea` (V1–V9 green, 112 passed, `PLAYWRIGHT_EXIT=0`), promoted via **PR #116, merge `aa35d7f`**. Rick's real-browser check passed; RPC applied to production ahead of the client merge. **post-deploy write-smoke PASSED** (Rick, 2026-08-10).
 **Target:** **staging only.**
 **Branch:** `feature/admin-account-lifecycle`
 **Findings:** **F126** (this), **F25** (the email trap that shaped it),
@@ -331,3 +331,41 @@ Two leftovers were found and cleaned first — a profile and a tenant timestampe
 22:41 and 22:50, from the two suite runs **stopped mid-flight** when the build
 moved under them. Stopping a run skips its teardown; worth remembering, since
 that is a self-inflicted version of F95's pattern.
+
+---
+
+## 8. Production — PR #116, merge `aa35d7f`, 2026-08-10
+
+Client-only for the app (`admin.html`, `app.js`). The SQL file in the diff was
+**already applied to production by hand before the merge**, so merging changed
+nothing in Postgres. Sequencing was deliberate: had the client shipped first,
+Last seen would have read **"unknown"** for every row — degraded by design, but
+indistinguishable from a defect to anyone looking at it.
+
+### 8.1 Post-deploy verification (read-only)
+
+| Check | Result |
+|---|---|
+| F126 markers served | ✅ `get_account_activity`, `Last seen`, `isNeverSignedIn`, the `never` filter option, `acct-edit`, `activityById` |
+| `Users.setName` in `app.js` | ✅ served |
+| Superseded label gone | ✅ **0** occurrences of "Invited, never responded" |
+| **RPC gate on production** | ✅ **403 `get_account_activity: admin only`** for a caller with no identity |
+| Row counts | ✅ `preorders` 2,005 · `order_submissions` 864 · `catalog` 11,724 · `user_profiles` 27 |
+| Account mix | ✅ 15 paper · 0 pending · **0 suspended** — the pause path is live but unexercised |
+
+### 8.2 The feature surfaces the exact case that prompted it
+
+**"Never signed in" lists one person on production: `Ronald Burke`** — invited
+2026-03-17, email never confirmed, never signed in, status `active`.
+
+That is the whole point of the session, and it is worth stating that he was
+**already findable before any of this shipped** — by a service-role query no one
+was going to run. What changed is that he is now visible from a screen Rick opens
+anyway, next to a filter that names the condition.
+
+**He was called on 2026-08-10 and the loop is closed.** Worth keeping as the shape of this work: shipping the surface was never the fix — making him visible was.
+
+### 8.3 Owed
+
+- **Post-deploy write-smoke** — Rick's, by hand: a real browser session on
+  production, which the Playwright runner is barred from by design.

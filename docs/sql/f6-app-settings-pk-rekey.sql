@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-07-08 | prod=APPLIED 2026-07-28
+--         F6. The 13-day gap between these two dates is what F105 was filed about.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- ============================================================================
 -- F6 — re-key app_settings PK from (key) to (tenant_id, key)
 -- Prepared 2026-07-08 (from the 2026-07-07 architecture review).

@@ -7,7 +7,7 @@ users. I see this as the Accounts tab that contains all users."*
 **Status:** **COMPLETE AND LIVE IN PRODUCTION 2026-08-09** — staging `40b8bc4` +
 `617cbd7` (V1–V8 green, **108/108**, `PLAYWRIGHT_EXIT=0`, zero flaky), promoted
 via **PR #115, merge `88f542b`**. Rick's real-browser check passed on staging;
-**post-deploy write-smoke owed** (§ 8.6).
+**post-deploy write-smoke PASSED** (Rick, 2026-08-10) — F126 closed.
 **Target:** staging first, then production (promotion at Rick's explicit request).
 **Branch:** `feature/admin-accounts-tab`
 **Findings:** **F126** (profile editing — deferred, OUT), **F127** (status is not
@@ -201,7 +201,7 @@ Per session 4 § 7.6, run **before** the first edit:
 - [x] All seeded fixtures torn down, verified by live SELECT (§ 8.4)
 - [x] `technical-reference.md` § RLS `user_profiles` corrected (§ 3.2), citing F92
 - [x] **Real-browser check by Rick on staging** — passed 2026-08-09
-- [x] Promoted to production (PR #115, merge `88f542b`); write-smoke owed
+- [x] Promoted to production (PR #115, merge `88f542b`); **write-smoke PASSED** (Rick, 2026-08-10)
 - [x] F126 / F127 cross-references accurate
 
 ## 6. Rollback

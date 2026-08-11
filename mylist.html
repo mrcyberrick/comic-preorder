@@ -740,6 +740,62 @@ function confirmDialog(message, okLabel = 'Remove') {
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
 
+  // ── Blocked account detection ────────────────────────────────
+  // Ported from catalog.html's gate (2026-08-10) — same predicate, same
+  // isBlocked/isPaused split; see that file for the full rationale. Two
+  // statuses block changing reservation quantities, with the SAME effect and
+  // different reasons (Rick 2026-08-09):
+  //   pending    self-registered, not yet approved
+  //   suspended  paused by an admin — typically a customer who stopped
+  //              collecting their reservations
+  // Admins are never blocked regardless of their status field.
+  //
+  // `isBlocked` is the gate; `isPaused` only picks the wording, because telling
+  // a long-standing customer their account "is being reviewed" would be false.
+  //
+  // ⚠️ CLIENT-SIDE ONLY, and known to be (F127, measured): no `preorders`
+  // RLS policy references `status`, so a blocked user with a valid session
+  // can still write via a hand-crafted request. This is a UI gate — do not
+  // describe it as a hard block, and do not assume a later reader knows that.
+  //
+  // Remove/cancel stays enabled while blocked (Rick 2026-08-10) — a blocked
+  // customer must still be able to cancel a reservation. Only the qty
+  // stepper is gated below.
+  const isPending = !profile?.is_admin && profile?.status === 'pending';
+  const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
+  const isBlocked = isPending || isPaused;
+  const BLOCKED_TITLE = isPaused
+    ? 'Your account is paused — call the store to resume'
+    : 'Available once your account is approved';
+  if (isBlocked) {
+    const header = document.querySelector('.page-header');
+    if (header) {
+      const banner = document.createElement('div');
+      banner.id = 'pending-banner';
+      banner.style.cssText = [
+        'background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.35);',
+        'border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;',
+        'display:flex;align-items:flex-start;gap:12px;',
+      ].join('');
+      banner.innerHTML =
+        '<div style="font-size:1.1rem;line-height:1;margin-top:2px">&#128274;</div>' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--warning,#eab308);margin-bottom:4px">' +
+            (isPaused ? 'Your account is paused' : 'Your account is being reviewed') +
+          '</div>' +
+          '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
+            (isPaused
+              ? 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
+                'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+              : 'You can view your reservations while we confirm your details. ' +
+                'Quantity changes will be available once Ray&nbsp;&amp;&nbsp;Judy’s Book Stop approves your account. ' +
+                'Questions? Call us at (973)&nbsp;586-9182.') +
+          '</div>' +
+        '</div>';
+      header.insertAdjacentElement('afterend', banner);
+    }
+  }
+
   let allItems = [];
   let allUpcoming = []; // all future reservations across all months
   let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
@@ -766,6 +822,48 @@ function confirmDialog(message, okLabel = 'Remove') {
     if (!c || !c.distributor) return false;
     const code = exportCode(c, c.distributor);
     return !!code && rejectedCodeSet.has(`${c.distributor}||${code}`);
+  }
+
+  // F108 § 4.6 — the arrival date a customer may be shown for an ordered
+  // title. Returns a 'YYYY-MM-DD' string, or null when no arrival claim can
+  // honestly be made. One helper, called from both the desktop table and the
+  // mobile cards, because this plan's own Session A recorded what happens
+  // when the same predicate is copied to two surfaces: they drift, and the
+  // two surfaces then disagree about the same word.
+  //
+  // Deliberately narrow. Each condition traces to a finding:
+  //   * Ledger only, NEVER `fulfilled` — F115 and F122 both found `fulfilled`
+  //     set true on titles that never arrived, so it cannot carry a
+  //     forward-looking promise. `isOrdered` at the call sites still ORs it
+  //     in (unchanged shipped behaviour); the arrival DATE does not.
+  //   * Future-dated only. A past on_sale_date means the window has already
+  //     gone by and we hold no evidence either way — "arriving Aug 5" read on
+  //     Aug 11 is nonsense on its face, and it is also the F122
+  //     superseded-row shape: a re-dated title leaves the reservation pinned
+  //     to the OLD, earlier row, so the stale direction is reliably PAST and
+  //     this guard suppresses it.
+  //   * `>= today` mirrors the allUpcoming filter in loadList() exactly, so a
+  //     title carrying an arrival date here is precisely one that appears in
+  //     Upcoming Arrivals. The two surfaces cannot contradict each other.
+  //
+  // Withdrawn and rejected are NOT re-checked here: both branches sit ABOVE
+  // the ordered branch at every call site, so an unavailable title can never
+  // reach this. That is § 4.6's gating requirement — "unavailable" and
+  // "ordered" can never both be claimed for one reservation.
+  //
+  // KNOWN LIMIT (F122, read-path half — still open): the date resolves
+  // through the reservation's own pinned catalog row, the same row the "On
+  // Sale" column beside it already renders. If a distributor pulls a title
+  // FORWARD, the pinned row holds a later date than the truth and this shows
+  // it. Resolving reads against the newest listing is F122's open item and
+  // belongs there — fixing it for this one string while the adjacent column
+  // stayed on the pinned row would put two dates from two different rows on
+  // one line.
+  function arrivalDateFor(c, isFulfilled) {
+    if (isFulfilled) return null;
+    if (!c || !c.on_sale_date) return null;
+    if (!isCodeOrdered(c)) return null;
+    return c.on_sale_date >= DateUtils.todayLocal() ? c.on_sale_date : null;
   }
 
   // Fetches standard-cover #1 issues from the current catalog month.
@@ -945,7 +1043,9 @@ function confirmDialog(message, okLabel = 'Remove') {
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
             const isOrdered  = isFulfilled || isCodeOrdered(c);
-            const isLocked   = focLocked || isOrdered;
+            const arrivingOn = arrivalDateFor(c, isFulfilled); // F108 § 4.6
+            const isLocked   = focLocked || isOrdered || isBlocked;
+            const stepperTitle = isBlocked ? ` title="${escapeHtml(BLOCKED_TITLE)}"` : '';
             const cover = c.cover_url
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
@@ -962,7 +1062,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                     : isRejected
                       ? `<div class="col-sub withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
                       : isOrdered
-                        ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
+                        ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
+                            ? ' &middot; arriving ' + formatDate(arrivingOn)
+                            : item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
                         : focLocked
                           ? `<div class="col-sub foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
                           : ''}
@@ -974,9 +1076,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td style="color:var(--text-muted); font-size:0.8rem">${formatDate(c.on_sale_date)}</td>
                 <td>
                   <div style="display:flex;align-items:center;gap:4px">
-                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}>−</button>
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}${stepperTitle}>−</button>
                     <span class="qty-display" style="min-width:20px;text-align:center;font-weight:600">${item.quantity || 1}</span>
-                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}>+</button>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:22px;height:22px;font-size:0.9rem" ${isLocked ? 'disabled' : ''}${stepperTitle}>+</button>
                   </div>
                 </td>
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
@@ -1005,7 +1107,9 @@ function confirmDialog(message, okLabel = 'Remove') {
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
           const isOrdered  = isFulfilled || isCodeOrdered(c);
-          const isLocked   = focLocked || isOrdered;
+          const arrivingOn = arrivalDateFor(c, isFulfilled); // F108 § 4.6
+          const isLocked   = focLocked || isOrdered || isBlocked;
+          const stepperTitle = isBlocked ? ` title="${escapeHtml(BLOCKED_TITLE)}"` : '';
           const lineTotal = ((parseFloat(c.price_usd) || 0) * qty).toFixed(2);
           const cover = c.cover_url
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
@@ -1021,7 +1125,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                   : isRejected
                     ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
                     : isOrdered
-                      ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
+                      ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
+                          ? ' &middot; arriving ' + formatDate(arrivingOn)
+                          : item.fulfilled_at ? ' &middot; ' + formatDate(item.fulfilled_at.split('T')[0]) : ''}</div>`
                       : focLocked
                         ? `<div class="mobile-card-series foc-locked-notice">\uD83D\uDD12 FOC passed &mdash; contact the store</div>`
                         : ''}
@@ -1035,9 +1141,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                 </div>
                 <div class="mobile-card-actions">
                   <div class="mobile-qty">
-                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}>−</button>
+                    <button class="qty-btn qty-minus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}${stepperTitle}>−</button>
                     <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
-                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}>+</button>
+                    <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}${stepperTitle}>+</button>
                   </div>
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
@@ -1275,6 +1381,27 @@ function confirmDialog(message, okLabel = 'Remove') {
         // (Rick's call 2026-08-06 — see the desktop table's isRejected
         // comment for the reasoning).
         const isRejected  = !isWithdrawn && isCodeRejected(c);
+        // F108 § 4.6 — SCOPE CALL, flagged for review (2026-08-11). The plan
+        // does not enumerate surfaces; the obvious reading is "the two places
+        // that already say Order placed", i.e. the current-month table above.
+        // MEASURED ON PRODUCTION, and it inverts that reading: of 1,237
+        // future-dated unfulfilled reservations, 1,125 (649 titles) are
+        // ordered in the ledger and **not one of them is in the current
+        // catalog month** (766×2026-07, 345×2026-06, 14×2026-05; the 111
+        // current-month rows are unordered because the Aug cycle's FOC is
+        // 8/31). So on today's data § 4.6 would render for ZERO customers if
+        // it stopped at the table. This grid is where the ordered-and-arriving
+        // population actually lives.
+        //
+        // It is also the exact mistake F110 already made once on this page —
+        // its withdrawn flag reached only the current-month table while the
+        // real prior-month case lived here, found mid-execution, and Rick's
+        // call was to fix it in the same session. Same page, same asymmetry.
+        //
+        // No date shown: the group header two rows up IS the on-sale date.
+        // Uses the shared helper so this grid and the table can never disagree
+        // about who counts as ordered-and-arriving.
+        const arrivingOn  = arrivalDateFor(c, !!item.fulfilled);
         const cover = c.cover_url
           ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
           : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
@@ -1293,6 +1420,8 @@ function confirmDialog(message, okLabel = 'Remove') {
                         style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>
               ` : isRejected ? `
                 <div class="withdrawn-notice">⚠ Rejected by the supplier</div>
+              ` : arrivingOn ? `
+                <div style="color:var(--success,#22c55e);font-size:0.72rem;margin-top:2px">✓ Order placed</div>
               ` : ''}
             </div>
           </div>`;

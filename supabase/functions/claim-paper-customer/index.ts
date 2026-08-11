@@ -160,6 +160,68 @@ Deno.serve(async (req) => {
       // Non-fatal — preorders already moved, log and continue
     }
 
+    // ── Reassign reservation_history (F13) ────────────────
+    // MUST run before the two deletes below. `reservation_history.user_id` is
+    // ON DELETE CASCADE to auth.users, so any row still pointing at the paper
+    // account is destroyed by the auth-user delete — silently, with no log line
+    // and no recovery. Measured on production 2026-08-10, before this fix:
+    // 136 rows across 9 of 15 paper accounts, 28% of the entire archive, with
+    // one customer holding 99. The claim flow carried preorders and
+    // subscriptions across from the start and simply never knew about the
+    // archive, so the visible outcome always looked correct.
+    const histRes = await fetch(
+      SUPABASE_URL + '/rest/v1/reservation_history?user_id=eq.' + paper_user_id + '&tenant_id=eq.' + callerTenantId,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: 'Bearer ' + SUPABASE_SERVICE,
+          apikey: SUPABASE_SERVICE,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ user_id: real_user_id }),
+      }
+    )
+    // 409 = the real account already holds history for the same
+    // (user_id, series_name, distributor, catalog_month) — its own row already
+    // records that series for that month, so the paper duplicate carries no
+    // information the archive loses. Any OTHER failure is real, and must not be
+    // followed by the deletes below: that is the exact sequence that destroys
+    // the rows. Fail the claim instead — a claim that stops is recoverable, a
+    // cascaded archive is not.
+    if (!histRes.ok && histRes.status !== 409) {
+      const err = await histRes.text()
+      console.error('Reservation history reassign failed:', err)
+      return Response.json(
+        { error: 'Failed to reassign reservation history: ' + err },
+        { status: 500, headers: corsHeaders }
+      )
+    }
+
+    // Report anything that could not move, so a partial move is visible in the
+    // logs at the moment it happens rather than inferred months later from a
+    // gap in the archive.
+    const histLeftRes = await fetch(
+      SUPABASE_URL + '/rest/v1/reservation_history?select=id&user_id=eq.' + paper_user_id + '&tenant_id=eq.' + callerTenantId,
+      {
+        headers: {
+          Authorization: 'Bearer ' + SUPABASE_SERVICE,
+          apikey: SUPABASE_SERVICE,
+          Prefer: 'count=exact',
+          Range: '0-0',
+        },
+      }
+    )
+    const histLeft = histLeftRes.headers.get('content-range')?.split('/')[1] ?? '?'
+    if (histLeft !== '0') {
+      console.warn(
+        'reservation_history: ' + histLeft + ' row(s) could not move to ' + real_user_id +
+        ' (duplicate series/distributor/month) and will be removed with the paper auth user'
+      )
+    } else {
+      console.log('reservation_history: all rows reassigned to ' + real_user_id)
+    }
+
     // ── Delete paper user_profiles row ────────────────────
     const delProfileRes = await fetch(
       SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + paper_user_id,
