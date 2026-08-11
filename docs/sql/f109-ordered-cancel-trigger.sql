@@ -1,5 +1,14 @@
--- STATUS: staging=APPLIED 2026-08-10 | prod=PENDING
---         Gates V7/V8/V9/V10 + full suite green on staging. Promotion is Rick's call.
+-- STATUS: staging=APPLIED 2026-08-10 | prod=APPLIED 2026-08-11
+--         Staging: gates V7/V8/V9/V10 + full suite all green.
+--         Production: run by Rick 2026-08-11. V7 reported the trigger present
+--         as BEFORE / DELETE / ROW / enabled.
+--         EVIDENCE NOTE, stated so nobody over-reads this line: that V7 result
+--         comes from the operator's pasted output and was NOT independently
+--         re-read -- pg_trigger is unreachable over PostgREST. V8, V9 and V10
+--         have NOT been observed on production either: each needs a real
+--         customer DELETE against seeded ledger and withdrawn rows, which is
+--         not something to run against live customer data. The behavioural
+--         evidence for this trigger is the staging run, where all three passed.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.

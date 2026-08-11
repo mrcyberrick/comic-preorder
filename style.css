@@ -233,6 +233,16 @@ button { cursor: pointer; font-family: var(--font-body); }
 /* Phase 3.6 — This Week bagging list print styles */
 .bagging-print-header { display: none; }
 
+/* Bagging card body padding (fix, 2026-08-11) — .customer-group-body carries
+   no padding at all (By Customer / By Distributor supply their own via
+   .list-table cells), so the bagging list's bare <ul> of .bagging-row items
+   sat flush against the card's left/right edges while the header above kept
+   its 14px 18px padding — the rows looked unindented against the title.
+   Scoped to .bagging-customer-card only so By Customer / By Distributor
+   (whose .list-table already accounts for its own horizontal padding) are
+   untouched. */
+.bagging-customer-card .customer-group-body { padding: 12px 18px 16px; }
+
 @media print {
   body.printing-this-week .nav,
   body.printing-this-week .page-header,
