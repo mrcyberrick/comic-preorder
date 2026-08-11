@@ -1,6 +1,19 @@
--- STATUS: staging=N/A | prod=PENDING
---         PART A drops a PRODUCTION-ONLY function (staging dropped it 2026-05-26, F19).
---         PARTS B and C are READ-ONLY and safe to run anywhere, any time.
+-- STATUS: staging=N/A | prod=APPLIED 2026-08-11 (PART A)
+--         PART A dropped a PRODUCTION-ONLY function (staging dropped it
+--         2026-05-26, F19). Run by Rick, SQL Editor:
+--           A1 captured the rollback DDL; recorded prosecdef=true and
+--              config_settings=NULL, i.e. NO `SET search_path` (the F23 gap).
+--           A2 returned ZERO rows -- the go signal -- after being corrected
+--              the same day (it first aborted with 42809 on an aggregate; see
+--              the note above the function branch).
+--           A3 dropped it. A4 returned 0 / 'PASS - gone'.
+--         Verified independently afterwards: `POST /rest/v1/rpc/is_admin` now
+--         returns 404 PGRST202 on production (it returned HTTP 200 before),
+--         matching staging; `current_user_is_admin` still returns 200, which
+--         is the one RLS actually depends on; and reads on user_profiles,
+--         preorders and order_submissions are all healthy.
+--         PARTS B and C are READ-ONLY and require no applied-state. PART B
+--         (the F92 pg_catalog residual) had NOT been run as of 2026-08-11.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.
