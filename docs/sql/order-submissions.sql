@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-08-03 | prod=APPLIED 2026-08-03
+--         F101/F102 table + admin-only RLS.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- ============================================================================
 -- order_submissions — a distributor-code-keyed order ledger (F102)
 -- Prepared 2026-08-02 (order-export correctness session, F101 + F102).

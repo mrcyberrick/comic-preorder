@@ -1,3 +1,9 @@
+-- STATUS: staging=APPLIED 2026-08-06 | prod=APPLIED 2026-08-06
+--         F117. Prod's FIRST attempt silently no-opped; caught by re-checking
+--         pg_constraint rather than the grants query, which looks identical either way.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- ============================================================================
 -- order_submissions — signed quantity (F117) + zero-quantity rejection (F108
 -- § 4.4) + get_ordered_codes() rework

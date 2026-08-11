@@ -1,3 +1,9 @@
+-- STATUS: staging=N/A | prod=APPLIED 2026-08-03
+--         PRODUCTION ONLY -- 857/857 codes matched. NEVER run the staging backfill
+--         file on prod: it hardcodes the staging tenant UUID and will FK-violate.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- ============================================================================
 -- PRODUCTION backfill — order_submissions from the archived May/June/July 2026
 -- order files. Generated 2026-08-03 (F101/F102 session, § 4.7 / S5).

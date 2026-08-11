@@ -268,7 +268,13 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 ### Session C — unavailable + customer (client)
 1. § 4.5 generic unavailable state reusing F110's rendering, admin panel and cancel exception.
 2. § 4.6 "Ordered — arriving [date]".
-3. **Gate V-C1:** a rejected (zero-qty) title renders identically to a withdrawn one and is cancellable.
+3. ~~**Gate V-C1:** a rejected (zero-qty) title renders identically to a withdrawn one and is cancellable.~~
+   **⚠️ V-C1 AS WRITTEN CANNOT PASS — the plan and the shipped code disagree, and the code is right (2026-08-11).**
+   § 4.5 shipped on 2026-08-06 as **F120** with a **deliberate narrowing that Rick made explicitly**: the rejected state is **badge-only on the customer side, with no FOC/ordered-lock override** — i.e. *not* cancellable. So the second half of this gate contradicts shipped behaviour that was chosen on purpose, not by omission.
+   **Do not "fix" the code to satisfy this gate.** Restate the gate to match the shipped decision:
+   > **V-C1 (restated):** a rejected title renders with the F120 badge on the Bagging List and on all three My List rendering paths, is visually distinct from an ordinary arriving item, and does **not** acquire a cancel exception — that override belongs to **withdrawn** titles only (F110).
+   **Also note it cannot be observed on live data:** production currently holds **zero** ledger codes netting ≤ 0, so the entire rejected/unavailable path has never rendered against real rows. Any evidence for this gate must come from a seeded fixture, and that limitation should be stated when it is ticked rather than discovered later.
+   *(Surfaced 2026-08-11 while building § 4.6. It predates that work and nothing about it was changed there. This is the **F105** shape in a plan doc rather than a status line: a completion criterion that outlived the decision it encoded, and would have been ticked on a reading of the plan rather than of the code.)*
 4. `/deploy-staging` — push first, then run the suite. Full suite green **plus** a real-browser check at mobile width.
 
 ---
@@ -382,10 +388,15 @@ Mark Ordered stays as-is for the genuine ad-hoc path. The `isNewMonth` import pr
 
 **Also unresolved and belonging to that session — `order_type` on confirm-on-export.** It hardcodes `'adhoc'` (plan § 4.2, written on the assumption that confirm-on-export served the *ad-hoc* process). Rick uses the Order Builder for the **monthly** cycle, so a monthly order recorded that way is mislabelled — and the consequence is not cosmetic: `classifyForExport()` routes `adhoc` matches to the "Ad-hoc ordered — excluded automatically" bucket instead of "Already ordered — your call", which **silently drops the F102 remainder-defaulted quantity control** on the next cycle. Order Builder should write `'monthly'`; Mark Ordered keeps `'adhoc'`.
 
-### Session C
-- [ ] Unavailable state shared with F110; **V-C1** green
-- [ ] Customer arrival date live; full suite green; real-browser check at mobile width
-- [ ] Fixtures torn down, verified by live SELECT returning zero rows
+### Session C — § 4.6 built 2026-08-11, live on STAGING, not promoted
+- [x] **Customer arrival date live on staging** (`c3a6b52`) — **full suite GREEN: unit 151/151, Playwright 113/113 in 16.2m, zero flaky.** Verified by reading the run's stage markers and counts, **not** by exit code: `run-smoke.ps1` has previously skipped its entire Playwright stage and still exited 0.
+- [x] **Real-browser check GREEN, desktop AND mobile (Rick, 2026-08-11).** Confirmed by eye on both surfaces — the current-month table and the Upcoming Arrivals grid. Recorded as its own gate rather than folded into the suite pass, because the suite asserts behaviour and not whether a chip renders legibly at 375px; two production incidents came from treating those as the same thing.
+- [x] **No fixtures were created**, so there is nothing to tear down. Stated rather than left blank — an empty teardown line reads the same whether it was done or skipped.
+- [ ] ~~Unavailable state shared with F110; **V-C1** green~~ — **V-C1 was found to contradict shipped behaviour and has been restated** (see § 7 gate list). It cannot be ticked in its original form, and satisfying it as written would mean reversing Rick's F120 decision. It also cannot be observed on live data: production holds **zero** ledger codes netting ≤ 0.
+
+**Scope note — § 4.6 reaches TWO surfaces, not one, and the measurement is why.** The section does not enumerate surfaces and the obvious reading is the current-month table. Measured against production first: of **1,237** future-dated unfulfilled reservations, **1,125 (649 titles)** are ordered in the ledger and **zero** are in the current catalog month — they are `2026-07` (766), `2026-06` (345), `2026-05` (14). The narrow reading would therefore have rendered for **no customer at all**. Every affected reservation lives in **Upcoming Arrivals**, which now carries the chip (no date — its group header already *is* the on-sale date). This is the same defect **F110** hit on this page, where the withdrawn flag reached only the current-month table while the real prior-month case lived in that grid.
+
+**Deliberate deviation:** the shipped token **"Order placed"** is kept rather than this plan's heading literal "Ordered" — spec 15 asserts on it, and churning shipped copy for a heading is not worth the regression risk.
 
 ---
 

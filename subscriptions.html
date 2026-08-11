@@ -364,6 +364,63 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
 
+  // ── Blocked account detection ────────────────────────────────
+  // Ported from catalog.html's gate (2026-08-10) — same predicate, same
+  // isBlocked/isPaused split; see that file for the full rationale. Two
+  // statuses block subscribing to NEW series, with the SAME effect and
+  // different reasons (Rick 2026-08-09):
+  //   pending    self-registered, not yet approved
+  //   suspended  paused by an admin — typically a customer who stopped
+  //              collecting their reservations
+  // Admins are never blocked regardless of their status field.
+  //
+  // `isBlocked` is the gate; `isPaused` only picks the wording, because telling
+  // a long-standing customer their account "is being reviewed" would be false.
+  //
+  // ⚠️ CLIENT-SIDE ONLY. F127 measured this gap for `preorders` specifically
+  // (no RLS policy there references `status`) — not independently re-verified
+  // for `subscriptions` here, but this is a UI gate only either way, not an
+  // RLS boundary. Do not describe it as a hard block.
+  //
+  // Unsubscribe stays enabled while blocked (Rick 2026-08-10) — a blocked
+  // customer must still be able to leave a series. This composes with, and
+  // does not replace, the AdminContext impersonation guard on .unsub-btn
+  // (F128) — see the click handler below.
+  const isPending = !profile?.is_admin && profile?.status === 'pending';
+  const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
+  const isBlocked = isPending || isPaused;
+  const BLOCKED_TITLE = isPaused
+    ? 'Your account is paused — call the store to resume'
+    : 'Available once your account is approved';
+  if (isBlocked) {
+    const header = document.querySelector('.page-header');
+    if (header) {
+      const banner = document.createElement('div');
+      banner.id = 'pending-banner';
+      banner.style.cssText = [
+        'background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.35);',
+        'border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;',
+        'display:flex;align-items:flex-start;gap:12px;',
+      ].join('');
+      banner.innerHTML =
+        '<div style="font-size:1.1rem;line-height:1;margin-top:2px">&#128274;</div>' +
+        '<div>' +
+          '<div style="font-weight:700;font-size:0.88rem;color:var(--warning,#eab308);margin-bottom:4px">' +
+            (isPaused ? 'Your account is paused' : 'Your account is being reviewed') +
+          '</div>' +
+          '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
+            (isPaused
+              ? 'You can still manage your existing subscriptions, but subscribing to new series is paused for now. ' +
+                'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+              : 'You can view your subscriptions while we confirm your details. ' +
+                'New subscriptions will be available once Ray&nbsp;&amp;&nbsp;Judy’s Book Stop approves your account. ' +
+                'Questions? Call us at (973)&nbsp;586-9182.') +
+          '</div>' +
+        '</div>';
+      header.insertAdjacentElement('afterend', banner);
+    }
+  }
+
   const container = document.getElementById('subs-container');
 
   // Admin context support
@@ -464,7 +521,11 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
         <div class="popular-series-header">📚 Series you're already reading</div>
         <p class="popular-series-note">${AdminContext.isActive()
           ? 'Series this customer has reserved — subscribe is unavailable while impersonating.'
-          : "You've reserved these — subscribe and your copy is auto-reserved every month, no action needed."}</p>
+          : isBlocked
+            ? (isPaused
+                ? "Series you've reserved — subscribing is paused while your account is on hold."
+                : "Series you've reserved — subscribing will be available once your account is approved.")
+            : "You've reserved these — subscribe and your copy is auto-reserved every month, no action needed."}</p>
         <div class="popular-series-list">
           ${suggestions.map(s => {
             const cover = s.cover_url
@@ -487,7 +548,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
                   ${s.subscribed
                     ? '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>'
                     : `<button class="btn btn-primary btn-sm rsv-sub-btn" data-key="${escapeHtml(s.key)}"${
-                         AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"' : ''
+                         AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"'
+                         : isBlocked ? ` disabled title="${escapeHtml(BLOCKED_TITLE)}"`
+                         : ''
                        }>☆ Subscribe</button>`}
                 </div>
               </div>`;
@@ -498,6 +561,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     suggestEl.querySelectorAll('.rsv-sub-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (AdminContext.isActive()) return; // belt-and-braces; buttons render disabled
+        if (isBlocked) return; // belt-and-braces; buttons render disabled — status gate, composes with the guard above (F127-style, client-side only)
         const s = suggestions.find(x => x.key === btn.dataset.key);
         if (!s || s.subscribed) return;
         btn.disabled = true;
@@ -581,7 +645,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
               <td style="text-align:right">
                 <button class="btn btn-danger btn-sm unsub-btn"
                   data-series="${escapeHtml(sub.series_name)}"
-                  data-distributor="${escapeHtml(sub.distributor)}">
+                  data-distributor="${escapeHtml(sub.distributor)}"${
+                    AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"' : ''
+                  }>
                   Unsubscribe
                 </button>
               </td>
@@ -593,6 +659,13 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     // Unsubscribe buttons
     container.querySelectorAll('.unsub-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        // Admins have no write permission on subscriptions by design (Rick,
+        // 2026-08-10): there is no admin write policy on the table, so an
+        // impersonated DELETE is filtered to zero rows by RLS and PostgREST
+        // still returns success — the toast below would report a change that
+        // did not happen. Buttons render disabled above; this is belt-and-
+        // braces, matching the subscribe paths. See F128.
+        if (AdminContext.isActive()) return;
         if (!(await confirmDialog(`Unsubscribe from "${btn.dataset.series}"?`))) return;
         btn.disabled = true;
         const targetUserId = AdminContext.resolveUserId(user.id);
@@ -625,6 +698,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   if (AdminContext.isActive()) {
     searchInput.disabled = true;
     searchInput.placeholder = 'Series search unavailable in admin context';
+  } else if (isBlocked) {
+    searchInput.disabled = true;
+    searchInput.placeholder = BLOCKED_TITLE;
   }
 
   async function searchSeries(query) {
@@ -684,7 +760,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
                 : `<button class="btn btn-primary btn-sm sub-search-btn"
                      data-series="${escapeHtml(r.series_name)}"
                      data-distributor="${escapeHtml(r.distributor)}"
-                     data-format="${escapeHtml(r.format || '')}">
+                     data-format="${escapeHtml(r.format || '')}"${
+                       isBlocked ? ` disabled title="${escapeHtml(BLOCKED_TITLE)}"` : ''
+                     }>
                      ☆ Subscribe
                    </button>`
               }
@@ -695,6 +773,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     // Wire up subscribe buttons in results
     resultsPanel.querySelectorAll('.sub-search-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (isBlocked) return; // belt-and-braces; buttons render disabled — status gate
         btn.disabled = true;
         btn.textContent = 'Subscribing…';
         const targetUserId = AdminContext.resolveUserId(user.id);

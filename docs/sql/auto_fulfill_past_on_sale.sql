@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-08-08 | prod=APPLIED 2026-08-08
+--         F122 Option 1. Prod returned 0 where the old body returned 3.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- Phase 3.6 — automatic fulfillment for items whose on-sale date has passed.
 -- Idempotent: only touches rows that are still unfulfilled.
 -- Called by import.js / import-staging.js at the end of each weekly run (Step 9).
