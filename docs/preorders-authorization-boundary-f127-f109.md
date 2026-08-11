@@ -207,7 +207,39 @@ A trigger that blocks on ledger presence alone silently reverts it. § 4.5 check
 
 ---
 
-## 3. Decisions — recommended, for Rick to confirm before Session 1
+## 3. Decisions — **ALL CONFIRMED BY RICK, 2026-08-10**
+
+> **Authorised in full.** Rick was offered the cheaper option on each of the two
+> findings and declined both:
+>
+> - **F127** — offered "accept it as a UI-level guard and document the
+>   limitation" (no DDL at all), and the narrower "harden `subscriptions` only".
+>   **Chose: do the DDL as planned.** So §§ 3.1–3.5 below stand as written —
+>   the helper, the four RESTRICTIVE policies, `WITH CHECK` only.
+> - **F109** — offered "accept as client-side and document it" and "defer
+>   entirely". **Chose: build the `BEFORE DELETE` trigger.** §§ 3.6–3.7 stand,
+>   including the § 3.7 end-user-sessions-only exemption.
+> - **Client gates (§ 3.5)** — **confirmed for BOTH pages**, `subscriptions.html`
+>   and `mylist.html`, shipping alongside the DDL.
+>
+> Two things settled the same day that this plan should not re-derive:
+>
+> 1. **F128 is closed and its answer constrains § 3.5.** Admins get **no**
+>    permission to unsubscribe on a customer's behalf, so `subscriptions`
+>    deliberately has **no admin write policy** and the `.unsub-btn`
+>    impersonation guard shipped 2026-08-10. The status gate added here is a
+>    *separate* condition that must **compose with** that guard, not replace it.
+> 2. **The production-only `is_admin()` is being dropped** (Rick's call, same
+>    day; `docs/sql/2026-08-10-is-admin-drop-and-f92-catalog-reads.sql` PART A).
+>    It is a dead duplicate and is **not** referenced by anything here — this
+>    plan's helper mirrors `current_user_is_admin()`, which stays.
+>
+> The DDL is written and committed: `docs/sql/f127-account-status-write-gate.sql`
+> (Session 1) and `docs/sql/f109-ordered-cancel-trigger.sql` (Session 2). Run
+> gate **V0** first; **staging first**, production promotion separately.
+>
+> The "RECOMMENDED" labels below are left in place as the record of what was
+> proposed and why. **They are no longer open questions.**
 
 ### 3.1 The predicate gates writes, never reads or cancels — RECOMMENDED
 
