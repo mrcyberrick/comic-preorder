@@ -268,7 +268,13 @@ From **`catalog.on_sale_date`**, which § 2.3 verified matches both distributors
 ### Session C — unavailable + customer (client)
 1. § 4.5 generic unavailable state reusing F110's rendering, admin panel and cancel exception.
 2. § 4.6 "Ordered — arriving [date]".
-3. **Gate V-C1:** a rejected (zero-qty) title renders identically to a withdrawn one and is cancellable.
+3. ~~**Gate V-C1:** a rejected (zero-qty) title renders identically to a withdrawn one and is cancellable.~~
+   **⚠️ V-C1 AS WRITTEN CANNOT PASS — the plan and the shipped code disagree, and the code is right (2026-08-11).**
+   § 4.5 shipped on 2026-08-06 as **F120** with a **deliberate narrowing that Rick made explicitly**: the rejected state is **badge-only on the customer side, with no FOC/ordered-lock override** — i.e. *not* cancellable. So the second half of this gate contradicts shipped behaviour that was chosen on purpose, not by omission.
+   **Do not "fix" the code to satisfy this gate.** Restate the gate to match the shipped decision:
+   > **V-C1 (restated):** a rejected title renders with the F120 badge on the Bagging List and on all three My List rendering paths, is visually distinct from an ordinary arriving item, and does **not** acquire a cancel exception — that override belongs to **withdrawn** titles only (F110).
+   **Also note it cannot be observed on live data:** production currently holds **zero** ledger codes netting ≤ 0, so the entire rejected/unavailable path has never rendered against real rows. Any evidence for this gate must come from a seeded fixture, and that limitation should be stated when it is ticked rather than discovered later.
+   *(Surfaced 2026-08-11 while building § 4.6. It predates that work and nothing about it was changed there. This is the **F105** shape in a plan doc rather than a status line: a completion criterion that outlived the decision it encoded, and would have been ticked on a reading of the plan rather than of the code.)*
 4. `/deploy-staging` — push first, then run the suite. Full suite green **plus** a real-browser check at mobile width.
 
 ---
