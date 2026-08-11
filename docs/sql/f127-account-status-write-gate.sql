@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-08-10 | prod=PENDING
+--         Gates V1/V2/V3/V4 + full suite + real-browser green on staging. Promotion is Rick's call.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- =====================================================================
 -- F127 — make account `status` an authorization boundary
 -- Session 1 of docs/preorders-authorization-boundary-f127-f109.md

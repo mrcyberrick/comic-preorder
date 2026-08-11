@@ -1,3 +1,9 @@
+-- STATUS: staging=N/A | prod=PENDING
+--         PART A drops a PRODUCTION-ONLY function (staging dropped it 2026-05-26, F19).
+--         PARTS B and C are READ-ONLY and safe to run anywhere, any time.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- =====================================================================
 -- 2026-08-10 — Supabase SQL Editor worksheet
 --

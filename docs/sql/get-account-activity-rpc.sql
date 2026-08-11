@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-08-10 | prod=APPLIED 2026-08-10
+--         F126, live via PR #116.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- ============================================================================
 -- get_account_activity() — admin-only read of sign-in activity from auth.users
 -- Prepared 2026-08-09 (F126 account-lifecycle session).

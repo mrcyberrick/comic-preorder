@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-08-10 | prod=PENDING
+--         Gates V7/V8/V9/V10 + full suite green on staging. Promotion is Rick's call.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- =====================================================================
 -- F109 — move the ordered-cancel guard into the database
 -- Session 2 of docs/preorders-authorization-boundary-f127-f109.md

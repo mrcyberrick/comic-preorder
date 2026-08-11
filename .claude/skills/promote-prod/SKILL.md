@@ -11,6 +11,37 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
 
 ## Steps
 
+0. **Unapplied-migration gate (F105).** Run this BEFORE the merge. It prints every
+   `docs/sql/` file whose production state is not `APPLIED` or `N/A`:
+
+   ```powershell
+   Select-String -Path docs\sql\*.sql -Pattern '^-- STATUS:' |
+     Where-Object { $_.Line -notmatch 'prod=(APPLIED|N/A)' } |
+     ForEach-Object { "{0}`n    {1}" -f $_.Filename, $_.Line.Trim() }
+   ```
+
+   **Every file it lists is a decision, not automatically a blocker.** For each,
+   establish one of:
+   - it must run on production **before** this PR merges (schema the new client
+     depends on — this is the common case, and running it after means a window
+     where the client calls something that does not exist);
+   - it is **deliberately** staging-only for now — then say so out loud to the
+     user and get agreement, rather than letting silence be the answer;
+   - it is `UNVERIFIED` — then verify it before promoting anything, because an
+     unknown applied state on production is exactly the condition F105 describes.
+
+   **Update the `-- STATUS:` line the moment a file is run.** The line is only
+   worth having if it is true; a stale one is worse than none, because it will
+   be believed.
+
+   *Why this step exists:* `f6-app-settings-pk-rekey.sql` required a production
+   re-key **before tenant 2**. Staging ran 2026-07-08, tenant 2 went live
+   2026-07-15, production did not run until 2026-07-28 — a 13-day exposure found
+   by an unrelated audit, not by any alarm. The gate was invisible because it
+   lived in prose inside a SQL file rather than anywhere a promotion would look.
+   With this step, that file would have printed `prod=PENDING` on every promotion
+   in the window (PRs #86, #89, #90, #91) instead of passing silently four times.
+
 1. **Merge with prod-credential preservation**
    ```powershell
    git checkout main

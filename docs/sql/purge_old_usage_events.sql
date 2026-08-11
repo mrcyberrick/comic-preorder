@@ -1,3 +1,9 @@
+-- STATUS: staging=UNVERIFIED | prod=UNVERIFIED
+--         Phase 3.5 era. Applied state NOT confirmed against either environment on
+--         2026-08-10. Verify before relying on this line.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- Phase 3.5 — per-tenant retention purge for usage_events.
 -- Hard-deletes rows older than p_retention_days for the given tenant.
 -- Returns the count of deleted rows.

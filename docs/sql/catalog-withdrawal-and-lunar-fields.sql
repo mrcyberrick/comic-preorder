@@ -1,3 +1,8 @@
+-- STATUS: staging=APPLIED 2026-08-03 | prod=APPLIED 2026-08-03
+--         F110/F112 four additive nullable columns.
+-- (F105) This line is the applied-state record. A gate that lives only in
+-- prose gets missed -- F6 sat unapplied on production for 13 days because
+-- nothing machine-readable said so. Update it the moment you run this file.
 -- ============================================================================
 -- catalog: four additive columns for withdrawal detection (F110) and Lunar
 -- distributor-model fields (F112(a))
