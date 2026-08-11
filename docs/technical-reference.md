@@ -2580,7 +2580,22 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   1. **A non-409 failure aborts the claim with HTTP 500 before anything is deleted.** That is the whole point: the destructive sequence is *delete after a failed move*, so the function now refuses to reach it. A claim that stops is recoverable; a cascaded archive is not.
   2. **A 409 is tolerated**, because the unique key is `(user_id, series_name, distributor, catalog_month)` — a conflict means the real account *already* holds a row for that series in that month, so the paper duplicate carries no information the archive loses. This is the one case where a row may still be cascaded, and it is now a known, bounded case rather than the default.
   3. **The residual is counted and logged** (`count=exact`, `Range: 0-0`) — either *"all rows reassigned"* or *"N row(s) could not move … and will be removed"*. The original defect was invisible precisely because nothing said anything; a partial move is now visible at the moment it happens instead of being inferred months later from a gap.
-- **Deployment owed** (`--project-ref` explicitly, never a bare deploy — **F93**):
+- **DEPLOYED TO STAGING 2026-08-11 (v20 → v21) AND VERIFIED END TO END.** A real claim was run through the **deployed** function with a real admin JWT, against a seeded paper account holding a `reservation_history` row:
+
+  | Check | Result |
+  |---|---|
+  | Claim call | **HTTP 200** `{"success":true}` |
+  | History row **survived** the claim | **yes** — pre-fix it would have been destroyed |
+  | History now owned by | the **real customer** |
+  | Paper profile removed | yes |
+  | Paper auth user removed | yes (404) |
+  | Fixtures torn down | verified by SELECT returning zero rows |
+
+  Note what this test asserts: not that the claim *succeeded* — it always did, which is exactly why the defect went unnoticed — but **where the history row ended up afterwards**.
+- **`verify_jwt` was preserved, deliberately, and this needed checking first.** `claim-paper-customer` runs with JWT verification **ON**, unlike its sibling `create-paper-customer` (turned OFF at F53). Neither this document nor `config.toml` recorded that, so it was established empirically against a known control: a **garbage bearer token** is rejected by the *gateway* (`401 UNAUTHORIZED_INVALID_JWT_FORMAT`) on `claim-paper-customer` but reaches the *function* (400) on `create-paper-customer`. The CLI defaults to on, so the deploy omitted `--no-verify-jwt`; **passing that flag would have silently weakened the function.** Re-confirmed after deploying: the garbage-bearer probe still returns the gateway 401.
+- **PRODUCTION DEPLOY STILL OWED** — Rick's call. Until it runs, production's Claim button still cascades the archive away, and the **136 rows remain exposed to the next claim** (nothing has been lost to date; the exposure was measured before any further claim occurred). Command:
+  `supabase functions deploy claim-paper-customer --project-ref plgegklqtdjxeglvyjte` — **no `--no-verify-jwt`**, per the paragraph above.
+- ~~**Deployment owed**~~ (`--project-ref` explicitly, never a bare deploy — **F93**):
   `supabase functions deploy claim-paper-customer --project-ref puoaiyezsreowpwxzxhj` (staging), then production `plgegklqtdjxeglvyjte` after a staging claim is verified end to end.
 - **Verify after deploying, on staging first:** create a paper customer, give it a `reservation_history` row, claim it from a real account, then confirm by SELECT that the row now carries the **real** user's id and that the paper user is gone. Checking only that the claim "succeeded" reproduces the original blind spot exactly — the visible outcome was always correct.
 - **The 136 production rows are not retroactively at risk once this deploys** — they are only destroyed *by a Claim*, so any paper account not yet claimed is protected by the fix. No backfill is needed; no history has been lost to date, because the exposure was measured before any further claim occurred.
