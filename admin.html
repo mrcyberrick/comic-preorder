@@ -1530,12 +1530,16 @@
     rows.forEach(p => {
       const c = p.catalog;
       const code = exportCode(c, c.distributor);
-      // Signed ledger (F117/F108 § 4.4): a code only clears here on a
-      // POSITIVE net quantity. A rejected or corrected-to-zero code has
-      // ledger rows but was never actually ordered, so it must stay visible
-      // (Backordered/At risk/Never arrived, whichever applies) rather than
-      // being cleared on the mere presence of a row.
+      // Signed ledger (F117/F108 § 4.4): a code only clears on POSITIVE net
+      // quantity here — a code with ledger rows netting to <= 0 was never
+      // actually ordered, so the mere presence of a row is not enough.
+      // F129: but a REJECTED code (ledgerRejected() — rows present, net <= 0)
+      // is a decided case, not an open one — the store has already recorded
+      // the supplier's rejection and F120 already surfaces it to the
+      // customer (My List / Bagging List). Nagging here forever after that
+      // is noise, not signal, so it clears the same as "arrived" does.
       if (ledgerNetQty(c.distributor, code) > 0) return;         // ordered — cleared
+      if (ledgerRejected(c.distributor, code)) return;           // rejected — already decided & surfaced (F129)
       if (hasShipmentEvidence(c)) return;                        // arrived — cleared
 
       // Released with no arrival record. Deliberately checked before the FOC

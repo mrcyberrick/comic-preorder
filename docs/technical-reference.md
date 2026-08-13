@@ -4047,7 +4047,17 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Not verified live.** This is read from the code and from § 7's policy list; no probe was run, because doing so needs an impersonation session and the account-status work was the session's priority. **Confirm empirically before fixing** — per CLAUDE.md § Verify before escalating, and because § 7 was independently found stale for `preorders` on this same date. The check is: impersonate a customer holding a subscription, click unsubscribe, observe the toast, reload, and see whether the row returns.
 - **Related:** **F127** (found in the same read; that entry's *"`subscriptions.html` has no status check at all"* is confirmed true). **F58** (the same silent-no-op shape, from the same root cause — a missing admin write policy — on `user_profiles`). **F109** (client-side guard over a database that does not enforce it). **F16** (the `preorders` policy set whose admin-write design this table lacks).
 
-Next free finding ID: **F129**.
+#### F129 — the Order Follow-Up panel never checks `ledgerRejected()`, so a title the store already marked rejected — and which F120 already flags to the customer — nags the admin panel forever
+
+- **Status:** filed 2026-08-13, fix scoped and approved same session (Rick, on seeing the panel unchanged after recording rejections: *"the bag list shows they are rejected by the supplier and on the UPCOMING list. These are already customer facing and that is the point of this."*).
+- **Severity:** Low — admin-only noise. No customer-facing or data-safety impact; F120's customer badge (My List, Bagging List) is unaffected and already correct.
+- **Symptom:** a one-time SQL correction (this session) reclassified 24 `order_submissions` codes that were wrongly recorded as ordered, via downward-adjustment rows netting each to 0 — the correct "rejected by the supplier" state per F117/F120. The affected titles correctly picked up F120's rejected badge on My List and the Bagging List, but the admin **Order Follow-Up** panel (Customers ▸ ongoing) kept showing every one of them as Backordered or At risk, unchanged before and after the correction.
+- **Diagnosis:** `computeBackorderRisk()` (`admin.html:1525-1538`) has exactly two exit conditions — `ledgerNetQty(...) > 0` (genuinely ordered) and `hasShipmentEvidence(...)` (arrived). There is no third exit for "the store already decided this is rejected and already communicated that to the customer." `ledgerRejected()` — ledger rows present, net ≤ 0 — already exists (`admin.html:793`, added with F117/F120) and is already used by `renderThisWeek()` for the identical distinction on the Bagging List. Order Follow-Up was simply never wired to it, so a resolved case (store decided, customer told) reads identically to a genuinely open one (never decided) — same shape as F116's original false-positive, in reverse: F116 stopped the panel crying wolf on titles that WERE ordered; this is the panel never standing down on titles that are correctly, permanently NOT going to be.
+- **Fix direction:** one line in `computeBackorderRisk()`'s row filter — `if (ledgerRejected(c.distributor, code)) return;` — placed between the existing `ledgerNetQty` and `hasShipmentEvidence` checks. Reuses the existing helper; no new logic.
+- **Where:** `admin.html` — `computeBackorderRisk()`.
+- **Related:** **F116** (the panel's original false-positive fix — same shape, opposite direction). **F117**/**F120** (the signed ledger and `ledgerRejected()` helper this reuses, and the customer/Bagging-List-facing badge this panel should now match).
+
+Next free finding ID: **F130**.
 
 ---
 
