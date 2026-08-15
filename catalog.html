@@ -145,6 +145,28 @@
     </div>
   </div>
 
+  <!-- Results count + mobile Filters toggle, in-line (moved 2026-08-15 —
+       was in .toolbar-header next to search; #btn-filter-toggle is
+       desktop-hidden regardless, see the @media rules above). Placed
+       BEFORE #filter-panel (moved 2026-08-15, second pass) so the button
+       stays fixed in place when tapped — the panel expands below it and
+       pushes the grid down, not the button that opens it. -->
+  <div class="results-toolbar">
+    <div style="font-size:0.8rem; color:var(--text-muted)" id="results-count"></div>
+    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
+      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
+             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
+             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
+             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+      Filters
+      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
+            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
+    </button>
+  </div>
+
   <div class="toolbar" id="filter-panel">
     <select class="filter-select" id="filter-distributor">
       <option value="">All Distributors</option>
@@ -174,25 +196,6 @@
              padding:6px 10px;cursor:pointer;color:var(--text-muted);font-size:0.8rem;
              white-space:nowrap;transition:color 0.15s,border-color 0.15s;flex-shrink:0">
       📌 Pin filters
-    </button>
-  </div>
-
-  <!-- Results count + mobile Filters toggle, in-line (moved 2026-08-15 —
-       was in .toolbar-header next to search; #btn-filter-toggle is
-       desktop-hidden regardless, see the @media rules above). -->
-  <div class="results-toolbar">
-    <div style="font-size:0.8rem; color:var(--text-muted)" id="results-count"></div>
-    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
-      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
-             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
-             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
-             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
-      </svg>
-      Filters
-      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
-            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
     </button>
   </div>
 

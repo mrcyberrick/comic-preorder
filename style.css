@@ -1317,8 +1317,12 @@ button { cursor: pointer; font-family: var(--font-body); }
        reorder (docs/mobile-nav-tab-bar.md § 5 S1) moved to the LEFT side of
        .nav-inner (order:1). This was `right: 0` when the hamburger itself
        sat on the right (pre-tab-bar); left unchanged it made the dropdown
-       fly out to the top-right corner, disconnected from the button. */
-    left: 0;
+       fly out to the top-right corner, disconnected from the button.
+       24px = .container's own left padding (style.css:55), which is what
+       the button's left edge actually sits at (margin-left:0, no offset
+       of its own) — left:0 alone lines up with .nav-inner's outer edge,
+       24px short of the button itself. */
+    left: 24px;
     width: 200px;
     background: #111;
     border: 1px solid var(--border);
@@ -1338,6 +1342,15 @@ button { cursor: pointer; font-family: var(--font-body); }
 
   .nav-user {
     display: none;
+    /* Must sort AFTER the header row (hamburger:1, logo:2, search-btn:3 —
+       style.css:1529+). Flex `order` defaults to 0, which is LOWER than
+       those, so without this the full-width .nav-user.open row (below)
+       sorted ahead of the hamburger in the flex layout on menu-open and
+       wrapped the entire header — hamburger, logo, the hamburger's own
+       X-animation, all of it — onto an invisible second line. Found from
+       a real screenshot: "Welcome, name / Sign Out" rendered at the very
+       top with no header above it at all. */
+    order: 4;
   }
   .nav-user.open {
     display: flex;
