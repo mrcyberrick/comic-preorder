@@ -258,6 +258,162 @@ const Auth = {
   },
 };
 
+// ── Mobile Tab Bar (design 2a — thumb-reach) ────────────────────
+// docs/mobile-nav-tab-bar.md § 4. Injected as the last child of <body>
+// on the six nav pages by initNav(). Hidden at >640px via style.css;
+// the desktop .nav-links row is untouched. Every accent-coloured value
+// is applied via CSS custom properties (var(--accent)) so Branding.apply()
+// still controls it per tenant — see § 3.1.
+const TabBar = {
+  // { href, label, paths } — path data copied verbatim from the source
+  // design (§ 4.4). First cell is labelled "Catalog", not "Home" (§ 3.3).
+  cells: [
+    {
+      href: 'catalog.html',
+      label: 'Catalog',
+      paths: ['M3 10.5 12 3l9 7.5V21H3z', 'M9.5 21v-6h5v6'],
+    },
+    {
+      href: 'mylist.html',
+      label: 'My List',
+      paths: ['M6 3h12v18l-6-4.6L6 21z', 'M9.5 8h5'],
+    },
+    {
+      href: 'subscriptions.html',
+      label: 'Subs',
+      paths: ['M3 8h18v12H3z', 'M2 4h20v4H2z', 'M10 12h4'],
+    },
+    {
+      href: 'arrivals.html',
+      label: 'This Week',
+      id: 'tab-arrivals', // NavBubble anchor
+      paths: ['M3.5 5h17v16h-17z', 'M3.5 10.5h17', 'M8 2.5v4M16 2.5v4', 'M7.5 15.5h3.5'],
+    },
+  ],
+
+  _svg(paths, cls) {
+    const d = paths.map(p => `<path d="${p}"></path>`).join('');
+    return `<svg class="${cls}" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter">${d}</svg>`;
+  },
+
+  mount(currentPage) {
+    if (document.getElementById('tab-bar')) return; // idempotent — nav code may re-enter
+
+    const bar = document.createElement('nav');
+    bar.className = 'tab-bar';
+    bar.id = 'tab-bar';
+    bar.setAttribute('aria-label', 'Primary');
+
+    this.cells.forEach(cell => {
+      const isActive = cell.href === currentPage;
+
+      const a = document.createElement('a');
+      a.className = 'tab-cell' + (isActive ? ' is-active' : '');
+      a.href = cell.href;
+      if (cell.id) a.id = cell.id;
+      if (isActive) a.setAttribute('aria-current', 'page');
+
+      const ink = document.createElement('span');
+      ink.className = 'tab-ink';
+      // Registration-offset plate uses only the FIRST path (outline) of the
+      // set, on the active cell only — the misprinted-plate effect (§ 4.4).
+      ink.innerHTML =
+        (isActive ? this._svg([cell.paths[0]], 'tab-ink-off') : '') +
+        this._svg(cell.paths, 'tab-ink-main');
+      a.appendChild(ink);
+
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = cell.label;
+      a.appendChild(label);
+
+      if (isActive) {
+        const halftone = document.createElement('span');
+        halftone.className = 'tab-halftone';
+        halftone.setAttribute('aria-hidden', 'true');
+        halftone.innerHTML = '<i></i><i></i><i></i>';
+        a.appendChild(halftone);
+      }
+
+      bar.appendChild(a);
+    });
+
+    document.body.appendChild(bar);
+  },
+};
+
+// ── Mobile Catalog Search Proxy (design 2a § 3.7) ────────────────
+// The header magnifier is a PROXY, not a second source of truth: it
+// writes into #search and dispatches a bubbling `input` event so
+// catalog.html's existing debouncedLoad listener (catalog.html:1329)
+// fires untouched. Catalog-only by construction — the whole gate is
+// #search's presence, so this renders nowhere else.
+const NavSearch = {
+  mount() {
+    const target = document.getElementById('search');
+    if (!target) return; // catalog-only gate — § 3.7
+
+    const navInner = document.querySelector('.nav-inner');
+    if (!navInner || document.getElementById('nav-search-btn')) return; // idempotent
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'nav-search-btn';
+    btn.className = 'nav-search-btn';
+    btn.setAttribute('aria-label', 'Search');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 10.5a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0"></path><path d="M15.4 15.4 21 21"></path></svg>';
+
+    const field = document.createElement('div');
+    field.className = 'nav-search-field';
+    field.id = 'nav-search-field';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'nav-search-input';
+    input.placeholder = target.placeholder || 'Search…';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'nav-search-close';
+    closeBtn.setAttribute('aria-label', 'Close search');
+    closeBtn.textContent = '✕';
+
+    field.appendChild(input);
+    field.appendChild(closeBtn);
+
+    const syncTarget = () => {
+      target.value = input.value;
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const open = () => {
+      navInner.dataset.search = 'open';
+      input.value = target.value; // sync FROM #search on open — § 3.7
+      btn.setAttribute('aria-expanded', 'true');
+      input.focus();
+    };
+
+    const close = () => {
+      // ✕ clears both fields and closes, restoring the unfiltered catalog.
+      input.value = '';
+      syncTarget();
+      delete navInner.dataset.search;
+      btn.setAttribute('aria-expanded', 'false');
+    };
+
+    btn.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
+    input.addEventListener('input', syncTarget);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+    });
+
+    navInner.appendChild(btn);
+    navInner.appendChild(field);
+  },
+};
+
 // ── Nav Initialization ────────────────────────────────────────
 async function initNav() {
   const nav = document.getElementById('main-nav');
@@ -288,6 +444,10 @@ async function initNav() {
   nav.querySelectorAll('.nav-links a').forEach(a => {
     if (a.getAttribute('href') === currentPage) a.classList.add('active');
   });
+
+  // Mobile tab bar + catalog search proxy (docs/mobile-nav-tab-bar.md)
+  TabBar.mount(currentPage);
+  NavSearch.mount();
 
   // Logout button
   const logoutBtn = nav.querySelector('#btn-logout');
@@ -392,19 +552,7 @@ const NavBubble = {
     document.querySelectorAll('.nav-bubble').forEach(b => b.remove());
     if (count < 1) return;
 
-    const arrivalsLink = document.querySelector('.nav-links a[href="arrivals.html"]');
-    if (!arrivalsLink) return;
-
-    const li = arrivalsLink.parentElement;
-    li.style.position = 'relative';
-    li.style.display  = 'flex';
-    li.style.alignItems = 'center';
-
-    const bubble = document.createElement('span');
-    bubble.className = 'nav-bubble';
-    bubble.textContent = count > 99 ? '99+' : String(count);
-    bubble.title = `${count} reserved item${count !== 1 ? 's' : ''} arriving this week`;
-    bubble.style.cssText = [
+    const bubbleCss = [
       'display:inline-flex;align-items:center;justify-content:center;',
       'background:#e74c3c;color:white;',
       'font-size:0.62rem;font-weight:700;',
@@ -416,8 +564,35 @@ const NavBubble = {
       'flex-shrink:0;',
     ].join('');
 
-    // Append bubble after the <a> tag inside the <li>
-    li.appendChild(bubble);
+    const arrivalsLink = document.querySelector('.nav-links a[href="arrivals.html"]');
+    if (arrivalsLink) {
+      const li = arrivalsLink.parentElement;
+      li.style.position = 'relative';
+      li.style.display  = 'flex';
+      li.style.alignItems = 'center';
+
+      const bubble = document.createElement('span');
+      bubble.className = 'nav-bubble';
+      bubble.textContent = count > 99 ? '99+' : String(count);
+      bubble.title = `${count} reserved item${count !== 1 ? 's' : ''} arriving this week`;
+      bubble.style.cssText = bubbleCss;
+
+      // Append bubble after the <a> tag inside the <li>
+      li.appendChild(bubble);
+    }
+
+    // Mobile tab bar cell (docs/mobile-nav-tab-bar.md § 5 S4). .tab-cell is
+    // already position:relative; offset away from .tab-halftone (top:1px).
+    const tabCell = document.getElementById('tab-arrivals');
+    if (tabCell) {
+      const bubble = document.createElement('span');
+      bubble.className = 'nav-bubble';
+      bubble.textContent = count > 99 ? '99+' : String(count);
+      bubble.title = `${count} reserved item${count !== 1 ? 's' : ''} arriving this week`;
+      bubble.style.cssText = bubbleCss + 'position:absolute;top:6px;right:calc(50% - 22px);';
+
+      tabCell.appendChild(bubble);
+    }
   },
 
   // Call this when admin context changes to refresh the bubble
