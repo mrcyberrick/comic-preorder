@@ -350,8 +350,15 @@ const TabBar = {
 // #search's presence, so this renders nowhere else.
 const NavSearch = {
   mount() {
-    const target = document.getElementById('search');
-    if (!target) return; // catalog-only gate — § 3.7
+    // Catalog-only gate — § 3.7. #search's presence ALONE is not enough:
+    // mylist.html has its own list-filter input sharing the same id
+    // (found running gate V6; corrects docs/mobile-nav-tab-bar.md § 2.4,
+    // which asserted #search as catalog-only across all six nav pages —
+    // true of every page but mylist.html). .toolbar-header is catalog.html's
+    // own wrapper class (§ 2.4, catalog.html:121) and appears on no other
+    // of the six nav pages, so scope the query to it.
+    const target = document.querySelector('.toolbar-header #search');
+    if (!target) return;
 
     const navInner = document.querySelector('.nav-inner');
     if (!navInner || document.getElementById('nav-search-btn')) return; // idempotent
