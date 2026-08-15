@@ -613,7 +613,24 @@ exists on catalog and not on mylist. Roughly 40 lines. Not a gate for this sessi
   as "finishing the design"; the existing `.comic-card` styling stays exactly
   as it is.
 
-### 7.2 Doc correction owed — CLAUDE.md § Repository Structure
+### 7.2 Doc correction — CLAUDE.md § Repository Structure — **DONE 2026-08-15**
+
+**Resolved before execution.** Rick chose the plain correction over a finding ID
+(2026-08-15). CLAUDE.md § Repository Structure and § Files That Must Stay in Sync
+both now say **six** pages and name `analytics.html` explicitly, with the measured
+hashes recorded inline. No F-number was spent; next free finding ID is still F130.
+
+Two further contracts were verified while making the correction, beyond what § 2.1
+had measured: all six **footer** blocks hash identically
+(`EB2513E8ED474B3CE5251F2540A69852`), and all six carry the same
+`vendor/supabase.min.js` → `config.js` → `app.js` load order. `analytics.html` is a
+full member of the sync set on every contract in that section, not just the nav.
+
+**An executor can now trust CLAUDE.md's list.** Original filing follows.
+
+---
+
+#### Original filing (superseded by the above)
 
 CLAUDE.md annotates `analytics.html` as *"no shared nav block"* and names five
 files that must stay in sync. § 2.1 proves it is six, byte-identical. Per CLAUDE.md
