@@ -1,6 +1,6 @@
 # Mobile Nav — Thumb-Reach Tab Bar (design 2a)
 
-**Status:** Planned, not started
+**Status:** **Approved by Rick 2026-08-15** — ready to execute, not started
 **Written:** 2026-08-15 (planning session, Opus)
 **Target:** `staging`, via feature branch `feat/mobile-tab-bar`
 **Executor:** fresh Sonnet CLI session — see § 9 Handoff Prompt
@@ -609,7 +609,9 @@ exists on catalog and not on mylist. Roughly 40 lines. Not a gate for this sessi
 - Any desktop (≥641px) change whatsoever.
 - Re-skinning catalog cards to 2a's card treatment. 2a shows restyled cards
   (distributor badge above the cover, boxy borders) as *context*, not as the
-  proposal. Out of scope; propose separately if wanted.
+  proposal. **Confirmed out of scope by Rick 2026-08-15** — do not re-raise it
+  as "finishing the design"; the existing `.comic-card` styling stays exactly
+  as it is.
 
 ### 7.2 Doc correction owed — CLAUDE.md § Repository Structure
 
