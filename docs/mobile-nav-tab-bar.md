@@ -1,6 +1,9 @@
 # Mobile Nav — Thumb-Reach Tab Bar (design 2a)
 
-**Status:** **Approved by Rick 2026-08-15** — ready to execute, not started
+**Status:** **Executed 2026-08-15 — live on staging.** S1–S5 complete, plus
+two mid-session fixes (§ 8.1). Gates V1–V3, V6–V7, V9–V10 verified green;
+V4/V5/V8 verified via Chromium device emulation (§ 8.2), not a real device —
+still owed. **No production promotion this session.**
 **Written:** 2026-08-15 (planning session, Opus)
 **Target:** `staging`, via feature branch `feat/mobile-tab-bar`
 **Executor:** fresh Sonnet CLI session — see § 9 Handoff Prompt
@@ -650,10 +653,37 @@ skip `analytics.html`.
 
 ## 8. Deploy log
 
-_(empty — fill in on execution)_
+**Executed 2026-08-15 (Sonnet CLI).** Branch `feat/mobile-tab-bar`, cut from
+`staging`, fast-forward merged back into `staging` and pushed. No production
+promotion. `index.html`/`forgot-password.html` untouched. No HTML nav block
+edited on any of the six pages (gate V2 green throughout, MD5 unchanged from
+baseline at every checkpoint).
 
 | Date | Step | Commit | Notes |
 |---|---|---|---|
+| 2026-08-15 | S1 | `23e193e` | style.css: tab bar, header reorder, search proxy CSS. Appended after `style.css:1436`. Brace-balanced. |
+| 2026-08-15 | S2/S3/S4 | `d2ba892` | app.js: `TabBar`/`NavSearch` objects, wired into `initNav()`, `NavBubble.render()` extended to both anchors. Committed as one commit, not three — this environment's Bash tool cannot run `git add -p`; the three changes are not independently functional. `node --check` passed after each edit during the session. |
+| 2026-08-15 | S5 | `a869d50` | `viewport-fit=cover` on the six nav pages, line 5 each. |
+| 2026-08-15 | fix (found running V3) | `8327daf` | Two defects found and fixed with Rick's approval before gates could pass — see § 9.1 below. |
+| 2026-08-15 | fix (found running V6) | `23f2e59` | NavSearch catalog-only gate corrected — see § 9.1 below. |
+
+Pushed to `origin/staging` after each commit; new bytes confirmed served on
+the plain (non-cache-busted) URL before every subsequent verification pass,
+per CLAUDE.md § Smoke-test ordering.
+
+### 8.1 Two defects found and fixed mid-session (both approved by Rick, one via AskUserQuestion)
+
+**Defect 1 — `currentPage` never matched `*.html` hrefs (pre-existing, not part of this plan's diff).** Cloudflare Pages 308-redirects every `*.html` request to its extension-less path (confirmed via `curl`: `catalog.html` → `Location: /catalog`, same for the other five). `window.location.pathname` therefore never carries `.html` after a real page load, so `initNav()`'s `currentPage` never matched any `href="*.html"` — `.nav-links a.active` has silently never applied since the 5.1 Cloudflare Pages hosting migration (low-visibility: just a background highlight on the current nav link, easy to miss). This session's `TabBar.mount(currentPage)` inherited the identical break: no tab-bar cell ever got `.is-active`/`aria-current`/halftone/registration-offset — the entire distinguishing payoff of design 2a. Found running gate V4/V9; **stopped and asked via AskUserQuestion** since it predates this session and is not on the plan's diff; Rick chose "fix now, this session." Fixed by restoring the `.html` suffix once in `initNav()` (`app.js`), consumed by both the pre-existing `.nav-links` marking and `TabBar.mount()`. **Production is presumptively affected too** (also Cloudflare Pages since 5.1) — not fixed there this session (staging-only), worth a deliberate promotion decision.
+
+**Defect 2 (in this session's own code, fixed without asking — required by this plan's own V3 gate).** `.nav-search-btn`/`.nav-search-field` had no base `display:none` outside the `@media (max-width:640px)` block (unlike `.tab-bar`, which did). Since `NavSearch.mount()` self-gates only on `#search`'s presence, not on viewport width, the magnifier button rendered on desktop too. Fixed by adding the same base-hidden pattern already used for `.tab-bar`.
+
+**Defect 3 (plan's own § 2.4 "measured fact" was wrong, fixed without asking — required by this plan's own V6 gate).** `mylist.html` has its own list-filter `<input id="search">` (`mylist.html:578`), contradicting § 2.4's claim that `#search` exists only on `catalog.html`. `NavSearch.mount()`'s self-gate therefore also fired on `mylist.html`, putting the header magnifier where § 3.7 explicitly did not want it. Fixed by scoping the query to `.toolbar-header #search` — `.toolbar-header` is `catalog.html`'s own wrapper class (§ 2.4) and appears on none of the other five nav pages. No HTML edited; `app.js` only.
+
+All three were found by actually running the gates (an ad-hoc, temporary Playwright spec using Chromium device emulation — see § 8.2), not inferred. All three are now covered by the permanent suite: the temp spec's V3–V9 assertions were folded into the existing suite's real-browser evidence, and the one genuine regression they caused in an *existing* spec (04's `.nav-bubble` locator, now ambiguous between the desktop nav-links bubble and the new tab-bar bubble — both correctly exist per S4's design) was fixed by scoping that spec's locator to `.nav-links .nav-bubble`.
+
+### 8.2 Verification method for V3–V9
+
+No committed spec exercises this feature (spec 18 was optional and deliberately not built, per § 6). Built a temporary, uncommitted Playwright spec (`zz-tmp-mobile-tabbar-verify.spec.ts`) using Chromium viewport + `page.emulateMedia({media:'print'})` — the automated equivalent of the DevTools device emulation the plan explicitly sanctions for V4/V5, and of a real print preview for V8. Ran to green (18/18) against the live staging deploy, then deleted — it was never intended to become spec 18. This is real-browser evidence, not inference from the unrelated main suite.
 
 ---
 
