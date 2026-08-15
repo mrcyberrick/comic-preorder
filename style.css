@@ -1435,3 +1435,152 @@ button { cursor: pointer; font-family: var(--font-body); }
   white-space: nowrap;
 }
 
+/* ── Mobile tab bar (design 2a — thumb-reach) ──────────────────
+   Injected by TabBar.mount() in app.js on the six nav pages.
+   Hidden at >640px: the desktop .nav-links row is unchanged.
+   All accent values use var(--accent) because Branding.apply()
+   overrides it per tenant — see docs/mobile-nav-tab-bar.md § 3.1. */
+.tab-bar { display: none; }
+
+@media (max-width: 640px) {
+  .tab-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    background: var(--bg-card);
+    /* Same weight as the icon strokes — an inked panel border, not a tray. */
+    border-top: 2.4px solid var(--border);
+    padding: 10px 4px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .tab-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 56px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tab-cell.is-active { color: var(--text-primary); }
+
+  .tab-ink { position: relative; display: block; width: 26px; height: 26px; }
+  .tab-ink-main { position: relative; display: block; }
+  /* Misprinted colour plate: 1.5px offset, accent, behind the main stroke. */
+  .tab-ink-off {
+    position: absolute;
+    left: 1.5px;
+    top: 1.5px;
+    opacity: 0.65;
+    color: var(--accent);
+  }
+
+  .tab-label {
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* Halftone: three shrinking dots INSIDE the bar, above the icon, so a thumb
+     resting on the cell never covers the only where-am-I indicator. */
+  .tab-halftone {
+    display: flex;
+    gap: 3px;
+    position: absolute;
+    top: 1px;
+  }
+  .tab-halftone i {
+    width: 3.5px;
+    height: 3.5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .tab-halftone i:nth-child(2) { opacity: 0.6; }
+  .tab-halftone i:nth-child(3) { opacity: 0.3; }
+
+  /* Clear the fixed bar so it never covers the footer or the last row. */
+  body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+  /* One search entry point on mobile: the header magnifier (§ 3.7). */
+  .toolbar-header .search-wrap { display: none; }
+
+  /* Header: hamburger left · logo centred · search right.
+     Reordered with `order` so the DOM stays as-is and desktop is untouched. */
+  .nav-hamburger  { order: 1; margin-left: 0; width: 44px; height: 44px; }
+  .nav-logo       { order: 2; margin: 0 auto; }
+  .nav-search-btn { order: 3; }
+
+  .nav-search-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+  }
+  .nav-search-btn:hover { color: var(--accent); }
+
+  .nav-search-field { display: none; }
+  .nav-inner[data-search="open"] .nav-search-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    order: 1;
+  }
+  .nav-inner[data-search="open"] .nav-logo,
+  .nav-inner[data-search="open"] .nav-hamburger,
+  .nav-inner[data-search="open"] .nav-search-btn { display: none; }
+
+  .nav-search-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 38px;
+    padding: 0 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+  }
+  .nav-search-field input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .nav-search-close {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: 0;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+}
+
+/* The tab bar and the expanded search field never print. Unconditional and
+   global on purpose: .nav is hidden by THREE separate print blocks
+   (style.css body.printing-this-week, arrivals.html, mylist.html) and the
+   F119 / 2026-08-15 scars above record what happens when a new element is
+   added after those rules were written. One rule, no sites to keep in sync. */
+@media print {
+  .tab-bar,
+  .nav-search-field { display: none !important; }
+  body { padding-bottom: 0 !important; }
+}
+
