@@ -262,7 +262,17 @@ button { cursor: pointer; font-family: var(--font-body); }
      printed above the bagging list on every "Print Bagging List" click. */
   body.printing-this-week #backorder-risk-panel,
   body.printing-this-week #withdrawn-panel,
-  body.printing-this-week .footer {
+  /* .admin-modes (fix, 2026-08-15) — the Customers/Bagging/Ordering mode
+     switcher sits above .admin-tabs and is not gated by any data-chrome
+     attribute (it's shown in every mode), so none of the rules above ever
+     caught it: it printed at the top of every "Print Bagging List" output,
+     reading as stray site navigation. */
+  body.printing-this-week .admin-modes,
+  /* Was `.footer` — the actual element is `.site-footer` (style.css:1398),
+     so this rule has never matched anything and "Service provided by Ray &
+     Judy's Book Stop · Rockaway, NJ" has printed at the end of every bagging
+     list since this rule was written. Corrected 2026-08-15. */
+  body.printing-this-week .site-footer {
     display: none !important;
   }
   body.printing-this-week {
