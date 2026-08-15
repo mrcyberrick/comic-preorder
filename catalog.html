@@ -56,6 +56,24 @@
         box-sizing: border-box;
       }
       #filter-panel #btn-pin-filters { text-align: left; }
+
+      /* Requested 2026-08-15: drop the Total/Lunar/PRH/My Reservations row
+         on mobile — the tab bar already frees very little vertical space
+         right below the header, and this row was the first thing pushing
+         the actual catalog down. Elements are kept in the DOM (not deleted)
+         — several JS call sites still set their textContent — just hidden. */
+      #stats-bar { display: none; }
+    }
+
+    /* Filters button moves in-line with the "Showing N of M items" text
+       (was in .toolbar-header next to search) — desktop is unaffected,
+       since #btn-filter-toggle is already display:none there (line ~35). */
+    .results-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 16px;
     }
   </style>
 </head>
@@ -117,7 +135,7 @@
     </div>
   </div>
 
-  <!-- Toolbar: search always visible; filters collapse on mobile -->
+  <!-- Toolbar: search always visible -->
   <div class="toolbar-header">
     <div class="search-wrap">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -125,18 +143,6 @@
       </svg>
       <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
     </div>
-    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
-      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
-             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
-             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
-             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
-      </svg>
-      Filters
-      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
-            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
-    </button>
   </div>
 
   <div class="toolbar" id="filter-panel">
@@ -171,8 +177,24 @@
     </button>
   </div>
 
-  <!-- Results count -->
-  <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:16px" id="results-count"></div>
+  <!-- Results count + mobile Filters toggle, in-line (moved 2026-08-15 —
+       was in .toolbar-header next to search; #btn-filter-toggle is
+       desktop-hidden regardless, see the @media rules above). -->
+  <div class="results-toolbar">
+    <div style="font-size:0.8rem; color:var(--text-muted)" id="results-count"></div>
+    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
+      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
+             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
+             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
+             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+      Filters
+      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
+            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
+    </button>
+  </div>
 
   <!-- Catalog Grid -->
   <div id="catalog-grid" class="catalog-grid"></div>

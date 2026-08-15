@@ -1313,7 +1313,12 @@ button { cursor: pointer; font-family: var(--font-body); }
     flex-direction: column;
     position: absolute;
     top: 100%;
-    right: 0;
+    /* Anchored under the hamburger button, which the mobile tab bar's header
+       reorder (docs/mobile-nav-tab-bar.md § 5 S1) moved to the LEFT side of
+       .nav-inner (order:1). This was `right: 0` when the hamburger itself
+       sat on the right (pre-tab-bar); left unchanged it made the dropdown
+       fly out to the top-right corner, disconnected from the button. */
+    left: 0;
     width: 200px;
     background: #111;
     border: 1px solid var(--border);
