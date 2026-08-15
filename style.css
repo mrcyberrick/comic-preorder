@@ -1442,6 +1442,16 @@ button { cursor: pointer; font-family: var(--font-body); }
    overrides it per tenant — see docs/mobile-nav-tab-bar.md § 3.1. */
 .tab-bar { display: none; }
 
+/* Base-hidden like .tab-bar above. NavSearch.mount() (app.js) self-gates only
+   on #search's presence, not on viewport width, so on catalog.html these
+   elements exist in the DOM at every screen size — without an explicit
+   base-level display:none they fall back to the browser's default <button>/
+   <div> display and the magnifier renders on desktop too (found running
+   gate V3, docs/mobile-nav-tab-bar.md § 6). The @media block below is the
+   only place that turns them on, and only at ≤640px. */
+.nav-search-btn,
+.nav-search-field { display: none; }
+
 @media (max-width: 640px) {
   .tab-bar {
     display: grid;

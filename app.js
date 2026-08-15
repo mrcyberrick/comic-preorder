@@ -440,7 +440,19 @@ async function initNav() {
   }
 
   // Mark current page active
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  let currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  // Cloudflare Pages 308-redirects *.html -> the extension-less path (e.g.
+  // /catalog.html -> /catalog, confirmed via curl 2026-08-15), so a real
+  // page load never sees "catalog.html" in window.location.pathname — only
+  // "catalog". Every nav href in the markup keeps its .html suffix, so this
+  // comparison (and TabBar.mount() below, which reuses currentPage) has
+  // silently never matched since the 5.1 hosting migration to CF Pages.
+  // Restored once here rather than patched per-consumer. Pre-existing bug,
+  // found running docs/mobile-nav-tab-bar.md gate V4/V9 — fix approved by
+  // Rick 2026-08-15, see that plan's § 6/§ 8.
+  if (currentPage !== 'index.html' && !currentPage.endsWith('.html')) {
+    currentPage += '.html';
+  }
   nav.querySelectorAll('.nav-links a').forEach(a => {
     if (a.getAttribute('href') === currentPage) a.classList.add('active');
   });
