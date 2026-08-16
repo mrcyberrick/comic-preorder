@@ -1539,8 +1539,22 @@ button { cursor: pointer; font-family: var(--font-body); }
   /* Clear the fixed bar so it never covers the footer or the last row. */
   body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
 
-  /* One search entry point on mobile: the header magnifier (§ 3.7). */
-  .toolbar-header .search-wrap { display: none; }
+  /* One search entry point on mobile: the header magnifier (§ 3.7).
+     Widened 2026-08-16 alongside NavSearch's gate — catalog.html's
+     .toolbar-header .search-wrap, mylist.html's .toolbar .search-wrap
+     (same class, different wrapper), and subscriptions.html's own
+     .series-search-wrap (kept its own class name — only the #search id
+     needed to match).
+     :has(#search) is load-bearing, not decoration: admin.html ALSO has
+     three .search-wrap divs inside a .toolbar (#admin-search, #bd-search,
+     #accounts-search) that must stay visible — NavSearch never mounts
+     there (no #search id), so hiding them would remove mobile search
+     entirely with no replacement. The plain class selectors alone would
+     have caught those too; :has(#search) scopes the hide to the one
+     wrap that actually contains the proxied input. */
+  .toolbar-header .search-wrap:has(#search),
+  .toolbar .search-wrap:has(#search),
+  .series-search-wrap:has(#search) { display: none; }
 
   /* Header: hamburger left · logo centred · search right.
      Reordered with `order` so the DOM stays as-is and desktop is untouched. */

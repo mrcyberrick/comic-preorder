@@ -342,22 +342,23 @@ const TabBar = {
   },
 };
 
-// ── Mobile Catalog Search Proxy (design 2a § 3.7) ────────────────
+// ── Mobile Search Proxy (design 2a § 3.7, widened 2026-08-16) ────
 // The header magnifier is a PROXY, not a second source of truth: it
-// writes into #search and dispatches a bubbling `input` event so
-// catalog.html's existing debouncedLoad listener (catalog.html:1329)
-// fires untouched. Catalog-only by construction — the whole gate is
-// #search's presence, so this renders nowhere else.
+// writes into #search and dispatches a bubbling `input` event so the
+// page's own existing input listener fires untouched — catalog.html's
+// debouncedLoad, mylist.html's list filter, subscriptions.html's series
+// search. Gate is simply #search's presence, so this renders nowhere
+// else (admin.html and analytics.html have no #search element and were
+// deliberately left out — see 2026-08-16 request).
+//
+// Was catalog-only (.toolbar-header #search) because mylist.html's own
+// #search collided with a narrower design; now that every page wanting
+// the proxy consistently uses id="search" (subscriptions.html's was
+// #series-search, renamed 2026-08-16), the plain id check is correct
+// again and covers all of them at once.
 const NavSearch = {
   mount() {
-    // Catalog-only gate — § 3.7. #search's presence ALONE is not enough:
-    // mylist.html has its own list-filter input sharing the same id
-    // (found running gate V6; corrects docs/mobile-nav-tab-bar.md § 2.4,
-    // which asserted #search as catalog-only across all six nav pages —
-    // true of every page but mylist.html). .toolbar-header is catalog.html's
-    // own wrapper class (§ 2.4, catalog.html:121) and appears on no other
-    // of the six nav pages, so scope the query to it.
-    const target = document.querySelector('.toolbar-header #search');
+    const target = document.getElementById('search');
     if (!target) return;
 
     const navInner = document.querySelector('.nav-inner');
