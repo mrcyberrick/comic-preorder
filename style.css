@@ -1313,7 +1313,16 @@ button { cursor: pointer; font-family: var(--font-body); }
     flex-direction: column;
     position: absolute;
     top: 100%;
-    right: 0;
+    /* Anchored under the hamburger button, which the mobile tab bar's header
+       reorder (docs/mobile-nav-tab-bar.md § 5 S1) moved to the LEFT side of
+       .nav-inner (order:1). This was `right: 0` when the hamburger itself
+       sat on the right (pre-tab-bar); left unchanged it made the dropdown
+       fly out to the top-right corner, disconnected from the button.
+       24px = .container's own left padding (style.css:55), which is what
+       the button's left edge actually sits at (margin-left:0, no offset
+       of its own) — left:0 alone lines up with .nav-inner's outer edge,
+       24px short of the button itself. */
+    left: 24px;
     width: 200px;
     background: #111;
     border: 1px solid var(--border);
@@ -1333,6 +1342,15 @@ button { cursor: pointer; font-family: var(--font-body); }
 
   .nav-user {
     display: none;
+    /* Must sort AFTER the header row (hamburger:1, logo:2, search-btn:3 —
+       style.css:1529+). Flex `order` defaults to 0, which is LOWER than
+       those, so without this the full-width .nav-user.open row (below)
+       sorted ahead of the hamburger in the flex layout on menu-open and
+       wrapped the entire header — hamburger, logo, the hamburger's own
+       X-animation, all of it — onto an invisible second line. Found from
+       a real screenshot: "Welcome, name / Sign Out" rendered at the very
+       top with no header above it at all. */
+    order: 4;
   }
   .nav-user.open {
     display: flex;
@@ -1433,5 +1451,194 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--accent);
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* ── Mobile tab bar (design 2a — thumb-reach) ──────────────────
+   Injected by TabBar.mount() in app.js on the six nav pages.
+   Hidden at >640px: the desktop .nav-links row is unchanged.
+   All accent values use var(--accent) because Branding.apply()
+   overrides it per tenant — see docs/mobile-nav-tab-bar.md § 3.1. */
+.tab-bar { display: none; }
+
+/* Base-hidden like .tab-bar above. NavSearch.mount() (app.js) self-gates only
+   on #search's presence, not on viewport width, so on catalog.html these
+   elements exist in the DOM at every screen size — without an explicit
+   base-level display:none they fall back to the browser's default <button>/
+   <div> display and the magnifier renders on desktop too (found running
+   gate V3, docs/mobile-nav-tab-bar.md § 6). The @media block below is the
+   only place that turns them on, and only at ≤640px.
+   .nav-settings-placeholder (added 2026-08-16) shares this base-hide and
+   the same treatment for the same reason — NavSettingsPlaceholder.mount()
+   (app.js) is also unconditional on viewport, gated only on #search's
+   ABSENCE (admin.html, analytics.html today). */
+.nav-search-btn,
+.nav-search-field,
+.nav-settings-placeholder { display: none; }
+
+@media (max-width: 640px) {
+  .tab-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    background: var(--bg-card);
+    /* Same weight as the icon strokes — an inked panel border, not a tray. */
+    border-top: 2.4px solid var(--border);
+    padding: 10px 4px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .tab-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 56px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tab-cell.is-active { color: var(--text-primary); }
+
+  .tab-ink { position: relative; display: block; width: 26px; height: 26px; }
+  .tab-ink-main { position: relative; display: block; }
+  /* Misprinted colour plate: 1.5px offset, accent, behind the main stroke. */
+  .tab-ink-off {
+    position: absolute;
+    left: 1.5px;
+    top: 1.5px;
+    opacity: 0.65;
+    color: var(--accent);
+  }
+
+  .tab-label {
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* Halftone: three shrinking dots INSIDE the bar, above the icon, so a thumb
+     resting on the cell never covers the only where-am-I indicator. */
+  .tab-halftone {
+    display: flex;
+    gap: 3px;
+    position: absolute;
+    top: 1px;
+  }
+  .tab-halftone i {
+    width: 3.5px;
+    height: 3.5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .tab-halftone i:nth-child(2) { opacity: 0.6; }
+  .tab-halftone i:nth-child(3) { opacity: 0.3; }
+
+  /* Clear the fixed bar so it never covers the footer or the last row. */
+  body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+  /* One search entry point on mobile: the header magnifier (§ 3.7).
+     Widened 2026-08-16 alongside NavSearch's gate — catalog.html's
+     .toolbar-header .search-wrap, mylist.html's .toolbar .search-wrap
+     (same class, different wrapper), and subscriptions.html's own
+     .series-search-wrap (kept its own class name — only the #search id
+     needed to match).
+     :has(#search) is load-bearing, not decoration: admin.html ALSO has
+     three .search-wrap divs inside a .toolbar (#admin-search, #bd-search,
+     #accounts-search) that must stay visible — NavSearch never mounts
+     there (no #search id), so hiding them would remove mobile search
+     entirely with no replacement. The plain class selectors alone would
+     have caught those too; :has(#search) scopes the hide to the one
+     wrap that actually contains the proxied input. */
+  .toolbar-header .search-wrap:has(#search),
+  .toolbar .search-wrap:has(#search),
+  .series-search-wrap:has(#search) { display: none; }
+
+  /* Header: hamburger left · logo centred · search (or its placeholder)
+     right. Reordered with `order` so the DOM stays as-is and desktop is
+     untouched. .nav-settings-placeholder occupies the identical order:3
+     slot on pages with no #search (admin.html, analytics.html) — without
+     a third item there, .nav-logo's margin:0 auto only centers it in the
+     space after the hamburger, not the full header width, so those two
+     pages read visibly off-center next to the other four. Added
+     2026-08-16, Rick's request. */
+  .nav-hamburger  { order: 1; margin-left: 0; width: 44px; height: 44px; }
+  .nav-logo       { order: 2; margin: 0 auto; }
+  .nav-search-btn,
+  .nav-settings-placeholder { order: 3; }
+
+  .nav-search-btn,
+  .nav-settings-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+  }
+  .nav-search-btn:hover { color: var(--accent); }
+  /* Placeholder only — does nothing on click (Rick's explicit instruction),
+     so no hover affordance implying otherwise. */
+  .nav-settings-placeholder { cursor: default; }
+
+  .nav-search-field { display: none; }
+  .nav-inner[data-search="open"] .nav-search-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    order: 1;
+  }
+  .nav-inner[data-search="open"] .nav-logo,
+  .nav-inner[data-search="open"] .nav-hamburger,
+  .nav-inner[data-search="open"] .nav-search-btn { display: none; }
+
+  .nav-search-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 38px;
+    padding: 0 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+  }
+  .nav-search-field input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .nav-search-close {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: 0;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+}
+
+/* The tab bar and the expanded search field never print. Unconditional and
+   global on purpose: .nav is hidden by THREE separate print blocks
+   (style.css body.printing-this-week, arrivals.html, mylist.html) and the
+   F119 / 2026-08-15 scars above record what happens when a new element is
+   added after those rules were written. One rule, no sites to keep in sync. */
+@media print {
+  .tab-bar,
+  .nav-search-field { display: none !important; }
+  body { padding-bottom: 0 !important; }
 }
 

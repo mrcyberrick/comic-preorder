@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Catalog — Pull List</title>
   <link rel="icon" type="image/svg+xml" href="favico.svg">
   <link rel="icon" href="favicon.ico">
@@ -30,6 +30,14 @@
     }
     .btn-reserve.foc-locked:hover { opacity: 0.7 !important; }
 
+    /* Requested 2026-08-15, widened 2026-08-15 (second pass) to all
+       viewports — was mobile-only. Total Items/Lunar/PRH/My Reservations is
+       catalog-wide inventory trivia, redundant with "Showing N of M items"
+       just below it, and not decision-relevant to a customer browsing.
+       Elements kept in the DOM (not deleted) — several JS call sites still
+       set their textContent — just hidden everywhere now. */
+    #stats-bar { display: none; }
+
     /* Desktop: filter toggle hidden, panel always shown as normal toolbar */
     @media (min-width: 641px) {
       #btn-filter-toggle { display: none !important; }
@@ -56,6 +64,17 @@
         box-sizing: border-box;
       }
       #filter-panel #btn-pin-filters { text-align: left; }
+    }
+
+    /* Filters button moves in-line with the "Showing N of M items" text
+       (was in .toolbar-header next to search) — desktop is unaffected,
+       since #btn-filter-toggle is already display:none there (line ~35). */
+    .results-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 16px;
     }
   </style>
 </head>
@@ -117,7 +136,7 @@
     </div>
   </div>
 
-  <!-- Toolbar: search always visible; filters collapse on mobile -->
+  <!-- Toolbar: search always visible -->
   <div class="toolbar-header">
     <div class="search-wrap">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -125,6 +144,16 @@
       </svg>
       <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
     </div>
+  </div>
+
+  <!-- Results count + mobile Filters toggle, in-line (moved 2026-08-15 —
+       was in .toolbar-header next to search; #btn-filter-toggle is
+       desktop-hidden regardless, see the @media rules above). Placed
+       BEFORE #filter-panel (moved 2026-08-15, second pass) so the button
+       stays fixed in place when tapped — the panel expands below it and
+       pushes the grid down, not the button that opens it. -->
+  <div class="results-toolbar">
+    <div style="font-size:0.8rem; color:var(--text-muted)" id="results-count"></div>
     <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
       style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
              border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
@@ -170,9 +199,6 @@
       📌 Pin filters
     </button>
   </div>
-
-  <!-- Results count -->
-  <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:16px" id="results-count"></div>
 
   <!-- Catalog Grid -->
   <div id="catalog-grid" class="catalog-grid"></div>

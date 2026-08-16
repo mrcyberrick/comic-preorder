@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Subscriptions — Pull List</title>
   <link rel="icon" type="image/svg+xml" href="favico.svg">
   <link rel="icon" href="favicon.ico">
@@ -286,7 +286,7 @@
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
-      <input type="text" class="series-search-input" id="series-search"
+      <input type="text" class="series-search-input" id="search"
         placeholder="Search for a series to subscribe…" autocomplete="off">
     </div>
     <a href="catalog.html" class="btn btn-secondary btn-sm">Browse Catalog</a>
@@ -694,7 +694,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   // Queries the catalog for matching series names (standard covers only)
   // and lets the customer subscribe directly from the results.
   // Skips search in admin impersonation context — subscribe button is hidden there.
-  const searchInput   = document.getElementById('series-search');
+  const searchInput   = document.getElementById('search');
   const resultsPanel  = document.getElementById('search-results-panel');
 
   if (AdminContext.isActive()) {

@@ -284,11 +284,12 @@ At the end of each session:
 comic-preorder/                    ← production repo (github.com/mrcyberrick/comic-preorder)
   index.html                       ← sign-in / landing
   catalog.html                     ← ┐
-  mylist.html                      ← │ the five nav+footer pages that must
+  mylist.html                      ← │ the SIX nav+footer pages that must
   arrivals.html                    ← │ stay in sync (see § Files That Must
   subscriptions.html               ← │ Stay in Sync)
-  admin.html                       ← ┘
-  analytics.html                   ← admin-gated nav link; no shared nav block
+  admin.html                       ← │
+  analytics.html                   ← ┘ admin-gated nav link — but it DOES
+                                   ←   carry the shared nav+footer blocks
   forgot-password.html             ← linked from the index.html sign-in footer
   app.js
   style.css
@@ -1016,12 +1017,22 @@ If a session needs to touch any of the above, **stop and confirm**.
 
 ## Files That Must Stay in Sync
 
-The nav block must be identical across `catalog.html`, `mylist.html`,
-`arrivals.html`, `subscriptions.html`, `admin.html`. When updating nav, copy from
-the most recently-updated file — the canonical version is whichever HTML file
-was last touched.
+The nav block must be identical across **six** pages: `catalog.html`,
+`mylist.html`, `arrivals.html`, `subscriptions.html`, `admin.html`, and
+**`analytics.html`**. When updating nav, copy from the most recently-updated
+file — the canonical version is whichever HTML file was last touched.
 
-The footer block must be identical across all five pages, placed immediately
+**`analytics.html` was omitted from this list until 2026-08-15**, and this
+section plus § Repository Structure both described it as having no shared nav
+block. That was wrong — measured, not assumed: all six nav blocks hash
+identically (`66C5139EF8AD97147227FB7A7EB38F56`), all six footer blocks hash
+identically (`EB2513E8ED474B3CE5251F2540A69852`), all six load
+`vendor/supabase.min.js` → `config.js` → `app.js`, and all six call
+`initNav()`. `analytics.html` is a full member of the sync set on every
+contract in this section. Found while planning `docs/mobile-nav-tab-bar.md`,
+where a five-file nav edit would have silently skipped it.
+
+The footer block must be identical across all six pages, placed immediately
 before `<div id="toast-container"></div>`.
 
 The `<script>` load order must be the same on every page: Supabase UMD bundle
