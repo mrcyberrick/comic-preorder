@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>This Week — Pull List</title>
   <link rel="icon" type="image/svg+xml" href="favico.svg">
   <link rel="icon" href="favicon.ico">
@@ -385,6 +385,20 @@
     <p id="page-subtitle">Your reserved titles arriving at the store this week</p>
   </div>
 
+  <!-- Search — title-only, filters whichever grid(s) are on screen (added
+       2026-08-16, matching catalog/mylist/subscriptions; mobile header
+       magnifier proxies into this same #search, style.css's existing
+       .toolbar .search-wrap:has(#search) mobile-hide rule already covers
+       it, no CSS change needed). Never printed — only affects what's
+       currently rendered; print always uses the full personal list. -->
+  <div class="toolbar" style="margin-bottom:16px">
+    <div class="search-wrap">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" class="search-input" id="search" placeholder="Search titles…" autocomplete="off">
+    </div>
+  </div>
 
   <!-- Toolbar -->
   <div class="toolbar" id="arrivals-toolbar" style="margin-bottom:16px;display:none">
@@ -620,11 +634,34 @@
       return;
     }
 
-    renderArrivalsGrid(container, myArrivals.map(i => ({
-      ...i.catalog,
-      _qty: i.quantity,
-      _reserved: true,
-    })));
+    // Search (title only, added 2026-08-16) — filters this grid client-side;
+    // the full list is already in memory, nothing to re-fetch. Print always
+    // reflects the complete personal list regardless of the on-screen filter.
+    function renderFallback(query) {
+      const filtered = query
+        ? myArrivals.filter(i => (i.catalog?.title || '').toLowerCase().includes(query))
+        : myArrivals;
+      if (!filtered.length) {
+        container.innerHTML = `
+          <div class="arrivals-empty">
+            <h2>No matches</h2>
+            <p>Try a different title, or clear the search to see everything arriving this week.</p>
+          </div>`;
+        return;
+      }
+      renderArrivalsGrid(container, filtered.map(i => ({
+        ...i.catalog,
+        _qty: i.quantity,
+        _reserved: true,
+      })));
+    }
+    renderFallback('');
+
+    const searchEl = document.getElementById('search');
+    searchEl.addEventListener('input', debounce(() => {
+      renderFallback(searchEl.value.trim().toLowerCase());
+    }, 350));
+
     renderPrintTable(myArrivals);
     setupPrintButton(weekDisplay, myArrivals);
     document.getElementById('arrivals-toolbar').style.display = 'flex';
@@ -717,57 +754,72 @@
       </div>`;
   }
 
-  let html = '';
+  // Search (title only, added 2026-08-16) — filters whichever of the two
+  // grids below are on screen; myRowsCombined/otherRows stay the full,
+  // unfiltered arrays (print and the toolbar-visibility check further down
+  // both need the real counts regardless of what's currently searched).
+  function renderShipmentGrids(query) {
+    const matchesQuery = (title) => !query || (title || '').toLowerCase().includes(query);
+    const filteredMine  = myRowsCombined.filter(r => matchesQuery(r.catalog?.title || r.title));
+    const filteredOther = otherRows.filter(r => matchesQuery(r.catalog?.title || r.title));
 
-  if (myRowsCombined.length) {
-    html += `
-      <div class="shipment-divider">
-        <span>Your reserved titles</span>
-        <span class="shipment-divider-count">${myRowsCombined.length} item${myRowsCombined.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div class="arrivals-grid" style="margin-bottom:32px">
-        ${myRowsCombined.map(r => {
-          // Find matching preorder for quantity (orphans already have _qty set)
-          if (typeof r._qty !== 'number') {
-            const po = myArrivals.find(i =>
-              (i.catalog?.id && i.catalog.id === r.catalog?.id) ||
-              (i.catalog?.upc && i.catalog.upc === r.upc)
-            );
-            r._qty = po?.quantity || r.quantity;
-          }
-          return makeCard(r, true);
-        }).join('')}
-      </div>`;
+    let html = '';
+
+    if (filteredMine.length) {
+      html += `
+        <div class="shipment-divider">
+          <span>Your reserved titles</span>
+          <span class="shipment-divider-count">${filteredMine.length} item${filteredMine.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="arrivals-grid" style="margin-bottom:32px">
+          ${filteredMine.map(r => {
+            // Find matching preorder for quantity (orphans already have _qty set)
+            if (typeof r._qty !== 'number') {
+              const po = myArrivals.find(i =>
+                (i.catalog?.id && i.catalog.id === r.catalog?.id) ||
+                (i.catalog?.upc && i.catalog.upc === r.upc)
+              );
+              r._qty = po?.quantity || r.quantity;
+            }
+            return makeCard(r, true);
+          }).join('')}
+        </div>`;
+    }
+
+    if (filteredOther.length) {
+      const hasPersonalSection = filteredMine.length > 0;
+      html += `
+        <div class="shipment-divider">
+          <span>${hasPersonalSection ? 'Also in this week\'s shipment' : 'This week\'s store shipment'}</span>
+          <span class="shipment-divider-count">${filteredOther.length} title${filteredOther.length !== 1 ? 's' : ''}</span>
+          <a href="catalog.html" class="shipment-divider-cta">Reserve in catalog →</a>
+        </div>
+        <div class="arrivals-grid">
+          ${filteredOther.map(r => makeCard(r, false)).join('')}
+        </div>`;
+    }
+
+    if (!filteredMine.length && !filteredOther.length) {
+      html = query
+        ? `<div class="arrivals-empty"><h2>No matches</h2><p>Try a different title, or clear the search.</p></div>`
+        : `<div class="arrivals-empty"><h2>Nothing in this week's shipment yet</h2><p>Check back after the weekly invoice is imported.</p></div>`;
+    }
+
+    container.innerHTML = html;
+
+    // Fade in images
+    container.querySelectorAll('img').forEach(img => {
+      if (img.complete) img.classList.add('loaded');
+      else img.addEventListener('load', () => img.classList.add('loaded'));
+    });
   }
 
-  if (otherRows.length) {
-    const hasPersonalSection = myRowsCombined.length > 0;
-    html += `
-      <div class="shipment-divider">
-        <span>${hasPersonalSection ? 'Also in this week\'s shipment' : 'This week\'s store shipment'}</span>
-        <span class="shipment-divider-count">${otherRows.length} title${otherRows.length !== 1 ? 's' : ''}</span>
-        <a href="catalog.html" class="shipment-divider-cta">Reserve in catalog →</a>
-      </div>
-      <div class="arrivals-grid">
-        ${otherRows.map(r => makeCard(r, false)).join('')}
-      </div>`;
-  }
+  renderShipmentGrids('');
 
-  if (!myRowsCombined.length && !otherRows.length) {
-    html = `
-      <div class="arrivals-empty">
-        <h2>Nothing in this week's shipment yet</h2>
-        <p>Check back after the weekly invoice is imported.</p>
-      </div>`;
-  }
-
-  container.innerHTML = html;
-
-  // Fade in images
-  container.querySelectorAll('img').forEach(img => {
-    if (img.complete) img.classList.add('loaded');
-    else img.addEventListener('load', () => img.classList.add('loaded'));
-  });
+  const searchEl = document.getElementById('search');
+  searchEl.addEventListener('input', debounce(() => {
+    renderShipmentGrids(searchEl.value.trim().toLowerCase());
+  }, 350));
 
   // ── Personal print button ─────────────────────────────────
   // This path only runs for a customer or an admin impersonating a
@@ -898,6 +950,47 @@
     // Monday (local Date) of the week currently shown. Updated by loadStoreWeek.
     let selectedMonday = null;
 
+    // Search (title only, added 2026-08-16) — filters the on-screen shipment
+    // grid; the reconciliation panel and printed store report both stay
+    // driven by the full, unfiltered shipment (search is a browse aid, not
+    // a data filter). currentShipment/currentStoreQuery are updated by
+    // loadStoreWeek and the input handler respectively, and the query
+    // deliberately persists across week navigation — Prev/Next re-applies
+    // whatever's currently typed rather than silently clearing it.
+    let currentShipment = [];
+    let currentStoreQuery = '';
+
+    function renderStoreGrid() {
+      const filtered = currentStoreQuery
+        ? currentShipment.filter(r => (r.catalog?.title || r.title || '').toLowerCase().includes(currentStoreQuery))
+        : currentShipment;
+
+      if (filtered.length) {
+        container.innerHTML =
+          `<div class="shipment-divider"><span>Store shipment</span>` +
+          `<span class="shipment-divider-count">${filtered.length} title${filtered.length !== 1 ? 's' : ''}</span></div>` +
+          `<div class="arrivals-grid">${filtered.map(r => makeStoreCard(r)).join('')}</div>`;
+        container.querySelectorAll('img').forEach(img => {
+          if (img.complete) img.classList.add('loaded');
+          else img.addEventListener('load', () => img.classList.add('loaded'));
+        });
+      } else if (currentShipment.length) {
+        container.innerHTML =
+          `<div class="arrivals-empty"><h2>No matches</h2>` +
+          `<p>Try a different title, or clear the search.</p></div>`;
+      } else {
+        container.innerHTML =
+          `<div class="arrivals-empty"><h2>No shipment for this week</h2>` +
+          `<p>Nothing has been imported for this week yet. Use the week controls above to check another week.</p></div>`;
+      }
+    }
+
+    const searchEl = document.getElementById('search');
+    searchEl.addEventListener('input', debounce(() => {
+      currentStoreQuery = searchEl.value.trim().toLowerCase();
+      renderStoreGrid();
+    }, 350));
+
     // Wire the poster print button once. The poster owns its own header,
     // so the shared personal-print title fields are left untouched.
     btnStore.addEventListener('click', () => {
@@ -970,20 +1063,11 @@
         ? `Store shipment · ${shipment.length} title${shipment.length !== 1 ? 's' : ''} · New Comics ${wedLabel}`
         : 'No shipment imported for this week yet';
 
-      if (shipment.length) {
-        container.innerHTML =
-          `<div class="shipment-divider"><span>Store shipment</span>` +
-          `<span class="shipment-divider-count">${shipment.length} title${shipment.length !== 1 ? 's' : ''}</span></div>` +
-          `<div class="arrivals-grid">${shipment.map(r => makeStoreCard(r)).join('')}</div>`;
-        container.querySelectorAll('img').forEach(img => {
-          if (img.complete) img.classList.add('loaded');
-          else img.addEventListener('load', () => img.classList.add('loaded'));
-        });
-      } else {
-        container.innerHTML =
-          `<div class="arrivals-empty"><h2>No shipment for this week</h2>` +
-          `<p>Nothing has been imported for this week yet. Use the week controls above to check another week.</p></div>`;
-      }
+      // currentShipment feeds renderStoreGrid(), which also reapplies
+      // whatever search query is currently active (§ above) — replaces the
+      // week's grid without disturbing currentStoreQuery.
+      currentShipment = shipment;
+      renderStoreGrid();
 
       renderStoreReport(shipment);
       await renderReconciliation(shipment, preorders, preRes.error);
