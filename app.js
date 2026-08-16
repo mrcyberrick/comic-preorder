@@ -422,6 +422,41 @@ const NavSearch = {
   },
 };
 
+// ── Mobile Settings Placeholder (added 2026-08-16, Rick's request) ──
+// A non-functional gear icon filling the same header slot the search
+// magnifier occupies on catalog/mylist/subscriptions/arrivals. Pages
+// with no #search (admin.html, analytics.html — every admin-only nav
+// page today) otherwise leave that slot empty, and .nav-logo's
+// margin:0 auto then only centers the logo in the space after the
+// hamburger, not the full header width — those two pages read visibly
+// off-center next to the other four. Self-gates on #search's ABSENCE,
+// the inverse of NavSearch's gate, so it never appears alongside the
+// real search button. Does nothing on click by design — a future
+// settings surface can replace this; aria-hidden + tabindex="-1" keep
+// it out of the accessibility tree and tab order since it has no
+// function yet.
+const NavSettingsPlaceholder = {
+  mount() {
+    if (document.getElementById('search')) return; // NavSearch owns this slot instead
+
+    const navInner = document.querySelector('.nav-inner');
+    if (!navInner || document.getElementById('nav-settings-placeholder')) return; // idempotent
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'nav-settings-placeholder';
+    btn.className = 'nav-settings-placeholder';
+    btn.setAttribute('aria-hidden', 'true');
+    btn.setAttribute('tabindex', '-1');
+    // Simple gear/cog, matching the app's stroke-only icon language
+    // (viewBox 24x24, stroke-width 2.4, square caps, miter joins — same
+    // as the hamburger/search/tab-bar icons).
+    btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M19 12h2.3"></path><path d="M15.5 5.94 16.65 3.95"></path><path d="M8.5 5.94 7.35 3.95"></path><path d="M5 12H2.7"></path><path d="M8.5 18.06 7.35 20.05"></path><path d="M15.5 18.06 16.65 20.05"></path></svg>';
+
+    navInner.appendChild(btn);
+  },
+};
+
 // ── Nav Initialization ────────────────────────────────────────
 async function initNav() {
   const nav = document.getElementById('main-nav');
@@ -468,6 +503,7 @@ async function initNav() {
   // Mobile tab bar + catalog search proxy (docs/mobile-nav-tab-bar.md)
   TabBar.mount(currentPage);
   NavSearch.mount();
+  NavSettingsPlaceholder.mount(); // fills the same slot when #search is absent
 
   // Logout button
   const logoutBtn = nav.querySelector('#btn-logout');

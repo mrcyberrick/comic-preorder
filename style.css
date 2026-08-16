@@ -1466,9 +1466,14 @@ button { cursor: pointer; font-family: var(--font-body); }
    base-level display:none they fall back to the browser's default <button>/
    <div> display and the magnifier renders on desktop too (found running
    gate V3, docs/mobile-nav-tab-bar.md § 6). The @media block below is the
-   only place that turns them on, and only at ≤640px. */
+   only place that turns them on, and only at ≤640px.
+   .nav-settings-placeholder (added 2026-08-16) shares this base-hide and
+   the same treatment for the same reason — NavSettingsPlaceholder.mount()
+   (app.js) is also unconditional on viewport, gated only on #search's
+   ABSENCE (admin.html, analytics.html today). */
 .nav-search-btn,
-.nav-search-field { display: none; }
+.nav-search-field,
+.nav-settings-placeholder { display: none; }
 
 @media (max-width: 640px) {
   .tab-bar {
@@ -1556,13 +1561,21 @@ button { cursor: pointer; font-family: var(--font-body); }
   .toolbar .search-wrap:has(#search),
   .series-search-wrap:has(#search) { display: none; }
 
-  /* Header: hamburger left · logo centred · search right.
-     Reordered with `order` so the DOM stays as-is and desktop is untouched. */
+  /* Header: hamburger left · logo centred · search (or its placeholder)
+     right. Reordered with `order` so the DOM stays as-is and desktop is
+     untouched. .nav-settings-placeholder occupies the identical order:3
+     slot on pages with no #search (admin.html, analytics.html) — without
+     a third item there, .nav-logo's margin:0 auto only centers it in the
+     space after the hamburger, not the full header width, so those two
+     pages read visibly off-center next to the other four. Added
+     2026-08-16, Rick's request. */
   .nav-hamburger  { order: 1; margin-left: 0; width: 44px; height: 44px; }
   .nav-logo       { order: 2; margin: 0 auto; }
-  .nav-search-btn { order: 3; }
+  .nav-search-btn,
+  .nav-settings-placeholder { order: 3; }
 
-  .nav-search-btn {
+  .nav-search-btn,
+  .nav-settings-placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1574,6 +1587,9 @@ button { cursor: pointer; font-family: var(--font-body); }
     color: var(--text-primary);
   }
   .nav-search-btn:hover { color: var(--accent); }
+  /* Placeholder only — does nothing on click (Rick's explicit instruction),
+     so no hover affordance implying otherwise. */
+  .nav-settings-placeholder { cursor: default; }
 
   .nav-search-field { display: none; }
   .nav-inner[data-search="open"] .nav-search-field {
