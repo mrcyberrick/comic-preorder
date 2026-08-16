@@ -559,14 +559,6 @@
       <div class="stat-value" style="color:var(--accent)" id="stat-total">—</div>
       <div class="stat-label">Est. Total</div>
     </div>
-    <div class="stat">
-      <div class="stat-value" style="color:var(--lunar)" id="stat-lunar">—</div>
-      <div class="stat-label">Lunar Items</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" style="color:var(--prh)" id="stat-prh">—</div>
-      <div class="stat-label">PRH Items</div>
-    </div>
   </div>
 
   <!-- Toolbar -->
@@ -945,10 +937,6 @@ function confirmDialog(message, okLabel = 'Remove') {
     document.getElementById('stat-count').textContent = allItems.length;
     const total = allItems.reduce((sum, i) => sum + ((parseFloat(i.catalog?.price_usd) || 0) * (i.quantity || 1)), 0);
     document.getElementById('stat-total').textContent = `$${total.toFixed(2)}`;
-    document.getElementById('stat-lunar').textContent =
-      allItems.filter(i => i.catalog?.distributor === 'Lunar').reduce((s,i) => s + (i.quantity||1), 0);
-    document.getElementById('stat-prh').textContent =
-      allItems.filter(i => i.catalog?.distributor === 'PRH').reduce((s,i) => s + (i.quantity||1), 0);
 
     // Update print footer values whenever list renders
     document.getElementById('print-footer-count').textContent =

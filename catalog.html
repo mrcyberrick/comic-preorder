@@ -30,6 +30,14 @@
     }
     .btn-reserve.foc-locked:hover { opacity: 0.7 !important; }
 
+    /* Requested 2026-08-15, widened 2026-08-15 (second pass) to all
+       viewports — was mobile-only. Total Items/Lunar/PRH/My Reservations is
+       catalog-wide inventory trivia, redundant with "Showing N of M items"
+       just below it, and not decision-relevant to a customer browsing.
+       Elements kept in the DOM (not deleted) — several JS call sites still
+       set their textContent — just hidden everywhere now. */
+    #stats-bar { display: none; }
+
     /* Desktop: filter toggle hidden, panel always shown as normal toolbar */
     @media (min-width: 641px) {
       #btn-filter-toggle { display: none !important; }
@@ -56,13 +64,6 @@
         box-sizing: border-box;
       }
       #filter-panel #btn-pin-filters { text-align: left; }
-
-      /* Requested 2026-08-15: drop the Total/Lunar/PRH/My Reservations row
-         on mobile — the tab bar already frees very little vertical space
-         right below the header, and this row was the first thing pushing
-         the actual catalog down. Elements are kept in the DOM (not deleted)
-         — several JS call sites still set their textContent — just hidden. */
-      #stats-bar { display: none; }
     }
 
     /* Filters button moves in-line with the "Showing N of M items" text
