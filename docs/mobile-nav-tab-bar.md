@@ -1,9 +1,18 @@
 # Mobile Nav — Thumb-Reach Tab Bar (design 2a)
 
-**Status:** **Executed 2026-08-15 — live on staging.** S1–S5 complete, plus
-two mid-session fixes (§ 8.1). Gates V1–V3, V6–V7, V9–V10 verified green;
-V4/V5/V8 verified via Chromium device emulation (§ 8.2), not a real device —
-still owed. **No production promotion this session.**
+**Status:** **COMPLETE — live in production 2026-08-16** (PR #123, merge
+`2ed97f8`). S1–S5 plus the two mid-session fixes (§ 8.1) executed and staged
+2026-08-15; a live-review follow-up cycle on 2026-08-16 (hamburger dropdown
+anchoring, `.nav-user` flex-order fix, catalog stats-bar removal, My List
+stats-bar Lunar/PRH split removal, mobile search widened to mylist.html and
+subscriptions.html, a new title-only search built for arrivals.html, and a
+placeholder settings icon on admin.html/analytics.html) went out in the same
+promotion — those items are **outside this plan's original S1–S5 scope** and
+are not otherwise documented here; see the session's PR #123 description for
+the full list. Post-deploy write-smoke passed (Rick, 2026-08-16). Gates
+V1–V3, V6–V7, V9–V10 verified green; V4/V5/V8 verified via Chromium device
+emulation (§ 8.2) plus real screenshots taken during the follow-up cycle —
+never verified on an actual physical device.
 **Written:** 2026-08-15 (planning session, Opus)
 **Target:** `staging`, via feature branch `feat/mobile-tab-bar`
 **Executor:** fresh Sonnet CLI session — see § 9 Handoff Prompt

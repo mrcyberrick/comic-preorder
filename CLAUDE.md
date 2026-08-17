@@ -925,6 +925,30 @@ founding tenant) both before and after the toggle flip; no Edge Function
 code changes were needed. Closes the F75 residual. See
 `docs/f86-anon-key-migration.md` for the full closed scope and evidence.
 
+The mobile thumb-reach tab bar (design 2a — `docs/mobile-nav-tab-bar.md`,
+approved by Rick 2026-08-15) plus its 2026-08-16 live-review follow-up cycle
+closed 2026-08-16 — **live in production**, promoted via PR #123 (`2ed97f8`);
+post-deploy write-smoke passed (Rick). `TabBar`/`NavSearch` injected by
+`app.js` on all six nav pages, zero HTML nav blocks edited (re-verified
+byte-identical throughout). Two bugs found running the plan's own gates and
+fixed same session: Cloudflare Pages 308-redirects `*.html` so
+`window.location.pathname` never carried the suffix and `.nav-links
+a.active`/the tab bar's active-cell detection never matched anything
+(restored once in `initNav()`); `.nav-user` had no explicit flex `order`, so
+opening the hamburger menu wrapped the entire header off-screen (fixed with
+`order: 4`). The follow-up cycle (outside the plan's original S1–S5 scope,
+not otherwise documented) added: hamburger dropdown anchoring, catalog
+stats-bar removed on all viewports, My List stats-bar Lunar/PRH split
+removed, Filters button moved in-line with results-count and fixed in place,
+mobile search widened to mylist.html and subscriptions.html (subscriptions'
+input id renamed `#series-search` → `#search`), a new title-only search
+built for arrivals.html from scratch (customer view + admin Store Manager
+View), and a placeholder settings icon on admin.html/analytics.html's mobile
+header. Full suite green throughout (113/113 + 172/172, multiple passes,
+zero flakes); every visual claim verified with real screenshots, not
+inferred from the suite alone. See `docs/mobile-nav-tab-bar.md` § 8 for the
+original plan's deploy log.
+
 The analytics cycle-alignment session (cycle-anchored deltas on Executive +
 Operations KPIs, "This Cycle vs Last" overlay chart, New Customers tile)
 closed 2026-07-19 — **live on production**, no longer listed here. V1–V5
