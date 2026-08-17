@@ -1739,8 +1739,11 @@ function renderSkeletons(count = 12, container) {
   `).join('');
 }
 
-// Inline SVG placeholder — shown while image loads and as fallback if it breaks
-const COVER_PLACEHOLDER = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='225' viewBox='0 0 150 225'%3E%3Crect width='150' height='225' fill='%23222'/%3E%3Crect x='20' y='20' width='110' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='32' width='80' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='60' width='110' height='80' rx='4' fill='%23333'/%3E%3Crect x='20' y='156' width='90' height='4' rx='2' fill='%23333'/%3E%3Crect x='20' y='168' width='60' height='4' rx='2' fill='%23333'/%3E%3C/svg%3E`;
+// Cover placeholder — shown while image loads and as fallback if it breaks.
+// Static asset at repo root (comic-cover-fallback.svg), same convention as
+// favico.svg / bookstop_logo.png. Was an inline gray-bars data URI until
+// 2026-08-17, when it was swapped for a designed fallback image.
+const COVER_PLACEHOLDER = 'comic-cover-fallback.svg';
 
 function buildComicCard(comic, reservedQty, focLocked = false) {
   const isReserved = reservedQty > 0;
