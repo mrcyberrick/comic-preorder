@@ -217,8 +217,14 @@ demo first, or hold one doc back to the end. Do not fix everything and then clai
       detail source)
 - [x] `/preflight` check committed and documented — `.claude/skills/preflight/SKILL.md` check 7
 - [x] This plan's own STATUS token flipped to `COMPLETE | staging=2026-08-18 | prod=N/A`
-- [ ] Doc-only commits pushed to `staging` — committed on `docs/status-truth-pass`, not yet merged
-      to `staging` or pushed; that is the last step of this session, after this file is saved
+- [x] Doc-only commits pushed to `staging` — `0be7a5f` (S1–S3) and `042ee3d` (S4–S5), merged ff-only
+      and pushed to `origin/staging`; feature branch deleted. **Ticked 2026-08-18 in a follow-up
+      commit:** this box read *"not yet merged to `staging` or pushed"* for the session's whole
+      closing window, i.e. the truth-pass plan was itself the last doc in the repo making a false
+      status claim. Left as a small joke at its own expense in the record, since it is the cheapest
+      possible demonstration of why the mechanism was needed — a status written *before* the action
+      it describes is a prediction, not a record, and predictions are what this session deleted 17
+      of.
 - [x] § Anti-Drift status update produced (session close, via `/wrap-up`)
 
 ### V3 — the check observed failing, output recorded
@@ -245,6 +251,36 @@ A full sweep of every doc currently in `NOT STARTED`/`IN PROGRESS` state
 (`doc-status-truth-pass.md` itself, `interim-deployment-work-instructions.md`,
 `weekly-pipeline-consolidation-plan.md`) found **zero** `PR #<n>` references in the two genuinely
 open docs — so V2 (zero stale claims) holds for the real current state, not just the demo.
+
+### V4 — two misses found in review, corrected 2026-08-18 (same day, follow-up commit)
+
+V4 was ticked on a both-directions grep of § 13 against the new table, and it still missed two —
+both because the check keyed on the *word* in the status line rather than its meaning:
+
+- **F115 was open and absent from the table.** Its status reads *"**Mitigated** 2026-08-04 …
+  Not fully *resolved*: … that remains **F108**'s job."* Neither "open" nor "deferred" appears, so a
+  keyword sweep slides past it. Worse, the delegation is now void: **F108 closed 2026-08-11 without
+  absorbing the residual** — Session C shipped the customer-facing arrival chip, not a record of
+  whether the title arrived. A **Medium** finding, and by its own text *"the only state in the whole
+  order pipeline where a customer is told something untrue,"* was therefore invisible on every
+  open-work surface. Now row 1 of the table, marked **needs an owner**, with the ownership gap
+  written into § 13 F115.
+- **F127 was resolved and still summarised as "PARTLY RESOLVED."** Its own first sub-bullet and
+  `docs/sql/f127-account-status-write-gate.sql`'s `prod=APPLIED 2026-08-11` both say otherwise. The
+  status line contradicted the body directly beneath it — **F106 one level down**, and the more
+  dangerous direction, because a status line is precisely where a reader stops. Corrected; the dated
+  sub-bullets kept verbatim with a `↳ Superseded` marker rather than rewritten.
+
+**The durable fix, not just the two edits:** § Current Migration Phase now instructs the next
+re-derivation to read each status line's **last clause, not its first word**, and to treat any
+finding that delegates its residual to another finding as open until that other finding
+demonstrably absorbed it. That second rule is what would have caught F115 on 2026-08-11, when F108
+closed.
+
+**Lesson for the mechanism itself:** the STATUS *token* is machine-checkable and worked. § 13
+statuses are freeform prose and are not, so V4 is inherently a judgement call — the check can
+narrow it but not close it. A future session wanting real coverage would need a token on each
+finding too; that is a bigger change than this session's scope and is not recommended casually.
 
 ### V6 — CLAUDE.md line count, measured honestly
 

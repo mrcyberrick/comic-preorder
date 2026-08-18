@@ -24,9 +24,15 @@ and flags any doc claiming NOT STARTED / IN PROGRESS whose branch is already mer
 
 **Open findings — full detail lives ONLY in `docs/technical-reference.md` § 13. This table is a
 pointer, not a record; do not duplicate finding narrative here or let it drift from § 13.**
+When re-deriving this table from § 13, **do not grep for the word "open"**: F115 went missing from
+every open-work surface for a week because its status reads *"Mitigated"*, and F127 sat listed as
+*"PARTLY RESOLVED"* for a week after both halves shipped (both corrected 2026-08-18). Read each
+status line's **last clause**, not its first word — and treat any finding that delegates its
+residual to another finding as open until that other finding demonstrably absorbed it.
 
 | ID | One line | Next step |
 |---|---|---|
+| F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Mitigated (reported at import), not resolved: nothing persists the arrival outcome | **needs an owner** — the residual was delegated to F108, which closed 2026-08-11 without absorbing it (found 2026-08-18). Scoping decision first: persist an arrival outcome, or accept reported-only and say so |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
 | F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | design together with F72 — needs a scoping interview; DMARC full-read gate armed 2026-08-20 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
