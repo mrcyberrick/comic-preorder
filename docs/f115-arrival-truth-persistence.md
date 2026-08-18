@@ -1,9 +1,12 @@
 # F115 — persist the reservation arrival outcome (Option B), bundled with the September import pre-flight
 
-**STATUS:** IN PROGRESS | staging=S2 migration APPLIED 2026-08-18 (docs/sql/f115-arrival-outcome.sql, verified: column + CHECK constraint + all-NULL confirmed live) | prod=— | findings=F115,F110,F122,F123
+**STATUS:** IN PROGRESS | staging=S2/S3/S4/S7 DONE 2026-08-18 (migration applied+verified, import write shipped, admin surface live, Playwright V3/V6/V7 green — see § 7) | prod=migration NOT APPLIED | findings=F115,F110,F122,F123
 **Session note (2026-08-18):** September catalog files not yet present (entry condition (b) —
-see session prompt). This pass does S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
-live run, and backfill) are held for the ~Sept 7–10 import window.
+see session prompt). This pass did S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
+live run, and backfill) are held for the ~Sept 7–10 import window. F115 is NOT resolved yet —
+see § 7 for exactly what ran and what didn't. A TDZ bug in the S4 admin.html change was
+introduced, caught, and fixed within this same session (staging `3dcf521` → `f61487a`) by the
+full Playwright run against deployed staging — see git log for detail.
 
 **Decision record.** Decided 2026-08-18 in `docs/f92-policy-audit-and-f115-arrival-truth.md`
 Part B, then scoped 2026-08-18 with Rick's four implementation answers:
@@ -167,16 +170,40 @@ one-time backfill · Playwright coverage · the September import pre-flight (F11
 
 ## 7. Completion criteria
 
-- [ ] V1–V7 green, each with recorded output
-- [ ] Migration applied to both environments, `-- STATUS:` line filled in
-- [ ] Both import scripts updated, committed **and pushed** to the scripts repo (verify with
-      `git log origin/main`; a commit that only exists locally has bitten this project before)
-- [ ] Backfill count re-measured and stated; zero rows set to `not_arrived`
-- [ ] `mylist.html` unchanged, verified by diff
-- [ ] § 13 F115 flipped to RESOLVED with the date; CLAUDE.md's open-findings row removed
-- [ ] This doc's STATUS token flipped — **check it before closing; the last three sessions all
-      forgot** (`/preflight` check 7's findings cross-check now catches exactly this)
-- [ ] `/wrap-up` produced
+**2026-08-18 session — entry condition (b): September catalog files not yet present.** Covered
+S2/S3/S4/S7 only, per the session's own timing gate. S1/S5/S6 remain, held for the ~Sept 7–10
+import window. Do not read the ticks below as F115 being done — it is not; V1/V4/V5 have not run.
+
+- [x] V2, V3, V6, V7 green, each with recorded output (this session) — V1/V4/V5 **not run** (need
+      the real September files / real import; S1/S5/S6 held)
+  - V2: 186/186 scripts-repo unit tests green, incl. the explicit "never produces `not_arrived`"
+    assertion (scripts repo `b629cda`)
+  - V3: Playwright — a seeded `fulfilled=true, arrival_outcome='unknown'` row reads "Never arrived"
+    (`data-state="neverArrived"`); a seeded `arrival_outcome='arrived'` row does not appear
+    (`15-order-export-ledger.spec.ts`, test added this session)
+  - V6: `mylist.html` byte-unchanged, confirmed via `git diff` before AND after this session's
+    admin.html changes
+  - V7: full suite **127 tests, 126 passed + 1 flaky** (`18-mobile-nav.spec.ts` mylist mobile
+    search — timed out at 60s, passed in 5.1s on an isolated re-run; unrelated to this session's
+    changes, `mylist.html` untouched) — scripts unit suite 186/186
+- [x] Migration applied to **staging**, `-- STATUS:` line filled in (`docs/sql/f115-arrival-outcome.sql`,
+      staging `9eeee0d`) — **production not yet run**, deferred alongside S1/S5/S6
+- [x] Both import scripts updated, committed **and pushed** to the scripts repo — verified via
+      `git log origin/main` (`b629cda`)
+- [ ] Backfill count re-measured and stated; zero rows set to `not_arrived` — **not this session**
+      (S6, held for the September import window)
+- [x] `mylist.html` unchanged, verified by diff
+- [ ] § 13 F115 flipped to RESOLVED — **not yet**; F115 stays open (Mitigated) until S1/S5/S6 land.
+      CLAUDE.md's open-findings row updated to reflect this session's progress, not removed.
+- [x] This doc's STATUS token flipped — see line 3
+- [x] `/wrap-up` produced (this session's closeout)
+
+**Next session:** when September catalog files are present, resume at S1 (dry-run pre-flight of
+F110/F122/F123, no new code — the F115 write already ships in this commit, so this becomes "does
+S1 stay clean AND does the persisted write behave correctly on a real run"), then S5 (real import),
+S6 (re-measure + backfill, staging then Rick-gated production), and only then close out § 13 F115
+and this doc's STATUS token as RESOLVED. Production's copy of `docs/sql/f115-arrival-outcome.sql`
+is also still queued — Rick's call, likely bundled with that same session.
 
 ---
 

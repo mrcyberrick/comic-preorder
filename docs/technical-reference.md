@@ -3928,6 +3928,17 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   3. **"Never arrived" is staff-only** — must not surface to a customer.
 
   **New owner: `docs/f115-arrival-truth-persistence.md`** (NOT STARTED, no date yet — Rick's call to schedule). That document is the scope-holder for the schema/import/client work this decision implies; it is a scoping document, not a runbook, per this session's own charter ("this session decides; it does not build"). **This delegation is different from the one that went missing:** it points at a live, just-created, git-committed document with an explicit decision recorded in it, not at an already-closed finding whose own scope never covered this.
+
+  **⏳ IN PROGRESS, 2026-08-18 (same day, later session) — S2/S3/S4/S7 of the owner doc shipped;
+  still OPEN, not RESOLVED.** September catalog files were not yet present, so the session's own
+  timing gate (entry condition (b)) held S1/S5/S6 (the real import pre-flight, live run, and the
+  28/23 backfill) for the ~Sept 7–10 window. What did ship, staging only: the `arrival_outcome`
+  tri-state column (migration applied and verified live), the import write in both scripts
+  (`classifyArrivalOutcomes()`/`writeArrivalOutcomes()`, 14 new unit tests, gate V2 green — never
+  produces `'not_arrived'`), and the admin `computeBackorderRisk()` surface reading the column for
+  already-fulfilled rows (gate V3 green via Playwright, `mylist.html` unchanged per gate V6). Full
+  suite 127/127 with one confirmed-flaky retry, scripts suite 186/186 (gate V7). Production has
+  **not** run the migration. Detail: `docs/f115-arrival-truth-persistence.md` § 7.
 - **Severity:** **Medium.** No data-integrity or security exposure, and the measured rate is low — but it is the only state in the whole order pipeline where a customer is told something untrue, and it was structurally unobservable.
 - **Diagnosis — three mechanisms stacked:**
   1. `auto_fulfill_past_on_sale()` (`docs/sql/auto_fulfill_past_on_sale.sql`) sets `fulfilled = true` for every preorder with `c.on_sale_date < CURRENT_DATE`, **with no arrival check whatsoever**.
