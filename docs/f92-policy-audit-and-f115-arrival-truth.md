@@ -1,7 +1,16 @@
 # F92 catalog audit + F115 arrival-truth decision — one Rick-in-the-loop session
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=F92,F115
-**Status:** **PLANNED — not started.** Written 2026-08-18.
+**STATUS:** COMPLETE | staging=2026-08-18 | prod=N/A (read-only + doc) | findings=F92,F115
+**Status:** **COMPLETE — 2026-08-18.** Part A closed F92 (six catalog queries run on both
+environments by Rick; `technical-reference.md` corrected from the results, incl. § 7's `preorders`
+subsection). Part B decided F115 — **Option B**, staff-only, one-time correction — with ownership
+handed to `docs/f115-arrival-truth-persistence.md`. Commits `5de96b5`, `3d13e21`.
+**Token and criteria flipped 2026-08-18 in a follow-up**, not by the executing session: the work was
+committed and pushed while this doc still read `NOT STARTED` with every box unticked. Recorded
+rather than quietly fixed — it is the **third** instance of this exact shape in this workstream
+(after the truth-pass plan's own push box and F108's nested status line), and it is what motivated
+the `/preflight` gap noted at § 8.
+**Original header:** PLANNED — not started. Written 2026-08-18.
 **Target:** **read-only on both environments** for F92. F115 produces a **decision**, not code —
 implementation is a separate session scoped by whatever is decided here.
 **Rick-in-the-loop:** every F92 query runs in the Supabase SQL Editor. PostgREST cannot read the
@@ -206,13 +215,27 @@ That is precisely how it went missing: F108 was named as owner, F108 closed, and
 
 ## 6. Completion criteria
 
-- [ ] V1–V6 green
-- [ ] F92 closed, or its remaining scope re-stated with a reason it is still open
-- [ ] F115 has an owner and a date; CLAUDE.md's open-findings table row updated to match
-- [ ] `weekly-pipeline-consolidation-plan.md:194` corrected, token left alone
-- [ ] `/preflight` carries the calibration note
-- [ ] Doc-only commits pushed to `staging`
-- [ ] `/wrap-up` status update produced
+**Reconstructed from the committed artifacts 2026-08-18** — the executing session did not tick these
+at close. Each box below names the evidence it rests on, and the one that cannot be confirmed from
+the artifacts is left unticked rather than assumed.
+
+- [x] V1 — six queries, both environments — § 13 F92's resolution line names all six by catalog
+      relation and both project refs
+- [ ] V2 — **cannot be confirmed from the artifacts.** § 2.2's table asked for every expectation to
+      be ticked *or flagged, passes included*; the § 13 entry records the corrections made but not a
+      row-by-row pass over the expectations. The substantive ones are evidenced (policy count,
+      function inventory, § 7 bodies), so this is a recording gap rather than a suspected miss —
+      but it is exactly the "passes go unrecorded" habit § 2.2 existed to break
+- [x] V3 — § 7 `preorders` now reads *"4 policies; 2 PERMISSIVE + 2 RESTRICTIVE"* with all four
+      bodies quoted from live, and § 7's header table records the divergence sweep
+- [x] V4 — divergences recorded naming both environments (§ 7 header table, line ~29)
+- [x] V5 — F115 decision recorded in § 13 with a **named owner doc**, not a delegation to another
+      finding; CLAUDE.md's table row points at it
+- [x] `weekly-pipeline-consolidation-plan.md` corrected (§ 200 records the correction; token
+      correctly left at `NOT STARTED`)
+- [x] `/preflight` carries the calibration note (SKILL.md ~line 67–73)
+- [x] Doc-only commits pushed to `staging` — `5de96b5`, `3d13e21`
+- [x] `/wrap-up` status update produced
 
 ---
 
