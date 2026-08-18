@@ -36,6 +36,34 @@ Never print credential values; report variable names and present/missing only.
 6. **Supabase reachability** (cheap, no auth)
    - `curl.exe -s -o $null -w "%{http_code}" https://puoaiyezsreowpwxzxhj.supabase.co/rest/v1/` — expect 401/200-range, not a timeout.
 
+7. **Doc-status consistency** (added 2026-08-18, doc-status truth pass — extends F105's mechanism)
+   - Every `docs/*.md` plan doc carries a first-line-after-title token:
+     `**STATUS:** <STATE> | staging=... | prod=... (PR #<n>) | findings=...`, where `<STATE>` is one
+     of `NOT STARTED` / `IN PROGRESS` / `COMPLETE` / `SUPERSEDED` / `STUB`. Every `docs/sql/*.sql`
+     file carries `-- STATUS: staging=... | prod=...`. (Reference/template docs are exempt:
+     `technical-reference.md`, `monthly-catalog-refresh.md`, `tenant-onboarding-runbook.md`,
+     `phase-4.1-canary-procedure.md`.)
+   - For every doc whose token state is `NOT STARTED` or `IN PROGRESS`, grep that file's body for
+     `PR #<n>` references and 7-40 char hex strings that look like commit SHAs. For each one found,
+     run `gh pr view <n> --json mergedAt` (a non-null `mergedAt` means it shipped) or
+     `git branch -a --contains <sha>` (a hit on `main` or `origin/main` means it shipped). **If
+     any hit lands on a merged PR or a SHA that is an ancestor of `origin/main`, FLAG that doc** —
+     its token claims unstarted/in-progress work that git says already shipped.
+   - Bash one-liner for the SHA/PR sweep once a candidate doc is identified:
+     ```bash
+     git branch -a --contains <sha> | grep -q 'main$' && echo "STALE: <sha> is on main"
+     gh pr view <n> --json mergedAt -q '.mergedAt' # non-null/non-empty => STALE
+     ```
+   - This check has a **known blind spot**: it only catches a doc claiming *less* progress than
+     git shows (a stale "not started"/"in progress"). It cannot catch a doc claiming *more*
+     progress than reality (a premature "COMPLETE") — that direction needs the doc's cited
+     evidence (PR number, SHA) to be checked for existing, not just for having merged, which this
+     same sweep already does as a side effect: a `PR #<n>` that `gh pr view` can't find at all is
+     also worth flagging.
+   - **Do not trust this check the first time it is added to a project.** Demonstrate it failing
+     against a real stale doc before relying on it (see `docs/doc-status-truth-pass.md` § 7 for the
+     first such demonstration and its recorded output).
+
 ## Output
 
 A table: check | status (PASS/FAIL) | fix (if FAIL). End with one line: either
