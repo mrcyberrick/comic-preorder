@@ -205,6 +205,12 @@ S6 (re-measure + backfill, staging then Rick-gated production), and only then cl
 and this doc's STATUS token as RESOLVED. Production's copy of `docs/sql/f115-arrival-outcome.sql`
 is also still queued — Rick's call, likely bundled with that same session.
 
+**Gate scheduled (2026-08-18):** the S1/S5/S6 wait-for-September-files gate has no elapsed-time
+condition, only an event condition (catalog files landing) — earliest plausible date ~Sept 7 per
+historical cadence. Reminder: one-time cloud routine `trig_01QwSJJf65mYTy2mNkTYsSKk`, fires
+2026-09-07 12:00 UTC (8:00 AM ET), checks in and prompts to resume S1 if files are present.
+https://claude.ai/code/routines/trig_01QwSJJf65mYTy2mNkTYsSKk
+
 ---
 
 ## 8. Rollback
