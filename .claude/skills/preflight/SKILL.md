@@ -54,6 +54,34 @@ Never print credential values; report variable names and present/missing only.
      git branch -a --contains <sha> | grep -q 'main$' && echo "STALE: <sha> is on main"
      gh pr view <n> --json mergedAt -q '.mergedAt' # non-null/non-empty => STALE
      ```
+   - **Findings cross-check (added 2026-08-18 — this is the one that catches doc-only sessions).**
+     The SHA/PR sweep above keys on a doc naming a branch or PR, which **doc-only sessions never
+     have**: they commit straight to `staging`, so there is no branch to be an ancestor of anything.
+     That is the most common session shape in this project, and all three observed instances of this
+     drift were doc-only. So also run, using data already in the token:
+     > **Read the `findings=` list of every `NOT STARTED` / `IN PROGRESS` doc and check each ID's
+     > status in `technical-reference.md` § 13. Then:**
+     > - state is **`NOT STARTED`** and **ANY** listed finding is RESOLVED/CLOSED → **FLAG.** The
+     >   plan has demonstrably progressed; it is at minimum `IN PROGRESS`.
+     > - state is **`IN PROGRESS`** and **ALL** listed findings are RESOLVED/CLOSED → **FLAG.** Its
+     >   declared scope is finished; it is probably `COMPLETE`.
+     > - state is `IN PROGRESS` and only *some* are resolved → **no flag.** A plan legitimately
+     >   spans a closed finding and an open one while it is being worked.
+     ```bash
+     # for one doc: extract findings= from the token, then check each in § 13
+     grep -m1 '^\*\*STATUS:\*\*' docs/<doc>.md | grep -o 'F[0-9]\+'
+     grep -A2 "^#### F<n> " docs/technical-reference.md | grep -icE 'RESOLVED|CLOSED'
+     ```
+     Worked example, and why this rule exists: `f92-policy-audit-and-f115-arrival-truth.md` declared
+     `findings=F92,F115`, F92 went RESOLVED on 2026-08-18, and the doc sat at `NOT STARTED` with
+     every completion box unticked while both halves were committed and pushed. The SHA/PR sweep
+     could not see it. This rule would have — via the **first** clause, not the second: the state was
+     `NOT STARTED` and F92 had gone RESOLVED, which is enough. F115 was still open in that same
+     list, so an "all findings closed" rule would have **missed it** — that was the first draft of
+     this rule, and it failed against its own worked example. Check any new rule here against the
+     case that motivated it before trusting it.
+     A flag still means **go look**, per the § Calibration note below — a plan spanning several
+     findings may be legitimately mid-flight and just need its state moved to `IN PROGRESS`.
    - This check has a **known blind spot**: it only catches a doc claiming *less* progress than
      git shows (a stale "not started"/"in progress"). It cannot catch a doc claiming *more*
      progress than reality (a premature "COMPLETE") — that direction needs the doc's cited
