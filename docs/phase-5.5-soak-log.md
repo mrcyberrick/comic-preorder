@@ -1,5 +1,7 @@
 # Phase 5.5 — Two-Tenant Production Soak Log
 
+**STATUS:** COMPLETE | staging=2026-07-15 | prod=2026-07-15 | findings=—
+
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md`
 **Sub-deploy plan:** `docs/phase-5.5-second-tenant-onboarding.md`
 **Soak definition:** One full monthly prod import cycle with both tenants present + post-import isolation re-verification = 0 in both directions (decision: Rick, 2026-06-17; no extra buffer — § 1.4)

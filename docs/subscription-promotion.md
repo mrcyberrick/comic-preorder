@@ -1,5 +1,7 @@
 # Subscription Promotion — catalog banner + post-reserve prompt
 
+**STATUS:** COMPLETE | staging=2026-07-17 | prod=2026-07-17 (PR #86) | findings=—
+
 **Status:** **Complete — live in production, 2026-07-17.** All steps done,
 V1–V5 green, Rick's staging visual sign-off received, prod-promoted via
 PR #86 (`107fc0a`), post-deploy write-smoke passed, banner enabled with

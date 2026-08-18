@@ -1,5 +1,7 @@
 # Subscription Reserved-Suggestions — one-click subscribe from your own reservations
 
+**STATUS:** COMPLETE | staging=2026-07-19 | prod=2026-07-19 (PR #91) | findings=—
+
 **Status:** **Complete — live in production, 2026-07-19.** Implemented
 (`5451406`), amended per Rick's V5 feedback (`a3995fa`, § 4c: always-on
 suggestions, Popular dropped, admin read-only view). V1–V5 all green under

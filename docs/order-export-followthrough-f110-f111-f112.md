@@ -1,6 +1,15 @@
 # Order-Export Follow-Through — F110 (withdrawals) + F111 (FOC across months) + F112 (distributor model)
 
-**Status:** **Session A (detection) — COMPLETE 2026-08-03, live on staging AND production.** Session B (surfacing) — PLANNED, not started. See § 8 Completion criteria and `docs/technical-reference.md` § 13 F110/F112 for full evidence.
+**STATUS:** COMPLETE | staging=2026-08-03 | prod=2026-08-04 (PR #101) | findings=F110,F111,F112,F113,F114
+
+**Status:** **Both sessions COMPLETE, live in production.** Session A (detection) — 2026-08-03.
+Session B (surfacing) — complete on staging 2026-08-03, live in production 2026-08-04 via PR #101
+(merge `303c255`, a general staging→main promotion that carried it along), re-verified live
+2026-08-09 by serving-build markers (`#withdrawn-panel`, `allPreordersAllMonths`, `gatherCollapsed`).
+See § 8 Completion criteria and `docs/technical-reference.md` § 13 F110/F111/F112/F113 for full
+evidence. *(Corrected 2026-08-18 — this line previously read "Session B — PLANNED, not started,"
+stale for two weeks; found via `git log --merges --ancestry-path` to PR #101, not by re-reading
+this file — the F105 mechanism, restated in CLAUDE.md's own F110/F111/F113 entries on 2026-08-09.)*
 **Plan written:** 2026-08-03 (planning session; execution handed to fresh CLI sessions).
 **Follows:** `docs/order-export-foc-window-and-order-state.md` (F101/F102) — **complete and live in production** 2026-08-03 (PR #100, merge `5951a30`). Nothing in that work is broken. All three findings here are gaps that reading the PRH and Lunar vendor documentation exposed.
 **Not a phase sub-deploy** — standalone correctness/enhancement work. Phase 5 closed 2026-07-15; Phase 6 not started.

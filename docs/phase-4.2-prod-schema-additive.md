@@ -1,8 +1,14 @@
 # Phase 4.2 — Production Schema, Additive
 
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-30 (direct main, cutover window, no PR) | findings=—
+
 **Parent plan:** `docs/phase-4-production-migration.md` (sub-deploy 4.2)
 **Baseline (authoritative):** `docs/production-baseline-2026-05-28.md`
-**Status:** Planning → ready for cutover-window execution (Friday evening)
+**Status:** **Complete — 2026-05-30.** Executed in the cutover window (direct to production, per
+CLAUDE.md § Staging Only's named-cutover-sub-deploy exemption). *(Corrected 2026-08-18 — this line
+previously read "Planning → ready for cutover-window execution," stale since 2026-05-30; found via
+`docs/phase-4-production-migration.md` § Sub-Deploys table, which already recorded
+"4.2 · Complete · 2026-05-30.")*
 **Branch:** `feat/phase-4-prod-cutover` off `main` (production repo). 4.2 itself is SQL-Editor work; no app-code changes land in 4.2.
 **Target:** Production Supabase `plgegklqtdjxeglvyjte.supabase.co`
 **Rollback complexity:** Easy (`DROP COLUMN` / `DROP INDEX` / `DROP TABLE`; backfill is re-runnable)

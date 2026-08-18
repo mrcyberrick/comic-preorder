@@ -1,5 +1,7 @@
 # Phase 4 — Production Migration
 
+**STATUS:** COMPLETE | staging=2026-05-31 | prod=2026-06-10 | findings=F55,F56,F57,F59,F61,F63,F64,F66
+
 **Status:** **Complete** — 4.0–4.8 complete; completion audit closed 2026-06-10; all Phase Completion Criteria ticked
 **Branch base:** `staging` (4.0, 4.1) → `feat/phase-4-prod-cutover` off `main` in the production repo (4.2–4.7)
 **Started:** 2026-05-24 (planning)

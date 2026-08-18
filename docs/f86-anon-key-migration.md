@@ -1,5 +1,7 @@
 # F86 — Prod Legacy API Key Retirement (config.js anon-key migration)
 
+**STATUS:** COMPLETE | staging=2026-07-22 | prod=2026-07-22 (PR #80) | findings=F86,F88
+
 **Status:** **Complete — 2026-07-22.** All steps 0–7 done; V1–V7 all green; F88 (surfaced mid-session) resolved on staging and prod; F75 residual closed. See § 6a Execution Log for full evidence.
 **Plan written:** 2026-07-15 (planning session; no code, config, or dashboard changes made)
 **Execution session opened:** 2026-07-15

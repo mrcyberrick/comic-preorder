@@ -1,6 +1,11 @@
 # Phase 1 — Schema Foundation Migration
 
-**Status:** Planning complete, execution pending
+**STATUS:** COMPLETE | staging=2026-04-30 | prod=N/A | findings=—
+
+**Status:** **Complete — 2026-04-30.** All criteria met (§ Phase Completion Criteria below).
+*(Corrected 2026-08-18 — this line previously read "Planning complete, execution pending," stale
+since 2026-04-30; the doc's own § Phase Completion Criteria already said "Phase 1 complete as of
+2026-04-30" — this header just hadn't been updated to match.)*
 **Branch:** `feature/multi-tenancy-foundation` (branched from `staging`)
 **Estimated execution time:** 3 sub-deploys over 1–2 weekends
 **Customer impact:** None (staging only, production untouched)

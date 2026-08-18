@@ -1,5 +1,7 @@
 # Phase 3.7 — Smoke Test Automation (Playwright)
 
+**STATUS:** COMPLETE | staging=2026-05-13 | prod=N/A | findings=—
+
 **Status:** Complete 2026-05-13
 **Parent phase:** `docs/phase-3-tenant-resolution.md`
 **Branch base:** `staging`

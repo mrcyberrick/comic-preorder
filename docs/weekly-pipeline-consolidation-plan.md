@@ -1,5 +1,7 @@
 # Weekly Pipeline Consolidation — Plan
 
+**STATUS:** NOT STARTED | staging=— | prod=N/A | findings=—
+
 **Status:** Scoping — Apps Script main source received 2026-07-09 (§ 1.5);
 three artifacts still outstanding (§ 5). Written 2026-07-08 from the
 2026-07-07 architecture review (workflow finding: shipment data is processed

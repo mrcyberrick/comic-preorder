@@ -1,5 +1,7 @@
 # Analytics — Cycle-Aligned Comparisons + Cycle Overlay
 
+**STATUS:** COMPLETE | staging=2026-07-19 | prod=2026-07-19 (PR #90) | findings=—
+
 **Status:** Complete — 2026-07-19. Merged to staging ff-only (`d6ee227`); V3 checklist correction doc commit (`fa2cff6`). V1–V5 all green. **Promoted to production 2026-07-19** via PR #90 (`e250281`), at Rick's explicit request the same session; post-deploy write-smoke passed (reserve → prod `preorders` row confirmed with correct founding-tenant `tenant_id` `20941129-c35a-476d-ae21-44b8f77af89c` → cancel → row hard-deleted).
 **Target:** staging only (standard flow; prod promotion is a separate explicit request) — **prod promotion completed same session, 2026-07-19.**
 **Predecessor state:** the live `analytics.html` is the **3-tier redesign**

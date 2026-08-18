@@ -1,5 +1,7 @@
 # Runbook — Phase 4.2 Production Schema (Additive)
 
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-30 (direct main, cutover window, no PR) | findings=—
+
 **CLI-orchestrated, Rick-in-the-loop.** A Claude Code CLI session runs this top to bottom. It
 **executes the repo/doc steps itself** and **pauses at every production-database step**, handing
 the SQL to Rick to run in the Supabase SQL Editor and waiting for pasted results before

@@ -1,6 +1,11 @@
 # Phase 3.2 — Explicit `tenant_id` on `app.js` Writes
 
-**Status:** Planning
+**STATUS:** COMPLETE | staging=2026-05-04 | prod=N/A | findings=—
+
+**Status:** **Complete — 2026-05-04.** All criteria met (see § Completion Criteria below).
+*(Corrected 2026-08-18 — this line previously read "Planning," stale since 2026-05-04; the doc's
+own completion section already said "Complete as of 2026-05-04" — this header just hadn't been
+updated to match.)*
 **Branch:** `feature/phase-3.2-explicit-tenant-writes` (branched from `staging`)
 **Risk:** Low — additive change to existing INSERTs, no schema changes, no behavior changes
 **Reversible:** Yes (revert the branch — column defaults still in place as safety net)

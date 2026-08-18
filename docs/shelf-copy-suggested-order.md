@@ -1,5 +1,7 @@
 # Shelf-Copy Suggested Order — My List store-inventory automation
 
+**STATUS:** COMPLETE | staging=2026-07-17 | prod=2026-07-18 (PR #89) | findings=—
+
 **Status:** **Complete and promoted to production.** Execution session ran
 2026-07-17, same day as planning. Both Open defaults confirmed as-is with
 Rick at execution pre-flight (plan-default tier thresholds; plan-proposed

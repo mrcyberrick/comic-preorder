@@ -1,5 +1,7 @@
 # Phase 5 — Second-Tenant Onboarding
 
+**STATUS:** COMPLETE | staging=2026-07-15 | prod=2026-07-15 | findings=F72,F89,F90,F105
+
 **Status:** **Phase 5 Complete — 2026-07-15.** 5.0 Complete 2026-06-11; 5.1 Complete 2026-06-14 (hosting → Cloudflare Pages; prod live at `pulllist.app`); 5.2 Complete 2026-06-15 (slug→id routing RPC; TENANT_SLUG_MAP removed; F14/F64-8/F67 resolved; prod write-smoke clean); 5.3 Complete 2026-06-15; 5.4 Complete 2026-06-17; 5.5 Complete 2026-07-15 (second tenant `comicstore` live on prod; two-tenant soak passed; onboarding generalized). Successor: Phase 6 (stub, not started, gated on wildcard-DNS/TLS spike).
 **Predecessor:** Phase 4 — Production Migration (`docs/phase-4-production-migration.md`) — **Complete 2026-06-10**
 **Branch base:** `staging` for all staging-side work; prod promotions per `CLAUDE.md` § Standard Deployment Workflow

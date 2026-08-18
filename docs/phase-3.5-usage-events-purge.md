@@ -1,5 +1,7 @@
 # Phase 3.5 — Usage Events Purge Job (90-day retention)
 
+**STATUS:** COMPLETE | staging=2026-05-10 | prod=N/A | findings=—
+
 **Status:** Complete — 2026-05-10
 **Parent phase:** `docs/phase-3-tenant-resolution.md`
 **Branch base:** `staging`

@@ -1,5 +1,7 @@
 # Phase 4.3 — Production Schema Constraints + View Recreation + RLS Recursion Fix — RUNBOOK
 
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-31 (direct main, cutover window, no PR) | findings=—
+
 **Sub-deploy:** 4.3 (cutover-window, Sat-morning slot per parent plan § Cutover sequencing)
 **Environment:** **PRODUCTION** — Supabase `plgegklqtdjxeglvyjte` (`https://plgegklqtdjxeglvyjte.supabase.co`)
 **Execution model:** CLI-orchestrated, Rick-in-the-loop — see § OPERATING MODEL (the CLI session never reaches the prod database itself; all DB SQL is run by Rick in the Supabase SQL Editor)

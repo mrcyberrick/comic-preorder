@@ -4049,7 +4049,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F129 — the Order Follow-Up panel never checks `ledgerRejected()`, so a title the store already marked rejected — and which F120 already flags to the customer — nags the admin panel forever
 
-- **Status:** filed 2026-08-13, fix scoped and approved same session (Rick, on seeing the panel unchanged after recording rejections: *"the bag list shows they are rejected by the supplier and on the UPCOMING list. These are already customer facing and that is the point of this."*).
+- **Status:** **RESOLVED 2026-08-13, live on staging AND production, same session as filing.** Fix
+  scoped and approved same session (Rick, on seeing the panel unchanged after recording rejections:
+  *"the bag list shows they are rejected by the supplier and on the UPCOMING list. These are already
+  customer facing and that is the point of this."*). Shipped as the one-line fix named below —
+  staging `944d9e6`, promoted via **PR #121, merge `6a1ea3f`** (2026-08-13). Recorded 2026-08-18
+  during the doc-status truth pass; this entry previously read "implementing now" for five days
+  after the fix had already shipped — found via `git log`, not by re-reading this entry.
 - **Severity:** Low — admin-only noise. No customer-facing or data-safety impact; F120's customer badge (My List, Bagging List) is unaffected and already correct.
 - **Symptom:** a one-time SQL correction (this session) reclassified 24 `order_submissions` codes that were wrongly recorded as ordered, via downward-adjustment rows netting each to 0 — the correct "rejected by the supplier" state per F117/F120. The affected titles correctly picked up F120's rejected badge on My List and the Bagging List, but the admin **Order Follow-Up** panel (Customers ▸ ongoing) kept showing every one of them as Backordered or At risk, unchanged before and after the correction.
 - **Diagnosis:** `computeBackorderRisk()` (`admin.html:1525-1538`) has exactly two exit conditions — `ledgerNetQty(...) > 0` (genuinely ordered) and `hasShipmentEvidence(...)` (arrived). There is no third exit for "the store already decided this is rejected and already communicated that to the customer." `ledgerRejected()` — ledger rows present, net ≤ 0 — already exists (`admin.html:793`, added with F117/F120) and is already used by `renderThisWeek()` for the identical distinction on the Bagging List. Order Follow-Up was simply never wired to it, so a resolved case (store decided, customer told) reads identically to a genuinely open one (never decided) — same shape as F116's original false-positive, in reverse: F116 stopped the panel crying wolf on titles that WERE ordered; this is the panel never standing down on titles that are correctly, permanently NOT going to be.

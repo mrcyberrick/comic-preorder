@@ -1,5 +1,7 @@
 # Phase 4.8 — Post-Cutover Housekeeping
 
+**STATUS:** COMPLETE | staging=N/A | prod=2026-06-10 | findings=F55,F56,F57,F61
+
 **Status:** Complete — executed 2026-06-10.
 **Parent plan:** `docs/phase-4-production-migration.md` (sub-deploy row 4.8)
 **Predecessor:** `docs/phase-4.7-post-cutover-soak.md` — closed 2026-06-10 (soak clean; canary torn down). Scope source: `docs/phase-4.6-edge-functions-cutover.md` **Appendix A** (H1–H4) + **F61** deferral from the 4.7 soak (H5).

@@ -1,5 +1,7 @@
 # Admin — the Accounts tab
 
+**STATUS:** COMPLETE | staging=2026-08-09 | prod=2026-08-09 (PR #115) | findings=F126,F127
+
 **Origin:** Rick's direction + mockup, 2026-08-09, immediately after F121's
 restructure closed. *"Paper Customers should be something more of a way to manage
 users. I see this as the Accounts tab that contains all users."*
