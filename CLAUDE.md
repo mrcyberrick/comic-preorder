@@ -12,8 +12,10 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F129 fix (Order Follow-Up panel now honors `ledgerRejected()`) — live in
-production 2026-08-13, PR #121, merge `6a1ea3f`.
+**Last completed work:** F92 catalog audit CLOSED — live `pg_catalog` read on both environments
+found no live defect, fixed doc drift in § 7 (two subsections falsely claimed "corrected");
+F115 decided (Option B, persist arrival outcome) with new owner `docs/f115-arrival-truth-persistence.md`
+— staging `5de96b5`, 2026-08-18, doc-only.
 **Next free finding ID:** **F130.**
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
@@ -32,7 +34,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Mitigated (reported at import), not resolved: nothing persists the arrival outcome | **needs an owner** — the residual was delegated to F108, which closed 2026-08-11 without absorbing it (found 2026-08-18). Scoping decision first: persist an arrival outcome, or accept reported-only and say so |
+| F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Mitigated (reported at import), not resolved: nothing persists the arrival outcome | **decided 2026-08-18** — Option B (persist the outcome), staff-only visibility, one-time correction of the 28/23 already-fulfilled rows. Owner: `docs/f115-arrival-truth-persistence.md` (NOT STARTED, no date set — Rick's call to schedule) |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
 | F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | design together with F72 — needs a scoping interview; DMARC full-read gate armed 2026-08-20 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
