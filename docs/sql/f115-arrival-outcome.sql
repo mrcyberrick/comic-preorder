@@ -1,5 +1,8 @@
--- STATUS: staging=NOT APPLIED | prod=NOT APPLIED
+-- STATUS: staging=APPLIED 2026-08-18 | prod=NOT APPLIED
 --         F115 tri-state arrival_outcome column on preorders.
+--         Staging verified live: column text/nullable/no-default, CHECK
+--         constraint matches (ARRAY['arrived','not_arrived','unknown']),
+--         bogus-value UPDATE correctly rejected 23514 then rolled back clean.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.

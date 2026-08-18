@@ -1,6 +1,6 @@
 # F115 — persist the reservation arrival outcome (Option B), bundled with the September import pre-flight
 
-**STATUS:** IN PROGRESS | staging=S2 migration written (docs/sql/f115-arrival-outcome.sql), not yet run | prod=— | findings=F115,F110,F122,F123
+**STATUS:** IN PROGRESS | staging=S2 migration APPLIED 2026-08-18 (docs/sql/f115-arrival-outcome.sql, verified: column + CHECK constraint + all-NULL confirmed live) | prod=— | findings=F115,F110,F122,F123
 **Session note (2026-08-18):** September catalog files not yet present (entry condition (b) —
 see session prompt). This pass does S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
 live run, and backfill) are held for the ~Sept 7–10 import window.
