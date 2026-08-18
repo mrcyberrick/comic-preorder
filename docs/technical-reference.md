@@ -2,26 +2,30 @@
 
 **Environment:** staging Supabase project `puoaiyezsreowpwxzxhj.supabase.co`
 **Founding tenant UUID:** `72e29f67-39f7-42bc-a4d5-d6f992f9d790` (slug `raysandjudys`)
-**Last verified against live: 2026-08-10** — this is the F92 live-DB pass.
-What that date covers, and what it does **not**, stated exactly:
+**Last verified against live: 2026-08-18** — this closes out the F92 residual
+the 2026-08-10 pass left open. What each date covers, stated exactly:
 
-| Scope | How it was verified on 2026-08-10 | Confidence |
+| Scope | How it was verified | Confidence |
 |---|---|---|
-| § 4 table list + **every column name** on both environments | PostgREST `?select=*&limit=1` key-set read, plus `?select=<col>` probes (a missing column returns `42703`) | **Read from live** |
-| § 4 row counts, § 4.1 tenant rows, § 4.2 keys, § 4.11 ledger contents | PostgREST `Prefer: count=exact` / `Range: 0-0` and direct SELECTs | **Read from live** |
-| § 5 view existence + column list; § 6 **function inventory** on both environments | PostgREST OpenAPI spec at `GET /rest/v1/` (`Accept: application/openapi+json`), which enumerates every exposed relation and `/rpc/` path | **Read from live** |
-| § 6.8 / § 6.10 RPC return shapes | `POST /rest/v1/rpc/<fn>?select=<col>` — a wrong column returns `42703` | **Read from live** |
-| § 4 constraints/FKs, § 7 policy bodies, § 8 index list, function bodies and grants | **NOT readable over PostgREST** (no `pg_constraint` / `pg_policies` / `pg_proc` / `information_schema` access). Corroborated against the local `pg_dump` snapshots `schema-{staging,prod}-4.8.sql` (**2026-06-10**) plus § 13's own dated fix records | **Corroborated, not re-read — see § 13 F92 "Still owed"** |
-| § 10 (`app.js`), § 11 (Edge Functions), § 12 (import scripts) | Read from the files on disk on this date (`app.js`, `supabase/functions/*/index.ts`, `catalogs/scripts/import{,-staging}.js`) | **Read from source** |
+| § 4 table list + **every column name** on both environments | PostgREST `?select=*&limit=1` key-set read, plus `?select=<col>` probes, 2026-08-10 | **Read from live** |
+| § 4 row counts, § 4.1 tenant rows, § 4.2 keys, § 4.11 ledger contents | PostgREST `Prefer: count=exact` / `Range: 0-0` and direct SELECTs, 2026-08-10 | **Read from live** |
+| § 5 view existence + column list; § 6 **function inventory** on both environments | PostgREST OpenAPI spec, 2026-08-10; superseded by the direct `pg_proc` read below | **Read from live** |
+| § 6.8 / § 6.10 RPC return shapes | `POST /rest/v1/rpc/<fn>?select=<col>` — a wrong column returns `42703`, 2026-08-10 | **Read from live** |
+| § 4 constraints/FKs, § 7 policy bodies, § 8 index list, § 6 function `prosecdef`/`proconfig`/EXECUTE grants | **Direct `pg_constraint` / `pg_policies` / `pg_indexes` / `pg_proc` / `information_schema.columns` queries, run by Rick in the Supabase SQL Editor on both projects, 2026-08-18** (F92's owed-SQL block — PostgREST cannot reach these catalogs at all, so this required Rick at the keyboard) | **Read from live** |
+| § 10 (`app.js`), § 11 (Edge Functions), § 12 (import scripts) | Read from the files on disk, 2026-08-10 (`app.js`, `supabase/functions/*/index.ts`, `catalogs/scripts/import{,-staging}.js`) | **Read from source** |
 
-**Where this document is still weakest:** anything that needs the Postgres
-catalog. § 7's policy *bodies* and § 4's *constraints* are recorded from a
-two-month-old dump and from finding records, not from a live read. § 13 **F92**
-carries the exact SQL Rick needs to run to close that last gap.
+**F92 is closed as of this pass.** Every scope this document could not verify
+without direct catalog access — RLS policy bodies, DEFINER grants, CHECK
+constraints, FKs, indexes, column types — has now been read live on both
+environments, not corroborated from a two-month-old `pg_dump`. The read
+surfaced two doc-drift instances the 2026-08-10 pass believed it had already
+fixed and had not (`weekly_shipment` and `reservation_history`'s § 7.1
+subsections — see § 7's header caveat) and confirmed the `preorders` policy
+contradiction was already resolved. See § 13 F92 for the full account.
 
 *(This block replaced a 2026-07-28 line that described the whole document as
-May-2026 stale except three sections. That was true then; the sweep below is
-what changed it.)*
+May-2026 stale except three sections. That was true then; the 2026-08-10 sweep
+changed it, and this 2026-08-18 pass closed the one gap that sweep left open.)*
 
 This document is the canonical schema and architecture reference for the
 PULLLIST staging environment. Production diverges from staging until Phase 4
@@ -298,11 +302,17 @@ join that achieves the same.
 **Pattern B — multiple PERMISSIVE policies OR together.** PostgreSQL
 combines multiple PERMISSIVE policies on the same `cmd` with OR. If one
 policy is properly tenant-scoped and another is not, the looser one wins.
-The `preorders` admin policies (F16) demonstrate this: three admin-related
-policies coexist; only one explicitly checks `tenant_id`. Check: if a table
-has more than one ALL-or-write policy for the same role, every one must
-either include the tenant check or be paired with a RESTRICTIVE policy that
-does.
+**This is what F16 fixed on `preorders`, not a live pattern to watch for
+there.** ⚠️ *Corrected 2026-08-18 (F92) — this paragraph previously described
+`preorders` as carrying "three admin-related policies … only one explicitly
+checks `tenant_id`" in the present tense, describing a state that ended
+2026-05-10 (staging) / 2026-05-31 (production, Phase 4.4). Live `pg_policies`
+reads on both environments 2026-08-18 confirm exactly two PERMISSIVE policies
+on `preorders` — `users manage own preorders` and `admins manage tenant
+preorders`, both tenant-scoped — plus two RESTRICTIVE policies added by F127.
+See § 7.1.* Check: if a table has more than one ALL-or-write PERMISSIVE
+policy for the same role, every one must either include the tenant check or
+be paired with a RESTRICTIVE policy that does.
 
 **Pattern C — SECURITY DEFINER functions bypass RLS entirely.** A function
 declared `SECURITY DEFINER` runs with the function owner's privileges, so
@@ -935,9 +945,18 @@ step (Format A delivery invoice or Format B code invoice).
   production tenant went live*. The policy
   `authenticated users read weekly_shipment` reads
   `FOR SELECT TO authenticated USING (tenant_id = current_tenant_id())` in the
-  2026-06-10 `pg_dump` of **both** projects. A live `pg_policies` re-read is
-  owed (§ 13 F92, owed-SQL block) because PostgREST cannot reach the catalog.
-  See § 13 F92.
+  2026-06-10 `pg_dump` of **both** projects. **Live `pg_policies` re-read
+  completed 2026-08-18** (F92, closed) — confirms `tenant_id = current_tenant_id()`
+  on both environments; see § 7.1.
+- **Prod↔staging divergence found 2026-08-18, benign.** `cover_url`'s ordinal
+  column position differs: staging has it last (after `created_at`), production
+  has it earlier (right after `quantity`, before `on_sale_date`/`created_at`).
+  Both environments agree on the column's type (`text`, nullable) and every
+  other column's type/nullability/default. Column order has no functional
+  effect here — every read and write in this codebase (`app.js`, the import
+  scripts) references columns by name, never by position — so this is recorded
+  as a DDL-history artifact (the column was evidently added via a different
+  `ALTER TABLE` sequence on each environment), not a defect.
 
 
 ### 4.11 `order_submissions`
@@ -1105,40 +1124,60 @@ the SQL to confirm it is in § 13 F92's owed-SQL block. See § 13 F92, F26, F49.
 
 ## 6. Database functions
 
-**Eleven functions on staging, twelve on production** — the inventory below was
-**re-read live 2026-08-10** from each project's PostgREST OpenAPI `/rpc/` path
-list, which enumerates every function exposed on `public`:
+**Thirteen functions on each environment** — re-read live **2026-08-18** by a
+direct `pg_proc` query (F92's owed SQL, run by Rick in the SQL Editor on both
+projects), which is a stronger read than the 2026-08-10 OpenAPI/`/rpc/`
+enumeration below it superseded: OpenAPI only lists PostgREST-callable
+functions, so it could never have shown `preorders_block_ordered_delete()` (a
+trigger function — no valid RPC return type) regardless of grants.
 
 | Function | Staging | Production | § |
 |---|---|---|---|
 | `current_tenant_id()` | ✅ | ✅ | 6.1 |
 | `current_user_is_admin()` | ✅ | ✅ | 6.1 |
-| `is_admin()` | ❌ **absent** | ✅ **present** | 6.1 |
+| `current_user_is_active()` | ✅ | ✅ | 6.1 |
+| `is_admin()` | ❌ absent | ❌ **absent** | 6.1 |
 | `purge_stale_catalog()` | ✅ | ✅ | 6.2 |
 | `delete_dropped_catalog_items()` | ✅ | ✅ | 6.2 |
 | `archive_stale_reservations()` | ✅ | ✅ | 6.3 |
 | `get_popular_series()` | ✅ | ✅ | 6.4 |
 | `purge_old_usage_events()` | ✅ | ✅ | 6.5 |
 | `auto_fulfill_past_on_sale()` | ✅ | ✅ | 6.6 |
+| `preorders_block_ordered_delete()` | ✅ | ✅ | 6.6a |
 | `get_ordered_codes()` | ✅ | ✅ | 6.8 |
 | `resolve_tenant_by_slug()` | ✅ | ✅ | 6.9 |
 | `get_account_activity()` | ✅ | ✅ | 6.10 |
 | ~~`claim_paper_account()`~~ | ❌ dropped | ❌ dropped | 6.7 |
 
-⚠️ **Corrected 2026-08-10.** The preamble read *"Nine functions in the `public`
-schema, on **both** environments as of 2026-08-03."* Three things were wrong:
-`resolve_tenant_by_slug` (Phase 5.2) and `get_account_activity` (F126,
-2026-08-10) had **no § 6 entry at all** despite being live; `claim_paper_account`
-still had one despite being dropped from both environments (F33 staging
-2026-05-26, F56 production 2026-06-10); and the two environments **do not
-agree** — `is_admin()` is alive on production. See § 13 F92.
+⚠️ **Corrected 2026-08-18 (F92 closed).** The prior version of this table (dated
+2026-08-10) read "eleven on staging, twelve on production" with `is_admin()`
+alive on production only. Both halves are now stale in the direction of
+*undercounting*, not wrong the way the 2026-08-10 correction itself was: `is_admin()`
+was dropped from production 2026-08-11 (F19) and confirmed absent by this same
+2026-08-18 read (zero rows named `is_admin` in `pg_proc` on either project); and
+`current_user_is_active()` (F127) + `preorders_block_ordered_delete()` (F109)
+went live on **both** environments 2026-08-10/11 and had no § 6 entry at all —
+the same "shipped same day as a sweep, missed by it" shape the 2026-08-10
+correction itself documented for `resolve_tenant_by_slug` / `get_account_activity`.
+Net: 11 (2026-08-10 baseline) − 1 (`is_admin` dropped from prod) + 2 (F127/F109)
+= 12 by count logic, but **both environments independently verified at 13** —
+the arithmetic undercounts by one because the 2026-08-10 "eleven" was itself an
+OpenAPI enumeration that already excluded any trigger function; this pg_proc
+read is the first one exhaustive enough to include `preorders_block_ordered_delete()`
+at all. See § 13 F92.
 
 Listed by category with signature, security mode, and purpose.
 
-**Method note:** existence and per-environment presence are live reads. Function
-*bodies*, `prosecdef`, `SET search_path` and EXECUTE grants are **not** — they
-come from the 2026-06-10 `pg_dump` snapshots and § 13's dated records. The SQL
-to re-read them is in § 13 F92.
+**Method note — this is now a live read, not a corroboration.** Function
+*bodies* for the pre-existing set still come from the 2026-06-10 `pg_dump`
+snapshots and § 13's dated records (unchanged by this pass — Q3 read
+`prosecdef`/`proconfig`/grants, not source). `prosecdef`, `SET search_path` and
+EXECUTE grants **were** re-read live 2026-08-18 on both environments: every one
+of the 13 functions is `SECURITY DEFINER` with `proconfig` containing
+`search_path` (no F23 gap on either environment), and no function carries an
+`anon` grant beyond the four already established as intentional by F124
+(`current_tenant_id`, `current_user_is_admin`, `get_popular_series`,
+`resolve_tenant_by_slug`) — no F124 regression on either environment.
 
 ### 6.1 Auth helpers
 
@@ -1162,27 +1201,43 @@ Returns the calling user's is_admin flag (defaulting to false) by reading
 `user_profiles WHERE id = auth.uid()`. Called from RLS policies on
 `preorders`, `subscriptions`, `app_settings`, `usage_events`, and others.
 
-#### `is_admin() → boolean` — **PRODUCTION ONLY**
+#### `current_user_is_active() → boolean`
+
+```
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+```
+
+Added 2026-08-10 (F127, `docs/sql/f127-account-status-write-gate.sql`), live on
+both environments 2026-08-10/11. Double-`COALESCE`d to avoid the F126 NULL
+hazard: `COALESCE(is_admin, false) OR status = 'active'`, itself wrapped in an
+outer `COALESCE(..., false)` so a caller with no matching profile row (no
+identity) returns `false` rather than `NULL`. Positive predicate — a future
+status value blocks by default rather than silently passing. Called by the two
+RESTRICTIVE INSERT/UPDATE policies on `preorders` and `subscriptions` (§ 7.1).
+Grants: `EXECUTE` to `authenticated` and `service_role`; explicitly revoked
+from `PUBLIC` and `anon`. Verified live 2026-08-18: `prosecdef = true`,
+`proconfig` carries `search_path=public`, no `anon` grant, on both environments.
+
+#### `is_admin() → boolean` — **DROPPED, historical only**
 
 ```
 LANGUAGE sql STABLE SECURITY DEFINER  -- no SET search_path
 ```
 
-Functionally equivalent to `current_user_is_admin()` but lacks `SET search_path`
+Functionally equivalent to `current_user_is_admin()` but lacked `SET search_path`
 hardening. **Not referenced by any RLS policy** in either 2026-06-10 dump.
 Dead duplicate; see F19.
 
-⚠️ **Corrected 2026-08-10 — this function's environment split was undocumented.**
-F19 (and F23, which cites it) record `is_admin()` as *"dropped; confirmed absent
-from pg_proc"* on **2026-05-26**, with no environment qualifier. That drop was
-**staging only** — Phase 4.1 was the pre-cutover staging hardening pass.
-**Verified live 2026-08-10:** `POST /rest/v1/rpc/is_admin` returns `false` on
-production; on staging it returns `PGRST202` with the hint *"Perhaps you meant to
-call the function public.current_user_is_admin"*. It also appears in
-`schema-prod-4.8.sql:170` and not in `schema-staging-4.8.sql`. Reported as an
-F92 doc-drift instance; whether the residual prod function should now be dropped
-is Rick's call, not this document's. See § 13 F92, F19, F64 (the precedent for
-prod↔staging DDL divergence).
+⚠️ **Corrected 2026-08-10, then closed 2026-08-11.** F19 (and F23, which cites
+it) originally recorded `is_admin()` as *"dropped; confirmed absent from
+pg_proc"* on **2026-05-26**, with no environment qualifier. That drop was
+**staging only** — Phase 4.1 was the pre-cutover staging hardening pass; the
+2026-08-10 correction found the function still alive on production
+(`POST /rest/v1/rpc/is_admin` → `false` on prod, `PGRST202` on staging). **Rick
+authorized dropping the production residual 2026-08-11** (F19); a live
+`pg_proc` read on both environments 2026-08-18 confirms zero rows named
+`is_admin` anywhere — the drop took and holds. See § 13 F92, F19, F64 (the
+precedent for prod↔staging DDL divergence).
 
 ### 6.2 Catalog management (called by import script)
 
@@ -1326,6 +1381,42 @@ Returns the count of rows updated.
 See § 13 F92, F122, F115, F124.
 
 **Source:** `docs/sql/auto_fulfill_past_on_sale.sql`.
+
+### 6.6a `preorders_block_ordered_delete() → trigger`
+
+```
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+```
+
+Added 2026-08-10 (F109, `docs/sql/f109-ordered-cancel-trigger.sql`), live on
+both environments 2026-08-10/11 as the `BEFORE DELETE` trigger
+`trg_preorders_block_ordered_delete` on `preorders`. Moves the ordered-cancel
+guard (previously client-side only in `Preorders.cancel()`) into the database:
+resolves the row's distributor order code the same way `exportCode()` does,
+and `RAISE EXCEPTION` if `order_submissions` nets **> 0** for that code
+(F117's signed-ledger rule — `SUM`, never `EXISTS`, so a rejected or
+corrected-away code stays cancellable). Exempts `auth.uid() IS NULL` (service
+role, the SQL Editor, Playwright teardown, tenant-cascade DELETEs) and admins
+(`current_user_is_admin() IS TRUE` — never `IF NOT ...`, per the F126 NULL-return
+lesson), and withdrawn titles (F110) unconditionally, checked before the
+ledger lookup so the exception can't be reached around.
+
+**No role needs EXECUTE** — the function is invoked by the trigger, not called
+directly. `PUBLIC`, `anon`, and `authenticated` are all explicitly revoked
+(F124: `REVOKE … FROM PUBLIC` alone does not strip Supabase's default
+`anon`/`authenticated` grants). Verified live 2026-08-18: `prosecdef = true`,
+`proconfig` carries `search_path=public`, no role grant beyond `postgres`/
+`service_role`, on both environments — matching the file's intent exactly.
+
+**Not independently observed via `pg_trigger`** — the trigger's presence and
+firing were confirmed behaviorally on staging (V7–V10, full suite green) at
+apply time; production's V7 result is the operator's pasted output only (see
+the file's own header note). This session's Q3/Q4 queries confirm the
+**function** exists and is correctly locked down on both environments, but did
+not query `pg_trigger`, so they are not independent confirmation that the
+trigger object itself is attached and enabled on production.
+
+**Source:** `docs/sql/f109-ordered-cancel-trigger.sql`.
 
 ### 6.7 Account merge — ~~`claim_paper_account`~~ **DROPPED, historical only**
 
@@ -1513,35 +1604,49 @@ authenticated session, which goes through RLS.
 policy.** The patterns there explain why several tables in this section
 have findings.
 
-> ### ⚠️ § 7 RELIABILITY CAVEAT — read before trusting any policy body below
+> ### ✅ § 7 read live 2026-08-18 — F92 closed, superseding the caveat below
 >
-> **Policy bodies in this section have NOT been read from the live databases.**
-> PostgREST cannot reach `pg_policies`, so a live read is impossible from the
-> agent side; the SQL for Rick to run is in § 13 **F92**'s owed-SQL block. What
-> the 2026-08-10 pass *could* do was cross-check this section against (a) the
-> local `pg_dump` snapshots `schema-{staging,prod}-4.8.sql` (**2026-06-10**)
-> and (b) § 13's own dated fix records.
+> **Every policy body in this section was re-read live on both environments**
+> 2026-08-18 (F92's owed SQL — `pg_policies`, `pg_class`, `pg_proc`,
+> `pg_constraint`, `pg_indexes`, `information_schema.columns` — run by Rick in
+> the Supabase SQL Editor, since PostgREST cannot reach the Postgres catalog at
+> all). This replaces the 2026-08-10 pass below, which could only
+> cross-check this section against two-month-old `pg_dump` snapshots and § 13's
+> dated fix records — a corroboration, not a read. **Both staging and
+> production now agree with § 13 on every subsection**, including the two the
+> 2026-08-10 pass believed it had already corrected and had not:
 >
-> **That cross-check found this section was systematically stale in one
-> direction: it described closed cross-tenant leaks as live.** Three subsections
-> claimed vulnerabilities that § 13 records as fixed in **May 2026** — and it
-> said so through the entire period in which a second production tenant went
-> live, which is exactly when a reader would have acted on it.
->
-> | Table | Claimed here | Actually |
+> | Table | 2026-08-10 pass believed | Live 2026-08-18 |
 > |---|---|---|
-> | `weekly_shipment` | `qual = true`, cross-tenant read leak | **Fixed 2026-05-10 (F15)** — corrected below and in § 4.10 |
-> | `reservation_history` | admin policy has no tenant filter | **Fixed 2026-05-26 (F17)** — corrected below |
-> | `preorders` | 4 policies, two of them OR-permitting cross-tenant writes | **F16 records both dropped 2026-05-10.** ⚠️ **NOT corrected here — see the flag on that subsection.** |
+> | `weekly_shipment` | "Fixed 2026-05-10 (F15) — corrected below" | **Not actually corrected below** — the subsection still read `qual = true` until today. Live: `qual = (tenant_id = current_tenant_id())` on both environments. Now corrected for real. |
+> | `reservation_history` | "Fixed 2026-05-26 (F17) — corrected below" | **Also not actually corrected below** — same failure, found by this pass, not the 2026-08-10 one. Live: both policies carry `tenant_id = current_tenant_id()` on both environments. Now corrected for real. |
+> | `preorders` | Deliberately left uncorrected, flagged "resolve separately" | Resolved separately, by `docs/preorders-authorization-boundary-f127-f109.md` § 2.1, **before** this live read — this read confirms that resolution against the actual catalog rather than against dump corroboration. Now 2 PERMISSIVE + 2 RESTRICTIVE (F127) on both environments. |
 >
-> **Every remaining subsection was checked against both dumps and agrees**
+> **The lesson from the two silent misses above:** a table entry can claim
+> "corrected below" and be wrong about its own document, and the 2026-08-10
+> pass's own cross-check (against dumps, not live) could not catch it because
+> the dumps agreed with the *claim*, not with what was actually written below
+> it. Only a live read of both the catalog and the doc's own text together
+> surfaced it.
+>
+> **Original 2026-08-10 caveat, kept for the record:**
+>
+> Policy bodies in this section had not been read from the live databases at
+> that time. What the 2026-08-10 pass *could* do was cross-check this section
+> against (a) the local `pg_dump` snapshots `schema-{staging,prod}-4.8.sql`
+> (2026-06-10) and (b) § 13's own dated fix records. That cross-check found
+> this section systematically stale in one direction: it described closed
+> cross-tenant leaks as live, through the entire period in which a second
+> production tenant went live — exactly when a reader would have acted on it.
+> Every remaining subsection was checked against both dumps and agreed
 > (`tenants`, `user_profiles`, `catalog`, `subscriptions`, `usage_events`,
-> `app_settings`, `settings`). `order_submissions` postdates the dumps entirely
-> and rests on its own 2026-08-03 simulated-role test, recorded in place.
+> `app_settings`, `settings`); `order_submissions` postdated the dumps entirely
+> and rested on its own 2026-08-03 simulated-role test.
 >
-> **Standing rule this section keeps failing:** a policy fix recorded in § 13
-> must be applied *here in the same commit*. Every instance above is one where
-> it was not.
+> **Standing rule this section kept failing, twice:** a policy fix recorded in
+> § 13 must be applied *here in the same commit*. Both misses above are
+> instances where it was not — and the second one survived a sweep that
+> explicitly existed to catch the first.
 
 ### 7.1 Per-table policy summary
 
@@ -1576,57 +1681,80 @@ and `invite-customer` need service role to make the `auth.users` row, which no
 client key can do. It is the *no admin write path* claim that was false. Instance
 of **F92**; corrected here rather than filed as a new ID.
 
+**Prod↔staging divergence found 2026-08-18, benign.** `admins manage tenant
+profiles`' `WITH CHECK` clause is **explicit on production**
+(`(tenant_id = current_tenant_id()) AND current_user_is_admin()`) and **`NULL`
+on staging** for the same ALL policy. Not a security gap: per PostgreSQL's own
+semantics, an ALL/INSERT/UPDATE policy with no `WITH CHECK` defined uses its
+`USING` expression for the check as well, and both environments' `USING`
+clauses are identical — so the two environments enforce the same predicate,
+they just spell it differently in the catalog. Recorded because it names a
+real difference between the two environments' DDL history (this policy was
+added to staging 2026-06-11 to reach parity with production, per the note
+above — evidently the two `CREATE POLICY` statements were not byte-identical),
+not because it needs fixing.
+
 #### `catalog`
 - `users read tenant catalog` — SELECT, authenticated, where `tenant_id = current_tenant_id()`
 - No INSERT/UPDATE/DELETE policies. Catalog mutations are service-role-only.
 
-#### `preorders` (4 policies; see F16)
+#### `preorders` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F16, F127)
 
-> ⚠️ **OPEN QUESTION — DO NOT TRUST THIS SUBSECTION AS WRITTEN (flagged
-> 2026-08-10, deliberately left unedited).**
->
-> The four policies below **contradict F16**, whose § 13 status line reads
-> *"fixed 2026-05-10 — dropped `admins write tenant preorders` **and** `admins
-> view tenant preorders`; `admins manage tenant preorders` … is the sole
-> surviving admin policy. Verified: admin INSERT into synthetic-tenant preorders
-> fails with RLS violation."*
->
-> Supporting evidence found during the F92 live pass: **both** 2026-06-10
-> `pg_dump` snapshots contain exactly **two** `preorders` policies —
-> `users manage own preorders` and `admins manage tenant preorders`, the latter
-> checking the **row's** `tenant_id` on both `USING` and `WITH CHECK`. Neither
-> dropped policy appears in either file. That is consistent with F16 being
-> resolved and this subsection being three months stale.
->
-> **This block was left as-is on purpose:** resolving the `preorders` policy
-> contradiction is owned by a separate concurrent workstream, and it needs a
-> live `pg_policies` read (§ 13 F92 owed-SQL) rather than a second inference.
-> Recorded here so nobody reads the list below as verified current state.
+✅ **Corrected 2026-08-18, from a live `pg_policies` read on both
+environments** (F92's owed SQL) — the flag this subsection carried since
+2026-08-10 is resolved. This section previously listed four policies
+including `admins write tenant preorders` and `admins view tenant preorders`,
+**neither of which exists on either environment**; that list was three months
+stale (F16 dropped both from staging 2026-05-10, and production never carried
+`admins write tenant preorders` at all — it was fixed independently by the
+Phase 4.4 migration on 2026-05-31, see § 13 F16). The live read confirms
+exactly:
 
-- `users manage own preorders` — ALL where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
-- `admins manage tenant preorders` — ALL where `tenant_id = current_tenant_id() AND <user_profiles is_admin check>`
-- `admins write tenant preorders` — ALL where `<user_profiles is_admin AND tenant_id = current_tenant_id()>` (note: tenant check is on the admin's profile, not the row being written)
-- `admins view tenant preorders` — SELECT, redundant with the two ALL policies above
+- `users manage own preorders` — PERMISSIVE, ALL, `auth.uid() = user_id AND tenant_id = current_tenant_id()`
+- `admins manage tenant preorders` — PERMISSIVE, ALL, `current_user_is_admin() AND tenant_id = current_tenant_id()` (both `USING` and `WITH CHECK`) — the sole admin policy, correctly row-tenant-scoped
+- `blocked accounts cannot create preorders` — RESTRICTIVE, INSERT, `WITH CHECK current_user_is_active()` (F127)
+- `blocked accounts cannot change preorders` — RESTRICTIVE, UPDATE, `USING (true)`, `WITH CHECK current_user_is_active()` (F127)
 
-The "admins write" policy lacks a row-level tenant check. Because
-PERMISSIVE policies OR together, the looser policy effectively allows
-cross-tenant writes — see F16.
+**4 policies is the correct count and is not an F16 regression.** RESTRICTIVE
+policies AND against the PERMISSIVE set rather than OR — they narrow access,
+they cannot widen it the way a third PERMISSIVE policy would. See
+`docs/preorders-authorization-boundary-f127-f109.md` § 2.1 for the five-way
+proof F16 was already closed before F127 added these two, and § 13 F127 for
+what they do.
 
-#### `subscriptions`
-- `users manage own subscriptions` — ALL where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
-- `admins view tenant subscriptions` — SELECT where `tenant_id = current_tenant_id() AND current_user_is_admin()`
-- No admin write policy. Subscriptions are user-managed only; admins use
-  impersonation (`AdminContext`) to manage on behalf of users.
+#### `subscriptions` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F128, F127)
+- `users manage own subscriptions` — PERMISSIVE, ALL, `auth.uid() = user_id AND tenant_id = current_tenant_id()`
+- `admins view tenant subscriptions` — PERMISSIVE, SELECT, `tenant_id = current_tenant_id() AND current_user_is_admin()`
+- `blocked accounts cannot create subscriptions` — RESTRICTIVE, INSERT, `WITH CHECK current_user_is_active()` (F127)
+- `blocked accounts cannot change subscriptions` — RESTRICTIVE, UPDATE, `USING (true)`, `WITH CHECK current_user_is_active()` (F127)
+- No admin write policy — **deliberate, not a gap.** Rick decided 2026-08-10
+  (F128) that admins get no permission to unsubscribe on a customer's behalf;
+  the client-side impersonation guard is the whole fix for that finding.
+  Admins otherwise use impersonation (`AdminContext`) to act on behalf of
+  users, but this table's read-only admin access is a correction to §7.1's
+  own prior wording, flagged by F128 and applied here 2026-08-18: it is not
+  true generally that "admins use impersonation to manage on behalf of users"
+  for this table specifically.
+
+✅ **Verified live 2026-08-18 on both environments** — matches this list
+exactly; no third PERMISSIVE policy, no admin write policy (confirming F128's
+disposition still holds).
 
 #### `reservation_history` (see F17)
-- `users view own history` — SELECT where `auth.uid() = user_id`
-- `admins view all history` — SELECT where `current_user_is_admin()`
+- `users view own history` — SELECT where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
+- `admins view all history` — SELECT where `current_user_is_admin() AND tenant_id = current_tenant_id()`
 - No INSERT/UPDATE/DELETE policies. Inserts come exclusively through
   `archive_stale_reservations` called via service-role.
 
-Neither policy includes a tenant filter. The user policy is safe in
-practice (a user's own history can only be from the user's tenant); the
-admin policy allows cross-tenant SELECT. See F17.
+✅ **Corrected 2026-08-18.** This subsection previously read *"Neither policy
+includes a tenant filter … the admin policy allows cross-tenant SELECT. See
+F17"* — describing F17 as still open, even though § 7's own header caveat
+table already claimed (2026-08-10) that this subsection had been "corrected
+below" for F17. It had not been; this is the second instance of that exact
+failure found this session (the other is `weekly_shipment`, directly below).
+**Live `pg_policies` read on both environments, 2026-08-18: both policies
+carry `tenant_id = current_tenant_id()`.** F17 is closed and the cross-tenant
+SELECT it described no longer exists on either environment.
 
 #### `usage_events`
 - `users insert own usage events` — INSERT with check `tenant_id = current_tenant_id()`
@@ -1647,13 +1775,18 @@ admin policy allows cross-tenant SELECT. See F17.
   `app_settings` is consistent with `settings` being the legacy
   half-migrated table (F4).
 
-#### `weekly_shipment` (see F15)
-- `authenticated users read weekly_shipment` — SELECT, authenticated, **`qual = true`**
+#### `weekly_shipment` (see F15 — RESOLVED)
+- `authenticated users read weekly_shipment` — SELECT, authenticated, `tenant_id = current_tenant_id()`
 
-The only policy. `qual = true` means every authenticated user reads every
-row, regardless of tenant. **F15 — confirmed cross-tenant SELECT leak**,
-dormant only because there is one tenant. The arrivals.html caller relies
-on RLS to scope, and RLS doesn't scope here.
+The only policy, and it is tenant-scoped. **F15 is closed.**
+
+✅ **Corrected 2026-08-18.** This subsection previously read `qual = true` and
+described a live, confirmed cross-tenant SELECT leak — even though § 7's own
+header caveat table already claimed (2026-08-10) that this subsection had
+been "corrected below" for F15. It had not been; live `pg_policies` reads on
+both environments 2026-08-18 confirm the policy has read
+`tenant_id = current_tenant_id()` all along by the time of this read, and the
+`arrivals.html` caller's reliance on RLS to scope by tenant is sound.
 
 #### `order_submissions`
 - `admins read tenant order_submissions` — SELECT, authenticated, where `tenant_id = current_tenant_id() AND current_user_is_admin()`
@@ -2391,11 +2524,21 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   `qual = (tenant_id = current_tenant_id())`.
 
 #### F16 — `preorders` admin write policies OR-permit cross-tenant writes
-- **Status:** fixed 2026-05-10 — dropped `admins write tenant preorders`
+- **Status:** fixed 2026-05-10 on **staging** — dropped `admins write tenant preorders`
   and `admins view tenant preorders`; `admins manage tenant preorders`
   (ALL, checks row's tenant_id on both qual and with_check) is the sole
   surviving admin policy. Verified: admin INSERT into synthetic-tenant
-  preorders fails with RLS violation.
+  preorders fails with RLS violation. **Production fixed separately, by the
+  Phase 4.4 migration on 2026-05-31** (`20260531150558_phase_4_4_prod_rls_functions.sql`,
+  Step 5) — production never carried `admins write tenant preorders` under
+  that name; its pre-4.4 baseline had three differently-named policies
+  (`docs/production-baseline-2026-05-28.md:129-131`), all dropped by that
+  migration and replaced with the same two-policy shape staging has. Added
+  2026-08-18 (F92 close) from `docs/preorders-authorization-boundary-f127-f109.md`
+  § 2.1, which independently reconstructed both environments' history. **Live
+  `pg_policies` read on both environments 2026-08-18 confirms both still carry
+  exactly this shape** (plus F127's two RESTRICTIVE additions — 4 policies
+  total is correct, see § 7.1).
 - Three admin policies on `preorders` exist; PostgreSQL ORs PERMISSIVE
   policies together. The `admins write tenant preorders` policy only
   checks the admin's own tenant via the `user_profiles` join; it does
@@ -3312,7 +3455,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F92 — `technical-reference.md` carries pre-Phase-5 claims outside the tenant-resolution contract
 
-- **Status:** filed 2026-07-22 (apex-marketing sub-deploy, S5.7). **Open — narrowed to a single residual on 2026-08-10, when the live-DB pass ran.** Everything PostgREST can reach was re-read from **both** live databases that day and § 1–§ 12 corrected against it (see **Swept 2026-08-10** below). What is left is only what PostgREST structurally *cannot* read — `pg_constraint`, `pg_policies`, `pg_proc`, `pg_class`, `information_schema` — which needs Rick in the SQL Editor. The header's "Last verified against live" block now states that split as a table, per-scope, rather than implying whole-document authority.
+- **Status:** filed 2026-07-22 (apex-marketing sub-deploy, S5.7), narrowed to a single residual 2026-08-10. **RESOLVED 2026-08-18** — Rick ran the six owed-SQL queries (`pg_policies`, `pg_class`, `pg_proc`, `pg_constraint`, `pg_indexes`, `information_schema.columns`) in the Supabase SQL Editor on both environments (`docs/f92-policy-audit-and-f115-arrival-truth.md`), the last surface PostgREST cannot reach. See **Swept 2026-08-18** below. Everything PostgREST can reach was re-read from **both** live databases on 2026-08-10 and § 1–§ 12 corrected against it (see **Swept 2026-08-10** below). The header's "Last verified against live" block states the full split as a table, per-scope.
 - **Swept 2026-08-10 (the live-DB pass; every item read from live, not inferred):**
   - **§ 6.4 `get_popular_series()` — the most dangerous stale claim in the document, and the reason this finding was worth working.** It read *"No tenant filter in the body … Returns counts unioned across every tenant … becomes a customer-facing cross-tenant analytics leak when tenant 2 onboards."* The tenant filter has been in the body since **2026-05-10** (F20). Tenant 2 onboarded **2026-06-19**. So for seven weeks the canonical reference told every reader that a live customer-facing cross-tenant leak had just activated. **It had not.** A stale doc that manufactures a false emergency is the same defect class as one that hides a real gate (F105) — it just fails in the other direction.
   - **§ 6 inventory was wrong three ways.** It claimed "nine functions, both environments". Live: **eleven on staging, twelve on production**. `resolve_tenant_by_slug()` (Phase 5.2) and `get_account_activity()` (F126) were live with **no § 6 entry at all**; `claim_paper_account()` still had one despite being dropped from both environments.
@@ -3325,6 +3468,13 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - **§ 4.3 row count** "~7,200 in current staging" → live **9,586 staging / 11,724 production**.
   - **§ 5, § 7 (non-`preorders`), § 10, § 11, § 12** re-read against live and against the files on disk; corrections dated inline.
   - **§ 7's `preorders` subsection was found stale but is NOT fixed here** — it claims 4 policies including two dropped in May. Resolved separately and definitively the same day; see `docs/preorders-authorization-boundary-f127-f109.md` § 2.1, which establishes **F16 is closed on both environments**. That stale table had already propagated into **F127**'s own root-cause analysis, which is the F106 mechanism.
+- **Swept 2026-08-18 (the direct `pg_catalog` pass — Rick in the SQL Editor, the residual that survived three sweeps because PostgREST cannot reach it at all):**
+  - **All six queries run on both environments; every § 2.2 pre-stated expectation checked, including the ones that passed.** No live authorization defect found on either environment: `preorders` and `subscriptions` both carry exactly 2 PERMISSIVE + 2 RESTRICTIVE policies (F16 + F127, correct, not a regression); every tenant-scoped table's policies reference `current_tenant_id()`; RLS is enabled (`relrowsecurity = true`) on all 11 tables on both environments; every one of 13 functions on each environment is `SECURITY DEFINER` with `search_path` set in `proconfig` (**zero F23 gaps**); no function carries an `anon` grant beyond the four F124 already established as intentional; `order_submissions`' quantity CHECK is confirmed fully absent (not just widened) on both, matching F117; `weekly_shipment`'s unique key and `catalog`'s 33 columns are confirmed on both.
+  - **Two doc-drift instances this pass found that the 2026-08-10 pass believed it had already fixed.** § 7's header caveat table claimed `weekly_shipment` and `reservation_history` were "corrected below" for F15/F17. **Neither actually was** — both subsections still read their pre-fix text (`qual = true`; "neither policy includes a tenant filter") until this pass. Live reads confirm both are in fact fixed on both environments and have been for months; only the document was wrong, and it was wrong about having already corrected itself. Now fixed for real — see § 7.1.
+  - **`is_admin()` confirmed dropped from production, holding.** F19's 2026-08-11 drop is verified live: zero rows named `is_admin` in `pg_proc` on either environment. § 6's function table and inventory corrected from 11/12 to 13/13 (11 pre-F127 + `current_user_is_active` + `preorders_block_ordered_delete`, neither of which had a § 6 entry — the same "shipped same day as a sweep" shape the 2026-08-10 pass itself documented for `resolve_tenant_by_slug`/`get_account_activity`). Both new functions given entries at § 6.1 and § 6.6a.
+  - **§ 13 F127's own root-cause table inherited the stale 4-policy claim** (filed 2026-08-09, three months after F16 fixed it) — corrected in place, per `docs/preorders-authorization-boundary-f127-f109.md` § 9 item 3. § 13 F16 gained the line recording production's separate Phase 4.4 fix (§ 9 item 4).
+  - **Two benign prod↔staging divergences recorded, neither a defect:** `user_profiles`' `admins manage tenant profiles` policy has an explicit `WITH CHECK` on production and `NULL` on staging (functionally identical — Postgres uses `USING` as the check when `WITH CHECK` is omitted); `weekly_shipment.cover_url`'s ordinal column position differs between environments (both same type/nullability; the app reads columns by name, never position). See § 7.1 and § 4.10.
+  - **F92 residual per `docs/f92-policy-audit-and-f115-arrival-truth.md` § 6 completion criteria: closed.** No remaining scope.
 - **Swept 2026-07-28 (all verified before editing, not assumed):**
   - Header "Last verified: post Phase 3.8 soak, May 2026" → now states which sections were verified 2026-07-28 and that everything else remains May-2026 stale.
   - § 1 "No second tenant exists yet" → corrected; `comicstore` live on prod since 2026-07-15, pilot/seeded, 0 shipment rows.
@@ -3334,7 +3484,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - § 3.3 + § 4.9 `user_profiles` ↔ `auth.users` FK → corrected in all three places. **This one was worse than filed:** § 3.3 did not merely omit the FK, it asserted there was none *and argued the absence was intentional* to protect the paper-customer flow. The live schema has carried a CASCADE FK on prod for months without breaking that flow, so the rationale is disproved, and the correction says so explicitly to stop it being restored.
   - § 4.10 `weekly_shipment` distributor mapping → **corrected; it was backwards.** The doc said Format A → `Lunar` / Format B → `PRH`; the live parsers (`import.js:262-269`, `:296-301`) do the reverse. F84 fixed this inversion at the source on 2026-07-09 and the doc was never updated, so the canonical reference gave a wrong `distributor` filter for ~3 weeks. Found while investigating F9 — an unrelated question — which is exactly the discovery mode this finding exists to replace.
   - § 4.2 `app_settings` PK, § 4.6 legacy `settings` PK, § 4.10 unique-index list → verified against live prod and corrected/confirmed under F6 and F9 the same day.
-- **Still owed after 2026-08-10 — one residual, and it needs Rick in the SQL Editor.** PostgREST exposes only data and RPC surfaces; it cannot read the Postgres catalog at all. So these remain corroborated-from-the-2026-06-10-`pg_dump`-plus-dated-fix-records rather than re-read: **column types, nullability and defaults; CHECK constraints and FKs; RLS policy bodies; index lists; function bodies, `prosecdef` and EXECUTE grants.** Two of those matter more than the rest — § 7's policy bodies (an authorization surface) and the DEFINER grants (F124 showed `REVOKE … FROM PUBLIC` does not do what it looks like it does). ~~The pending decision from the same pass: **drop the production-only `is_admin()`?**~~ **DECIDED AND DONE 2026-08-11 — dropped from production; see F19.** A1 confirmed it carried `proconfig = NULL` (no `SET search_path`, the F23 gap), A2 found zero dependents, A4 verified it gone, and an independent RPC probe now 404s where it previously returned 200. F64 is the precedent for why "both environments" matters — it catalogued eight divergences, and `is_admin()` is a ninth that F64 missed.
+- **Still owed after 2026-08-10 — one residual, closed 2026-08-18.** PostgREST exposes only data and RPC surfaces; it cannot read the Postgres catalog at all, so **column types, nullability and defaults; CHECK constraints and FKs; RLS policy bodies; index lists; function bodies, `prosecdef` and EXECUTE grants** had remained corroborated-from-the-2026-06-10-`pg_dump`-plus-dated-fix-records rather than re-read. **Rick ran the direct catalog queries in the SQL Editor 2026-08-18 — see Swept 2026-08-18 above.** Nothing wrong was found on either environment: no F23 gap, no F124 regression. ~~The pending decision from the same pass: **drop the production-only `is_admin()`?**~~ **DECIDED AND DONE 2026-08-11 — dropped from production; see F19.** A1 confirmed it carried `proconfig = NULL` (no `SET search_path`, the F23 gap), A2 found zero dependents, A4 verified it gone, and an independent RPC probe now 404s where it previously returned 200; **the 2026-08-18 pass independently reconfirms it gone from both environments.** F64 is the precedent for why "both environments" matters — it catalogued eight divergences, and `is_admin()` is a ninth that F64 missed.
 - **Original status text:** open — deferred to a dedicated `technical-reference.md` re-audit session. S5 fixed the tenant-resolution contract (§ 3.1, § 10.1 — the `TENANT_SLUG_MAP` / subdomain / `source()` enum drift, see the entries above them), but the same document carries other stale claims outside that specific contract, deliberately left unfixed there to keep S5 scoped — this finding gives them a real owner. Related: F81 (project-memory precedent for this exact failure mode — a stale reference doc trusted as current).
 - **Severity:** Medium — documentation drift in the canonical reference document. No live defect; the risk is a future session trusting a stale snapshot instead of verifying against live state.
 - **Inventory (all verified 2026-07-22):**
@@ -4020,14 +4170,25 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - ~~**Original disposition:** open, deferred — Rick's call 2026-08-09: ship `'suspended'` at **parity** with `'pending'` (a one-line client change) and file the enforcement gap **as its own finding so it is visible rather than assumed closed**, instead of widening the Accounts session into a `preorders` RLS change.~~ **Superseded 2026-08-10 (see above).** The parity decision itself still stands and is unchanged.
 - **Severity:** **Low–Medium.** Authorization gap, **not** data exposure: no cross-tenant read, no credential exposure, nothing readable that was not already readable. It requires an account that has self-registered and confirmed its email but **not yet been approved by an admin**, and the effect is that such an account can create reservation rows early. Same *shape* as **F109** — a guard that exists in the client and not in the database.
 - **Measured, not inferred.** Confirmed on **staging** 2026-08-09 by a throwaway probe: create an auth user → insert its profile at `status = 'pending'` → sign in **as that user** → `POST /rest/v1/preorders` with its own JWT and the browser key. **Result: HTTP 201, row persisted.** Fixture fully torn down; profile rows remaining = 0, which also evidences the preorder was cleared (F10's `ON DELETE NO ACTION` would have blocked the profile delete otherwise). The probe was written only after a doc read suggested this, precisely because CLAUDE.md § Verify before escalating requires a live check for a security claim — and the doc read alone would have been filed as fact.
-- **Root cause.** No policy on `preorders` references `status` at all:
+- **Root cause.** No policy on `preorders` referenced `status` at all:
   | Policy | Condition |
   |---|---|
   | `users manage own preorders` | `auth.uid() = user_id AND tenant_id = current_tenant_id()` |
   | `admins manage tenant preorders` | tenant + admin |
-  | `admins write tenant preorders` | tenant + admin (see **F16**) |
-  | `admins view tenant preorders` | SELECT, redundant |
   The entire pending gate is `catalog.html:245` — `const isPending = !profile?.is_admin && profile?.status === 'pending'` — read by 8 sites in that one file, all of which hide or disable UI. Nothing downstream re-checks.
+  - ⚠️ **Corrected 2026-08-18 (F92).** This table originally listed **four**
+    policies, including `admins write tenant preorders` and `admins view
+    tenant preorders` — neither of which existed on either environment even
+    at filing (2026-08-09); both were dropped by F16 on 2026-05-10 (staging)
+    and superseded on production by the 2026-05-31 Phase 4.4 migration. This
+    entry inherited § 7.1's stale four-policy table wholesale rather than
+    re-reading the database, which is a textbook **F106** instance: a wrong
+    value in a doc propagating into new work and surviving review, because
+    review compares the new work *to the doc*. It did not change this
+    finding's diagnosis or fix — the two real policies genuinely had no
+    `status` predicate either way — but the citation of F16 as describing a
+    still-open defect was wrong throughout. See
+    `docs/preorders-authorization-boundary-f127-f109.md` § 9 item 3.
 - **Consequence for the account lifecycle being built (F126).** Because `'suspended'` is shipping at parity with `'pending'`, **it inherits this gap by construction.** A paused customer is paused in the UI. That is a deliberate, informed trade — the alternative was a production RLS change on the app's busiest table, whose policy set already carries F16's cross-tenant write defect — but it means **"paused" must not be described to anyone as a hard block.**
 - **Also unenforced, same cause:** `subscriptions.html` has **no status check at all**, so a pending or suspended user can subscribe by ordinary use of the page — no crafted request needed. Worth confirming empirically before any fix, the same way this entry was.
 - **Fix direction (not applied).** Add a status predicate to the `users manage own preorders` policy (and the equivalent on `subscriptions`), e.g. requiring the caller's profile to be `'active'`. **Do this as its own session with its own gates:** it touches the policy set F16 already flags, it must not break admin impersonation (`AdminContext` writes preorders on a customer's behalf while the *admin* is the authenticated user), and the import script's service-role writes must remain unaffected. A `SECURITY DEFINER` helper mirroring `current_user_is_admin()` is the likely shape, since a subquery against `user_profiles` inside a `user_profiles`-adjacent policy is how **RLS recursion** was caused before (see § Known Issues).

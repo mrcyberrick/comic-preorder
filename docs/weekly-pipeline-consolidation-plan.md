@@ -195,8 +195,14 @@ any customer-facing page — additive outputs only, so the risk profile is low.
    against the deploy): admin-gated "Print Store Report" on `arrivals.html`
    — full week's shipment grouped by distributor, A-Z titles, check-off box,
    qty, code/UPC, price, per-group + grand unit totals, received-by line.
-   Customer print path unchanged. **Prod promotion pending** (rides the next
-   staging → main).
+   Customer print path unchanged. **Promoted to production the same day**
+   (PR #77, merge `5a4d865`, 2026-07-09) — corrected 2026-08-18 (F92 pass);
+   this previously read "prod promotion pending" for five weeks after it had
+   already shipped. This item's completion does not advance this plan's own
+   `NOT STARTED` token above — the token describes the plan as a whole, and
+   items 4–5 (parallel run, cutover) remain genuinely not started; see
+   `/preflight`'s calibration note on plan-level tokens containing finished
+   sub-items.
 4. Parallel run 2–4 weeks: diff `rss.xml` / `newsletter.html` /
    `newsletter-email.html` against the Apps Script outputs weekly.
 5. Cutover: stop running `processNewShipments()`; Sheet/Drive/Apps Script

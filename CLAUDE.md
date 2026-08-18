@@ -37,7 +37,6 @@ residual to another finding as open until that other finding demonstrably absorb
 | F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | design together with F72 — needs a scoping interview; DMARC full-read gate armed 2026-08-20 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
-| F92 | `technical-reference.md`'s pre-Phase-5 residual: RLS policy bodies + DEFINER grants, unreadable via PostgREST | needs Rick in the Supabase SQL Editor |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
@@ -640,8 +639,8 @@ Do NOT touch any of the below in agentic sessions without explicit approval.
 
 **Genuinely still open or deferred:** Partial fulfillment is not representable (product decision,
 deferred until product scoping — no finding ID). Everything else currently open is F72, F89, F90,
-F92, F99, and F126's residual — see the open-findings table in § Current Migration Phase; full
-detail lives only in `docs/technical-reference.md` § 13.
+F99, and F126's residual — see the open-findings table in § Current Migration Phase; full
+detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-18** — see § 13.
 
 **Closed work — kept here as a "don't re-open without asking" index only. Each doc's own
 `**STATUS:**` token and `docs/technical-reference.md` § 13 are the evidence; this table is not:**

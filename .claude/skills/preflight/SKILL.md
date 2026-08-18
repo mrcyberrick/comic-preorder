@@ -63,6 +63,15 @@ Never print credential values; report variable names and present/missing only.
    - **Do not trust this check the first time it is added to a project.** Demonstrate it failing
      against a real stale doc before relying on it (see `docs/doc-status-truth-pass.md` § 7 for the
      first such demonstration and its recorded output).
+   - **Calibration (added 2026-08-18, F92 catalog-audit session):** a plan-level `NOT STARTED` or
+     `IN PROGRESS` token can legitimately contain a finished sub-item — a plan is often a numbered
+     list of steps, and one step shipping does not mean the plan is done. `weekly-pipeline-consolidation-plan.md`
+     is the worked example: its token correctly reads `NOT STARTED` (items 4–5, parallel run and
+     cutover, are genuinely not started), while item 3 shipped to both staging *and* production on
+     2026-07-09 and the doc said so five weeks later. **A flag from this check means GO LOOK at the
+     cited PR/SHA and the surrounding prose — it does not mean the token itself is wrong.** Don't
+     "fix" a flagged doc by changing its token to match a shipped sub-item; fix the stale sentence
+     and leave the token describing the plan as a whole.
 
 ## Output
 
