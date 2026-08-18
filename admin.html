@@ -1537,9 +1537,19 @@
   // arrival_outcome (pre-migration row, or fulfilled by some other path) is
   // deliberately excluded — NULL means "not yet judged", not "judged unknown"
   // (§ 3.1), so it must not read as Never Arrived.
-  const neverArrivedFromFulfilled = () => gatherCollapsed
-    .filter(p => p.fulfilled && p.arrival_outcome === 'unknown' && p.catalog?.foc_date && !p.catalog?.withdrawn_at)
-    .map(p => ({ p }));
+  // A `function` declaration, not `const` — this file's top-level script
+  // calls applyMode() -> ensureFullData() -> loadData() -> computeBackorderRisk()
+  // synchronously during its own initial run, BEFORE the script's linear
+  // execution ever reaches this line. A `const` here sat in the temporal dead
+  // zone at that first call and threw "Cannot access before initialization",
+  // which aborted every downstream admin.html init (mode switching, every
+  // tab) — caught by Playwright, not by inspection. Hoisted function
+  // declarations have no such ordering constraint.
+  function neverArrivedFromFulfilled() {
+    return gatherCollapsed
+      .filter(p => p.fulfilled && p.arrival_outcome === 'unknown' && p.catalog?.foc_date && !p.catalog?.withdrawn_at)
+      .map(p => ({ p }));
+  }
 
   function computeBackorderRisk() {
     const rows = gatherCollapsed.filter(p => !p.fulfilled && p.catalog?.foc_date && !p.catalog?.withdrawn_at);
