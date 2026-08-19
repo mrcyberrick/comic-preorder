@@ -4242,7 +4242,24 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `admin.html` — `computeBackorderRisk()`.
 - **Related:** **F116** (the panel's original false-positive fix — same shape, opposite direction). **F117**/**F120** (the signed ledger and `ledgerRejected()` helper this reuses, and the customer/Bagging-List-facing badge this panel should now match).
 
-Next free finding ID: **F130**.
+#### F130 — Playwright fixture teardown leaves orphaned GoTrue **auth users** in staging: profile deletes succeed, auth-user deletes do not
+
+- **Status:** filed 2026-08-18 (surfaced while fixing the spec-18 mylist failure — see "Discovery" below). **Open — deferred by Rick's explicit choice to a dedicated test-infra session.** Not investigated beyond the counts below; **do not bulk-delete before establishing why the auth delete is being skipped**, or the same accumulation simply restarts.
+- **Severity:** **Low.** Staging only, test-infrastructure only. No live app impact, no customer data, no production exposure. The Accounts tab and `get_account_activity()` read `user_profiles`, which is clean — so nothing in the admin UI misreports because of this.
+- **Measured 2026-08-18 (live staging, service-role reads):**
+  - **197** `auth.users` rows matching `^pw-.*@example\.test$` — the Playwright fixture naming convention. Spread across many specs: `pw-pending-*`, `pw-iso-*`, `pw-prompt-*`, `pw-rsv-*`, `pw-recon-*`, `pw-shot-*`, `pw-cust-*` and others.
+  - **4** orphaned `user_profiles` rows over the same pattern.
+- **Why that asymmetry is the finding.** `deleteUser()` (`fixtures/auth.ts`) deletes in FK order — `preorders` → `user_profiles` → auth user — and since **F95** (2026-08-02) it **throws on any failure**. Profiles are being removed and auth users are not, which means execution is reaching the profile delete and then either not reaching, or silently not completing, the auth delete. Two candidate explanations, **neither verified**:
+  1. the bulk of these **predate F95's fix**, when a failed auth delete could pass unnoticed — in which case this is historical residue and the current code is fine; or
+  2. some path deletes a profile **without** going through `deleteUser()` at all, leaving the auth user behind by construction.
+  The session that owns this should settle which, by date-bucketing the 197 against 2026-08-02 before touching anything. If (1), it is a one-time cleanup. If (2), cleanup without the code fix is pointless.
+- **Distinct from F95, and the distinction matters.** F95 was orphaned **profiles** (292 of them), caused by `deleteUser()` not checking `res.ok` while the `preorders` FK (`ON DELETE NO ACTION`, F10) rejected the delete with a silent 409. That is fixed and stayed fixed — the profile count here is 4, not hundreds. This is the **opposite** layer: the profile goes, the auth user stays. Do not assume F95's fix covers it.
+- **Discovery.** Found while cleaning up after the spec-18 mylist test (see below): a sweep for that test's own orphans returned **7** `pw-18-*` fixture users — more than the 2 the investigation itself had created — and widening the pattern to `pw-*` exposed the 197. Those 7 were deleted and verified gone (preorders → profile → auth user); the 197 were deliberately left, per Rick's call to file rather than fix.
+- **Related context, not part of this finding:** the spec-18 mylist test was failing 2-of-2 (not "flaky") because it signed in **twice** — once via the `authenticatedPage` fixture and once inline — and spec 18 issues ~13 magic links in ~4 minutes; the failure landed on the apex marketing page with no session, the **F107** rate-limit family. Fixed 2026-08-18 with an `authedUser` fixture (yields `{ page, userId, email }`, one sign-in) plus a `signInVia()` helper that bounds the wait at 20s and reports the landing URL and GoTrue error hash instead of consuming the full 60s test budget. 3/3 targeted green, then **127/127 full suite, zero flaky**. That change also closes the teardown half of the same class: **a `finally` block does not run when a test times out, but fixture teardown does** — which is why the previous session found an orphaned user after a timeout, and why the new `pw-au-*` prefix swept clean at 0.
+- **Where:** `catalogs/scripts/playwright/fixtures/auth.ts` (`deleteUser`), and any spec deleting a profile by another path. The suite is **local-only and untracked in every repo** (§ What's tracked vs local-only), so no repo file carries this code.
+- **Related:** **F95** (orphaned profiles — the opposite layer, fixed), **F10** (the FK that made F95 silent), **F107** (the rate-limit family behind the spec-18 failure), **F103**/**F91** (the prior test-infra maintenance session, `docs/test-infra-maintenance-f91-f95-f103.md`, the natural template for the session that owns this).
+
+Next free finding ID: **F131**.
 
 ---
 

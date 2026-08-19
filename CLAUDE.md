@@ -18,7 +18,7 @@ scripts (186/186 unit tests), admin backorder panel reads the column, full Playw
 127/127 (1 confirmed-flaky retry). September catalog files not yet present, so S1/S5/S6 (real
 import pre-flight, live run, backfill) are held for the ~Sept 7–10 window — **F115 is still open,
 not resolved.** Staging `f61487a`, scripts repo `b629cda`, 2026-08-18.
-**Next free finding ID:** **F130.**
+**Next free finding ID:** **F131.**
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -37,6 +37,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | ID | One line | Next step |
 |---|---|---|
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence now built on staging (S2-S4/S7) but not yet exercised by a real import, and prod has neither the migration nor the write | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod migration + prod backfill, Rick-gated) |
+| F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures; profile deletes succeed, auth-user deletes do not. Test-infra only, no live app impact | deferred — dedicated test-infra session. **Date-bucket the 197 against F95's 2026-08-02 fix BEFORE any bulk delete** — if they postdate it, cleanup without a code fix is pointless |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
 | F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | design together with F72 — needs a scoping interview; DMARC full-read gate armed 2026-08-20 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
