@@ -1,10 +1,8 @@
 -- STATUS: staging=APPLIED 2026-08-20 (verified: 0 non-null / 9,589, then
---         populated live by a real import 2026-08-21) | prod=PENDING —
---         Rick requested production promotion 2026-08-21; run this file
---         against the PRODUCTION project BEFORE the code promotion lands
---         (see docs/order-restriction-alert-badge.md § 7 S8). Update this
---         line to prod=APPLIED the moment it runs — F6's 13-day miss is
---         exactly the failure mode a stale STATUS line causes.
+--         populated live by a real import 2026-08-21) | prod=APPLIED
+--         2026-08-21 — verified: 0 non-null / 11,726 total (Rick, SQL
+--         Editor). Matches "no backfill" by design; populates on the next
+--         production import, same shape as staging.
 -- ============================================================================
 -- catalog: one additive nullable column, order_requirement
 -- Prepared 2026-08-20 (F132 order-restriction alert+badge scoping session).

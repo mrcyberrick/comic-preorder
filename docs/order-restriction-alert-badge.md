@@ -264,17 +264,13 @@ on a restricted title, hidden on an unrestricted one. Regression-checked against
 other modal-heavy paths) — no impact. **Gate V7.**
 
 **S8 — production.** Requested by Rick 2026-08-21. Two independent halves, **DB before code**:
-1. `docs/sql/f132-order-requirement.sql` run against the **production** project — same file used
-   for staging, STATUS line updated to `prod=PENDING` pending this run. **Not optional pre-work**:
-   production's `import.js` already carries the F132 normalizer changes (pushed alongside
-   `import-staging.js` throughout this session), so the *next* production import 400s on every
-   catalog upsert (`PGRST204`, not just restricted rows) if this hasn't landed first — independent
-   of whether the client code has been promoted yet.
+1. `docs/sql/f132-order-requirement.sql` run against the **production** project. **APPLIED
+   2026-08-21** — verified 0 non-null / 11,726 total (Rick, SQL Editor). This was the not-optional
+   pre-work: production's `import.js` already carries the F132 normalizer changes, so the *next*
+   production import would have 400d on every catalog upsert without this column.
 2. Client code (`app.js`, `catalog.html`, `style.css`) promoted via the standard `/promote-prod`
-   flow — config.js preservation, F59 merge-base check, PR to `main`, post-deploy write-smoke. Safe
-   to run before or after step 1: the badge/modal are additive reads, inert if the column doesn't
-   exist yet (same shape as F115).
-**Gate V8.**
+   flow — config.js preservation, F59 merge-base check, PR to `main`, post-deploy write-smoke.
+**Gate V8 — DB half GREEN, code half in progress.**
 
 ---
 
