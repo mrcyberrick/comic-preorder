@@ -1,3 +1,4 @@
+-- STATUS: staging=APPLIED 2026-08-10 | prod=APPLIED 2026-08-10
 -- ============================================================================
 -- Backfill user_profiles.email from auth.users.email
 -- Prepared 2026-08-10. **APPLIED 2026-08-10 to BOTH environments.**

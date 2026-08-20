@@ -1,6 +1,13 @@
 # Phase 4.1 — Pre-Cutover Hardening + Canary Tenant Lifecycle
 
-**Status:** Planning — plan written 2026-05-26; **locked 2026-05-26** (three open decisions resolved: 3-day soak, inline stop-and-ask gate, local-only teardown SQL)
+**STATUS:** COMPLETE | staging=2026-05-29 | prod=N/A | findings=—
+
+**Status:** **Complete — 2026-05-29.** Plan written and locked 2026-05-26 (three open decisions
+resolved: 3-day soak, inline stop-and-ask gate, local-only teardown SQL); executed with the
+2026-05-27 → 2026-05-29 canary soak (`docs/phase-4.1-soak-log.md`). *(Corrected 2026-08-18 — this
+line previously read "Planning," stale since the 2026-05-29 close; found via
+`docs/phase-4-production-migration.md` § Sub-Deploys table, which already recorded
+"4.1 · Complete · 2026-05-29.")*
 **Parent plan:** `docs/phase-4-production-migration.md`
 **Branch base:** `staging`
 **Branch name:** `feature/4.1-pre-cutover-hardening`

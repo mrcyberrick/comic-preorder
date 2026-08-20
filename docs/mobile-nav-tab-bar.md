@@ -1,5 +1,7 @@
 # Mobile Nav — Thumb-Reach Tab Bar (design 2a)
 
+**STATUS:** COMPLETE | staging=2026-08-16 | prod=2026-08-16 (PR #123) | findings=—
+
 **Status:** **COMPLETE — live in production 2026-08-16** (PR #123, merge
 `2ed97f8`). S1–S5 plus the two mid-session fixes (§ 8.1) executed and staged
 2026-08-15; a live-review follow-up cycle on 2026-08-16 (hamburger dropdown

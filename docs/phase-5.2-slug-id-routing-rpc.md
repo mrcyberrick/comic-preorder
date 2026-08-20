@@ -1,5 +1,7 @@
 # Phase 5.2 — Slug→id Routing RPC
 
+**STATUS:** COMPLETE | staging=2026-06-15 | prod=2026-06-15 | findings=F14,F67
+
 **Status:** **Complete** — 2026-06-15. All completion criteria ticked; prod write-smoke clean; CLAUDE.md pointer advanced to 5.3.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.2)
 **Predecessor:** Phase 5.1 — Hosting migration → Cloudflare Pages — **Complete 2026-06-14** (prod live at `pulllist.app`; staging at `staging.pulllist.pages.dev`).

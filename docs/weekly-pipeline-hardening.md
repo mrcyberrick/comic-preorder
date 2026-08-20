@@ -1,5 +1,7 @@
 # Weekly Pull-Feed Pipeline Hardening (PLAN)
 
+**STATUS:** COMPLETE | staging=2026-07-27 | prod=2026-07-27 | findings=F96,F98,F100,F106
+
 **Status:** **COMPLETE — 2026-07-27.** All three items shipped and live; every completion
 criterion ticked; V4 and V5 both observed against the live Brevo API, and the real-browser
 signup check confirmed. Written 2026-07-25, executed 2026-07-26, closed 2026-07-27 —

@@ -1,5 +1,7 @@
 # Admin Restructure — Session 6: Ordering mode + the Paper Orders split
 
+**STATUS:** COMPLETE | staging=2026-08-09 | prod=2026-08-09 (PR #114) | findings=F121
+
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.1, § 5.7.2 **P2**, § 5.7.4 row 6.
 **Decision:** Option B, built as **modes within one `admin.html`** — Rick, 2026-08-07.
 

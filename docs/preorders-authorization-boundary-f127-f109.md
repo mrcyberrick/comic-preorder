@@ -1,7 +1,12 @@
 # Moving two client-side guards into the database — F127 (account status) and F109 (ordered-cancel)
 
+**STATUS:** COMPLETE | staging=2026-08-10 | prod=2026-08-11 (PR #117) | findings=F127,F109
+
 **Findings:** `docs/technical-reference.md` § 13 **F127**, **F109**.
-**Status:** **PLANNED — not started.** No code written, no DDL run.
+**Status:** **COMPLETE — live in production 2026-08-11.** DDL applied staging 2026-08-10 / prod
+2026-08-11; client gates in the same PR. Promoted via PR #117, merge `230d84b`. *(Corrected
+2026-08-18 — this line previously read "PLANNED — not started," stale since the 2026-08-11
+promotion; found via `git branch -a --contains 230d84b`, not by re-reading this file.)*
 **Target:** staging first, then production on Rick's explicit request.
 **DDL is Rick-in-the-loop** — PostgREST has no SQL endpoint; every statement in
 this plan needs the Supabase SQL Editor.

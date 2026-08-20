@@ -1,5 +1,7 @@
 # Order Builder — decouple "record the order" from "download the file"
 
+**STATUS:** COMPLETE | staging=2026-08-08 | prod=2026-08-08 (PR #109) | findings=—
+
 **Owning plan:** `docs/order-loop-closure-f108.md` § 8 *"Deferred to its own
 session"* — the design there is settled (Rick, 2026-08-06) and is not reopened
 here. This document adds only the runbook, gates and completion criteria that
@@ -9,7 +11,9 @@ the Definition of Done requires.
 control this protects), **F117** (signed ledger — zero = rejected).
 Referenced from the F121 process map as **W2/W3**.
 
-**Status:** Planned 2026-08-08.
+**Status:** **COMPLETE — live in production 2026-08-08.** Promoted via PR #109, merge `9552ee6`.
+*(Corrected 2026-08-18 — this line previously read "Planned 2026-08-08," stale since the
+same-day promotion; found via `gh pr view 109` and `git branch -a --contains 9552ee6`.)*
 **Target:** **staging only.** Production promotion on Rick's explicit request.
 **Branch:** `feature/order-builder-record-split`
 **Last verified against live code:** `admin.html` @ `ab23636`, 2026-08-08.

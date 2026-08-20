@@ -1,6 +1,11 @@
 # Phase 4.4 — Prod schema: RLS + functions + default removal
 
-**Status:** Planning — plan drafted 2026-05-31; runbook ready (`phase-4.4-runbook.md`)
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-31 (direct main, cutover window, no PR) | findings=F46
+
+**Status:** **Complete — 2026-05-31.** Executed in the cutover window (direct to production, per
+CLAUDE.md § Staging Only's named-cutover-sub-deploy exemption). *(Corrected 2026-08-18 — this line
+previously read "Planning," stale since 2026-05-31; found via `docs/phase-4-production-migration.md`
+§ Sub-Deploys table, which already recorded "4.4 · Complete · 2026-05-31.")*
 **Parent plan:** `docs/phase-4-production-migration.md` (sub-deploy row 4.4)
 **Branch (migration artifact):** `feat/phase-4-prod-cutover` (production repo; committed, **held for the 4.6 PR — not pushed to `origin main`**)
 **Branch (docs):** `staging` (doc-only commits go to `staging` directly per `CLAUDE.md` § Document Integrity)

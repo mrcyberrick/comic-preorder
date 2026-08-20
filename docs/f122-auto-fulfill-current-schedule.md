@@ -1,5 +1,7 @@
 # F122 — auto-fulfill on the title's current schedule, not the joined row
 
+**STATUS:** COMPLETE | staging=2026-08-08 | prod=2026-08-08 | findings=F122,F124
+
 **Finding:** `docs/technical-reference.md` § 13 **F122**.
 **Decision:** Rick, 2026-08-08 — **Option 1** ("judge on the newest row").
 Option 2 (carry manual reservations forward on re-listing) is **not** taken here.

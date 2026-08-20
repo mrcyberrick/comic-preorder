@@ -1,6 +1,11 @@
 # Phase 3.1 — Tenant Resolution Layer (Read-Only)
 
-**Status:** Planning
+**STATUS:** COMPLETE | staging=2026-05-02 | prod=N/A | findings=—
+
+**Status:** **Complete — 2026-05-02.** All criteria met (see § Completion Criteria below).
+*(Corrected 2026-08-18 — this line previously read "Planning," stale since 2026-05-02; the doc's
+own completion section already said "Complete as of 2026-05-02" — this header just hadn't been
+updated to match.)*
 **Branch:** `feature/phase-3.1-tenant-resolution-layer` (branched from `staging`)
 **Risk:** Low — additive only, no writes change, no DB changes
 **Reversible:** Yes (delete the new `TenantContext` block from `app.js`)

@@ -1,5 +1,7 @@
 # Phase 5.1 — Hosting Migration (GitHub Pages → Cloudflare Pages)
 
+**STATUS:** COMPLETE | staging=2026-06-14 | prod=2026-06-14 | findings=—
+
 **Status:** **Complete 2026-06-14** — S1–S8 all executed; prod live on Cloudflare Pages at `https://pulllist.app/`; 3-calendar-day soak (06-12 / 06-13 / 06-14) clean; § 5 criteria all checked. Plan written 2026-06-11.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.1)
 **Predecessor:** Phase 5.0 — Pre-Phase-5 housekeeping — **Complete 2026-06-11**. Platform decision (Rick, 5.1 planning session 2026-06-11): **Cloudflare Pages** (Vercel not selected; parent row title updated).

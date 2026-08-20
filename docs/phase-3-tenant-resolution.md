@@ -1,5 +1,7 @@
 # Phase 3 — Tenant Resolution
 
+**STATUS:** COMPLETE | staging=2026-05-15 | prod=N/A | findings=—
+
 **Status:** Complete — 3.1–3.7 closed 2026-05-13; 3.8 hardening closed 2026-05-15 (one-day soak clean)
 **Branch base:** `staging`
 **Started:** 2026-05-01

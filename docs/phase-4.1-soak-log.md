@@ -1,5 +1,7 @@
 # Phase 4.1 — Canary Soak Log
 
+**STATUS:** COMPLETE | staging=2026-05-29 | prod=N/A | findings=—
+
 **Parent plan:** `docs/phase-4-production-migration.md`
 **Sub-deploy plan:** `docs/phase-4.1-pre-cutover-hardening.md`
 **Soak duration:** 3 days (decision locked 2026-05-26)

@@ -1,5 +1,7 @@
 # Apex Marketing Page — Design Reference
 
+**STATUS:** COMPLETE | staging=2026-07-21 | prod=2026-07-22 (PR #93) | findings=—
+
 **Status:** **Design approved (2026-07-20/21). Implemented on staging 2026-07-21** — see
 `docs/apex-landing-tenant-subdomains.md` § Deploy log → S2 for what was built, the execution
 decisions (sign-in overlay, `Sample dashboard` caption, `#contact` phone CTA, Bebas Neue display

@@ -225,6 +225,11 @@
       </div>
     </div>
     <div class="modal-body">
+      <!-- F132 (2026-08-21) — same disclosure as the card's native title=
+           tooltip, but reachable on mobile: this modal opens on a real
+           click/tap (openModal(), catalog.html), not :hover, so it's the
+           tap-accessible channel the tooltip alone can't be. -->
+      <div class="restriction-notice" id="modal-restriction-notice" style="display:none"></div>
       <div class="modal-credits" id="modal-credits"></div>
       <h3>Description</h3>
       <p id="modal-description"></p>
@@ -1215,6 +1220,18 @@
       comic.variant_type && comic.variant_type !== 'Standard'
         ? `<span class="badge badge-variant">${escapeHtml(comic.variant_type)}</span>` : '',
     ].join('');
+
+    // F132 (2026-08-21) — the "Learn more" disclosure, tap-accessible: this
+    // modal opens on click/tap, not :hover, so it's reachable on mobile where
+    // the card's native title= tooltip (buildComicCard(), app.js) is not.
+    // Same copy as the tooltip, deliberately — one message, two channels.
+    const restrictionEl = document.getElementById('modal-restriction-notice');
+    if (comic.order_requirement) {
+      restrictionEl.innerHTML = `⚠ This is a restricted variant. Your reservation is noted, but fulfillment depends on distributor rules. Order ratio ${escapeHtml(comic.order_requirement)}.`;
+      restrictionEl.style.display = '';
+    } else {
+      restrictionEl.style.display = 'none';
+    }
 
     // Credits
     const credits = [

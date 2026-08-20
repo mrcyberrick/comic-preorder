@@ -1,6 +1,10 @@
 # Native In-App Customer Self-Registration (PLAN)
 
-**Status:** **In progress** (opened 2026-07-23).
+**STATUS:** COMPLETE | staging=2026-07-23 | prod=2026-07-24 (PR #95) | findings=F94
+
+**Status:** **COMPLETE — live in production 2026-07-24.** Promoted via PR #95, merge `3bc3319`.
+*(Corrected 2026-08-18 — this line previously read "In progress," stale since the 2026-07-24
+promotion; found via `gh pr view 95` and `git branch -a --contains 3bc3319`.)*
 Standalone pre-Phase-6 workstream; its own session, full
 staging→prod discipline. **Not** a phase sub-deploy (Phase 5 closed 2026-07-15; Phase 6 not started).
 **Author context:** Written 2026-07-23 (Rick + planning session) after the founding tenant's MailerLite

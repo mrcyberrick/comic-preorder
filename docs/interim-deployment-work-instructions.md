@@ -1,5 +1,7 @@
 # Interim Work Instructions — Deploying PULLLIST on Cloudflare Pages
 
+**STATUS:** IN PROGRESS | staging=2026-06-11 | prod=N/A | findings=—
+
 **Status:** Interim — written 2026-06-11, immediately after the Phase 5.1 hosting
 migration. These instructions bridge the gap until the Cloudflare Pages setup has
 matured (post-5.5, when GitHub Pages is torn down) and a permanent SOP is written.

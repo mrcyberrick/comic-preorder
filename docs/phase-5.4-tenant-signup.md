@@ -1,6 +1,12 @@
 # Phase 5.4 — Tenant Signup
 
-**Status:** **Planning** — plan written 2026-06-15; not yet executed. Active sub-deploy.
+**STATUS:** COMPLETE | staging=2026-06-17 | prod=2026-06-17 | findings=F34,F72,F73,F74
+
+**Status:** **Complete** — 2026-06-17. Plan written 2026-06-15. Phase 5 closed 2026-07-15; this
+sub-deploy is no longer active. *(Corrected 2026-08-18 — this line previously read "Planning …
+not yet executed. Active sub-deploy," stale since 2026-06-17 and contradicted by this repo's own
+`docs/phase-5-second-tenant-onboarding.md`, which has recorded "5.4 Complete 2026-06-17" the whole
+time — found by re-checking that parent doc, not by trusting this file.)*
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.4)
 **Predecessor:** Phase 5.3 — Per-Tenant Branding — **Complete 2026-06-15** (`resolve_tenant_by_slug` 4-col both projects; `Branding.apply()` override layer live; `FOUNDING_TENANT` in per-env `config.js`; F71 resolved).
 **Branches:** This sub-deploy is **backend-only** — Edge Function source (`supabase/functions/**`, tracked) + database data/DDL + docs. **No `app.js` / `*.html` / `config.js` / `style.css` change is in scope** (no public signup *page* is built — the tenant-creation surface is a gated operator Edge Function, not a customer-facing screen; see § 1.6). Doc commits → `staging` directly. EF source edits ride `feature/5.4-tenant-signup` off `staging` → `--ff-only` merge → staging deploy + smoke → prod EF redeploy per § Standard Deployment Workflow's Edge-Function path. Because no `config.js` key is added, the prod promotion does **not** need the per-branch `config.js` dance — but it **does** need per-project Edge-Function secret setup and a per-env founding-tenant data migration (§ S6).
