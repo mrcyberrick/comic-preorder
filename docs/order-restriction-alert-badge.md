@@ -1,6 +1,6 @@
 # Ordering-restriction alert + badge — warn customers before they reserve a limited-ratio variant
 
-**STATUS:** STAGING COMPLETE 2026-08-21 | staging=V1-V7 ALL GREEN — real import run 2026-08-21 populated `order_requirement` for both distributors from live data; a hover-stacking bug found the same day (badge + tooltip both broken on `.comic-card:hover`) was root-caused and fixed; the native-tooltip mobile gap flagged in § 5 (revisit if it matters) turned out to matter — the detail modal now carries the same disclosure, tap-accessible everywhere | prod=N/A, not requested | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
+**STATUS:** IN PROGRESS — PRODUCTION REQUESTED 2026-08-21 | staging=V1-V7 ALL GREEN (migration, both distributors, hover-stacking fix, mobile Learn More via the detail modal) | prod=V8 PENDING — `f132-order-requirement.sql` must run on production BEFORE the next production import (see § 7 S8); Rick requested the promotion, not yet executed | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
 
 **Origin:** Rick's request, 2026-08-20. Today a title PRH restricts (`OrderRequirement != 'Order All'`,
 shown in the UI as a ratio like `1:10`) can be reserved by any number of customers with no signal
@@ -263,6 +263,19 @@ and `.restriction-notice` CSS matching the existing amber "restricted" color lan
 on a restricted title, hidden on an unrestricted one. Regression-checked against specs 02/14 (the
 other modal-heavy paths) — no impact. **Gate V7.**
 
+**S8 — production.** Requested by Rick 2026-08-21. Two independent halves, **DB before code**:
+1. `docs/sql/f132-order-requirement.sql` run against the **production** project — same file used
+   for staging, STATUS line updated to `prod=PENDING` pending this run. **Not optional pre-work**:
+   production's `import.js` already carries the F132 normalizer changes (pushed alongside
+   `import-staging.js` throughout this session), so the *next* production import 400s on every
+   catalog upsert (`PGRST204`, not just restricted rows) if this hasn't landed first — independent
+   of whether the client code has been promoted yet.
+2. Client code (`app.js`, `catalog.html`, `style.css`) promoted via the standard `/promote-prod`
+   flow — config.js preservation, F59 merge-base check, PR to `main`, post-deploy write-smoke. Safe
+   to run before or after step 1: the badge/modal are additive reads, inert if the column doesn't
+   exist yet (same shape as F115).
+**Gate V8.**
+
 ---
 
 ## 8. Verification gates
@@ -276,6 +289,7 @@ other modal-heavy paths) — no impact. **Gate V7.**
 | **V5** | Real import run: non-null `order_requirement` count > 0 on real data | **GREEN 2026-08-21 (Rick)** — confirmed via direct query on real restricted rows |
 | **V6** | Badge stays visually on top AND reachable (native tooltip fires) during `.comic-card:hover` | **GREEN 2026-08-21** — root-caused, fixed (`3b345bf`), re-verified, Playwright regression added (spec 20, 4/4) |
 | **V7** | Detail modal shows the restriction disclosure (tap-accessible) when `order_requirement` is set, hidden otherwise | **GREEN 2026-08-21** — commit `704820e`, spec 20 6/6, regression-checked against specs 02/14 |
+| **V8** | Production: `f132-order-requirement.sql` applied (post-DDL checks pass) BEFORE the next production import runs; client code promoted via `/promote-prod`, post-deploy write-smoke passes | **PENDING — 2026-08-21**, requested by Rick |
 
 ---
 
@@ -288,15 +302,15 @@ other modal-heavy paths) — no impact. **Gate V7.**
 - [x] V5 — real import spot-check (Rick, 2026-08-21 — real restricted rows confirmed live)
 - [x] V6 — hover-stacking bug found via real-data testing, root-caused, fixed, re-verified (2026-08-21)
 - [x] V7 — mobile "Learn more" via the detail modal, § 5's flagged revisit, triggered (2026-08-21)
+- [ ] V8 — production migration applied, code promoted, post-deploy write-smoke — **pending, requested 2026-08-21**
 - [x] `docs/technical-reference.md` § 4.3 `order_requirement` note updated from "Not yet live"
 - [x] `CLAUDE.md` § Open findings F132 line updated
-- [x] This doc's `**STATUS:**` line advanced to STAGING COMPLETE (not COMPLETE — no production run
-      requested; that stays a separate, later, explicit decision)
+- [ ] This doc's `**STATUS:**` line advanced to COMPLETE — **not yet**: V8 (production) is requested
+      but not yet run
 
 **Staging build + verification done 2026-08-20–21**, including a same-day data-survey correction
 (§ 1, Lunar), a same-day UI bug found by Rick testing real data and fixed same session (§ 7 S6), and
 § 5's explicitly-flagged mobile-tooltip revisit, also triggered the same session (§ 7 S7).
 V1–V7 all green: migration applied, both distributors' halves built, real import run confirms real
-data, hover-stacking bug fixed and covered by regression. Production is out of scope for this doc
-entirely until Rick explicitly asks for a
-promotion.
+data, hover-stacking bug fixed and covered by regression. **Production promotion requested by Rick
+2026-08-21** — § 7 S8 / gate V8, in progress.

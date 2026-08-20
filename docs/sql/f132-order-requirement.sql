@@ -1,16 +1,28 @@
--- STATUS: staging=APPLIED 2026-08-20 | prod=N/A (staging-first; prod is a
---         separate, later run at Rick's explicit call once the September
---         import has exercised this on staging)
---         Verified live: column exists (query 1), no CHECK constraint
---         (query 2), zero non-null rows over 9,589 total (query 3) — Rick,
---         2026-08-20.
+-- STATUS: staging=APPLIED 2026-08-20 (verified: 0 non-null / 9,589, then
+--         populated live by a real import 2026-08-21) | prod=PENDING —
+--         Rick requested production promotion 2026-08-21; run this file
+--         against the PRODUCTION project BEFORE the code promotion lands
+--         (see docs/order-restriction-alert-badge.md § 7 S8). Update this
+--         line to prod=APPLIED the moment it runs — F6's 13-day miss is
+--         exactly the failure mode a stale STATUS line causes.
 -- ============================================================================
 -- catalog: one additive nullable column, order_requirement
 -- Prepared 2026-08-20 (F132 order-restriction alert+badge scoping session).
--- Plan: docs/order-restriction-alert-badge.md § 2, runbook S1.
--- Run: STAGING first (this file targets staging). Production is a separate,
---      later run, not part of this run.
+-- Plan: docs/order-restriction-alert-badge.md § 2, runbook S1 (staging),
+--       S8 (production).
+-- Run: STAGING already applied 2026-08-20 (see STATUS). THIS RUN targets
+--      PRODUCTION — same file, same DDL, different project. Confirm you are
+--      in the production Supabase project (plgegklqtdjxeglvyjte) before
+--      running, not an already-open staging tab — see the F115 migration's
+--      note on exactly this risk.
 -- Operator: Rick (Supabase SQL Editor, runs as postgres superuser).
+--
+-- WHY THIS RUN MATTERS BEYOND THE BADGE: production's import.js (scripts
+-- repo, already updated with the F132 normalizer changes) will 400 with
+-- PGRST204 "column not found" on EVERY catalog upsert -- not just the
+-- restricted rows -- if it runs before this column exists on production.
+-- This migration must land before the next production import, independent
+-- of when the client-code promotion happens.
 --
 -- WHY THIS COLUMN EXISTS:
 --   PRH's OrderRequirement column (879 rows, 2026-08-20 file) flags 133 rows
@@ -80,4 +92,7 @@ SELECT
   count(*) FILTER (WHERE order_requirement IS NOT NULL) AS non_null_order_requirement,
   count(*) AS total_rows
 FROM public.catalog;
--- Expected: non_null_order_requirement = 0; total_rows = the live row count (9,586 as of 2026-08-10)
+-- Expected: non_null_order_requirement = 0; total_rows = the live PRODUCTION
+-- row count (~11,724 as of 2026-08-10 per technical-reference.md SS 4.3 --
+-- will differ, re-verify against whatever total_rows this query actually
+-- returns, don't compare against the staging 9,589 figure from the S1 run)
