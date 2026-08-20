@@ -517,11 +517,12 @@ nullable. **Present on both environments — key-set read live 2026-08-10, 33
 columns on each.** *(Added to this document 2026-08-10; they had been live for
 a week with no entry here at all. See § 13 F92.)*
 
-**`order_requirement` was added to this document 2026-08-20 (F132) ahead of
-being live — `docs/sql/f132-order-requirement.sql` carries `-- STATUS:
-staging=PENDING | prod=N/A`. Do not treat it as applied until that file's
-STATUS line says otherwise; re-verify against live before relying on it for
-any schema-related claim, per CLAUDE.md's live-doc discipline.**
+**`order_requirement` added to this document 2026-08-20 (F132) and applied to
+STAGING the same day** — `docs/sql/f132-order-requirement.sql` now carries
+`-- STATUS: staging=APPLIED 2026-08-20 | prod=N/A`. Verified live: 0 non-null
+rows over 9,589 total (Rick, SQL Editor). **Not yet on production** — that is
+a separate, later, explicitly-requested run; re-verify before relying on this
+column for any production-facing claim.
 
 - `initial_order_due` — **Lunar only.** Lunar's product file publishes
   `InitialOrderDue`; PRH publishes no equivalent, so PRH rows write an explicit
@@ -538,9 +539,10 @@ any schema-related claim, per CLAUDE.md's live-doc discipline.**
   `'Order All'` and blank both normalize to `null` via `parseOrderRequirement()`
   (F132). Lunar rows always write explicit `null` (no equivalent field in
   Lunar's feed — F123 key-shape rule). Drives the catalog-page "Restricted"
-  badge (`buildComicCard()`, `app.js:1748`). **Not yet live** — see the
-  pending-migration note above; populates naturally on the next PRH import
-  once applied, no backfill planned.
+  badge (`buildComicCard()`, `app.js:1748`), real-browser-verified 2026-08-20
+  via Playwright spec 20. **Live on staging 2026-08-20, 0 non-null rows** —
+  populates naturally on the next PRH import (~Sept 7–10), no backfill
+  planned. Not yet on production.
 - `withdrawn_at` / `withdrawn_last_seen_month` — set by the import's F110
   withdrawal detection (`detectWithdrawals()`, Step 4b), which is a **cross-month
   set difference**, not a column read: the PRH file the store downloads is the
@@ -4321,6 +4323,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Measured, not assumed (2026-08-20):** PRH's `OrderRequirement` column (`2026_08_PRH_metadata_full_active.csv`, 879 rows) carries a real restriction on 133 rows (15%) — ratios from `1:5` to `1:250`, always on a `Variant Title` row, never `Primary Title`, and self-contained (`OrderRequirementUPC` empty in all 133 — no cross-row lookup needed). Lunar has no equivalent structured field; the closest signal, free-text `TitleNote`, is written to `catalog.title_note` on import but read nowhere in the app, and is overloaded with discount/territory/returnability text unrelated to allocation risk — out of scope for this finding, noted as a follow-on.
 - **Scoping decisions (2026-08-20, Rick):** PRH structured ratio only for V1 (Lunar `title_note` classification deferred, separate follow-on). Badge-only signal, catalog page only — no reserve-time toast/confirm, no My List/Arrivals surface. "Learn more" via native `title=` tooltip (matches the existing FOC-lock badge pattern, `app.js:1764`), not a custom popover. No historical backfill — the new `catalog.order_requirement` column populates naturally on the next PRH import.
 - **Fix shape:** additive nullable `catalog.order_requirement text` column (staging first, Rick-gated for prod, same pattern as F115's `arrival_outcome`) · PRH-only normalizer change in both import scripts (`'Order All'`/blank → `null`, else passthrough) with unit tests · a new pill in `buildComicCard()` (`app.js:1748`), visually distinct from F120's rejected badge since the two signals are predictive vs. retrospective and must not be conflated.
+- **Built and verified on staging, same session, 2026-08-20.** Migration applied (Rick) — 0 non-null over 9,589 rows. Import-script normalizer + 198/198 unit suite green (`e57ade4`). Badge real-browser-verified via a new Playwright spec (`20-restricted-variant-badge.spec.ts`, 3/3 green) — including catching that `catalog.html`'s `#filter-variants` defaults to "Standard Covers," which hides every restricted row by construction (all 133 real restricted PRH rows are `Variant Title`, § 1) until a customer switches to "All Covers." Not a defect — existing, working catalog behavior the spec had to account for, not something F132 changed. **Only V5 (a real September import spot-check) remains; production not requested.** Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
 - **Where:** `catalog` table (new column) · `catalogs/scripts/import.js` / `import-staging.js` normalizers — private scripts repo · `app.js:1748` (`buildComicCard()`) · `catalog.html`.
 - **Related:** **F117**/**F120** (the retrospective rejected-badge mechanism this is an earlier, non-replacing signal for — see explicit OUT-of-scope note in the plan doc). **F115** (same additive-nullable-column, no-backfill-needed shape, different fact). **F123** (the key-shape rule this column's normalizer must respect across both distributors in one upsert batch).
 

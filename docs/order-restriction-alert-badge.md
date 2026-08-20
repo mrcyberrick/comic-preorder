@@ -1,6 +1,6 @@
 # Ordering-restriction alert + badge — warn customers before they reserve a limited-ratio variant
 
-**STATUS:** IN PROGRESS | staging=code built, migration PENDING (Rick-gated, see § 7 runbook S1) | prod=N/A | findings=F132
+**STATUS:** IN PROGRESS | staging=V1-V4 GREEN 2026-08-20 (migration applied, badge real-browser-verified); V5 held for ~Sept 7-10 import | prod=N/A, not requested | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
 
 **Origin:** Rick's request, 2026-08-20. Today a title PRH restricts (`OrderRequirement != 'Order All'`,
 shown in the UI as a ratio like `1:10`) can be reserved by any number of customers with no signal
@@ -164,7 +164,8 @@ tooltip, no separate alert) on the shared card renderer, catalog page only · Pl
 
 **S1 — schema.** `docs/sql/f132-order-requirement.sql` — additive nullable `catalog.order_requirement
 text`, no CHECK (open-set distributor values, not an app enum). > **PAUSE → Rick**, staging only.
-Production is a separate, later, explicitly-requested run. **Gate V1.**
+Production is a separate, later, explicitly-requested run. **APPLIED 2026-08-20 (Rick)** — verified
+live: 0 non-null rows over 9,589 total, matching "no backfill" by design. **Gate V1 GREEN.**
 
 **S2 — import.** `parseOrderRequirement()` + normalizer wiring, both scripts (`import.js`,
 `import-staging.js`, private scripts repo). PRH passes through a real ratio, `'Order All'`/blank
@@ -176,16 +177,19 @@ then, per the commit message's own warning.** **Gate V2.**
 **S3 — UI.** `buildComicCard()` (`app.js:1748`) reads `comic.order_requirement`, renders
 `.restriction-badge` (bottom-left of the cover, amber, native `title=` tooltip carrying Rick's exact
 copy + the ratio). `.restriction-badge` CSS in `style.css`. Catalog-only by construction (§ 5).
-**Built 2026-08-20 — inert client-side until S1 lands: `comic.order_requirement` reads `undefined`
-on any row from a pre-migration `select('*')`, so the badge simply never renders. Safe to deploy to
-staging ahead of the migration if convenient**, same shape as F115. **Gate V3.**
+**Built 2026-08-20, real-browser-verified same day (spec 20, below) — badge renders with the correct
+tooltip copy + ratio, no badge on an unrestricted card, and it coexists with `reserved-indicator`
+without clobbering it.** **Gate V3 GREEN.**
 
 **S4 — Playwright.** `20-restricted-variant-badge.spec.ts` (local-only, scripts repo) — seeds a
 restricted PRH row (`order_requirement: '1:10'`) and an unrestricted one, asserts the badge/tooltip
 render only on the restricted card, and that reserving the item doesn't clobber or hide the badge.
-`seedCatalogRow()` fixture extended with an `orderRequirement` option. **Written 2026-08-20 —
-CANNOT RUN until S1 lands** (`seedCatalogRow`'s insert 400s with `undefined_column` against a
-catalog table that doesn't have the column yet). **Gate V4.**
+`seedCatalogRow()` fixture extended with an `orderRequirement` option. **3/3 GREEN 2026-08-20**,
+after one fixture-side fix found on the first post-migration run: the restricted seed row correctly
+uses `variant_type: 'Variant Title'` (matching every one of the 133 real restricted PRH rows, § 1)
+— but `catalog.html`'s `#filter-variants` defaults to "Standard Covers," which hides it. Not a
+product bug; the spec now selects "All Covers" before searching, same real UI a customer would use
+to see restricted variants at all. **Gate V4 GREEN.**
 
 **S5 — the real September import.** The ~Sept 7–10 cycle is the first PRH import to actually write
 non-null `order_requirement` values from production data. Spot-check a handful of the known-restricted
@@ -197,26 +201,28 @@ item codes against the live catalog page afterward. **Gate V5.**
 
 | Gate | Assertion | Status |
 |---|---|---|
-| **V1** | `order_requirement` column live on staging, matching `docs/sql/f132-order-requirement.sql`'s post-DDL checks (type/nullability, no CHECK, zero non-null rows) | **PENDING — Rick** |
+| **V1** | `order_requirement` column live on staging, matching `docs/sql/f132-order-requirement.sql`'s post-DDL checks (type/nullability, no CHECK, zero non-null rows) | **GREEN 2026-08-20 (Rick)** — 0 non-null / 9,589 total |
 | **V2** | Both import scripts' unit suite green with the F132 additions; PRH/Lunar key-shape parity holds | **GREEN 2026-08-20** — 198/198, `e57ade4` |
-| **V3** | Badge renders only when `comic.order_requirement` is truthy; tooltip carries Rick's exact copy + the ratio; does not collide with `reserved-indicator`/`foc-locked-indicator`/`distributor-badge` | Built, not yet real-browser-verified (needs V1 first — see spec 20) |
-| **V4** | Spec 20 green (3/3): restricted card shows badge, unrestricted card doesn't, badge survives a reserve | **BLOCKED on V1** |
+| **V3** | Badge renders only when `comic.order_requirement` is truthy; tooltip carries Rick's exact copy + the ratio; does not collide with `reserved-indicator`/`foc-locked-indicator`/`distributor-badge` | **GREEN 2026-08-20** — real-browser check via spec 20 |
+| **V4** | Spec 20 green (3/3): restricted card shows badge, unrestricted card doesn't, badge survives a reserve | **GREEN 2026-08-20** — 3/3 |
 | **V5** | September import: spot-check ≥ 3 real restricted item codes against the live catalog page | Held for the ~Sept 7–10 window |
 
 ---
 
 ## 9. Completion criteria
 
-- [ ] V1 — migration applied and verified live on staging (Rick)
+- [x] V1 — migration applied and verified live on staging (Rick, 2026-08-20)
 - [x] V2 — import-script unit suite green (198/198, `e57ade4`)
-- [ ] V3 — real-browser check of the badge/tooltip on staging (needs V1)
-- [ ] V4 — Playwright spec 20 green (needs V1)
-- [ ] V5 — September import spot-check
-- [ ] `docs/technical-reference.md` § 4.3 `order_requirement` note updated from "Not yet live" once V1 lands
-- [ ] `CLAUDE.md` § Open findings F132 line updated once V1–V4 close
-- [ ] This doc's `**STATUS:**` line advanced to COMPLETE with the date
+- [x] V3 — real-browser check of the badge/tooltip on staging (spec 20, 2026-08-20)
+- [x] V4 — Playwright spec 20 green (3/3, 2026-08-20)
+- [ ] V5 — September import spot-check — **the only thing left, held for the ~Sept 7–10 window**
+- [x] `docs/technical-reference.md` § 4.3 `order_requirement` note updated from "Not yet live"
+- [x] `CLAUDE.md` § Open findings F132 line updated
+- [ ] This doc's `**STATUS:**` line advanced to COMPLETE — **not yet**: V5 and any production run are
+      still open, so STATUS reads staging-complete, not COMPLETE
 
-**Not done today.** This session built and committed the client + import-script halves (S2/S3, both
-inert-safe) and wrote the migration + Playwright spec (S1/S4, both blocked on Rick applying the
-migration). Production is out of scope for this doc entirely until staging V1–V5 are all green and
-Rick explicitly asks for a promotion.
+**Staging build + verification done 2026-08-20 — same session as the scoping interview.** V1–V4 all
+green: migration applied, both halves built, real-browser-verified via Playwright. What's left is
+entirely time-gated (V5, the September import) — no further build work is needed before then.
+Production is out of scope for this doc entirely until V5 is green and Rick explicitly asks for a
+promotion.

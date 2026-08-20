@@ -1,6 +1,9 @@
--- STATUS: staging=PENDING | prod=N/A (staging-first; prod is a separate,
---         later run at Rick's explicit call once the September import has
---         exercised this on staging)
+-- STATUS: staging=APPLIED 2026-08-20 | prod=N/A (staging-first; prod is a
+--         separate, later run at Rick's explicit call once the September
+--         import has exercised this on staging)
+--         Verified live: column exists (query 1), no CHECK constraint
+--         (query 2), zero non-null rows over 9,589 total (query 3) — Rick,
+--         2026-08-20.
 -- ============================================================================
 -- catalog: one additive nullable column, order_requirement
 -- Prepared 2026-08-20 (F132 order-restriction alert+badge scoping session).
