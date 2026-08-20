@@ -18,7 +18,7 @@ scripts (186/186 unit tests), admin backorder panel reads the column, full Playw
 127/127 (1 confirmed-flaky retry). September catalog files not yet present, so S1/S5/S6 (real
 import pre-flight, live run, backfill) are held for the ~Sept 7–10 window — **F115 is still open,
 not resolved.** Staging `f61487a`, scripts repo `b629cda`, 2026-08-18.
-**Next free finding ID:** **F132.**
+**Next free finding ID:** **F133.**
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -44,6 +44,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
+| F132 | **Medium** — a PRH title restricted to a distributor allocation ratio (e.g. `1:10`, 15% of PRH titles) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge | Owner: `docs/order-restriction-alert-badge.md` (scoping resolved 2026-08-20 — badge-only, catalog page only, native tooltip, no backfill; build starting) |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,
