@@ -1,8 +1,21 @@
--- STATUS: staging=APPLIED 2026-08-18 | prod=NOT APPLIED
+-- STATUS: staging=APPLIED 2026-08-18 | prod=APPLIED 2026-08-20
 --         F115 tri-state arrival_outcome column on preorders.
 --         Staging verified live: column text/nullable/no-default, CHECK
 --         constraint matches (ARRAY['arrived','not_arrived','unknown']),
 --         bogus-value UPDATE correctly rejected 23514 then rolled back clean.
+--         PRODUCTION verified live 2026-08-20, same four checks: pre-check 0
+--         rows; column text/YES/null; CHECK present; 0 non-null over 2,020
+--         rows; bogus UPDATE rejected 23514 on constraint
+--         "preorders_arrival_outcome_check". The 23514 DETAIL carried
+--         tenant_id 20941129-... (the PRODUCTION founding tenant), which
+--         independently confirms the run happened in the prod project and
+--         not in an already-open staging tab -- the one real risk here.
+--         Run EARLY, ahead of the September import session, deliberately:
+--         admin.html on staging selects this column, so until production had
+--         it, ANY staging->main promotion would 400 the whole admin gather
+--         (see /promote-prod step 0b). Applying it early is inert -- every
+--         row reads NULL and no production code reads the column yet -- and
+--         it both clears that block and removes a dependency from S5/S6.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.

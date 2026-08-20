@@ -1,6 +1,7 @@
 # F115 — persist the reservation arrival outcome (Option B), bundled with the September import pre-flight
 
-**STATUS:** IN PROGRESS | staging=S2/S3/S4/S7 DONE 2026-08-18 (migration applied+verified, import write shipped, admin surface live, Playwright V3/V6/V7 green — see § 7) | prod=migration NOT APPLIED | findings=F115,F110,F122,F123
+**STATUS:** IN PROGRESS | staging=S2/S3/S4/S7 DONE 2026-08-18 (migration applied+verified, import write shipped, admin surface live, Playwright V3/V6/V7 green — see § 7) | prod=migration APPLIED 2026-08-20 (S2 only; import write + backfill still owed) | findings=F115,F110,F122,F123
+**Prod migration pulled forward to 2026-08-20**, out of the S5/S6 window and ahead of the import, at Rick's call. It is additive/nullable and no production code reads the column, so it is inert — but it **clears the promotion block** (`admin.html` on staging selects `arrival_outcome`; without the column any staging→main merge would 400 the entire admin gather — `/promote-prod` step 0b) and removes a dependency from the September session. Verified live on production with the file's own four checks; the 23514 DETAIL carried the production founding tenant_id, confirming the right project. **S5/S6 are unchanged and still owed.**
 **Session note (2026-08-18):** September catalog files not yet present (entry condition (b) —
 see session prompt). This pass did S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
 live run, and backfill) are held for the ~Sept 7–10 import window. F115 is NOT resolved yet —
