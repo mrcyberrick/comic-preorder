@@ -508,12 +508,20 @@ Monthly distributor catalog items. The largest table by row count —
 | `title_note` | text | YES | — |
 | `withdrawn_at` | timestamptz | YES | — |
 | `withdrawn_last_seen_month` | text | YES | — |
+| `order_requirement` | text | YES | — |
 
-**The last four columns were added 2026-08-03** by the F110/F112 order-export
-follow-through session (`docs/sql/catalog-withdrawal-and-lunar-fields.sql`),
-all additive and nullable. **Present on both environments — key-set read live
-2026-08-10, 33 columns on each.** *(Added to this document 2026-08-10; they had
-been live for a week with no entry here at all. See § 13 F92.)*
+**The middle four (`initial_order_due` through `withdrawn_last_seen_month`)
+were added 2026-08-03** by the F110/F112 order-export follow-through session
+(`docs/sql/catalog-withdrawal-and-lunar-fields.sql`), all additive and
+nullable. **Present on both environments — key-set read live 2026-08-10, 33
+columns on each.** *(Added to this document 2026-08-10; they had been live for
+a week with no entry here at all. See § 13 F92.)*
+
+**`order_requirement` was added to this document 2026-08-20 (F132) ahead of
+being live — `docs/sql/f132-order-requirement.sql` carries `-- STATUS:
+staging=PENDING | prod=N/A`. Do not treat it as applied until that file's
+STATUS line says otherwise; re-verify against live before relying on it for
+any schema-related claim, per CLAUDE.md's live-doc discipline.**
 
 - `initial_order_due` — **Lunar only.** Lunar's product file publishes
   `InitialOrderDue`; PRH publishes no equivalent, so PRH rows write an explicit
@@ -525,6 +533,14 @@ been live for a week with no entry here at all. See § 13 F92.)*
 - `title_note` — Lunar's `TitleNote` free text ("Allocations may occur",
   "Previously offered through Diamond. Never fulfilled."). **Live 2026-08-10:
   75 non-null rows on production.**
+- `order_requirement` — **PRH only.** PRH's `OrderRequirement` carries a
+  distributor allocation ratio (`'1:10'`, `'1:25'`, …) on ~15% of rows;
+  `'Order All'` and blank both normalize to `null` via `parseOrderRequirement()`
+  (F132). Lunar rows always write explicit `null` (no equivalent field in
+  Lunar's feed — F123 key-shape rule). Drives the catalog-page "Restricted"
+  badge (`buildComicCard()`, `app.js:1748`). **Not yet live** — see the
+  pending-migration note above; populates naturally on the next PRH import
+  once applied, no backfill planned.
 - `withdrawn_at` / `withdrawn_last_seen_month` — set by the import's F110
   withdrawal detection (`detectWithdrawals()`, Step 4b), which is a **cross-month
   set difference**, not a column read: the PRH file the store downloads is the

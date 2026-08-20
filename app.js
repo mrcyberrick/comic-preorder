@@ -1764,6 +1764,19 @@ function buildComicCard(comic, reservedQty, focLocked = false) {
     ? `<div class="foc-locked-indicator" title="Order cutoff passed — cannot be changed">FOC</div>`
     : '';
 
+  // Restricted-variant badge (F132) — PRH titles the distributor allocates by
+  // ratio (catalog.order_requirement, e.g. '1:10') get a predictive pill here,
+  // ahead of any order being placed, so the customer has a signal before
+  // reserving rather than only after a rejection. Deliberately a different
+  // signal from F120's rejected notice (mylist.html): that one is
+  // retrospective (the distributor already declined the order); this one is
+  // predictive and must not be visually conflated with it. Catalog-page only
+  // per scoping (docs/order-restriction-alert-badge.md) — no toast/confirm at
+  // reserve time, badge + native tooltip is the whole signal for V1.
+  const restrictionBadge = comic.order_requirement
+    ? `<div class="restriction-badge" title="This is a restricted variant. Your reservation is noted, but fulfillment depends on distributor rules. Order ratio ${escapeHtml(comic.order_requirement)}.">Restricted</div>`
+    : '';
+
   const saleDate = comic.on_sale_date ? formatDate(comic.on_sale_date) : '—';
 
   // Button state: locked items (reserved or not) cannot be toggled.
@@ -1779,7 +1792,7 @@ function buildComicCard(comic, reservedQty, focLocked = false) {
     <div class="comic-card" data-id="${comic.id}">
       <div class="comic-cover">
         <div class="distributor-badge badge-${comic.distributor.toLowerCase()}">${escapeHtml(comic.distributor)}</div>
-        ${reservedBadge}${focBadge}
+        ${reservedBadge}${focBadge}${restrictionBadge}
         ${coverHtml}
       </div>
       <div class="comic-info">

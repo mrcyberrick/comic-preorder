@@ -569,6 +569,25 @@ button { cursor: pointer; font-family: var(--font-body); }
   padding: 2px 7px;
   border-radius: 2px;
 }
+/* F132 — predictive restricted-variant pill (catalog.order_requirement).
+   Bottom-left of the cover so it never collides with distributor-badge
+   (top-left) or reserved-indicator/FOC badge (top-right), and amber rather
+   than the accent red used by reserved-indicator so it doesn't read as an
+   error state — this is advisory, not a problem with the reservation. */
+.restriction-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: var(--warning);
+  color: #1a1408;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  cursor: help;
+}
 .comic-info {
   padding: 8px;
   flex: 1;

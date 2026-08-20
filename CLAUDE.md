@@ -44,7 +44,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
-| F132 | **Medium** — a PRH title restricted to a distributor allocation ratio (e.g. `1:10`, 15% of PRH titles) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge | Owner: `docs/order-restriction-alert-badge.md` (scoping resolved 2026-08-20 — badge-only, catalog page only, native tooltip, no backfill; build starting) |
+| F132 | **Medium** — a PRH title restricted to a distributor allocation ratio (e.g. `1:10`, 15% of PRH titles) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge | Owner: `docs/order-restriction-alert-badge.md` (IN PROGRESS — client + import-script halves built and committed 2026-08-20, badge-only/catalog-only/native-tooltip/no-backfill per Rick's scoping call; **migration S1 PENDING, Rick-gated** — everything else is inert until it lands) |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,

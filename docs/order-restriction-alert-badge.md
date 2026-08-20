@@ -1,6 +1,6 @@
 # Ordering-restriction alert + badge — warn customers before they reserve a limited-ratio variant
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=— (candidate: next free ID F132, not yet claimed)
+**STATUS:** IN PROGRESS | staging=code built, migration PENDING (Rick-gated, see § 7 runbook S1) | prod=N/A | findings=F132
 
 **Origin:** Rick's request, 2026-08-20. Today a title PRH restricts (`OrderRequirement != 'Order All'`,
 shown in the UI as a ratio like `1:10`) can be reserved by any number of customers with no signal
@@ -13,9 +13,11 @@ reservation time, ahead of that outcome, per Rick's two asks:
 2. Badge restricted/incentive variants in the catalog, with a "Learn more" link surfacing: *"This is
    a restricted variant. Your reservation is noted, but fulfillment depends on distributor rules."*
 
-This is a scoping doc only — no code has been written. Nothing here is committed to a sub-deploy;
-CLAUDE.md's Current Migration Phase is "none" (Phase 5 closed, Phase 6 stub-only), so this doc is
-what makes the work real enough to execute in a dedicated session, per the Session Opening Protocol.
+Started as a scoping doc only, no code. **§ 5 records the scoping decisions Rick made 2026-08-20**
+(alert style, tooltip vs. popover, surface scope, finding ID); § 7 is the runbook that followed in
+the same session. Nothing here is committed to a sub-deploy — CLAUDE.md's Current Migration Phase is
+"none" (Phase 5 closed, Phase 6 stub-only) — so this doc is what makes the work real enough to
+execute, per the Session Opening Protocol.
 
 ---
 
@@ -121,25 +123,35 @@ popover (better on mobile, where hover tooltips don't work at all).
 
 ---
 
-## 5. Open questions for the scoping session (not resolved here)
+## 5. Scoping decisions (resolved 2026-08-20)
 
-- Blocking vs. non-blocking alert (§ 4.2).
-- Tooltip vs. popover for "Learn more," given mobile has no hover (§ 4.3).
-- Does the badge/alert also belong on `mylist.html` and `arrivals.html`, or catalog-reserve-time only?
-- Claim finding ID F132 for this gap, or leave it doc-only (no finding) like `subscription-reserved-
-  suggestions.md`?
-- Confirm the "no backfill" reasoning in § 3 explicitly with Rick before building.
-- Lunar `title_note` follow-on (§ 1) — separate finding, or fold into a later phase of this feature?
+- **Alert style: badge only, no separate reserve-time alert.** Neither the blocking confirm nor the
+  non-blocking toast from § 4.2 ships in V1 — the catalog-card pill is the whole signal. Simpler
+  than the doc's own recommendation (toast), Rick's call.
+- **"Learn more": native `title=` tooltip**, not a custom popover — matches the existing FOC-lock
+  badge pattern (`app.js:1764`). Accepted knowingly that this is non-functional on mobile tap (no
+  hover); revisit if that turns out to matter in practice.
+- **Surface scope: catalog page only.** `buildComicCard()` is used exclusively by `catalog.html`
+  (verified — `mylist.html`/`arrivals.html` render their own inline markup, not this function), so
+  this was free: no `mylist.html`/`arrivals.html` change needed to honor the decision.
+- **Finding ID: F132 claimed** — `docs/technical-reference.md` § 13, `CLAUDE.md` § Open findings.
+- **No backfill confirmed** — advisory catalog metadata tied to the live offering, populates
+  naturally on the next PRH import. Not challenged during scoping.
+- **Lunar `title_note` follow-on: separate finding, not folded in.** Left as the doc originally
+  proposed — a real gap, but its own text-classification scope, not part of F132.
 
 ---
 
 ## 6. Scope
 
-### IN (once scoped)
-`catalog.order_requirement` migration · PRH import parsing (both scripts) + unit tests · badge on the
-shared card renderer · reserve-time alert · "Learn more" disclosure · Playwright coverage.
+### IN — final, per § 5
+`catalog.order_requirement` migration · PRH import parsing (both scripts) + unit tests · badge (native
+tooltip, no separate alert) on the shared card renderer, catalog page only · Playwright coverage.
 
 ### OUT — stop and ask
+- Blocking or non-blocking reserve-time alert — decided against in § 5, badge is the whole signal.
+- Any surface outside `catalog.html` (`mylist.html`, `arrivals.html`) — decided against in § 5.
+- A custom popover for "Learn more" — decided against in § 5, native tooltip only.
 - Lunar `title_note` classification (§ 1) — related gap, not this feature.
 - Any change to the existing F117/F120 rejected-badge mechanism — this is a new, earlier signal, not a
   replacement.
@@ -148,8 +160,63 @@ shared card renderer · reserve-time alert · "Learn more" disclosure · Playwri
 
 ---
 
-## 7. Completion criteria
+## 7. Runbook
 
-Not applicable yet — this is a scoping doc. A future execution session fills in a runbook (§-numbered
-steps + verification gates, per the `f115-arrival-truth-persistence.md` template) once the open
-questions in § 5 are answered.
+**S1 — schema.** `docs/sql/f132-order-requirement.sql` — additive nullable `catalog.order_requirement
+text`, no CHECK (open-set distributor values, not an app enum). > **PAUSE → Rick**, staging only.
+Production is a separate, later, explicitly-requested run. **Gate V1.**
+
+**S2 — import.** `parseOrderRequirement()` + normalizer wiring, both scripts (`import.js`,
+`import-staging.js`, private scripts repo). PRH passes through a real ratio, `'Order All'`/blank
+→ `null`; Lunar writes explicit `null` (F123 key-shape rule). Unit-tested in
+`test/catalog-key-shape.test.mjs` (186 → 198 tests, both scripts green). **Built and committed
+(`e57ade4`) 2026-08-20 — inert until S1 lands; do not run either script against staging/prod before
+then, per the commit message's own warning.** **Gate V2.**
+
+**S3 — UI.** `buildComicCard()` (`app.js:1748`) reads `comic.order_requirement`, renders
+`.restriction-badge` (bottom-left of the cover, amber, native `title=` tooltip carrying Rick's exact
+copy + the ratio). `.restriction-badge` CSS in `style.css`. Catalog-only by construction (§ 5).
+**Built 2026-08-20 — inert client-side until S1 lands: `comic.order_requirement` reads `undefined`
+on any row from a pre-migration `select('*')`, so the badge simply never renders. Safe to deploy to
+staging ahead of the migration if convenient**, same shape as F115. **Gate V3.**
+
+**S4 — Playwright.** `20-restricted-variant-badge.spec.ts` (local-only, scripts repo) — seeds a
+restricted PRH row (`order_requirement: '1:10'`) and an unrestricted one, asserts the badge/tooltip
+render only on the restricted card, and that reserving the item doesn't clobber or hide the badge.
+`seedCatalogRow()` fixture extended with an `orderRequirement` option. **Written 2026-08-20 —
+CANNOT RUN until S1 lands** (`seedCatalogRow`'s insert 400s with `undefined_column` against a
+catalog table that doesn't have the column yet). **Gate V4.**
+
+**S5 — the real September import.** The ~Sept 7–10 cycle is the first PRH import to actually write
+non-null `order_requirement` values from production data. Spot-check a handful of the known-restricted
+item codes against the live catalog page afterward. **Gate V5.**
+
+---
+
+## 8. Verification gates
+
+| Gate | Assertion | Status |
+|---|---|---|
+| **V1** | `order_requirement` column live on staging, matching `docs/sql/f132-order-requirement.sql`'s post-DDL checks (type/nullability, no CHECK, zero non-null rows) | **PENDING — Rick** |
+| **V2** | Both import scripts' unit suite green with the F132 additions; PRH/Lunar key-shape parity holds | **GREEN 2026-08-20** — 198/198, `e57ade4` |
+| **V3** | Badge renders only when `comic.order_requirement` is truthy; tooltip carries Rick's exact copy + the ratio; does not collide with `reserved-indicator`/`foc-locked-indicator`/`distributor-badge` | Built, not yet real-browser-verified (needs V1 first — see spec 20) |
+| **V4** | Spec 20 green (3/3): restricted card shows badge, unrestricted card doesn't, badge survives a reserve | **BLOCKED on V1** |
+| **V5** | September import: spot-check ≥ 3 real restricted item codes against the live catalog page | Held for the ~Sept 7–10 window |
+
+---
+
+## 9. Completion criteria
+
+- [ ] V1 — migration applied and verified live on staging (Rick)
+- [x] V2 — import-script unit suite green (198/198, `e57ade4`)
+- [ ] V3 — real-browser check of the badge/tooltip on staging (needs V1)
+- [ ] V4 — Playwright spec 20 green (needs V1)
+- [ ] V5 — September import spot-check
+- [ ] `docs/technical-reference.md` § 4.3 `order_requirement` note updated from "Not yet live" once V1 lands
+- [ ] `CLAUDE.md` § Open findings F132 line updated once V1–V4 close
+- [ ] This doc's `**STATUS:**` line advanced to COMPLETE with the date
+
+**Not done today.** This session built and committed the client + import-script halves (S2/S3, both
+inert-safe) and wrote the migration + Playwright spec (S1/S4, both blocked on Rick applying the
+migration). Production is out of scope for this doc entirely until staging V1–V5 are all green and
+Rick explicitly asks for a promotion.
