@@ -1,8 +1,8 @@
--- STATUS: staging=APPLIED 2026-08-20 (verified: 0 non-null / 9,589, then
---         populated live by a real import 2026-08-21) | prod=APPLIED
---         2026-08-21 — verified: 0 non-null / 11,726 total (Rick, SQL
---         Editor). Matches "no backfill" by design; populates on the next
---         production import, same shape as staging.
+-- STATUS: staging=APPLIED 2026-08-20 | prod=APPLIED 2026-08-21
+--         Staging verified: 0 non-null / 9,589, then populated live by a
+--         real import 2026-08-21. Production verified: 0 non-null / 11,726
+--         total (Rick, SQL Editor). Matches "no backfill" by design on both
+--         — populates on the next import for each environment.
 -- ============================================================================
 -- catalog: one additive nullable column, order_requirement
 -- Prepared 2026-08-20 (F132 order-restriction alert+badge scoping session).
