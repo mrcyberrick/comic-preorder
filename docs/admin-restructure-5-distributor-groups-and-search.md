@@ -1,9 +1,11 @@
 # Admin Restructure — Session 5: By Distributor grouping, and search across months
 
+**STATUS:** COMPLETE | staging=2026-08-09 | prod=2026-08-09 (PR #111,#113) | findings=F121
+
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.4.
 **Origin:** Rick's suggestions 2026-08-08 after using the session-4 build.
 
-**Status:** **5a LIVE IN PRODUCTION 2026-08-08** — PR #111, merge `f031916`. Staging (`ad39d04` + TDZ fix) — publisher grouping, search, matching print. **98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`.** Rick's print check owed. **5b (cross-month search) not started.**
+**Status:** **5a LIVE IN PRODUCTION 2026-08-08** — PR #111, merge `f031916`. Staging (`ad39d04` + TDZ fix) — publisher grouping, search, matching print. **98 passed / 98 declared, `PLAYWRIGHT_EXIT=0`.** Rick's print check done. **5b (cross-month search) LIVE IN PRODUCTION 2026-08-09** — staging `60035df` (99/99 suite), promoted via PR #113, merge `d12921e`. Corrected 2026-08-18 — this line previously read "5b not started" after 5b had already shipped; found via `git branch -a --contains d12921e`, not via re-reading this file.
 **Target:** **staging only.**
 **Last verified against live code:** `admin.html` @ `8d4099e`.
 

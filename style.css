@@ -543,10 +543,21 @@ button { cursor: pointer; font-family: var(--font-body); }
 .comic-cover img[src^="data:image"] {
   opacity: 1 !important;
 }
+/* z-index: 2 on all three cover badges below (fixed 2026-08-21, found via
+   Rick's real-data test of the F132 badge, but pre-existing on all of them):
+   .comic-card:hover .comic-cover img applies a transform, which creates a
+   new stacking context on hover. Without an explicit z-index, that hover
+   stacking context can paint the (later-in-DOM) <img> ABOVE these
+   absolutely-positioned, earlier-in-DOM badges — confirmed via
+   document.elementFromPoint() landing on the <img>, not the badge, and a
+   screenshot showing every badge vanish under the enlarged cover on hover.
+   z-index guarantees the badges stay on top regardless of the image's own
+   stacking context. */
 .distributor-badge {
   position: absolute;
   top: 8px;
   left: 8px;
+  z-index: 2;
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -560,6 +571,7 @@ button { cursor: pointer; font-family: var(--font-body); }
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 2;
   background: var(--accent);
   color: white;
   font-size: 0.6rem;
@@ -568,6 +580,26 @@ button { cursor: pointer; font-family: var(--font-body); }
   text-transform: uppercase;
   padding: 2px 7px;
   border-radius: 2px;
+}
+/* F132 — predictive restricted-variant pill (catalog.order_requirement).
+   Bottom-left of the cover so it never collides with distributor-badge
+   (top-left) or reserved-indicator/FOC badge (top-right), and amber rather
+   than the accent red used by reserved-indicator so it doesn't read as an
+   error state — this is advisory, not a problem with the reservation. */
+.restriction-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  background: var(--warning);
+  color: #1a1408;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  cursor: help;
 }
 .comic-info {
   padding: 8px;
@@ -765,6 +797,20 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .badge-format { color: var(--text-muted); border-color: var(--border); }
 .badge-variant { color: var(--warning); border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.08); }
+/* F132 (2026-08-21) — modal "Learn more" disclosure, the tap-accessible
+   channel for mobile (the card badge's title= tooltip needs hover). Same
+   amber as .restriction-badge/.badge-variant for one consistent "restricted"
+   color language across the card, modal badge, and this notice. */
+.restriction-notice {
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
 .modal-price-row {
   display: flex;
   align-items: baseline;

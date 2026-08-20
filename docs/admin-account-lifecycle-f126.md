@@ -1,5 +1,7 @@
 # Admin — account lifecycle (F126)
 
+**STATUS:** COMPLETE | staging=2026-08-10 | prod=2026-08-10 (PR #116) | findings=F126
+
 **Origin:** F126, filed 2026-08-09 while scoping the Accounts tab and deferred
 by Rick the same day. Reopened 2026-08-09 with all three open decisions answered.
 

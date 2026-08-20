@@ -1,10 +1,14 @@
 # Admin Restructure — Session 1: Removals
 
+**STATUS:** COMPLETE | staging=2026-08-08 | prod=2026-08-08 (PR #109) | findings=F121
+
 **Parent plan:** `docs/admin-dashboard-process-map.md` (F121). Structure decided
 2026-08-07 — **Option B, as modes within one `admin.html`** (parent § 5.7).
 **Finding:** `docs/technical-reference.md` § 13 **F121**.
 
-**Status:** Planned 2026-08-07, not started.
+**Status:** **COMPLETE — live in production 2026-08-08.** Promoted via PR #109, merge `9552ee6`.
+*(Corrected 2026-08-18 — this line previously read "Planned … not started," stale since the
+2026-08-08 promotion; found via `gh pr view 109` and `git branch -a --contains 9552ee6`.)*
 **Target:** **staging only.** Production promotion only on Rick's explicit request
 after staging verification.
 **Branch:** `feature/admin-removals`

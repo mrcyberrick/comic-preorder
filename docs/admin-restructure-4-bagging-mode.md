@@ -1,5 +1,7 @@
 # Admin Restructure — Session 4: the mode switch, proved on Bagging
 
+**STATUS:** COMPLETE | staging=2026-08-08 | prod=2026-08-08 (PR #110) | findings=F121
+
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.2 **P4**, § 5.7.4.
 **Decision:** Option B, built as **modes within one `admin.html`** — Rick, 2026-08-07.
 

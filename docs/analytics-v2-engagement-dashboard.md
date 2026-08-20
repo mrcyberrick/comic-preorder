@@ -1,5 +1,7 @@
 # Analytics v2 — Engagement Dashboard (full redesign, ungated)
 
+**STATUS:** COMPLETE | staging=2026-07-16 | prod=2026-07-16 (PR #81) | findings=—
+
 **Status:** Complete — 2026-07-16. Implemented on `feature/analytics-v2`,
 merged to staging ff-only (`b3f942b`); a snapshot-consistency/ordering bug in
 the `usage_events` ranged fetch was found by Rick's first V4 pass and fixed

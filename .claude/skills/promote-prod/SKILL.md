@@ -34,6 +34,33 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
    worth having if it is true; a stale one is worse than none, because it will
    be believed.
 
+   **0b. Does the client already reference it? (added 2026-08-18)** Do not decide
+   the above by reading. For each unapplied migration, pull the identifiers it
+   adds and grep the app files this PR would promote:
+
+   ```powershell
+   # identifiers added by the pending migration (columns, functions, tables)
+   Select-String -Path docs\sql\<pending>.sql -Pattern 'ADD COLUMN\s+(\w+)|CREATE (?:OR REPLACE )?FUNCTION\s+(\w+)|CREATE TABLE\s+(\w+)' -AllMatches |
+     ForEach-Object { $_.Matches.Groups | Where-Object { $_.Success -and $_.Name -ne '0' } | ForEach-Object { $_.Value } } |
+     Sort-Object -Unique
+   # then, for each identifier:
+   Select-String -Path *.html, app.js -Pattern '<identifier>' -List
+   ```
+
+   **Any hit is a HARD BLOCKER, not a decision.** The client would call something
+   production does not have. A PostgREST select naming a missing column returns
+   **400 / `42703`**, which fails the whole request — so this is not graceful
+   degradation of one panel, it is that page's entire data load.
+
+   *Worked example, and why this was added:* on 2026-08-18 the F115 build put
+   `arrival_outcome` into `admin.html`'s `fetchAllPreorders()` select list
+   (`admin.html:1106`) with `f115-arrival-outcome.sql` at `prod=NOT APPLIED`.
+   Promoting in that window would have taken the **entire production admin
+   dashboard** offline — not the backorder panel, the whole gather. The session
+   knew and said "do not promote" in its closeout, which is prose in a document
+   nobody re-reads at promotion time. That is the F105 shape exactly, so it gets
+   a check rather than a sentence.
+
    *Why this step exists:* `f6-app-settings-pk-rekey.sql` required a production
    re-key **before tenant 2**. Staging ran 2026-07-08, tenant 2 went live
    2026-07-15, production did not run until 2026-07-28 — a 13-day exposure found

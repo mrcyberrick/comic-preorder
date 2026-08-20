@@ -1,6 +1,11 @@
 # Phase 4.5 — Production `import.js` Bidirectional Merge
 
-**Status:** Planning (flip to **Complete** on execution)
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-31 (direct main, cutover window, no PR) | findings=—
+
+**Status:** **Complete — 2026-05-31.** Executed in the cutover window. *(Corrected 2026-08-18 —
+this line previously read "Planning (flip to Complete on execution)" and was never flipped, stale
+since 2026-05-31; found via `docs/phase-4-production-migration.md` § Sub-Deploys table, which
+already recorded "4.5 · Complete · 2026-05-31.")*
 **Sub-deploy:** 4.5 of Phase 4 — see `docs/phase-4-production-migration.md`
 **Branch:** none — **[LOCAL] script-only.** No commits to `feat/phase-4-prod-cutover`. No production DB writes.
 **Strategy:** B — production `import.js` is the base; each staging→prod patch is applied as a discrete, individually-verified diff. The four prod→staging backfill features are preservation checks, not re-introductions.

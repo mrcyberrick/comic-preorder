@@ -1,6 +1,11 @@
 # Phase 4.6 — Edge Functions redeploy + first prod import + maintenance off
 
-**Status:** Planning — plan/runbook drafted 2026-05-31. Flip parent-plan row 4.6 → **Complete** on execution.
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-31 (direct main, cutover window, no PR) | findings=F55,F58,F59
+
+**Status:** **Complete — 2026-05-31.** Executed in the cutover window; parent-plan row 4.6 flipped
+to Complete. *(Corrected 2026-08-18 — this line previously read "Planning … Flip on execution" and
+was never flipped, stale since 2026-05-31; found via `docs/phase-4-production-migration.md`
+§ Sub-Deploys table, which already recorded "4.6 · Complete · 2026-05-31.")*
 **Sign-offs (Rick, 2026-05-31):** (1) `--no-write` flag added to local `import.js` at 4.6 execution start — **approved**. (2) F55 analytics views deferred to post-cutover housekeeping + parent structural-diff criterion annotated — **approved**. Pre-session doc commits **not assumed** — § 0.4 verifies-or-fixes regardless of state.
 **Parent plan:** `docs/phase-4-production-migration.md` (sub-deploy row 4.6)
 **Branches:**

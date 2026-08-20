@@ -1,5 +1,7 @@
 # Phase 4.7 — Post-Cutover Soak Observation
 
+**STATUS:** COMPLETE | staging=N/A | prod=2026-06-10 | findings=F59,F61
+
 **Status:** **Complete** — closed 2026-06-10 (§ 6 closeout; soak 2026-05-31 → 2026-06-10, 10 calendar days). Plan/runbook written 2026-06-02.
 **Parent plan:** `docs/phase-4-production-migration.md` (sub-deploy row 4.7; In-Scope lines 161–162)
 **Predecessor:** `docs/phase-4.6-edge-functions-cutover.md` — closed 2026-05-31 (maintenance off, first prod import, tags pushed). Appendix A defines the **4.8** housekeeping pass that follows this soak.

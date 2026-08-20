@@ -1,5 +1,7 @@
 # Production Baseline — PULLLIST (pre-4.2)
 
+**STATUS:** COMPLETE | staging=N/A | prod=2026-05-28 | findings=—
+
 **Environment:** Production Supabase project `plgegklqtdjxeglvyjte.supabase.co` (ref `plgegklqtdjxeglvyjte`)
 **Last verified against live:** 2026-05-28 (Q1–Q8 schema audit + I2/I3 provenance)
 **Author:** Phase 4.2 planning session

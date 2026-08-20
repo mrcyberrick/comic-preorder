@@ -1,12 +1,16 @@
 # Apex Marketing Page + Universal Login (PLAN)
 
+**STATUS:** COMPLETE | staging=2026-07-21 | prod=2026-07-22 (PR #93) | findings=—
+
 *(Formerly "Apex Landing + Founding-Tenant Subdomain." Re-centered 2026-07-20: the **marketing page
 drives this development**; provisioning the founding tenant's own subdomain is **deprioritized/
 deferred** — the founding tenant simply stays on the apex.)*
 
-**Status:** **In progress** (opened 2026-07-21) — **S2 complete on staging 2026-07-21; S5 + S6 are
-the remaining work.** Standalone sub-deploy; **not** bundled with any other work. Its own session,
-full staging→prod discipline.
+**Status:** **COMPLETE — live in production 2026-07-22.** All sessions through S6 shipped; promoted
+via PR #93, merge `0f2aec6`. Standalone sub-deploy; **not** bundled with any other work.
+*(Corrected 2026-08-18 — this line previously read "In progress … S5 + S6 are the remaining work,"
+stale since the 2026-07-22 promotion; found via `gh pr view 93` and `git branch -a --contains
+0f2aec6`, not by re-reading this file — the F106 mechanism.)*
 **F86/F88 gating — CLEARED 2026-07-22.** The earlier gate read: staging build may proceed during the
 F86 legacy-key watch (staging-side static frontend, no shared surface with the production key
 toggle), but **the production promotion is gated on F86/F88 closure**, because F88 predicted the F86
@@ -1042,5 +1046,5 @@ Hybrid tiering model (apex = marketing + universal login = free tier; branded su
 per-tenant redirect downgraded blocking→optional; single-`APP_BASE_URL` confirmed not-a-defect, so
 **no finding was filed for it** — that decision stands. *(The 2026-07-20 note originally read "no
 F91" because F91 was the next free ID at the time; F91 is now claimed by the unrelated
-`technical-reference.md` drift filed at S5.7 — the two are not related.)* Status: In progress —
-S2 complete on staging; S5/S6 remaining)
+`technical-reference.md` drift filed at S5.7 — the two are not related.)* Status: COMPLETE — live
+in production 2026-07-22 (PR #93, merge `0f2aec6`); corrected 2026-08-18, see the header.

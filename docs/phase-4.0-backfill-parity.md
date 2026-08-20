@@ -1,6 +1,11 @@
 # Phase 4.0 — Backfill Parity (staging script catches up to production)
 
-**Status:** Planning — plan written 2026-05-26
+**STATUS:** COMPLETE | staging=2026-05-26 | prod=N/A | findings=—
+
+**Status:** **Complete — 2026-05-26.** Plan written 2026-05-26; executed same day.
+*(Corrected 2026-08-18 — this line previously read "Planning," stale since the same-day execution;
+found via `docs/phase-4-production-migration.md` § Sub-Deploys table, which already recorded
+"4.0 · Complete · 2026-05-26.")*
 **Parent plan:** `docs/phase-4-production-migration.md`
 **Branch base:** `staging`
 **Branch name:** `feature/4.0-backfill-parity`

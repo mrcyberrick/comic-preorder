@@ -1103,6 +1103,7 @@
       quantity,
       fulfilled,
       fulfilled_at,
+      arrival_outcome,
       catalog (
         id, distributor, item_code, upc, isbn, title, series_name, publisher,
         issue_number, format, price_usd, foc_date, on_sale_date,
@@ -1522,9 +1523,37 @@
   //
   // Withdrawn titles are excluded entirely (F110 § 2.1) — they cannot be
   // ordered at all, and get their own panel. See renderWithdrawnPanel().
+  //
+  // F115: a title auto-fulfilled with no arrival evidence used to just exit
+  // this panel — `fulfilled` flips to true and the row drops out of `rows`
+  // below, silently, on the very import that judged it unverified. The import
+  // now persists that judgement onto `arrival_outcome` (docs/
+  // f115-arrival-truth-persistence.md § 3.2), so a fulfilled row reading
+  // 'unknown' is fed straight into Never Arrived here — reusing the label
+  // F116 already built, not inventing a new one. Reads the column rather than
+  // recomputing hasShipmentEvidence()/on_sale_date against a fulfilled row:
+  // the column is the judgement made at the moment the row left the open
+  // panel, and there is nothing later to reconcile it against. A NULL
+  // arrival_outcome (pre-migration row, or fulfilled by some other path) is
+  // deliberately excluded — NULL means "not yet judged", not "judged unknown"
+  // (§ 3.1), so it must not read as Never Arrived.
+  // A `function` declaration, not `const` — this file's top-level script
+  // calls applyMode() -> ensureFullData() -> loadData() -> computeBackorderRisk()
+  // synchronously during its own initial run, BEFORE the script's linear
+  // execution ever reaches this line. A `const` here sat in the temporal dead
+  // zone at that first call and threw "Cannot access before initialization",
+  // which aborted every downstream admin.html init (mode switching, every
+  // tab) — caught by Playwright, not by inspection. Hoisted function
+  // declarations have no such ordering constraint.
+  function neverArrivedFromFulfilled() {
+    return gatherCollapsed
+      .filter(p => p.fulfilled && p.arrival_outcome === 'unknown' && p.catalog?.foc_date && !p.catalog?.withdrawn_at)
+      .map(p => ({ p }));
+  }
+
   function computeBackorderRisk() {
     const rows = gatherCollapsed.filter(p => !p.fulfilled && p.catalog?.foc_date && !p.catalog?.withdrawn_at);
-    const neverArrived = [], backordered = [], atRisk = [];
+    const neverArrived = neverArrivedFromFulfilled(), backordered = [], atRisk = [];
     const todayStr = DateUtils.todayLocal();
 
     rows.forEach(p => {

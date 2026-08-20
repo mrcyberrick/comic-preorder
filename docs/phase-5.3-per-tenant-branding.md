@@ -1,5 +1,7 @@
 # Phase 5.3 — Per-Tenant Branding
 
+**STATUS:** COMPLETE | staging=2026-06-15 | prod=2026-06-15 | findings=F71
+
 **Status:** **Complete** — 2026-06-15. All §5 criteria ticked; prod RPC 4-col + branding render live on `pulllist.app`; founding-apex invariant + write-smoke clean; F71 resolved; CLAUDE.md pointer advanced to 5.4.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.3)
 **Predecessor:** Phase 5.2 — Slug→id routing RPC — **Complete 2026-06-15** (`resolve_tenant_by_slug` live both projects; `TENANT_SLUG_MAP` removed; F14/F64-8/F67 resolved).

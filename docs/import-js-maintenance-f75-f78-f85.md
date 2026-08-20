@@ -1,5 +1,7 @@
 # Import.js Maintenance Session — F75 (key rotation) + F78 (historical dedup) + F85 (cross-month carry-forward root fix)
 
+**STATUS:** COMPLETE | staging=2026-07-15 | prod=2026-07-15 (scripts repo, no PR) | findings=F75,F78,F85
+
 **Status:** Complete — closed 2026-07-15
 **Plan written:** 2026-07-15
 **Not a phase sub-deploy** — standalone maintenance session. Touches only the **private scripts repo** (`comic-preorder-scripts`, working tree `catalogs\scripts\`) plus one-time prod/staging data cleanup. No `app.js`/`*.html`/`config.js`/Edge-Function changes in this repo.

@@ -1,5 +1,7 @@
 # Order-Export Correctness Session — F101 (FOC window) + F102 (order state)
 
+**STATUS:** COMPLETE | staging=2026-08-03 | prod=2026-08-03 (PR #100) | findings=F101,F102
+
 **Status:** **COMPLETE — live in production 2026-08-03** (PR #100, merge `5951a30`).
 **Executed:** 2026-08-02 → 2026-08-03 (CLI session). Gates V1–V8 all green; real-browser check confirmed by Rick 2026-08-03.
 **Scope changed mid-session by Rick, three times** — all live, all recorded in § 8:

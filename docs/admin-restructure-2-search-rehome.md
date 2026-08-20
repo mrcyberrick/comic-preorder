@@ -1,10 +1,14 @@
 # Admin Restructure — Session 2: search rehome, All Reservations retired
 
+**STATUS:** COMPLETE | staging=2026-08-08 | prod=2026-08-08 (PR #109) | findings=F121
+
 **Parent:** `docs/admin-dashboard-process-map.md` (F121) § 5.7.2 **P3** and § 5.7.4.
 **Decision:** Rick, 2026-08-07 — *"Accepted as recommended"*: **rehome the
 search, retire the list.**
 
-**Status:** Planned 2026-08-08.
+**Status:** **COMPLETE — live in production 2026-08-08.** Promoted via PR #109, merge `9552ee6`.
+*(Corrected 2026-08-18 — this line previously read "Planned," stale since the 2026-08-08
+promotion; found via `gh pr view 109` and `git branch -a --contains 9552ee6`.)*
 **Target:** **staging only.**
 **Branch:** `feature/admin-search-rehome`
 **Last verified against live code:** `admin.html` @ `592b2e0`, 2026-08-08.

@@ -1,5 +1,7 @@
 # Phase 5.5 — Second-Tenant Onboarding + Two-Tenant Production Soak
 
+**STATUS:** COMPLETE | staging=2026-07-15 | prod=2026-07-15 | findings=F105
+
 **Status:** **Complete** — 2026-07-15 (S0-S1 2026-06-18; S2-S3 2026-06-19; S4 opened 2026-06-20, closed 2026-07-15; S5 2026-06-20; S6 2026-07-15). All completion criteria met.
 **Parent plan:** `docs/phase-5-second-tenant-onboarding.md` (sub-deploy row 5.5 — the final Phase 5 sub-deploy)
 **Predecessor:** Phase 5.4 — Tenant Signup — **Complete 2026-06-17** (`register-customer` un-pinned to per-tenant webhook secret; gated `register-tenant` operator EF live on **both** envs — 9th EF; per-tenant webhook secrets in `tenants.settings`; §4.1 FK-ordered teardown proven end-to-end in S4; F34/F64-item-5 resolved; F72 filed (email-branding deferral); F73/F74 resolved).
