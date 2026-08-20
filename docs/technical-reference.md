@@ -534,15 +534,21 @@ column for any production-facing claim.
 - `title_note` — Lunar's `TitleNote` free text ("Allocations may occur",
   "Previously offered through Diamond. Never fulfilled."). **Live 2026-08-10:
   75 non-null rows on production.**
-- `order_requirement` — **PRH only.** PRH's `OrderRequirement` carries a
-  distributor allocation ratio (`'1:10'`, `'1:25'`, …) on ~15% of rows;
-  `'Order All'` and blank both normalize to `null` via `parseOrderRequirement()`
-  (F132). Lunar rows always write explicit `null` (no equivalent field in
-  Lunar's feed — F123 key-shape rule). Drives the catalog-page "Restricted"
-  badge (`buildComicCard()`, `app.js:1748`), real-browser-verified 2026-08-20
-  via Playwright spec 20. **Live on staging 2026-08-20, 0 non-null rows** —
-  populates naturally on the next PRH import (~Sept 7–10), no backfill
-  planned. Not yet on production.
+- `order_requirement` — **both distributors** (corrected 2026-08-20, same
+  session as the original build — see § 13 F132). PRH's `OrderRequirement`
+  carries a distributor allocation ratio (`'1:10'`, `'1:25'`, …) on ~15% of
+  rows; `'Order All'` and blank both normalize to `null` via
+  `parseOrderRequirement()`. Lunar carries the same signal in its
+  `variant_type` field itself — a ratio on 562/4,799 staging rows, over 4x
+  PRH's volume — via `parseLunarVariantRestriction()`: `'open order'` (any
+  casing) normalizes to `null`, a `\d+:\d+` pattern passes through, and
+  `'BLANK'`/`'Unlock'`/`'Standard'`/blank all normalize to `null` (real
+  `variant_type` values, deliberately not treated as restrictions — see F132).
+  Drives the catalog-page "Restricted" badge (`buildComicCard()`,
+  `app.js:1748`), real-browser-verified 2026-08-20 via Playwright spec 20.
+  **Live on staging 2026-08-20, 0 non-null rows** — populates naturally on
+  the next import (~Sept 7–10) for both distributors, no backfill planned.
+  Not yet on production.
 - `withdrawn_at` / `withdrawn_last_seen_month` — set by the import's F110
   withdrawal detection (`detectWithdrawals()`, Step 4b), which is a **cross-month
   set difference**, not a column read: the PRH file the store downloads is the
@@ -4316,14 +4322,15 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `catalogs/scripts/import.js` (`TENANT_ID` at line 76; service-role auth throughout) and `import-staging.js` — **private scripts repo, working tree local-only**. Catalog source files: `catalogs/*.csv`, downloaded manually from the distributor portals. **No file in this repo changes.**
 - **Related:** **`docs/phase-5.5-second-tenant-onboarding.md` § 1.5** (the original un-filed flag). **F105** / **F106** (same failure shape — a constraint living only where no session would find it). **`docs/phase-6-self-service-signup.md`** — the Phase 6 stub gates going-live on a catalog import but never specifies *who runs it*; this finding is that unstated assumption. **F75** (why service-role credentials are `.env`-only and local — the constraint that makes dimension 2 non-negotiable).
 
-#### F132 — a title PRH restricts to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time, so a customer can reserve a copy the store may never actually receive
+#### F132 — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time, so a customer can reserve a copy the store may never actually receive
 
-- **Status:** filed 2026-08-20 during the scoping session for `docs/order-restriction-alert-badge.md`. **Open — scoping resolved, build not yet started.** Filed at Rick's request (two asks: alert restricted PRH titles, badge restricted/incentive variants with a "Learn more" disclosure).
+- **Status:** filed 2026-08-20 during the scoping session for `docs/order-restriction-alert-badge.md`. **Open — scoping resolved, build not yet started.** Filed at Rick's request (two asks: alert restricted titles, badge restricted/incentive variants with a "Learn more" disclosure).
 - **Severity:** **Medium.** Not a defect — every component works as designed. The gap is a missing *proactive* signal: today the customer finds out a restricted title didn't arrive only *after* the fact, via the same rejected-badge mechanism (**F117**/**F120**) used for ordinary rejections, which conflates "distributor allocation risk was known at reservation time" with "distributor rejected this order."
-- **Measured, not assumed (2026-08-20):** PRH's `OrderRequirement` column (`2026_08_PRH_metadata_full_active.csv`, 879 rows) carries a real restriction on 133 rows (15%) — ratios from `1:5` to `1:250`, always on a `Variant Title` row, never `Primary Title`, and self-contained (`OrderRequirementUPC` empty in all 133 — no cross-row lookup needed). Lunar has no equivalent structured field; the closest signal, free-text `TitleNote`, is written to `catalog.title_note` on import but read nowhere in the app, and is overloaded with discount/territory/returnability text unrelated to allocation risk — out of scope for this finding, noted as a follow-on.
-- **Scoping decisions (2026-08-20, Rick):** PRH structured ratio only for V1 (Lunar `title_note` classification deferred, separate follow-on). Badge-only signal, catalog page only — no reserve-time toast/confirm, no My List/Arrivals surface. "Learn more" via native `title=` tooltip (matches the existing FOC-lock badge pattern, `app.js:1764`), not a custom popover. No historical backfill — the new `catalog.order_requirement` column populates naturally on the next PRH import.
-- **Fix shape:** additive nullable `catalog.order_requirement text` column (staging first, Rick-gated for prod, same pattern as F115's `arrival_outcome`) · PRH-only normalizer change in both import scripts (`'Order All'`/blank → `null`, else passthrough) with unit tests · a new pill in `buildComicCard()` (`app.js:1748`), visually distinct from F120's rejected badge since the two signals are predictive vs. retrospective and must not be conflated.
-- **Built and verified on staging, same session, 2026-08-20.** Migration applied (Rick) — 0 non-null over 9,589 rows. Import-script normalizer + 198/198 unit suite green (`e57ade4`). Badge real-browser-verified via a new Playwright spec (`20-restricted-variant-badge.spec.ts`, 3/3 green) — including catching that `catalog.html`'s `#filter-variants` defaults to "Standard Covers," which hides every restricted row by construction (all 133 real restricted PRH rows are `Variant Title`, § 1) until a customer switches to "All Covers." Not a defect — existing, working catalog behavior the spec had to account for, not something F132 changed. **Only V5 (a real September import spot-check) remains; production not requested.** Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
+- **Measured, not assumed (2026-08-20):** PRH's `OrderRequirement` column (`2026_08_PRH_metadata_full_active.csv`, 879 rows) carries a real restriction on 133 rows (15%) — ratios from `1:5` to `1:250`, always on a `Variant Title` row, never `Primary Title`, and self-contained (`OrderRequirementUPC` empty in all 133 — no cross-row lookup needed).
+- **CORRECTED same day, before production was touched.** The original survey also claimed "Lunar has no equivalent structured field" — **wrong.** Rick found a live restricted Lunar variant on staging showing no badge, which prompted a re-measurement: Lunar's `VariantType` field **is** the structured signal — a ratio string on **562/4,799 rows on staging (over 4x PRH's volume)**, versus `'Open Order'`/`'OPEN ORDER'`/`'Open order'` (1,832 rows, three castings of the no-restriction marker — Lunar's own `'Order All'`) for unrestricted variants. `title_note` (free-text, overloaded with discount/territory/returnability info) remains a separate, still-real, still out-of-scope gap — it was never the actual signal, `VariantType` was. Full correction: `docs/order-restriction-alert-badge.md` § 1.
+- **Scoping decisions (2026-08-20, Rick):** structured ratio for both distributors (corrected from PRH-only same day). Badge-only signal, catalog page only — no reserve-time toast/confirm, no My List/Arrivals surface. "Learn more" via native `title=` tooltip (matches the existing FOC-lock badge pattern, `app.js:1764`), not a custom popover. No historical backfill — the column populates naturally on the next import. `BLANK` (19 Lunar rows, likely blank-sketch covers) and `Unlock` (10 Lunar rows, an industry-wide threshold mechanic) deliberately left unflagged — real values, neither a per-shop ratio.
+- **Fix shape:** additive nullable `catalog.order_requirement text` column (staging first, Rick-gated for prod, same pattern as F115's `arrival_outcome`) · normalizer change in both import scripts for both distributors (PRH: `'Order All'`/blank → `null`, else passthrough; Lunar: `VariantType`'s `\d+:\d+` pattern → passthrough, `'open order'`/`'BLANK'`/`'Unlock'`/blank → `null`, `variant_type` itself untouched) with unit tests · a new pill in `buildComicCard()` (`app.js:1748`), visually distinct from F120's rejected badge since the two signals are predictive vs. retrospective and must not be conflated.
+- **Built and verified on staging, same session, 2026-08-20.** Migration applied (Rick) — 0 non-null over 9,589 rows. Import-script normalizers + 210/210 unit suite green (`e57ade4`, then `0f5d9ae` for the Lunar correction). Badge real-browser-verified via a new Playwright spec (`20-restricted-variant-badge.spec.ts`, 3/3 green) — including catching that `catalog.html`'s `#filter-variants` defaults to "Standard Covers," which hides every restricted row by construction (every restricted row is a variant by definition) until a customer switches to "All Covers." Not a defect — existing, working catalog behavior the spec had to account for, not something F132 changed. **Only V5 (a real ~Sept import spot-check) remains; production not requested.** Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
 - **Where:** `catalog` table (new column) · `catalogs/scripts/import.js` / `import-staging.js` normalizers — private scripts repo · `app.js:1748` (`buildComicCard()`) · `catalog.html`.
 - **Related:** **F117**/**F120** (the retrospective rejected-badge mechanism this is an earlier, non-replacing signal for — see explicit OUT-of-scope note in the plan doc). **F115** (same additive-nullable-column, no-backfill-needed shape, different fact). **F123** (the key-shape rule this column's normalizer must respect across both distributors in one upsert batch).
 

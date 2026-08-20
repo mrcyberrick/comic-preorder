@@ -1,6 +1,6 @@
 # Ordering-restriction alert + badge — warn customers before they reserve a limited-ratio variant
 
-**STATUS:** IN PROGRESS | staging=V1-V4 GREEN 2026-08-20 (migration applied, badge real-browser-verified); V5 held for ~Sept 7-10 import | prod=N/A, not requested | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
+**STATUS:** IN PROGRESS | staging=V1-V4 GREEN 2026-08-20 (migration applied, badge real-browser-verified, **both distributors** after the same-day Lunar correction in § 1); V5 held for ~Sept 7-10 import | prod=N/A, not requested | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
 
 **Origin:** Rick's request, 2026-08-20. Today a title PRH restricts (`OrderRequirement != 'Order All'`,
 shown in the UI as a ratio like `1:10`) can be reserved by any number of customers with no signal
@@ -59,6 +59,32 @@ real, related gap (`title_note` is dead data today) but needs its own text-class
 separate allocation warnings from the other three note types — that's scope creep on this feature,
 not a natural extension of it. Flag it as a follow-on, don't fold it in.
 
+**CORRECTED 2026-08-20, same day, before production was ever touched.** The paragraph above is
+**wrong** and is kept verbatim rather than silently edited, per CLAUDE.md's document-integrity rule.
+Rick found a live restricted Lunar variant on staging (`DETECTIVE #1 (OF 2) CVR G INC 1:20 DAVID
+LAPHAM B&W VAR`) showing no badge, which prompted a re-measurement. **Lunar's `VariantType` field IS
+the structured signal** — the survey above checked only for a separate `OrderRequirement`-named
+column and never looked at what `VariantType` itself actually contained for Lunar. Measured against
+all 4,799 Lunar rows on staging (paged past PostgREST's 1,000-row default — the first pass without
+paging undercounted):
+
+| Pattern | Rows | Meaning |
+|---|---|---|
+| `null` | 2,375 | standard cover |
+| `Open Order` / `OPEN ORDER` / `Open order` (3 castings) | 1,832 | Lunar's own "no restriction" marker — the direct equivalent of PRH's `'Order All'` |
+| a ratio (`1:10`, `1:20`, … `1:1000`) | **562** | a real, live allocation restriction — **over 4x PRH's 133** |
+| `BLANK` | 19 | almost certainly a blank-sketch cover (comics convention), not a restriction concept |
+| `Unlock` | 10 | an industry-wide preorder-threshold incentive, a different mechanic from a per-shop ratio |
+| `Standard` | 1 | explicit standard-cover marker |
+
+**Fix shipped same session** (scripts repo `0f5d9ae`): `parseLunarVariantRestriction()` derives
+`order_requirement` from `VariantType` (case-insensitive `'open order'` → null, a `\d+:\d+` pattern →
+passthrough), without touching `variant_type` itself — so nothing else that reads it (subscribe
+eligibility, the existing variant badge) is affected. `BLANK` and `Unlock` are deliberately **not**
+flagged — real values, neither is a per-shop ratio, and mislabeling either "Order ratio Unlock" would
+be actively wrong. Both remain follow-on questions, same status as the `title_note` follow-on below.
+**§ 6 scope is updated accordingly — this is no longer PRH-only.**
+
 ---
 
 ## 2. Schema
@@ -70,27 +96,31 @@ live before writing the migration, per CLAUDE.md SQL authoring rules):
 order_requirement  text  NULL
 ```
 
-Stores the raw ratio string (`'1:10'`, `'1:25'`, …) when PRH's `OrderRequirement` is present and not
-`'Order All'`; `NULL` otherwise — including for every Lunar row (no equivalent field, so Lunar always
-writes explicit `null`, same pattern as `initial_order_due` for PRH rows — **F123's key-shape rule
-applies**: every batch in one upsert call needs the same key set present, or PostgREST's one-key-shape
-rule breaks the batch). Additive/nullable, so — like F115's `arrival_outcome` — it's safe to land ahead
-of the import-script change and inert until something reads it.
+Stores the raw ratio string (`'1:10'`, `'1:25'`, …) — from PRH's `OrderRequirement` when present and
+not `'Order All'`, or from Lunar's `VariantType` when it matches a `\d+:\d+` pattern (§ 1 correction,
+both distributors write this key on every upsert — **F123's key-shape rule applies**: every batch in
+one upsert call needs the same key set present, or PostgREST's one-key-shape rule breaks the batch).
+`NULL` otherwise. Additive/nullable, so — like F115's `arrival_outcome` — it's safe to land ahead of
+the import-script change and inert until something reads it.
 
 Migration goes in `docs/sql/` with a `-- STATUS:` line, staging first, Rick-gated for production.
 
 ---
 
-## 3. Import — both scripts, PRH only
+## 3. Import — both scripts, both distributors (corrected 2026-08-20 — see § 1)
 
-`normalizePRH()` (name approximate — verify against current scripts-repo source before editing) reads
-`OrderRequirement`: write `null` when the value is blank or exactly `'Order All'`, else the literal
-string. Unit-test the normalizer function directly (scripts repo suite is at 186 tests as of F115,
-this is exactly its shape) — assert `'Order All'` → `null`, a ratio string → passthrough, and a
-Lunar-sourced record never sets the field to anything but `null`.
+`normalizePRHCatalog()` reads `OrderRequirement`: write `null` when the value is blank or exactly
+`'Order All'`, else the literal string (`parseOrderRequirement()`). `normalizeLunarCatalog()` reads
+`VariantType`: write `null` when it's blank, `'Standard'`, or case-insensitively `'Open Order'`, else
+the literal string if it matches a `\d+:\d+` ratio pattern — else `null` (covers `'BLANK'`/`'Unlock'`,
+deliberately excluded per § 1) (`parseLunarVariantRestriction()`). Both unit-tested directly in
+`test/catalog-key-shape.test.mjs` (210 tests as of this correction, both scripts green) — PRH: `'Order
+All'` → `null`, a ratio string → passthrough, blank/missing → `null`; Lunar: all three `'open order'`
+castings → `null`, a ratio → passthrough (and `variant_type` itself provably untouched), `'BLANK'`/
+`'Unlock'`/`'Standard'`/blank → `null`.
 
 **No backfill planned.** Unlike F115's `arrival_outcome` (a fact about a past reservation), this is
-advisory catalog metadata tied to the *live* offering — it populates naturally on the next PRH import
+advisory catalog metadata tied to the *live* offering — it populates naturally on the next import
 (the ~Sept 7–10 cycle) with no historical gap that matters. Confirm this reasoning with Rick during
 scoping rather than assuming it's uncontroversial.
 
@@ -136,17 +166,25 @@ popover (better on mobile, where hover tooltips don't work at all).
   this was free: no `mylist.html`/`arrivals.html` change needed to honor the decision.
 - **Finding ID: F132 claimed** — `docs/technical-reference.md` § 13, `CLAUDE.md` § Open findings.
 - **No backfill confirmed** — advisory catalog metadata tied to the live offering, populates
-  naturally on the next PRH import. Not challenged during scoping.
-- **Lunar `title_note` follow-on: separate finding, not folded in.** Left as the doc originally
-  proposed — a real gap, but its own text-classification scope, not part of F132.
+  naturally on the next import. Not challenged during scoping.
+- **Lunar `title_note` follow-on: still separate, not folded in.** Unchanged by the § 1 correction —
+  `title_note` (allocation-note free text, overloaded with discount/territory/returnability info) is
+  a different, still-real gap from `VariantType` (the structured ratio field, now in scope). Both are
+  "Lunar," but they're not the same problem.
+- **§ 1 correction (2026-08-20, same day): Lunar IS in scope, via `VariantType`, not `title_note`.**
+  The original "PRH structured ratio only for V1" decision was based on a data survey that missed
+  Lunar's real structured signal — see § 1's correction block. `BLANK` and `Unlock` (both real
+  `VariantType` values, neither a per-shop ratio) remain deliberately unflagged, same follow-on
+  status as `title_note`.
 
 ---
 
 ## 6. Scope
 
-### IN — final, per § 5
-`catalog.order_requirement` migration · PRH import parsing (both scripts) + unit tests · badge (native
-tooltip, no separate alert) on the shared card renderer, catalog page only · Playwright coverage.
+### IN — final, per § 5, corrected § 1
+`catalog.order_requirement` migration · import parsing, **both distributors**, both scripts + unit
+tests (PRH via `OrderRequirement`, Lunar via `VariantType`'s ratio pattern) · badge (native tooltip,
+no separate alert) on the shared card renderer, catalog page only · Playwright coverage.
 
 ### OUT — stop and ask
 - Blocking or non-blocking reserve-time alert — decided against in § 5, badge is the whole signal.
@@ -167,12 +205,13 @@ text`, no CHECK (open-set distributor values, not an app enum). > **PAUSE → Ri
 Production is a separate, later, explicitly-requested run. **APPLIED 2026-08-20 (Rick)** — verified
 live: 0 non-null rows over 9,589 total, matching "no backfill" by design. **Gate V1 GREEN.**
 
-**S2 — import.** `parseOrderRequirement()` + normalizer wiring, both scripts (`import.js`,
-`import-staging.js`, private scripts repo). PRH passes through a real ratio, `'Order All'`/blank
-→ `null`; Lunar writes explicit `null` (F123 key-shape rule). Unit-tested in
-`test/catalog-key-shape.test.mjs` (186 → 198 tests, both scripts green). **Built and committed
-(`e57ade4`) 2026-08-20 — inert until S1 lands; do not run either script against staging/prod before
-then, per the commit message's own warning.** **Gate V2.**
+**S2 — import.** `parseOrderRequirement()` + `parseLunarVariantRestriction()`, both scripts
+(`import.js`, `import-staging.js`, private scripts repo). PRH passes through a real ratio, `'Order
+All'`/blank → `null`. **Lunar corrected same day** (§ 1) — passes through a `VariantType` ratio,
+`'open order'` (any casing)/`'Standard'`/`'BLANK'`/`'Unlock'`/blank → `null`; `variant_type` itself
+untouched. Unit-tested in `test/catalog-key-shape.test.mjs` (186 → 198 → 210 tests across the two
+commits, both scripts green). **Built and committed (`e57ade4`, then `0f5d9ae` for the Lunar
+correction) 2026-08-20.** **Gate V2 GREEN.**
 
 **S3 — UI.** `buildComicCard()` (`app.js:1748`) reads `comic.order_requirement`, renders
 `.restriction-badge` (bottom-left of the cover, amber, native `title=` tooltip carrying Rick's exact
@@ -202,7 +241,7 @@ item codes against the live catalog page afterward. **Gate V5.**
 | Gate | Assertion | Status |
 |---|---|---|
 | **V1** | `order_requirement` column live on staging, matching `docs/sql/f132-order-requirement.sql`'s post-DDL checks (type/nullability, no CHECK, zero non-null rows) | **GREEN 2026-08-20 (Rick)** — 0 non-null / 9,589 total |
-| **V2** | Both import scripts' unit suite green with the F132 additions; PRH/Lunar key-shape parity holds | **GREEN 2026-08-20** — 198/198, `e57ade4` |
+| **V2** | Both import scripts' unit suite green with the F132 additions; PRH/Lunar key-shape parity holds | **GREEN 2026-08-20** — 210/210, `0f5d9ae` |
 | **V3** | Badge renders only when `comic.order_requirement` is truthy; tooltip carries Rick's exact copy + the ratio; does not collide with `reserved-indicator`/`foc-locked-indicator`/`distributor-badge` | **GREEN 2026-08-20** — real-browser check via spec 20 |
 | **V4** | Spec 20 green (3/3): restricted card shows badge, unrestricted card doesn't, badge survives a reserve | **GREEN 2026-08-20** — 3/3 |
 | **V5** | September import: spot-check ≥ 3 real restricted item codes against the live catalog page | Held for the ~Sept 7–10 window |
@@ -212,7 +251,7 @@ item codes against the live catalog page afterward. **Gate V5.**
 ## 9. Completion criteria
 
 - [x] V1 — migration applied and verified live on staging (Rick, 2026-08-20)
-- [x] V2 — import-script unit suite green (198/198, `e57ade4`)
+- [x] V2 — import-script unit suite green (210/210, `0f5d9ae`, includes the Lunar correction)
 - [x] V3 — real-browser check of the badge/tooltip on staging (spec 20, 2026-08-20)
 - [x] V4 — Playwright spec 20 green (3/3, 2026-08-20)
 - [ ] V5 — September import spot-check — **the only thing left, held for the ~Sept 7–10 window**
