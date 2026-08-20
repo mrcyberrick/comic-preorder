@@ -543,10 +543,21 @@ button { cursor: pointer; font-family: var(--font-body); }
 .comic-cover img[src^="data:image"] {
   opacity: 1 !important;
 }
+/* z-index: 2 on all three cover badges below (fixed 2026-08-21, found via
+   Rick's real-data test of the F132 badge, but pre-existing on all of them):
+   .comic-card:hover .comic-cover img applies a transform, which creates a
+   new stacking context on hover. Without an explicit z-index, that hover
+   stacking context can paint the (later-in-DOM) <img> ABOVE these
+   absolutely-positioned, earlier-in-DOM badges — confirmed via
+   document.elementFromPoint() landing on the <img>, not the badge, and a
+   screenshot showing every badge vanish under the enlarged cover on hover.
+   z-index guarantees the badges stay on top regardless of the image's own
+   stacking context. */
 .distributor-badge {
   position: absolute;
   top: 8px;
   left: 8px;
+  z-index: 2;
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -560,6 +571,7 @@ button { cursor: pointer; font-family: var(--font-body); }
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 2;
   background: var(--accent);
   color: white;
   font-size: 0.6rem;
@@ -578,6 +590,7 @@ button { cursor: pointer; font-family: var(--font-body); }
   position: absolute;
   bottom: 8px;
   left: 8px;
+  z-index: 2;
   background: var(--warning);
   color: #1a1408;
   font-size: 0.6rem;
