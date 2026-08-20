@@ -1,6 +1,6 @@
 # Ordering-restriction alert + badge — warn customers before they reserve a limited-ratio variant
 
-**STATUS:** IN PROGRESS | staging=V1-V4 GREEN 2026-08-20 (migration applied, badge real-browser-verified, **both distributors** after the same-day Lunar correction in § 1); V5 moved up to 2026-08-21 (real import run, pending catalog-refresh-step confirmation) | prod=N/A, not requested | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
+**STATUS:** STAGING COMPLETE 2026-08-21 | staging=V1-V5 ALL GREEN — real import run 2026-08-21 populated `order_requirement` for both distributors from live data; a hover-stacking bug found the same day (badge + tooltip both broken on `.comic-card:hover`) was root-caused and fixed same session | prod=N/A, not requested | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
 
 **Origin:** Rick's request, 2026-08-20. Today a title PRH restricts (`OrderRequirement != 'Order All'`,
 shown in the UI as a ratio like `1:10`) can be reserved by any number of customers with no signal
@@ -230,17 +230,25 @@ uses `variant_type: 'Variant Title'` (matching every one of the 133 real restric
 product bug; the spec now selects "All Covers" before searching, same real UI a customer would use
 to see restricted variants at all. **Gate V4 GREEN.**
 
-**S5 — the real import.** Moved up from the original ~Sept 7–10 estimate: Rick is running
-`import-staging.js` **2026-08-21** against the existing catalog files plus new shipment files — the
-first real run to exercise the corrected normalizers (both distributors) against real distributor
-data. **Requires the run to include the catalog-refresh step** (`refreshCatalog()`, which upserts
-against the Lunar/PRH CSVs and is the only step that writes `order_requirement`) — a shipment-only
-run doesn't touch this column at all. Verification once run: (a) `SELECT count(*) FILTER (WHERE
-order_requirement IS NOT NULL)` on `catalog` — expect > 0 for the first time; (b) re-query the two
-example rows from the screenshots (`DETECTIVE #1 (OF 2) CVR G INC 1:20...`, Lunar; `Canto: The
-Clockwork Chronicles #1 (CVR C) (1:25)...`, PRH) — if their catalog rows are still present after the
-run, confirm `order_requirement` populated; (c) real-browser check that the badge renders on at
-least one of them. **Gate V5.**
+**S5 — the real import.** Moved up from the original ~Sept 7–10 estimate. Rick ran
+`import-staging.js` **2026-08-21** against the existing catalog files (skipping shipment files —
+catalog-refresh step only, which is the step that writes `order_requirement`). **Confirmed live**:
+real restricted rows now carry the ratio (e.g. `ARCHIE VS THE TERMINATOR #1 CVR L INC 1:10 BILL
+GALVAN PENCILS VAR`, Lunar, `order_requirement: '1:10'`) — verified by direct query, not assumed.
+**Gate V5 GREEN.**
+
+**S6 — hover-stacking fix (found via Rick's real-browser test, same day).** Rick reported the badge
+"hides when mouse hovers over title box" and no tooltip appearing. Root-caused with data, not
+theory: `document.elementFromPoint()` at the badge's screen position returned the `<img>`, not the
+badge, during hover — confirmed visually with before/after screenshots. `.comic-card:hover
+.comic-cover img { transform: scale(1.03) }` creates a new stacking context on hover; with no
+`z-index` on the badges, the (later-in-DOM) image painted above them, which explains **both** of
+Rick's reports as one mechanism — the image visually covered the badge, and it also captured the
+hover, so the badge's `title=` tooltip never triggered. Fixed with `z-index: 2` on
+`.distributor-badge`/`.reserved-indicator`/`.restriction-badge` (`style.css`, commit `3b345bf`) —
+pre-existing on all three, not introduced by F132, just surfaced by it. Re-verified after the fix:
+`elementFromPoint` now returns the badge itself. Playwright regression added (spec 20, 4th test) so
+this can't silently regress again. **Gate V6.**
 
 ---
 
@@ -252,7 +260,8 @@ least one of them. **Gate V5.**
 | **V2** | Both import scripts' unit suite green with the F132 additions; PRH/Lunar key-shape parity holds | **GREEN 2026-08-20** — 210/210, `0f5d9ae` |
 | **V3** | Badge renders only when `comic.order_requirement` is truthy; tooltip carries Rick's exact copy + the ratio; does not collide with `reserved-indicator`/`foc-locked-indicator`/`distributor-badge` | **GREEN 2026-08-20** — real-browser check via spec 20 |
 | **V4** | Spec 20 green (3/3): restricted card shows badge, unrestricted card doesn't, badge survives a reserve | **GREEN 2026-08-20** — 3/3 |
-| **V5** | Real import run: non-null `order_requirement` count > 0; the two screenshot example rows (if still present) populate; badge real-browser-confirmed on at least one | **PENDING — 2026-08-21**, moved up from ~Sept 7-10 (Rick's call, existing catalog + new shipment files) |
+| **V5** | Real import run: non-null `order_requirement` count > 0 on real data | **GREEN 2026-08-21 (Rick)** — confirmed via direct query on real restricted rows |
+| **V6** | Badge stays visually on top AND reachable (native tooltip fires) during `.comic-card:hover` | **GREEN 2026-08-21** — root-caused, fixed (`3b345bf`), re-verified, Playwright regression added (spec 20, 4/4) |
 
 ---
 
@@ -262,16 +271,16 @@ least one of them. **Gate V5.**
 - [x] V2 — import-script unit suite green (210/210, `0f5d9ae`, includes the Lunar correction)
 - [x] V3 — real-browser check of the badge/tooltip on staging (spec 20, 2026-08-20)
 - [x] V4 — Playwright spec 20 green (3/3, 2026-08-20)
-- [ ] V5 — real import spot-check — **pending, 2026-08-21** (moved up from ~Sept 7-10)
+- [x] V5 — real import spot-check (Rick, 2026-08-21 — real restricted rows confirmed live)
+- [x] V6 — hover-stacking bug found via real-data testing, root-caused, fixed, re-verified (2026-08-21)
 - [x] `docs/technical-reference.md` § 4.3 `order_requirement` note updated from "Not yet live"
 - [x] `CLAUDE.md` § Open findings F132 line updated
-- [ ] This doc's `**STATUS:**` line advanced to COMPLETE — **not yet**: V5 and any production run are
-      still open, so STATUS reads staging-complete, not COMPLETE
+- [x] This doc's `**STATUS:**` line advanced to STAGING COMPLETE (not COMPLETE — no production run
+      requested; that stays a separate, later, explicit decision)
 
-**Staging build + verification done 2026-08-20 — same session as the scoping interview**, including
-a same-day correction (§ 1) after Rick spotted a live Lunar restricted variant with no badge. V1–V4
-all green: migration applied, both distributors' halves built, real-browser-verified via Playwright.
-What's left is entirely time-gated — V5 moved up to **2026-08-21** (Rick is running a real import
-that day) — no further build work is needed before then. Production is out of scope for this doc
-entirely until V5 is green and Rick explicitly asks for a
+**Staging build + verification done 2026-08-20–21**, including a same-day data-survey correction
+(§ 1, Lunar) and a same-day UI bug found by Rick testing real data and fixed same session (§ 7 S6).
+V1–V6 all green: migration applied, both distributors' halves built, real import run confirms real
+data, hover-stacking bug fixed and covered by regression. Production is out of scope for this doc
+entirely until Rick explicitly asks for a
 promotion.
