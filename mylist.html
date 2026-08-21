@@ -1048,7 +1048,7 @@ function confirmDialog(message, okLabel = 'Remove') {
             const isLocked   = focLocked || isOrdered || isBlocked;
             const stepperTitle = isBlocked ? ` title="${escapeHtml(BLOCKED_TITLE)}"` : '';
             const cover = c.cover_url
-              ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
+              ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
             return `
               <tr${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
