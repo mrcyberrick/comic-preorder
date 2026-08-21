@@ -1030,6 +1030,17 @@ function confirmDialog(message, okLabel = 'Remove') {
             // withdrawn-notice styling -- same "generic unavailable" surface,
             // rejected-specific copy.
             const isRejected  = !isWithdrawn && isCodeRejected(c);
+            // F134 § 4.3 -- the settled rule: the customer sees HUMAN-CONFIRMED
+            // outcomes; auto-judged 'unknown' stays staff-only (Order
+            // Follow-Up only, admin.html). Sits ABOVE the ordered branch, same
+            // as withdrawn and rejected: withdrawn -> rejected ->
+            // not_arrived/damaged -> ordered -> FOC-locked. 'arrived' gets no
+            // copy -- falls through to the existing "Order placed" below, same
+            // as always. Unreachable except via admin.html's resolve control
+            // (F134 Part 2b) or an operator SQL write -- both human, never
+            // the import (f134-arrival-resolution.md § 4.4 OUT-of-scope).
+            const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
+            const isDamaged    = !isWithdrawn && !isRejected && item.arrival_outcome === 'damaged';
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
             const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -1040,7 +1051,7 @@ function confirmDialog(message, okLabel = 'Remove') {
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
             return `
-              <tr${(isWithdrawn || isRejected) ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
+              <tr${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
                 <td class="td-cover">${cover}</td>
                 <td>
                   <div class="col-title">${escapeHtml(c.title)}</div>
@@ -1051,6 +1062,10 @@ function confirmDialog(message, okLabel = 'Remove') {
                     ? `<div class="col-sub withdrawn-notice">\u26A0 No longer available &mdash; withdrawn by the distributor. This title cannot arrive.</div>`
                     : isRejected
                       ? `<div class="col-sub withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
+                      : isNotArrived
+                        ? `<div class="col-sub withdrawn-notice">\u26A0 Did not arrive &mdash; contact the store.</div>`
+                        : isDamaged
+                          ? `<div class="col-sub withdrawn-notice">\u26A0 Arrived damaged &mdash; contact the store.</div>`
                       : isOrdered
                         ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
                             ? ' &middot; arriving ' + formatDate(arrivingOn)
@@ -1076,7 +1091,11 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td>
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
-                    : isOrdered
+                    : isNotArrived
+                      ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Didn't arrive</span>`
+                      : isDamaged
+                        ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Damaged</span>`
+                        : isOrdered
                       ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
@@ -1094,6 +1113,9 @@ function confirmDialog(message, okLabel = 'Remove') {
           const qty = item.quantity || 1;
           const isWithdrawn = !!c.withdrawn_at;
           const isRejected  = !isWithdrawn && isCodeRejected(c); // F117/F108 \u00A7 4.5 \u2014 badge-only, see desktop table comment
+          // F134 \u00A7 4.3 -- same settled rule as the desktop table above.
+          const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
+          const isDamaged    = !isWithdrawn && !isRejected && item.arrival_outcome === 'damaged';
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
           const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -1105,7 +1127,7 @@ function confirmDialog(message, okLabel = 'Remove') {
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
             : `<img src="${COVER_PLACEHOLDER}" alt="">`;
           return `
-            <div class="mobile-card${(isWithdrawn || isRejected) ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
+            <div class="mobile-card${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
               <div class="mobile-card-cover">${cover}</div>
               <div class="mobile-card-body">
                 <div class="mobile-card-title">${escapeHtml(c.title)}</div>
@@ -1114,6 +1136,10 @@ function confirmDialog(message, okLabel = 'Remove') {
                   ? `<div class="mobile-card-series withdrawn-notice">\u26A0 No longer available &mdash; withdrawn by the distributor. This title cannot arrive.</div>`
                   : isRejected
                     ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
+                    : isNotArrived
+                      ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Did not arrive &mdash; contact the store.</div>`
+                      : isDamaged
+                        ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Arrived damaged &mdash; contact the store.</div>`
                     : isOrdered
                       ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
                           ? ' &middot; arriving ' + formatDate(arrivingOn)
@@ -1137,7 +1163,11 @@ function confirmDialog(message, okLabel = 'Remove') {
                   </div>
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
-                    : isOrdered
+                    : isNotArrived
+                      ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Didn't arrive</span>`
+                      : isDamaged
+                        ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Damaged</span>`
+                        : isOrdered
                       ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
@@ -1371,6 +1401,10 @@ function confirmDialog(message, okLabel = 'Remove') {
         // (Rick's call 2026-08-06 — see the desktop table's isRejected
         // comment for the reasoning).
         const isRejected  = !isWithdrawn && isCodeRejected(c);
+        // F134 § 4.3 -- same settled rule as the desktop table above: sits
+        // ABOVE the ordered branch (arrivingOn), below withdrawn/rejected.
+        const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
+        const isDamaged    = !isWithdrawn && !isRejected && item.arrival_outcome === 'damaged';
         // F108 § 4.6 — SCOPE CALL, flagged for review (2026-08-11). The plan
         // does not enumerate surfaces; the obvious reading is "the two places
         // that already say Order placed", i.e. the current-month table above.
@@ -1396,7 +1430,7 @@ function confirmDialog(message, okLabel = 'Remove') {
           ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
           : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
         return `
-          <div class="month-arrival-card${(isWithdrawn || isRejected) ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
+          <div class="month-arrival-card${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
             <div class="month-arrival-cover">
               <span class="distributor-badge badge-${c.distributor?.toLowerCase()}" style="font-size:0.55rem;padding:1px 5px">${escapeHtml(c.distributor||'')}</span>
               ${cover}
@@ -1410,6 +1444,10 @@ function confirmDialog(message, okLabel = 'Remove') {
                         style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>
               ` : isRejected ? `
                 <div class="withdrawn-notice">⚠ Rejected by the supplier</div>
+              ` : isNotArrived ? `
+                <div class="withdrawn-notice">⚠ Did not arrive</div>
+              ` : isDamaged ? `
+                <div class="withdrawn-notice">⚠ Arrived damaged</div>
               ` : arrivingOn ? `
                 <div style="color:var(--success,#22c55e);font-size:0.72rem;margin-top:2px">✓ Order placed</div>
               ` : ''}
