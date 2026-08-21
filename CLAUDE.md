@@ -19,12 +19,14 @@ has) + Part 2 (CHECK widened to add `'damaged'`, admin resolve control, My List 
 observed failing pre-fix, then green); a real bug caught by V5 (action-column chip still read
 "✓ Order placed" on a fulfilled damaged/not_arrived row) fixed same session. Full suite: 136/139,
 the 3 failures all attributed to the pre-existing F133 date-crossing defect, none touching F134's
-changed paths. **Production migration APPLIED 2026-08-21** (Rick, SQL Editor — constraint-def query
-confirmed `'damaged'` in the allowed set on prod; a bogus-value-rejection check alone was run first
-but is insufficient proof, since 'bogus' fails under either the old or new constraint). **Client
-promoted 2026-08-21 via PR #127 (`726f8df`)** — new bytes confirmed served on `pulllist.app` for
-`admin.html`/`app.js`/`mylist.html`; post-deploy write-smoke pending (Rick). Staging `667c397`, docs
-`31d8912`, 2026-08-20/21.
+changed paths. **RESOLVED AND LIVE IN PRODUCTION 2026-08-21** — DB migration applied (Rick, SQL
+Editor — constraint-def query confirmed `'damaged'` in the allowed set on prod; a bogus-value-
+rejection check alone was run first but is insufficient proof, since 'bogus' fails under either the
+old or new constraint), client promoted via **PR #127** (`726f8df`), post-deploy write-smoke passed
+(Rick). **The write-smoke caught one real, unrelated bug** — My List's desktop cover `<img>` had no
+`onerror` fallback (pre-existing since 2026-02-23) — fixed same session on Rick's go-ahead, promoted
+via **PR #128** (`bfa687c`), verified live. Staging `eee537b`, docs `31d8912`+, main `bfa687c`,
+2026-08-20/21.
 **Next free finding ID:** **F136.** (unchanged — no new finding filed this session; the action-column
 bug was in-scope for F134's own gate V5, fixed inline, not filed separately)
 
@@ -45,7 +47,6 @@ residual to another finding as open until that other finding demonstrably absorb
 | ID | One line | Next step |
 |---|---|---|
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
-| F134 | **Medium** — Order Follow-Up's "Never arrived" rows had **no exit and no way to resolve them**: a recorded rejection, a later-imported invoice, and the next import all failed to clear them, so the panel accumulated unresolvable rows weekly. **LIVE IN PRODUCTION 2026-08-21** — DB migration applied (constraint-def query confirmed `'damaged'` in the allowed set), client promoted via **PR #127** (`726f8df`), new bytes confirmed served on `pulllist.app` for all three changed files. Supersedes F115 gate V6 (marked superseded in place) | Owner: `docs/f134-arrival-resolution.md`. **Post-deploy write-smoke pending (Rick)** — reserve/confirm/cancel through the live app; flip to RESOLVED in § 13 once confirmed |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
 | F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures; profile deletes succeed, auth-user deletes do not. Test-infra only, no live app impact | deferred — dedicated test-infra session. **Date-bucket the 197 against F95's 2026-08-02 fix BEFORE any bulk delete** — if they postdate it, cleanup without a code fix is pointless |
