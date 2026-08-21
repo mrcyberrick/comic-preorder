@@ -1,10 +1,14 @@
--- STATUS: staging=PENDING | prod=PENDING
---         Not yet run on either environment. Fill in staging=APPLIED <date>
---         the moment the STAGING run below is confirmed (F105 — a gate that
---         lives only in prose gets missed, see F6's 13-day miss). Production
---         is a separate, later run at Rick's explicit call, same as F115 and
---         F132's precedent — do NOT run this against prod as part of the
---         staging pass.
+-- STATUS: staging=APPLIED 2026-08-20 | prod=PENDING
+--         Staging verified live (Rick, SQL Editor): pre-check confirmed the
+--         constraint was still the original tri-state before this ran; DDL
+--         applied clean; row-count check showed 54 null / 2 arrived / 0
+--         damaged / 0 not_arrived (no row touched by the widening); a
+--         'damaged' write succeeded inside a rolled-back transaction; a
+--         bogus value was rejected 23514 on "preorders_arrival_outcome_check"
+--         (DETAIL line confirmed the founding tenant id, i.e. this really ran
+--         against staging). Production is a separate, later run at Rick's
+--         explicit call, same as F115 and F132's precedent — do NOT run this
+--         against prod as part of the staging pass.
 -- ============================================================================
 -- preorders: widen the arrival_outcome CHECK to add 'damaged'
 -- Prepared 2026-08-21 (F134 arrival-resolution session, Part 2a).
