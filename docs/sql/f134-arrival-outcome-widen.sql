@@ -1,4 +1,4 @@
--- STATUS: staging=APPLIED 2026-08-20 | prod=PENDING
+-- STATUS: staging=APPLIED 2026-08-20 | prod=APPLIED 2026-08-21
 --         Staging verified live (Rick, SQL Editor): pre-check confirmed the
 --         constraint was still the original tri-state before this ran; DDL
 --         applied clean; row-count check showed 54 null / 2 arrived / 0
@@ -6,9 +6,20 @@
 --         'damaged' write succeeded inside a rolled-back transaction; a
 --         bogus value was rejected 23514 on "preorders_arrival_outcome_check"
 --         (DETAIL line confirmed the founding tenant id, i.e. this really ran
---         against staging). Production is a separate, later run at Rick's
---         explicit call, same as F115 and F132's precedent — do NOT run this
---         against prod as part of the staging pass.
+--         against staging).
+--         Production verified live (Rick, SQL Editor, 2026-08-21): a bogus
+--         value rejected 23514 (DETAIL line carried tenant_id
+--         20941129-c35a-476d-ae21-44b8f77af89c, the PRODUCTION founding
+--         tenant — confirms the run happened in the prod project, same
+--         cross-check F115's own prod migration used) — but a bogus-value
+--         rejection alone cannot distinguish the widened constraint from
+--         the original tri-state, since 'bogus' fails either way. The
+--         constraint-definition query was run as the actual proof:
+--         CHECK ((arrival_outcome = ANY (ARRAY['arrived'::text,
+--         'not_arrived'::text, 'damaged'::text, 'unknown'::text]))) —
+--         confirmed 'damaged' is now in the allowed set on production.
+--         Client promotion (admin.html/app.js/mylist.html to main) is a
+--         SEPARATE, later step — this file only covers the DB half.
 -- ============================================================================
 -- preorders: widen the arrival_outcome CHECK to add 'damaged'
 -- Prepared 2026-08-21 (F134 arrival-resolution session, Part 2a).

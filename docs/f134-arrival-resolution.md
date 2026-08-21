@@ -1,10 +1,11 @@
 # F134 — resolving "Never arrived": panel exits, and an admin resolution control
 
-**STATUS:** STAGING COMPLETE 2026-08-20 | staging=APPLIED | prod=PENDING | findings=F134,F115
+**STATUS:** STAGING COMPLETE, PROD MIGRATION APPLIED 2026-08-21 | staging=APPLIED | prod=APPLIED (DB only) | findings=F134,F115
 **Status:** **STAGING COMPLETE.** Part 1 + Part 2 (a/b/c) all built, deployed, and verified on
-staging — gates V1-V6 green, V3 confirmed live by Rick in the SQL Editor. Production migration +
-client promotion are a separate, later, Rick-gated session (not this one — see CLAUDE.md §
-Staging Only).
+staging — gates V1-V6 green, V3 confirmed live by Rick in the SQL Editor. The Part 2a migration
+(CHECK widening) is now also applied on **production** (Rick, 2026-08-21, SQL Editor — confirmed via
+constraint-definition query). **Client promotion (`admin.html`/`app.js`/`mylist.html` to `main`)
+has NOT run** — a separate, explicit `/promote-prod` step, still pending.
 **Target:** staging first. Production on Rick's explicit call, per session.
 **Two parts, deliberately separable.** Part 1 is a one-line bug fix with no schema and no product
 decisions — it can ship on its own, today. Part 2 carries a migration, an admin control and a
@@ -178,18 +179,21 @@ reachable with a seeded fixture, and an assertion never seen red is decoration (
 
 - [x] V1–V7 green, each with recorded output (§ 6)
 - [x] Part 1 shipped (may precede Part 2) — shipped and merged first, on its own commit
-- [x] Migration applied **staging** (`-- STATUS:` filled in) — [ ] **production not run.**
-      Deliberately out of this session's scope (staging-only per CLAUDE.md § Staging Only);
-      a separate, later, Rick-gated session runs the prod migration + client promotion,
-      same sequencing F132 used
+- [x] Migration applied **both environments** (`-- STATUS:` filled in) — staging 2026-08-20,
+      **production 2026-08-21** (Rick, SQL Editor; verified via constraint-definition query, not
+      just the bogus-value-rejection check, which cannot distinguish old from widened constraint —
+      same trap F115's own prod migration note records). Client promotion
+      (`admin.html`/`app.js`/`mylist.html` to `main`) is a **separate, still-pending**,
+      explicit `/promote-prod` step — not triggered by the DB migration
 - [x] F115 plan doc: **V6 marked superseded**, with the reason (was already done in the prior
       session per the runbook's "ALREADY DONE 2026-08-21" note — re-verified this session, still
       correct)
-- [x] § 13 F134 updated — **STAGING COMPLETE**, not flipped to fully RESOLVED, since production
-      is still pending (same convention as F132's own entry while its prod run was outstanding).
-      CLAUDE.md row **updated, not removed** — F134 is not closed until production ships
+- [x] § 13 F134 updated — **STAGING COMPLETE, prod migration APPLIED**, not flipped to fully
+      RESOLVED since client promotion is still pending (same convention as F132's own entry while
+      its client PR was outstanding). CLAUDE.md row **updated, not removed** — F134 is not closed
+      until the client ships to production too
 - [x] This doc's STATUS token flipped
-- [ ] `/wrap-up`
+- [x] `/wrap-up`
 
 ---
 
