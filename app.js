@@ -1004,6 +1004,7 @@ const Preorders = {
         notes,
         fulfilled,
         fulfilled_at,
+        arrival_outcome,
         catalog (
           id, distributor, item_code, upc, isbn, title, series_name, publisher,
           issue_number, format, price_usd, foc_date, on_sale_date,

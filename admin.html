@@ -887,11 +887,19 @@
       const c = p.catalog || {};
       const code = exportCode(c, c.distributor);
       if (!code) return;
-      if (!map.has(code)) map.set(code, { catalog: c, qty: 0, customers: new Set() });
+      // F134 Part 2b: `rows` carries every underlying preorder row the group
+      // collapsed, so a caller that needs to WRITE something back to the
+      // individual rows (the arrival-resolve control — one title-level
+      // judgement applies to every customer who reserved it) has their ids,
+      // not just the aggregate qty/customers this function already returned.
+      // Additive — no existing caller reads `rows`, so this changes nothing
+      // for them.
+      if (!map.has(code)) map.set(code, { catalog: c, qty: 0, customers: new Set(), rows: [] });
       const e = map.get(code);
       if ((c.catalog_month || '') > (e.catalog.catalog_month || '')) e.catalog = c;
       e.qty += (p.quantity || 1);
       e.customers.add(p.user_id);
+      e.rows.push(p);
     });
     return [...map.values()].sort((a, b) => (a.catalog.foc_date || '').localeCompare(b.catalog.foc_date || ''));
   }
@@ -1642,22 +1650,39 @@
       atRisk:       { label: 'At risk',       text: 'var(--warning)', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)' },
     };
 
-    const rowHtml = (entries, stateKey) => entries.map(({ catalog: c, qty, customers }) => {
+    // F134 Part 2b — admin-only resolve control, Never Arrived rows only.
+    // Writes arrival_outcome and nothing else; any value other than 'unknown'
+    // drops the row out of neverArrivedFromFulfilled()'s filter, so no
+    // additional clearing logic is needed here (plan § 4.2). One title-level
+    // judgement applies to every customer who reserved it — data-ids carries
+    // every underlying preorder id the group collapsed (groupByExportCode's
+    // `rows`, F134), not just the first.
+    const rowHtml = (entries, stateKey) => entries.map(({ catalog: c, qty, customers, rows }) => {
       const s = STATES[stateKey];
+      const ids = (rows || []).map(p => p.id).join(',');
+      const resolveRow = stateKey === 'neverArrived' ? `
+        <div class="arrival-resolve-actions" data-ids="${ids}" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="arrived" style="font-size:0.68rem;padding:3px 10px">Received</button>
+          <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="not_arrived" style="font-size:0.68rem;padding:3px 10px">Didn't arrive</button>
+          <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="damaged" style="font-size:0.68rem;padding:3px 10px">Damaged</button>
+        </div>` : '';
       return `
-        <div class="backorder-risk-row" data-state="${stateKey}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+        <div class="backorder-risk-row" data-state="${stateKey}" style="padding:10px 12px;
              border-radius:var(--radius);background:${s.bg};border:1px solid ${s.border}">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${escapeHtml(c.title || '')}
-              <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                ${escapeHtml(c.title || '')}
+                <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text-muted)">
+                ${onSaleLabel(c)} · FOC ${formatDate(c.foc_date)} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
+              </div>
             </div>
-            <div style="font-size:0.75rem;color:var(--text-muted)">
-              ${onSaleLabel(c)} · FOC ${formatDate(c.foc_date)} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
-            </div>
+            <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+                         color:${s.text};white-space:nowrap">${s.label}</span>
           </div>
-          <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
-                       color:${s.text};white-space:nowrap">${s.label}</span>
+          ${resolveRow}
         </div>`;
     }).join('');
 
@@ -1686,6 +1711,45 @@
         Titles already ordered, or with a shipment record, are cleared automatically.
       </div>
     `;
+
+    wireArrivalResolveActions(panel);
+  }
+
+  // F134 Part 2b — writes arrival_outcome for every preorder row a Never
+  // Arrived group collapsed (one title-level judgement, every customer who
+  // reserved it). No RLS change needed: `admins manage tenant preorders` is
+  // an ALL policy already tenant-scoped (technical-reference.md § 7.1), and
+  // this UPDATE carries no explicit tenant_id filter because RLS enforces it
+  // server-side regardless. `loadData()` is the same "reload, then re-render
+  // everything downstream" pattern the ledger-write flows already use
+  // (Mark Ordered, Order Builder record save) — simplest way to guarantee the
+  // row's disappearance reflects a real server read, not a client-side patch
+  // that could drift from a concurrent change.
+  function wireArrivalResolveActions(panel) {
+    panel.querySelectorAll('.arrival-resolve-actions').forEach(container => {
+      const ids = (container.dataset.ids || '').split(',').filter(Boolean);
+      container.querySelectorAll('.arrival-resolve-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!ids.length) return;
+          const outcome = btn.dataset.outcome; // 'arrived' | 'not_arrived' | 'damaged'
+          container.querySelectorAll('.arrival-resolve-btn').forEach(b => b.disabled = true);
+
+          const { error } = await db.from('preorders')
+            .update({ arrival_outcome: outcome })
+            .in('id', ids);
+
+          if (error) {
+            toast(`Failed to resolve: ${error.message}`, 'error');
+            container.querySelectorAll('.arrival-resolve-btn').forEach(b => b.disabled = false);
+            return;
+          }
+          toast(outcome === 'arrived' ? 'Marked received'
+              : outcome === 'damaged' ? 'Marked damaged'
+              : "Marked didn't arrive");
+          await loadData();
+        });
+      });
+    });
   }
 
   // ── Withdrawn panel (F110 § 4.5) ────────────────────────────
