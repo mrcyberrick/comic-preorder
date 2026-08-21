@@ -1091,7 +1091,11 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td>
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
-                    : isOrdered
+                    : isNotArrived
+                      ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Didn't arrive</span>`
+                      : isDamaged
+                        ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Damaged</span>`
+                        : isOrdered
                       ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
@@ -1159,7 +1163,11 @@ function confirmDialog(message, okLabel = 'Remove') {
                   </div>
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
-                    : isOrdered
+                    : isNotArrived
+                      ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Didn't arrive</span>`
+                      : isDamaged
+                        ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Damaged</span>`
+                        : isOrdered
                       ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
                         ? `<span class="foc-locked-chip" title="Order cutoff passed — contact the store">🔒 Locked</span>`
