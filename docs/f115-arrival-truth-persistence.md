@@ -94,7 +94,16 @@ Keep the printed report as well as the write. It is how the operator sees the cy
 from the column instead of recomputing, and leave the label alone. Staff-only is the existing
 precedent and matches decision 3.
 
-### 3.4 Customer surface — deliberately nothing
+### 3.4 Customer surface — deliberately nothing ⚠️ SUPERSEDED 2026-08-21
+
+> **SUPERSEDED by F134 (`docs/f134-arrival-resolution.md` § 4.3).** This section and its gate **V6**
+> were correct for F115's own scope — an *auto-judged* `'unknown'` should not reach a customer, and
+> still does not. But F134 adds **human-confirmed** `not_arrived` and `damaged` values, and Rick
+> decided 2026-08-21 that those **do** surface on My List. The rule that now governs both:
+> *the customer sees human-confirmed outcomes; auto-judged `'unknown'` stays staff-only.*
+> **Do not "restore" the byte-unchanged constraint below** — it describes a decision that has been
+> revisited, not one that was missed.
+
 
 `mylist.html` is **not changed**. Decision 3: the customer sees exactly what they see today.
 Record this in the plan's completion criteria as a *deliberate no-change* so a later session does
@@ -149,7 +158,7 @@ gate (~17 min, 126 tests baseline). **Gate V6.**
 | **V3** | A seeded `unknown` row renders the staff "Never arrived" state; an `arrived` row does not | The surface actually reads the column |
 | **V4** | After the real import, spot-check ≥ 3 rows against the printed report — the column agrees with what the operator was shown | Report and record must not diverge; two sources of truth is how F115 started |
 | **V5** | Backfilled set is **re-measured**, count stated, all set to `unknown`, zero set to `not_arrived` | § 3.5 |
-| **V6** | `mylist.html` byte-unchanged | § 3.4's deliberate no-change, provable rather than asserted |
+| **V6** | ~~`mylist.html` byte-unchanged~~ **— SUPERSEDED 2026-08-21 by F134, do not re-apply** | § 3.4's deliberate no-change, provable rather than asserted |
 | **V7** | Full suite green; counts recorded | Standard |
 
 ---
