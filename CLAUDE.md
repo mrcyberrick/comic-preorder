@@ -12,13 +12,17 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F115 build session (S2/S3/S4/S7 of `docs/f115-arrival-truth-persistence.md`)
-— `arrival_outcome` tri-state column applied+verified on staging, import write shipped in both
-scripts (186/186 unit tests), admin backorder panel reads the column, full Playwright suite
-127/127 (1 confirmed-flaky retry). September catalog files not yet present, so S1/S5/S6 (real
-import pre-flight, live run, backfill) are held for the ~Sept 7–10 window — **F115 is still open,
-not resolved.** Staging `f61487a`, scripts repo `b629cda`, 2026-08-18.
-**Next free finding ID:** **F136.**
+**Last completed work:** F134 build session (`docs/f134-arrival-resolution.md`) — Part 1 (fulfilled
+path gets the same `hasShipmentEvidence()`/`ledgerRejected()` exits the unfulfilled path already
+has) + Part 2 (CHECK widened to add `'damaged'`, admin resolve control, My List copy for
+`not_arrived`/`damaged`) all built, deployed, and verified on staging. Gates V1–V6 green (V1/V2
+observed failing pre-fix, then green); a real bug caught by V5 (action-column chip still read
+"✓ Order placed" on a fulfilled damaged/not_arrived row) fixed same session. Full suite: 136/139,
+the 3 failures all attributed to the pre-existing F133 date-crossing defect, none touching F134's
+changed paths. **Production not yet run — staging-only, F134 still open pending the prod migration
++ client promotion (Rick-gated, separate session).** Staging `667c397`, 2026-08-20.
+**Next free finding ID:** **F136.** (unchanged — no new finding filed this session; the action-column
+bug was in-scope for F134's own gate V5, fixed inline, not filed separately)
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -37,7 +41,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | ID | One line | Next step |
 |---|---|---|
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
-| F134 | **Medium** — Order Follow-Up's "Never arrived" rows have **no exit and no way to resolve them**: a recorded rejection, a later-imported invoice, and the next import all fail to clear them, so the panel accumulates unresolvable rows weekly. `'not_arrived'` has no writer at all | Owner: `docs/f134-arrival-resolution.md`. **Part 1** (add `hasShipmentEvidence()` + `ledgerRejected()` exits to `neverArrivedFromFulfilled()`) is one line and ships alone. **Part 2** = admin resolve control, CHECK widened with `'damaged'`, `not_arrived`/`damaged` surfaced to customers. **Supersedes F115 gate V6** |
+| F134 | **Medium** — Order Follow-Up's "Never arrived" rows had **no exit and no way to resolve them**: a recorded rejection, a later-imported invoice, and the next import all failed to clear them, so the panel accumulated unresolvable rows weekly. **STAGING COMPLETE 2026-08-20** — Part 1 exits + Part 2 admin resolve control/CHECK widening/My List copy all live+verified on staging (gates V1-V6 green). Supersedes F115 gate V6 (marked superseded in place) | Owner: `docs/f134-arrival-resolution.md`. **PRODUCTION NOT YET RUN** — `docs/sql/f134-arrival-outcome-widen.sql` must run on prod (Rick-gated, staging-verified) before the client promotion, same sequencing as F132 |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
 | F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures; profile deletes succeed, auth-user deletes do not. Test-infra only, no live app impact | deferred — dedicated test-infra session. **Date-bucket the 197 against F95's 2026-08-02 fix BEFORE any bulk delete** — if they postdate it, cleanup without a code fix is pointless |

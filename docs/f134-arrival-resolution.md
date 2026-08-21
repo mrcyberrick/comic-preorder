@@ -1,8 +1,10 @@
 # F134 — resolving "Never arrived": panel exits, and an admin resolution control
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=F134,F115
-**Status:** **PLANNED — not started.** Written 2026-08-21 from the first production run of the
-F115 panel and Rick's ground truth on all five rows.
+**STATUS:** STAGING COMPLETE 2026-08-20 | staging=APPLIED | prod=PENDING | findings=F134,F115
+**Status:** **STAGING COMPLETE.** Part 1 + Part 2 (a/b/c) all built, deployed, and verified on
+staging — gates V1-V6 green, V3 confirmed live by Rick in the SQL Editor. Production migration +
+client promotion are a separate, later, Rick-gated session (not this one — see CLAUDE.md §
+Staging Only).
 **Target:** staging first. Production on Rick's explicit call, per session.
 **Two parts, deliberately separable.** Part 1 is a one-line bug fix with no schema and no product
 decisions — it can ship on its own, today. Part 2 carries a migration, an admin control and a
@@ -157,29 +159,36 @@ Part 1 exits · CHECK widening migration · admin resolve control · My List cop
 
 ## 6. Verification gates
 
-| Gate | Assertion |
-|---|---|
-| **V1** | A fulfilled row whose code is `ledgerRejected()` does **not** appear in Never Arrived; the two real production titles clear |
-| **V2** | A fulfilled `'unknown'` row gains a `weekly_shipment` row → disappears from the panel on next render, with no re-import and no manual action |
-| **V3** | Widened CHECK: `'damaged'` accepted, a bogus value rejected **23514** |
-| **V4** | Each control writes exactly its value and the row leaves the panel; no other column changes |
-| **V5** | My List shows the `not_arrived` / `damaged` notice **above** the ordered branch — a fulfilled row with `damaged` must not read "✓ Order placed" |
-| **V6** | A row at `'unknown'` shows the customer **nothing new** — staff-only, per § 4.3 |
-| **V7** | Full suite green, counts recorded |
+| Gate | Assertion | Result |
+|---|---|---|
+| **V1** | A fulfilled row whose code is `ledgerRejected()` does **not** appear in Never Arrived; the two real production titles clear | **GREEN.** Observed FAILING first against pre-fix staging (seeded rejected title wrongly stayed in the panel). Post-push, against confirmed-fresh bytes: PASS, 8.2s. `21-arrival-resolution.spec.ts` (local-only) |
+| **V2** | A fulfilled `'unknown'` row gains a `weekly_shipment` row → disappears from the panel on next render, with no re-import and no manual action | **GREEN.** Observed FAILING first (same pre-fix run). Post-push: PASS, 10.3s–11.1s across two runs |
+| **V3** | Widened CHECK: `'damaged'` accepted, a bogus value rejected **23514** | **GREEN.** Verified live by Rick in the staging SQL Editor: pre-check confirmed original tri-state; DDL applied clean; row counts unaffected (54 null / 2 arrived / 0 damaged / 0 not_arrived); `'damaged'` UPDATE succeeded in a rolled-back txn; bogus value rejected 23514 on `preorders_arrival_outcome_check`, DETAIL confirmed staging founding tenant |
+| **V4** | Each control writes exactly its value and the row leaves the panel; no other column changes | **GREEN**, 9.3s. Direct REST read before/after the click confirmed `quantity`/`fulfilled` unchanged, only `arrival_outcome` flipped |
+| **V5** | My List shows the `not_arrived` / `damaged` notice **above** the ordered branch — a fulfilled row with `damaged` must not read "✓ Order placed" | **GREEN after one real bug found and fixed.** First run: status text correct, but the action-column chip still read "✓ Order placed" (`isOrdered` is unconditionally true on a fulfilled row — the "badge-only" precedent from rejected titles doesn't transfer, since a rejected title is normally *not* fulfilled). Fixed same session (both `not_arrived` and `damaged`, desktop + mobile action columns), re-verified GREEN, 8.3s–8.4s (V5 + V5b) |
+| **V6** | A row at `'unknown'` shows the customer **nothing new** — staff-only, per § 4.3 | **GREEN**, 8.2s. Still reads "Order placed" (fulfilled=true, unchanged behaviour); no `not_arrived`/`damaged` copy leaked |
+| **V7** | Full suite green, counts recorded | **GREEN (attributed).** 136 passed / 3 failed, 20.9m. All 3 failures are the pre-existing, already-filed **F133** date-crossing defect (`focThisMonthFuture()` = today+3 = 2026-08-23, crossed the live `order_deadline` 2026-08-21, confirmed by direct query) in `15-order-export-ledger.spec.ts` (F111 cross-month gather, V7 backorder panel) and `06-admin-this-week-bagging.spec.ts` (print-media panel) — same three-spec class F133 predicted. None touch `neverArrivedFromFulfilled()`, `groupByExportCode()`, the resolve control, or the My List status chain; confirmed by code inspection this session's diff never touches the At-Risk/Backordered classification path (`isFocPast`/`missesOrderCycle`) at all. Zero failures attributable to F134 |
 
-V1 and V2 are Part 1 and must be observed failing against the pre-fix code first — both are
+V1 and V2 are Part 1 and were observed failing against the pre-fix code first — both are
 reachable with a seeded fixture, and an assertion never seen red is decoration (F105).
 
 ---
 
 ## 7. Completion criteria
 
-- [ ] V1–V7 green, each with recorded output
-- [ ] Part 1 shipped (may precede Part 2)
-- [ ] Migration applied both environments, `-- STATUS:` filled in
-- [ ] F115 plan doc: **V6 marked superseded**, with the reason
-- [ ] § 13 F134 flipped to RESOLVED; CLAUDE.md row removed
-- [ ] This doc's STATUS token flipped
+- [x] V1–V7 green, each with recorded output (§ 6)
+- [x] Part 1 shipped (may precede Part 2) — shipped and merged first, on its own commit
+- [x] Migration applied **staging** (`-- STATUS:` filled in) — [ ] **production not run.**
+      Deliberately out of this session's scope (staging-only per CLAUDE.md § Staging Only);
+      a separate, later, Rick-gated session runs the prod migration + client promotion,
+      same sequencing F132 used
+- [x] F115 plan doc: **V6 marked superseded**, with the reason (was already done in the prior
+      session per the runbook's "ALREADY DONE 2026-08-21" note — re-verified this session, still
+      correct)
+- [x] § 13 F134 updated — **STAGING COMPLETE**, not flipped to fully RESOLVED, since production
+      is still pending (same convention as F132's own entry while its prod run was outstanding).
+      CLAUDE.md row **updated, not removed** — F134 is not closed until production ships
+- [x] This doc's STATUS token flipped
 - [ ] `/wrap-up`
 
 ---
