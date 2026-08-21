@@ -27,8 +27,7 @@ old or new constraint), client promoted via **PR #127** (`726f8df`), post-deploy
 `onerror` fallback (pre-existing since 2026-02-23) — fixed same session on Rick's go-ahead, promoted
 via **PR #128** (`bfa687c`), verified live. Staging `eee537b`, docs `31d8912`+, main `bfa687c`,
 2026-08-20/21.
-**Next free finding ID:** **F136.** (unchanged — no new finding filed this session; the action-column
-bug was in-scope for F134's own gate V5, fixed inline, not filed separately)
+**Next free finding ID:** **F137.**
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -57,6 +56,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
 | F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **PRODUCTION REQUESTED 2026-08-21 (gate V8, in progress)** — `docs/sql/f132-order-requirement.sql` must run on prod BEFORE the next production import, or import.js 400s on every catalog upsert) |
+| F136 | **Medium-High** — a distributor's post-solicitation date revision has no detection path on an unreserved catalog row (49 reserved titles found silently stale in production alone before this session's fix); separately, 2,666 `(item_code, distributor)` pairs carry duplicate `catalog_month` rows (2,621 of them `{2026-05,2026-06}`), and at least 2 live reservations sit on the duplicate row the monthly import can never revisit again | open, no plan doc. Root cause of the mass duplication not yet identified; fix needs a Lunar-vs-PRH-specific canonical-row rule before any repoint/cleanup runs. See § 13 F136 |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,
