@@ -1531,12 +1531,24 @@
   // f115-arrival-truth-persistence.md § 3.2), so a fulfilled row reading
   // 'unknown' is fed straight into Never Arrived here — reusing the label
   // F116 already built, not inventing a new one. Reads the column rather than
-  // recomputing hasShipmentEvidence()/on_sale_date against a fulfilled row:
-  // the column is the judgement made at the moment the row left the open
-  // panel, and there is nothing later to reconcile it against. A NULL
+  // recomputing on_sale_date against a fulfilled row: the column is the
+  // judgement made at the moment the row left the open panel. A NULL
   // arrival_outcome (pre-migration row, or fulfilled by some other path) is
   // deliberately excluded — NULL means "not yet judged", not "judged unknown"
   // (§ 3.1), so it must not read as Never Arrived.
+  //
+  // F134 Part 1: the column being frozen at judgement time does NOT mean
+  // there is nothing later to reconcile it against — a subsequently-imported
+  // invoice, or a rejection the store already recorded, both arrive AFTER
+  // the judgement and both settle it. Two exits, the same ones the unfulfilled
+  // path below already carries: hasShipmentEvidence() (a later invoice
+  // proves it arrived) and ledgerRejected() (the store already recorded the
+  // supplier's rejection and F120 already told the customer — nagging here
+  // is noise, not signal, same reasoning as F129 one layer over). Deliberately
+  // NOT given a ledgerNetQty > 0 exit: on the unfulfilled path that means
+  // "ordered, so not yet a failure", but on a row already fulfilled=true it
+  // would mean "we ordered it, therefore it arrived" — the exact false
+  // inference F115 exists to stop.
   // A `function` declaration, not `const` — this file's top-level script
   // calls applyMode() -> ensureFullData() -> loadData() -> computeBackorderRisk()
   // synchronously during its own initial run, BEFORE the script's linear
@@ -1547,7 +1559,10 @@
   // declarations have no such ordering constraint.
   function neverArrivedFromFulfilled() {
     return gatherCollapsed
-      .filter(p => p.fulfilled && p.arrival_outcome === 'unknown' && p.catalog?.foc_date && !p.catalog?.withdrawn_at)
+      .filter(p => p.fulfilled && p.arrival_outcome === 'unknown'
+                   && p.catalog?.foc_date && !p.catalog?.withdrawn_at
+                   && !hasShipmentEvidence(p.catalog)
+                   && !ledgerRejected(p.catalog.distributor, exportCode(p.catalog, p.catalog.distributor)))
       .map(p => ({ p }));
   }
 
