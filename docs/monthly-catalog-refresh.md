@@ -1,6 +1,7 @@
 # Monthly Catalog Refresh — Step-by-Step Guide
 
-**Last updated:** 2026-07-08 (F81 rewrite — see warning below)
+**Last updated:** 2026-08-22 (F136 S3 — added Step 3, the revision-sweep step;
+see warning below for the earlier F81 rewrite)
 **Applies to:** production (`import.js` → `pulllist.app`). The staging variant
 (`import-staging.js` → staging Supabase) follows the identical sequence.
 
@@ -64,12 +65,47 @@ placed with the distributors at FOC time (admin → **By Distributor** /
 **Paper Orders** print buttons). If not, export them now — the new-month
 sequence purges unreserved stale catalog rows.
 
-### Step 3 — Drop the New CSV Files
+### Step 3 — Revision Sweep: Re-Pull Still-Open Months (F136 Part C)
+
+**Do this before Step 4's new-month import.** A distributor can re-issue a
+still-open month's file with revised FOC/in-store dates for titles that
+haven't gone on sale yet — nothing about the normal monthly cycle re-fetches
+an older month on its own, so a date revision on a row **nobody has
+reserved** has no detection path unless someone manually re-supplies that
+month's file. This is the sequence Rick ran by hand on 2026-08-21 to find and
+fix 49 stale production titles (SPAWN SCORCHED #54's FOC pushed a full week
+with zero prior signal); this step turns that one-off rescue into a
+documented recurring one, feeding S1's widened drift report (F136 Part C(1)
+— `classifyReservedDateDrift()`'s `unreserved` list).
+
+1. Re-download the **previous 1–2 still-open months'** Lunar Product Data
+   file(s) from the Lunar portal (a month is "still open" if any of its
+   titles have an `on_sale_date` still in the future — check via the "Months
+   currently in the catalog" query under § Useful SQL Queries below).
+2. Re-import them **oldest-to-newest**, one month at a time, confirming the
+   correct historical `YYYY-MM` at the prompt (not the new month) and passing
+   `--skip-autoreserve` so subscribers aren't re-reserved into a past month:
+   ```powershell
+   node .\import.js "..\Lunar_Product_Data_<older-MMYY>.csv" "..\YYYY_MM_PRH_metadata_full_active.csv" --skip-autoreserve
+   ```
+3. **Read the console's F136 report on each run:**
+   `📌 N unreserved title(s) changed in-store date on re-pull (F136)` lists
+   exactly what changed and for which titles — this is the signal that did
+   not exist before S1. If a change looks surprising, cross-check the title
+   against the distributor's own site the way Rick did for SPAWN SCORCHED #54
+   before trusting it.
+4. Repeat for PRH's still-open months if its active-export file has been
+   re-downloaded; PRH's export omits withdrawn titles rather than revising
+   dates in place (see F110), so this step matters most for Lunar.
+
+Then continue with Step 4 using the **new** month's files.
+
+### Step 4 — Drop the New CSV Files
 
 Place the new Lunar and PRH CSVs in the `catalogs` folder (the parent of
 `scripts`). Filenames don't matter — you pass them as arguments.
 
-### Step 4 — Run the Import Script
+### Step 5 — Run the Import Script
 
 ```powershell
 cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts
@@ -82,14 +118,15 @@ the interactive prompt. Answer "n" to skip shipment import early in the month.
 **Confirm the catalog month at the prompt.** This matters most when importing
 a new month's files before the calendar month starts — type the correct
 `YYYY-MM` if the detected value is wrong. A mislabeled month is the root of
-the F80 "stale month" defect family.
+the F80 "stale month" defect family, and as of F136 S1 the script no longer
+accepts a silent guess here at all — it requires a typed month.
 
 Flags:
 - `--skip-autoreserve` — use on older-month backfills so subscribers aren't
   re-reserved into a past month (the script also skips auto-reserve on
   older-month imports automatically)
 
-### Step 5 — Verify the Import
+### Step 6 — Verify the Import
 
 In **Supabase → SQL Editor**:
 
@@ -111,13 +148,13 @@ WHERE catalog_month = 'YYYY-MM'
 GROUP BY title, distributor, item_code HAVING COUNT(*) > 1;
 ```
 
-### Step 6 — Set the Order Deadline
+### Step 7 — Set the Order Deadline
 
 Admin → Settings → **Order Deadline**. Choose a date that falls before the
 bulk of the new month's FOC dates while leaving customers the longest possible
 reservation window. (Candidate for automation — see the 2026-07 review.)
 
-### Step 7 — Turn Maintenance Mode OFF
+### Step 8 — Turn Maintenance Mode OFF
 
 Admin → toggle **Maintenance Mode OFF**. The catalog is live.
 

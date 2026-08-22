@@ -1,12 +1,14 @@
 # F134 — resolving "Never arrived": panel exits, and an admin resolution control
 
-**STATUS:** LIVE IN PRODUCTION 2026-08-21 | staging=APPLIED | prod=APPLIED | findings=F134,F115
-**Status:** **LIVE IN PRODUCTION.** Part 1 + Part 2 (a/b/c) all built, deployed, and verified on
-staging — gates V1-V6 green, V3 confirmed live by Rick in the SQL Editor. The Part 2a migration
-(CHECK widening) is applied on **production** (Rick, 2026-08-21, SQL Editor — confirmed via
-constraint-definition query), and the client (`admin.html`/`app.js`/`mylist.html`) is promoted via
-**PR #127** (`726f8df`) — new bytes confirmed served on `pulllist.app`. **Post-deploy write-smoke
-pending (Rick)** before this is marked fully RESOLVED.
+**STATUS:** RESOLVED, LIVE IN PRODUCTION 2026-08-21 | staging=APPLIED | prod=APPLIED | findings=F134,F115
+**Status:** **RESOLVED.** Part 1 + Part 2 (a/b/c) all built, deployed, and verified on staging —
+gates V1-V6 green, V3 confirmed live by Rick in the SQL Editor. The Part 2a migration (CHECK
+widening) is applied on **production** (Rick, 2026-08-21, SQL Editor — confirmed via constraint-
+definition query), and the client (`admin.html`/`app.js`/`mylist.html`) is promoted via **PR #127**
+(`726f8df`) — new bytes confirmed served on `pulllist.app`. **Post-deploy write-smoke passed
+(Rick).** The write-smoke surfaced one real, unrelated bug (My List desktop cover-image fallback,
+pre-existing since 2026-02-23) — fixed same session on Rick's go-ahead, promoted via **PR #128**
+(`bfa687c`), verified live. See § 7.
 **Target:** staging first. Production on Rick's explicit call, per session.
 **Two parts, deliberately separable.** Part 1 is a one-line bug fix with no schema and no product
 decisions — it can ship on its own, today. Part 2 carries a migration, an admin control and a
@@ -185,16 +187,21 @@ reachable with a seeded fixture, and an assertion never seen red is decoration (
       just the bogus-value-rejection check, which cannot distinguish old from widened constraint —
       same trap F115's own prod migration note records)
 - [x] Client promoted (`admin.html`/`app.js`/`mylist.html` to `main`) — **PR #127** (`726f8df`),
-      merged 2026-08-21, new bytes confirmed served on `pulllist.app` for all three files. Post-
-      deploy write-smoke (reserve/confirm/cancel through the live app) requested of Rick, pending
+      merged 2026-08-21, new bytes confirmed served on `pulllist.app` for all three files
+- [x] Post-deploy write-smoke — **PASSED (Rick).** Reserve/confirm/cancel through the live app.
+      **Surfaced one real, unrelated bug**: My List's desktop cover `<img>` had no `onerror`
+      fallback (`git blame`: `mrcyberrick`, 2026-02-23, five months pre-F134), so a `cover_url`
+      that failed to load showed a broken-image icon rather than the placeholder the mobile
+      card/Upcoming Arrivals grid already fall back to. Out of scope for F134 — stopped, described,
+      asked per CLAUDE.md § Anti-Drift Rules; Rick chose "fix now" over filing it. One attribute,
+      matching the pattern already used twice in the same file. Promoted separately, its own
+      commit and PR (`eee537b` staging, **PR #128** `bfa687c` prod), verified live. No new finding
+      ID — fixed immediately, not deferred
 - [x] F115 plan doc: **V6 marked superseded**, with the reason (was already done in the prior
       session per the runbook's "ALREADY DONE 2026-08-21" note — re-verified this session, still
       correct)
-- [x] § 13 F134 updated — **LIVE IN PRODUCTION**, not flipped to fully RESOLVED yet pending
-      Rick's post-deploy write-smoke confirmation (same convention this doc's own SS 13 precedents
-      use — "RESOLVED AND LIVE IN PRODUCTION" only after write-smoke passed, e.g. F109/F127/F128).
-      CLAUDE.md row **updated to LIVE IN PRODUCTION, not removed** — final RESOLVED flip in SS 13
-      still needs Rick's confirmation
+- [x] § 13 F134 flipped to **RESOLVED AND LIVE IN PRODUCTION**; CLAUDE.md row **removed**
+      (findings table is for open work — F134 is closed)
 - [x] This doc's STATUS token flipped
 - [x] `/wrap-up`
 

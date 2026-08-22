@@ -12,21 +12,52 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F134 build session (`docs/f134-arrival-resolution.md`) — Part 1 (fulfilled
-path gets the same `hasShipmentEvidence()`/`ledgerRejected()` exits the unfulfilled path already
-has) + Part 2 (CHECK widened to add `'damaged'`, admin resolve control, My List copy for
-`not_arrived`/`damaged`) all built, deployed, and verified on staging. Gates V1–V6 green (V1/V2
-observed failing pre-fix, then green); a real bug caught by V5 (action-column chip still read
-"✓ Order placed" on a fulfilled damaged/not_arrived row) fixed same session. Full suite: 136/139,
-the 3 failures all attributed to the pre-existing F133 date-crossing defect, none touching F134's
-changed paths. **Production migration APPLIED 2026-08-21** (Rick, SQL Editor — constraint-def query
-confirmed `'damaged'` in the allowed set on prod; a bogus-value-rejection check alone was run first
-but is insufficient proof, since 'bogus' fails under either the old or new constraint). **Client
-promoted 2026-08-21 via PR #127 (`726f8df`)** — new bytes confirmed served on `pulllist.app` for
-`admin.html`/`app.js`/`mylist.html`; post-deploy write-smoke pending (Rick). Staging `667c397`, docs
-`31d8912`, 2026-08-20/21.
-**Next free finding ID:** **F136.** (unchanged — no new finding filed this session; the action-column
-bug was in-scope for F134's own gate V5, fixed inline, not filed separately)
+**Last completed work:** F138 RESOLVED on staging 2026-08-22 (reverses F128, Rick's explicit
+request) — admin impersonation gets full write access to `subscriptions` (subscribe **and**
+unsubscribe on a customer's behalf), matching how `preorders`' admin policy already works. New
+`admins manage tenant subscriptions` RLS policy (`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`)
+run on staging and verified via `pg_policies`; three impersonation guards removed from
+`subscriptions.html` (reserved-suggestions Subscribe, main-table Unsubscribe, series-search input);
+two write-target bugs fixed in the process (reserved-suggestions subscribe + its Undo handler were
+writing to the admin's own `user_id`, not the impersonated customer's — harmless only while the
+buttons were disabled). **V1–V4 all green**: V1 the live `pg_policies` read, V2/V3 a rewritten
+Playwright test in local spec `11-reserved-suggestions.spec.ts` that subscribes and unsubscribes on
+a customer's behalf during impersonation and DB-verifies both the correct `user_id` and the actual
+row deletion (not F128's silent no-op), V4 the full `run-smoke.ps1` — 269 unit + 139 Playwright, 0
+failures. Branch `feature/f138-admin-subscription-management-impersonation` merged to `staging`
+`--ff-only` and pushed. **Not promoted to production** — separate later request via
+`/promote-prod`. See `docs/technical-reference.md` § 13 F138.
+
+Prior work, same day: **F136** fully RESOLVED 2026-08-22 — S1, S2, and S3 all shipped the same day
+(`docs/f136-catalog-month-integrity.md`). S3 (an earlier session that same day): created
+`dedupe_catalog_months()` on **production** (S2's migration was staging-only); added the Part C(2)
+revision-sweep runbook step to `docs/monthly-catalog-refresh.md`; re-measured live production fresh
+rather than trusting the 2026-08-21 snapshot (2,666 duplicate pairs / 2,667 safe / 29 blocked,
+unchanged — of the 29 blocked, only 2 are unfulfilled, matching § 3(d) exactly, the other 27
+historical/fulfilled); repointed the 2 unfulfilled reservations (Alex Alvarez / TMNT #40 Variant C,
+Brian Moss / Action Comics #1 Facsimile) from `2026-05` to the maintained `2026-06` rows; ran the
+production dedupe. **Gates V7–V8 green**, confirmed three independent ways — production catalog
+rows **12,087 → 9,418 (delta exactly 2,669)** matching the dry-run preview precisely, preorder
+counts unchanged (**2,021/1,049/972** total/unfulfilled/fulfilled), duplicate pairs **2,666 → 27** /
+safe-blocked **2,667/29 → 0/27** (the 27 survivors are the historical rows Rick chose to leave
+blocked — zero customer risk, permanent minor bloat, accepted). Staging's one residual (Nightmare
+Before Christmas #2) confirmed `fulfilled = true`, same accepted category. **Also fixed in-session:**
+CLAUDE.md's and `technical-reference.md`'s F132 findings both still read "production not yet run"
+when the DB half had actually been `APPLIED` 2026-08-21 — corrected (commit `7d4df83`), found while
+confirming F136 S3 wasn't blocked by that gate. **No further F136 sessions planned.**
+
+Prior work, same day: **F136 S2** — the `dedupe_catalog_months()` RPC applied to **staging**, wired
+into `refreshCatalog()`'s new-month branch in both `import.js`/`import-staging.js` (scripts repo
+`main` `7a8d6a1`, which is why S3 needed no additional code change — the wiring already covered
+production). **F136 S1** — Part A (catalog-month entry guards: `inferCatalogMonth()` no longer
+silently guesses, requires an explicit typed month; Lunar MMYY-vs-confirmed-month cross-check;
+distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyReservedDateDrift()`
+gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
+**fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
+2026-08-22.
+**Next free finding ID:** **F139**. **F138 filed this session** (reverses
+F128 at Rick's request — see table below and `docs/technical-reference.md`
+§ 13).
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -44,8 +75,8 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. **RESOLVED on staging 2026-08-22** — V1-V4 all green, merged and pushed to `staging`. Next: production promotion is a separate explicit request via `/promote-prod` (not requested yet) |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
-| F134 | **Medium** — Order Follow-Up's "Never arrived" rows had **no exit and no way to resolve them**: a recorded rejection, a later-imported invoice, and the next import all failed to clear them, so the panel accumulated unresolvable rows weekly. **LIVE IN PRODUCTION 2026-08-21** — DB migration applied (constraint-def query confirmed `'damaged'` in the allowed set), client promoted via **PR #127** (`726f8df`), new bytes confirmed served on `pulllist.app` for all three changed files. Supersedes F115 gate V6 (marked superseded in place) | Owner: `docs/f134-arrival-resolution.md`. **Post-deploy write-smoke pending (Rick)** — reserve/confirm/cancel through the live app; flip to RESOLVED in § 13 once confirmed |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
 | F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures; profile deletes succeed, auth-user deletes do not. Test-infra only, no live app impact | deferred — dedicated test-infra session. **Date-bucket the 197 against F95's 2026-08-02 fix BEFORE any bulk delete** — if they postdate it, cleanup without a code fix is pointless |
@@ -55,7 +86,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
-| F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **PRODUCTION REQUESTED 2026-08-21 (gate V8, in progress)** — `docs/sql/f132-order-requirement.sql` must run on prod BEFORE the next production import, or import.js 400s on every catalog upsert) |
+| F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **Gate V8 — DB half APPLIED to production 2026-08-21** (verified 0 non-null/11,726, Rick) — the `import.js` 400 risk this was blocking is cleared; **client code half (app.js/catalog.html/style.css via `/promote-prod`) still not promoted**, in progress) |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,
@@ -587,11 +618,15 @@ Items from previous months where `on_sale_date < today` are hidden from My List
 ### Series Subscriptions
 - Subscribe button appears only on standard covers (`variant_type` null,
   `'Standard'`, or `'Primary Title'`)
-- Hidden in admin impersonation context — **exception (2026-07-19):** the
-  reserved-suggestions list on `subscriptions.html` stays visible during
-  impersonation (it shows the impersonated customer's unsubscribed reserved
-  series) with its subscribe buttons disabled, per Rick's explicit decision
-  in `docs/subscription-reserved-suggestions.md` § 4c
+- **Full admin write access during impersonation (F138, 2026-08-22, reverses
+  F128/§ 4c's earlier disabled-button design).** On `subscriptions.html`,
+  admins can subscribe and unsubscribe on the impersonated customer's behalf
+  — reserved-suggestions list, series search, and the main subscriptions
+  table all write through `AdminContext.resolveUserId(user.id)`, backed by a
+  new `admins manage tenant subscriptions` RLS policy mirroring `preorders`'.
+  **Live on staging 2026-08-22 (V1–V4 green); not yet promoted to
+  production.** See `docs/technical-reference.md` § 13 F138 for status
+  before relying on this in production contexts.
 - Import script auto-reserves standard covers for subscribers each month
 - `subscriptions.html` shows an always-on "Series you're already reading"
   one-click subscribe list built from the customer's own reservations; the
@@ -658,7 +693,8 @@ Do NOT touch any of the below in agentic sessions without explicit approval.
 **Genuinely still open or deferred:** Partial fulfillment is not representable (product decision,
 deferred until product scoping — no finding ID). Everything else currently open is F72, F89, F90,
 F99, and F126's residual — see the open-findings table in § Current Migration Phase; full
-detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-18** — see § 13.
+detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-18, F136+F137 closed
+2026-08-22** — see § 13.
 
 **Closed work — kept here as a "don't re-open without asking" index only. Each doc's own
 `**STATUS:**` token and `docs/technical-reference.md` § 13 are the evidence; this table is not:**
@@ -675,6 +711,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | `preorders` authorization boundary (status gate + ordered-cancel trigger) | `preorders-authorization-boundary-f127-f109.md` | F127, F109 |
 | Phase 5 — second-tenant onboarding (all sub-deploys) | `phase-5-second-tenant-onboarding.md` | F105 |
 | Test-infrastructure maintenance | `test-infra-maintenance-f91-f95-f103.md` | F91, F95, F103, F107 |
+| Catalog-month integrity — stale-date detection + duplicate-row cleanup (S1-S3) | `f136-catalog-month-integrity.md` | F136, F137 |
 | `import.js` maintenance (key rotation, historical dedup, cross-month fix) | `import-js-maintenance-f75-f78-f85.md` | F75, F78, F85 |
 | F86 prod legacy API key retirement | `f86-anon-key-migration.md` | F86, F88 |
 | Mobile thumb-reach tab bar + live-review follow-up | `mobile-nav-tab-bar.md` | — |
