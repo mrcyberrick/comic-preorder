@@ -12,8 +12,24 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F136 fully RESOLVED 2026-08-22 — S1, S2, and S3 all shipped the same day
-(`docs/f136-catalog-month-integrity.md`). S3 (this session's own work): created
+**Last completed work:** F138 RESOLVED on staging 2026-08-22 (reverses F128, Rick's explicit
+request) — admin impersonation gets full write access to `subscriptions` (subscribe **and**
+unsubscribe on a customer's behalf), matching how `preorders`' admin policy already works. New
+`admins manage tenant subscriptions` RLS policy (`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`)
+run on staging and verified via `pg_policies`; three impersonation guards removed from
+`subscriptions.html` (reserved-suggestions Subscribe, main-table Unsubscribe, series-search input);
+two write-target bugs fixed in the process (reserved-suggestions subscribe + its Undo handler were
+writing to the admin's own `user_id`, not the impersonated customer's — harmless only while the
+buttons were disabled). **V1–V4 all green**: V1 the live `pg_policies` read, V2/V3 a rewritten
+Playwright test in local spec `11-reserved-suggestions.spec.ts` that subscribes and unsubscribes on
+a customer's behalf during impersonation and DB-verifies both the correct `user_id` and the actual
+row deletion (not F128's silent no-op), V4 the full `run-smoke.ps1` — 269 unit + 139 Playwright, 0
+failures. Branch `feature/f138-admin-subscription-management-impersonation` merged to `staging`
+`--ff-only` and pushed. **Not promoted to production** — separate later request via
+`/promote-prod`. See `docs/technical-reference.md` § 13 F138.
+
+Prior work, same day: **F136** fully RESOLVED 2026-08-22 — S1, S2, and S3 all shipped the same day
+(`docs/f136-catalog-month-integrity.md`). S3 (an earlier session that same day): created
 `dedupe_catalog_months()` on **production** (S2's migration was staging-only); added the Part C(2)
 revision-sweep runbook step to `docs/monthly-catalog-refresh.md`; re-measured live production fresh
 rather than trusting the 2026-08-21 snapshot (2,666 duplicate pairs / 2,667 safe / 29 blocked,
@@ -29,15 +45,6 @@ Before Christmas #2) confirmed `fulfilled = true`, same accepted category. **Als
 CLAUDE.md's and `technical-reference.md`'s F132 findings both still read "production not yet run"
 when the DB half had actually been `APPLIED` 2026-08-21 — corrected (commit `7d4df83`), found while
 confirming F136 S3 wasn't blocked by that gate. **No further F136 sessions planned.**
-
-**In progress, not yet merged to staging:** **F138** (2026-08-22, reverses F128) — admin
-impersonation gains full write access to `subscriptions` (subscribe + unsubscribe on a customer's
-behalf), at Rick's explicit request. `subscriptions.html` client changes complete on branch
-`feature/f138-admin-subscription-management-impersonation`; RLS migration
-(`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`) **run and verified on
-staging 2026-08-22** (V1 green — `pg_policies` confirms `admins manage tenant subscriptions`
-PERMISSIVE ALL in place). Still open: V2-V4 functional/regression gates, merge to staging, smoke
-suite, then production is a separate later ask. See `docs/technical-reference.md` § 13 F138.
 
 Prior work, same day: **F136 S2** — the `dedupe_catalog_months()` RPC applied to **staging**, wired
 into `refreshCatalog()`'s new-month branch in both `import.js`/`import-staging.js` (scripts repo
@@ -68,7 +75,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. RLS migration **V1 green on staging 2026-08-22**; client code done on branch `feature/f138-admin-subscription-management-impersonation`, not yet merged. Next: V2-V4 (functional + regression) then `/deploy-staging` |
+| F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. **RESOLVED on staging 2026-08-22** — V1-V4 all green, merged and pushed to `staging`. Next: production promotion is a separate explicit request via `/promote-prod` (not requested yet) |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
@@ -617,9 +624,9 @@ Items from previous months where `on_sale_date < today` are hidden from My List
   — reserved-suggestions list, series search, and the main subscriptions
   table all write through `AdminContext.resolveUserId(user.id)`, backed by a
   new `admins manage tenant subscriptions` RLS policy mirroring `preorders`'.
-  **RLS migration verified live on staging 2026-08-22; client branch not yet
-  merged.** See `docs/technical-reference.md` § 13 F138 for status before
-  relying on this.
+  **Live on staging 2026-08-22 (V1–V4 green); not yet promoted to
+  production.** See `docs/technical-reference.md` § 13 F138 for status
+  before relying on this in production contexts.
 - Import script auto-reserves standard covers for subscribers each month
 - `subscriptions.html` shows an always-on "Series you're already reading"
   one-click subscribe list built from the customer's own reservations; the

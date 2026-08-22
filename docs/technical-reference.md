@@ -4446,11 +4446,11 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F138 — reverses F128: admins now get write access to `subscriptions` so impersonation can fully manage a customer's subscriptions
 
-- **Status:** filed 2026-08-22, Rick's explicit request. **IN PROGRESS** —
-  client code done on branch `feature/f138-admin-subscription-management-impersonation`;
-  RLS migration **run and verified on staging 2026-08-22** (V1 green, below).
-  Not yet merged to staging (V2-V4 + smoke gate still open), not yet run on
-  production.
+- **Status:** filed 2026-08-22, Rick's explicit request. **RESOLVED on
+  staging 2026-08-22** — V1-V4 all green (below), branch merged
+  `--ff-only` and pushed, full `run-smoke.ps1` green (269 unit + 139
+  Playwright, 0 failures, 0 retries). **Not yet run on production** —
+  that's a separate later request via `/promote-prod`.
 - **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
   with no admin write policy, on Rick's explicit "no" to admins
   unsubscribing customers during impersonation — see that entry's "Do not
@@ -4498,19 +4498,46 @@ reasoning — only the disposition changed, not the diagnosis.
     them to a series from the reserved-suggestions list, confirms (via
     PostgREST or SQL Editor) the row's `user_id` is the **customer's**, not
     the admin's.
+    **GREEN 2026-08-22** — new Playwright test in
+    `11-reserved-suggestions.spec.ts` (local suite): impersonated admin
+    subscribes from the reserved-suggestions list, row flips to ★
+    Subscribed, DB row polled via `getSubscription` lands under the
+    customer's `user_id` (asserted `sub.user_id === custId`), and a parallel
+    check confirms no row was created under the admin's own id — the exact
+    write-target bug this session found and fixed while re-enabling the
+    button.
   - V3 — same for series search subscribe, and for Unsubscribe from the main
     table — confirm the row is actually gone, not silently retained (the
     F128 failure mode, now checked for both directions).
+    **GREEN 2026-08-22** — same test continues: Unsubscribe from the main
+    table (admin, impersonating), confirm dialog accepted, row disappears
+    from the UI, and `getSubscription` polls to `null` — the exact
+    verification F128's original bug lacked (a DELETE reported as
+    successful that RLS had silently filtered to zero rows). Series-search
+    subscribe path unchanged by this finding (it never had a write-target
+    bug — only the input-level disable blocked it) and is covered by the
+    pre-existing `series_search` attribution test in the same spec, which
+    stayed green.
   - V4 — regression: non-impersonated customer subscribe/unsubscribe/search
     still work unchanged; a blocked (`pending`/`suspended`) customer's own
     session still can't subscribe to new series but can still unsubscribe
     (F127-style client gate, untouched by this finding).
+    **GREEN 2026-08-22** — full `run-smoke.ps1`: 269 unit tests + 139
+    Playwright tests (specs 01-21, including the new F138 test and every
+    pre-existing subscription/impersonation spec), 0 failures, 0 retries.
   - Full `run-smoke.ps1` green before any production promotion request.
-- **Docs updated for V1 (2026-08-22):** § 7.1 subscriptions policy list above
+    **Satisfied 2026-08-22** — see V4 above; branch merged to `staging`
+    `--ff-only` (fast-forward, no conflicts) and pushed
+    (`ba6217b..5692419`); new bytes confirmed served via `curl -L` before
+    the gate ran.
+- **Docs updated (2026-08-22):** § 7.1 subscriptions policy list above
   (pending note removed, "Verified live on staging" with date),
   `docs/subscription-reserved-suggestions.md` § 4c (superseded pointer),
   CLAUDE.md § Series Subscriptions (impersonation bullet updated to match
-  the new behavior).
+  the new behavior) and its findings table/status section. Local-only
+  (never committed): `11-reserved-suggestions.spec.ts`'s admin-impersonation
+  test rewritten from asserting the old disabled state to exercising the
+  new write path end-to-end (subscribe + unsubscribe, both DB-verified).
 - **Related:** **F128** (the decision this reverses), **F16**/**F127**
   (the `preorders` admin-policy pattern this mirrors), **F58** (same
   silent-no-op shape on `user_profiles`, unrelated table, not in scope
