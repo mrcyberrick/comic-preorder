@@ -1,10 +1,14 @@
 # F136 — catalog_month integrity: stale-date detection + duplicate-row cleanup
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=F136,F137,F122,F110,F115
-**Status:** **PLANNED — not started.** Written 2026-08-21 in a planning session that also
-**identified the root cause F136 was filed without** (§ 2) and **corrected two statements in the
-filed finding** (§ 3). No code was changed. All measurements in this doc are read-only GETs run
-2026-08-21 against live staging *and* live production.
+**STATUS:** IN PROGRESS | staging=2026-08-22 (S1 only, code) | prod=— | findings=F136,F137,F122,F110,F115
+**Status:** **S1 COMPLETE 2026-08-22** — Part A (all three entry guards) + Part C(1) (widened
+`unreserved` drift list) + F137 (own commit) + `f136-audit.js` all shipped to the scripts repo
+`main` (`f1f90be`), staging code only, no DB migration, no production touch. Gates V0-V4 all
+green — see § 11. **S2** (`dedupe_catalog_months()` RPC, staging DB) is next; **S3** (prod
+repoints + prod dedupe) stays Rick-gated. Originally written 2026-08-21 in a planning session that
+also **identified the root cause F136 was filed without** (§ 2) and **corrected two statements in
+the filed finding** (§ 3). All measurements in §§ 2-4 are the *original* read-only GETs from
+2026-08-21 against live staging *and* live production; § 11's are S1's own, from 2026-08-22.
 **Target:** `catalogs/scripts` (private scripts repo) — `import.js` / `import-staging.js` — plus
 one new `docs/sql/` migration. **No `comic-preorder` app change.**
 **Last verified against live:** 2026-08-21 — every count in §§ 2–4 measured this session; see
@@ -361,15 +365,15 @@ a verification gate that only one session can run is not a gate.
 
 ## 10. Completion criteria
 
-- [ ] S1 — **F137**: Step 3 month-detection query scoped by `tenant_id` in both scripts, own commit
-- [ ] S1 — V0 green, observed failing against the unfixed code first, seed row torn down and verified
-- [ ] S1 — `inferCatalogMonth()` returns `null` on no match; prompt requires explicit month
-- [ ] S1 — Lunar MMYY mismatch guard aborts without a typed `yes`
-- [ ] S1 — cross-month collision pre-check reports and gates
-- [ ] S1 — `classifyReservedDateDrift()` returns a third `unreserved` list; report prints it
-- [ ] S1 — both scripts changed identically; `node --check` clean; `npm test` extended and green
-- [ ] S1 — V1–V4 green, evidence pasted into § 11
-- [ ] S1 — `f136-audit.js` committed to the scripts repo
+- [x] S1 — **F137**: Step 3 month-detection query scoped by `tenant_id` in both scripts, own commit (`3a1bede`)
+- [x] S1 — V0 green, observed failing against the unfixed code first, seed row torn down and verified
+- [x] S1 — `inferCatalogMonth()` returns `null` on no match; prompt requires explicit month
+- [x] S1 — Lunar MMYY mismatch guard aborts without a typed `yes`
+- [x] S1 — cross-month collision pre-check reports and gates
+- [x] S1 — `classifyReservedDateDrift()` returns a third `unreserved` list; report prints it
+- [x] S1 — both scripts changed identically; `node --check` clean; `npm test` extended and green (269/269)
+- [x] S1 — V1–V4 green, evidence pasted into § 11
+- [x] S1 — `f136-audit.js` committed to the scripts repo (`f1f90be`)
 - [ ] S2 — `docs/sql/f136-dedupe-catalog-months.sql` written, applied to staging, V5–V6 green
 - [ ] S2 — RPC wired into the new-month branch, reports its count
 - [ ] S3 — `docs/monthly-catalog-refresh.md` carries the revision-sweep step
@@ -381,4 +385,113 @@ a verification gate that only one session can run is not a gate.
 
 ## 11. Verification evidence
 
-*(empty — filled in by the executing sessions)*
+### S1 — 2026-08-22, staging (`puoaiyezsreowpwxzxhj`), scripts repo `main` `f1f90be`
+
+**Note on live-run tooling.** `import.js`/`import-staging.js`'s sequential prompts use a fresh
+`readline.createInterface` per question. Piping multi-line answers in one shot
+(`printf 'a\nb\n' | node import-staging.js ...`) delivers ALL lines to the FIRST prompt's listener
+in one stdin `data` event — only the first line is consumed, the rest are parsed and discarded
+internally by that one interface's own buffer before any later `question()` call exists to receive
+them. This is a stdlib `readline` behavior that only bites piped/scripted input (a human typing
+at a real terminal never hits it, since each line arrives well after the previous prompt's listener
+attached) — not a defect in the scripts. Confirmed with a byte-for-byte minimal repro before
+concluding this, and again after switching to a single persistent interface (same result either
+way — confirms it's not the create-per-question pattern specifically). Worked around with a
+throwaway Node driver (not committed) that waits for each prompt's own text to appear in the
+child's output before writing the next answer — timing-independent, no fixed delays.
+
+**V0 — F137, constructed.** Seeded one `catalog` row for `pw-56132e92`
+(`93b65c8d-b858-4b5b-beb9-6204752830c8`) at `catalog_month=2026-09` (staging's real max was
+2026-08 for every tenant, confirmed before seeding). Ran the literal Step 3 query text from both
+the unfixed (git HEAD, no tenant filter) and fixed (working tree, `tenant_id=eq.<raysandjudys>`)
+versions directly against live staging:
+  - Unfixed: `catalog?select=catalog_month&order=catalog_month.desc&limit=1` → `2026-09` (poisoned
+    by the seed — `isNewMonth` would compute `false` for a real September import: the exact FAIL
+    condition).
+  - Fixed: `catalog?tenant_id=eq.72e29f67-...&select=catalog_month&order=catalog_month.desc&limit=1`
+    → `2026-08` (correct; `isNewMonth` computes `true`).
+  Seed row deleted; teardown confirmed via live SELECT on `item_code=eq.F136-V0-SEED-DELETE-ME`
+  returning `[]`, and the global max confirmed back at `2026-08`. **GREEN.**
+
+**V1 — unit.** `inferCatalogMonth('no-month-here.csv') === null` (and three more no-match
+filenames); ISO- and MMYY-shaped filenames still parse correctly (regression guard). **GREEN**
+(`test/catalog-month-guards.test.mjs`).
+
+**V2 — unit + live.** Unit: `classifyLunarMonthMismatch(records, '2026-05')` over 1,353
+`0626`-prefixed fixture records returns `{ '0626': 1353 }`; full-agreement and mixed-batch cases
+also pass. **Live:** ran `import-staging.js` against `Lunar_Product_Data_0826.csv` paired with
+`2026_07_PRH_metadata_full_active.csv` (chosen so guard (a)'s filename-mismatch check does NOT
+fire, isolating the new guard), typed `2026-07` at the month prompt, then `no` at the Lunar
+mismatch prompt:
+```
+⚠️  LUNAR ITEM CODE / CONFIRMED MONTH MISMATCH:
+   Confirmed catalog month: 2026-07
+   • item codes prefixed "0826": 1514 record(s)
+Aborted on Lunar item-code / month mismatch.
+```
+Exit code 1, no upsert attempted. **GREEN.**
+
+**V3 — live, both cases.** Pair: `Lunar_Product_Data_0826.csv` + `2026_08_PRH_metadata_full_active.csv`.
+  - Confirming **2026-08** (the real matching month): collision check reported **4** incoming
+    items already existing under a different `catalog_month` — not the plan's literal "0", but
+    well under the 5% threshold (120 of 2,390), so the gate correctly did not fire. The 4 are
+    consistent with pre-existing incidental overlap in staging's already-documented duplicate
+    population (977 pairs) rather than a defect in the check itself. Full run (`--no-write`)
+    completed cleanly end to end: upsert (mocked), shipment import declined, notification email
+    declined.
+  - Confirming **2026-07** (deliberately wrong): passed guard (a) and guard (c) with `yes`, then
+    the collision pre-check reported:
+    ```
+    ⚠️  CROSS-MONTH COLLISION: 2393 of 2390 incoming record(s)
+       already exist in the catalog under a DIFFERENT catalog_month than "2026-07"
+       (threshold: 120, ~5%).
+    ```
+    (2393 > 2390 because a single incoming item can match more than one existing duplicate-month
+    row — staging already carries known duplicate groups spanning 3 months. Exceeds the plan's
+    rough "~1,500" estimate, but the assertion that matters — large count, gate fires — holds.)
+    Answered `no` → `Aborted on cross-month collision.`, exit 1, no upsert attempted. **GREEN.**
+
+**V4 — live, both cases, plus one constructed fixture.**
+  - Re-imported the **already-imported 2026-07 pair** unchanged (`Lunar_Product_Data_0726.csv` +
+    `2026_07_PRH_metadata_full_active.csv`, confirmed `2026-07`): report printed
+    `📅 No in-store-date changes on reserved titles.` — the branch that only fires when
+    `corrected`, `stranded`, AND `unreserved` are all empty. **corrected/stranded/unreserved = 0,
+    0, 0 — matches expectation exactly.**
+  - Re-imported the **2026-06 pair** (`Lunar_Product_Data_0626.csv` + `2026_06_PRH_metadata_full_active.csv`,
+    a genuine older-month backfill): same "No in-store-date changes" result — **`unreserved` read
+    0, not > 0.** Investigated rather than declared green: the 2026-08-21 manual backfill
+    (referenced in this doc's own root-cause section) ran this exact file through a REAL (non-dry-run)
+    import, which unconditionally upserts every incoming record's `on_sale_date` regardless of
+    reservation status. So the natural blind spot this session's C1 work targets had *already*
+    been closed by that prior real import — there was no live drift left on disk to detect,
+    which is a fact about the current data, not a defect in the new code.
+    **Constructed the case instead** (same pattern as V0, and for the same reason — "a check that
+    can't fail proves nothing"): identified a genuinely unreserved 2026-06 catalog row
+    (`A MISCHIEF OF MAGPIES #2 CVR A`, id `cce7bd86-...`, confirmed via a `preorders` lookup that
+    it holds zero reservations), manually set its `on_sale_date` to a deliberately stale
+    `2026-07-01` (real value: `2026-09-23`), then re-ran the same 2026-06 import:
+    ```
+    📌 1 unreserved title(s) changed in-store date on re-pull (F136):
+       • A MISCHIEF OF MAGPIES #2 CVR A MATIAS BERGARA: 2026-07-01 → 2026-09-23
+    ```
+    Exactly the seeded row, exactly the seeded from/to dates. Reverted the `on_sale_date` back to
+    `2026-09-23` and confirmed via live SELECT. **GREEN, via the constructed fixture** — the
+    natural-data case is legitimately 0 today given what the 2026-08-21 backfill already did, not
+    a failure of this session's change.
+
+**Test suite.** 269/269 green (63 new: 44 in `catalog-month-guards.test.mjs` +
+`reserved-date-drift.test.mjs`'s extension, 18 in `f136-audit.js`'s new suite, plus 1 export-parity
+check). `node --check` clean on `import.js`, `import-staging.js`, `f136-audit.js`.
+
+**Commits (scripts repo, `feature/f136-s1-catalog-month-guards` → `main` --ff-only, pushed):**
+- `3a1bede` — `fix(F137): scope Step 3 catalog-month detection query by tenant_id`
+- `e3c15e5` — `feat(F136): catalog-month entry guards (Part A) + unreserved drift detection (Part C1)`
+- `f1f90be` — `feat(F136): consolidated read-only catalog_month integrity audit tool`
+
+**Out-of-band discovery, reported not fixed:** `f136-audit.js`'s first live run found **1** live
+stranded reservation on staging (0 recorded on 2026-08-21) — a real reservation on "Disney Tim
+Burton's The Nightmare Before Christmas: All Hail the Pumpkin King #2" (`64557390089200211`, PRH)
+landed on the stale `2026-04` duplicate row instead of the maintained `2026-06` row sometime in
+the intervening day. This is a fresh, real instance of this finding's own Part 2 failure mode —
+not a new finding, not fixed here (repointing is Part D/S3, Rick-gated). Logged in
+`technical-reference.md` § 13 F136 "Where" and CLAUDE.md's F136 row.

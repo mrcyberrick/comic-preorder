@@ -12,22 +12,27 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F134 build session (`docs/f134-arrival-resolution.md`) — Part 1 (fulfilled
-path gets the same `hasShipmentEvidence()`/`ledgerRejected()` exits the unfulfilled path already
-has) + Part 2 (CHECK widened to add `'damaged'`, admin resolve control, My List copy for
-`not_arrived`/`damaged`) all built, deployed, and verified on staging. Gates V1–V6 green (V1/V2
-observed failing pre-fix, then green); a real bug caught by V5 (action-column chip still read
-"✓ Order placed" on a fulfilled damaged/not_arrived row) fixed same session. Full suite: 136/139,
-the 3 failures all attributed to the pre-existing F133 date-crossing defect, none touching F134's
-changed paths. **RESOLVED AND LIVE IN PRODUCTION 2026-08-21** — DB migration applied (Rick, SQL
-Editor — constraint-def query confirmed `'damaged'` in the allowed set on prod; a bogus-value-
-rejection check alone was run first but is insufficient proof, since 'bogus' fails under either the
-old or new constraint), client promoted via **PR #127** (`726f8df`), post-deploy write-smoke passed
-(Rick). **The write-smoke caught one real, unrelated bug** — My List's desktop cover `<img>` had no
-`onerror` fallback (pre-existing since 2026-02-23) — fixed same session on Rick's go-ahead, promoted
-via **PR #128** (`bfa687c`), verified live. Staging `eee537b`, docs `31d8912`+, main `bfa687c`,
-2026-08-20/21.
-**Next free finding ID:** **F138.**
+**Last completed work:** F136 S1 build session (`docs/f136-catalog-month-integrity.md`) — Part A
+(catalog-month entry guards: `inferCatalogMonth()` no longer silently guesses the current calendar
+month, returns `null` and requires an explicit typed month instead; new Lunar item-code MMYY-vs-
+confirmed-month cross-check; new distributor-agnostic cross-month collision pre-check, ~5%
+threshold) + Part C(1) (`classifyReservedDateDrift()` gains a third `unreserved` list — the blind
+spot where a stale date on a row nobody has reserved had zero detection) + **F137** (Step 3's
+month-detection query scoped by `tenant_id`, its own commit) + `f136-audit.js` (consolidated
+read-only diagnostic, replacing three scratchpad-only scripts from the planning session). All in
+the **private scripts repo** (`import.js`/`import-staging.js`), not `comic-preorder` — no app
+change in this session. 269/269 unit tests green (63 new); `node --check` clean on both scripts;
+both changed identically. **Gates V0–V4 all green on staging**, V0/V2/V3 observed against real live
+data including deliberately-wrong-month runs that correctly aborted; V4's natural-backfill case
+read 0 (the prior manual 2026-08-21 backfill had already corrected it) so a **constructed** fixture
+(one seeded stale unreserved date, torn down and verified after) demonstrated the code path
+correctly. Merged to `main` in the scripts repo (`f1f90be`) and pushed. **One live discovery, not
+acted on:** `f136-audit.js` found a NEW real stranded reservation on staging (0 on 2026-08-21,
+1 now) — exactly F136 Part 2's failure mode occurring live; repointing is Part D/S3, Rick-gated,
+correctly left untouched this session. **F137 fully RESOLVED.** F136 **S2** (the
+`dedupe_catalog_months()` RPC) is next; **S3** (prod repoints + prod dedupe) stays Rick-gated.
+2026-08-22.
+**Next free finding ID:** **F138** (unchanged — no new findings filed this session).
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -56,8 +61,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
 | F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **PRODUCTION REQUESTED 2026-08-21 (gate V8, in progress)** — `docs/sql/f132-order-requirement.sql` must run on prod BEFORE the next production import, or import.js 400s on every catalog upsert) |
-| F136 | **Medium-High** — a distributor's post-solicitation date revision has no detection path on an unreserved catalog row (49 reserved titles found silently stale in production alone before this session's fix); separately, 2,666 `(item_code, distributor)` pairs carry duplicate `catalog_month` rows (2,621 of them `{2026-05,2026-06}`), and 2 live reservations sit on the duplicate row the monthly import can never revisit again | Owner: `docs/f136-catalog-month-integrity.md` (PLANNED 2026-08-21, not started — three sessions S1/S2/S3). **Root cause identified 2026-08-21**: the June file was imported under `catalog_month=2026-05` (1,353 `0626` codes sit there), enabled by `inferCatalogMonth()` silently defaulting to the current calendar month. Cleanup needs **no** per-distributor canonical rule — highest-month row wins, unreferenced lower-month rows delete safely (prod 2,667/29, staging 997/1). **S1 is code-only + staging-only; § 8 flags the `import.js` collision with F115's held Sept-window work** |
-| F137 | **Medium** — the import scripts’ Step 3 catalog-month detection query carries **no tenant filter** and runs on the service-role key, so `currentDbMonth` is the newest month **across all tenants**. A secondary tenant a month ahead makes `isNewMonth` false for a genuinely new month, silently skipping archive + purge + delete_dropped with a successful-looking console. Latent today on both envs (correct only because the importing tenant holds the newest month) | Rides in **F136 S1** as its own commit (Rick, 2026-08-22) — one line in each script, in a function S1 already edits. Needs a **constructed** verification (seed a secondary-tenant row a month ahead on staging), since any check against today’s data passes before and after. See § 13 F137 |
+| F136 | **Medium-High** — a distributor's post-solicitation date revision has no detection path on an unreserved catalog row (49 reserved titles found silently stale in production alone before this session's fix); separately, 2,666 `(item_code, distributor)` pairs carry duplicate `catalog_month` rows (2,621 of them `{2026-05,2026-06}`), and 2 live reservations sit on the duplicate row the monthly import can never revisit again | Owner: `docs/f136-catalog-month-integrity.md` (IN PROGRESS — **S1 shipped 2026-08-22** on `main` in the scripts repo: entry guards + widened drift report + F137's fix, all live on staging code, V0-V4 green). **S2 next** (the `dedupe_catalog_months()` RPC, staging-only DB change); S3 (prod repoints + prod dedupe) stays Rick-gated. § 8 still flags the `import.js` collision with F115's held Sept-window work for S3 |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,
