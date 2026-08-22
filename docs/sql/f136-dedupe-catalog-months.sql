@@ -1,4 +1,8 @@
--- STATUS: staging=APPLIED 2026-08-22 | prod=NOT STARTED
+-- STATUS: staging=APPLIED 2026-08-22 | prod=APPLIED 2026-08-22 (F136 S3, via a
+--         separate production-only SQL session, not this file directly — see
+--         docs/f136-catalog-month-integrity.md and CLAUDE.md "prior work,
+--         same day" for the S3 record: catalog rows 12,087 -> 9,418, gates
+--         V7-V8 green, confirmed three independent ways)
 --         F136 S2. Steps 1-3 run by Rick on staging 2026-08-22. V5/V6 GREEN,
 --         confirmed independently via a fresh f136-audit.js run: catalog rows
 --         9,951 -> 8,954 (delta 997, exact match to the pre-run "safe" count);
