@@ -1750,34 +1750,23 @@ proof F16 was already closed before F127 added these two, and § 13 F127 for
 what they do.
 
 #### `subscriptions` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F138, F127)
-⚠️ **F138 (2026-08-22, IN PROGRESS) reverses the "no admin write policy"
-disposition documented below** — Rick asked for admins to fully manage a
-customer's subscriptions during impersonation. The migration
-(`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`)
-has **not yet been run on any environment** as of this writing — the list
-below is still what's live. Once applied, `admins view tenant subscriptions`
-(SELECT) is replaced by `admins manage tenant subscriptions` (ALL), same
-predicate. Do not trust the "No admin write policy" framing below until
-F138's staging gate confirms the migration ran — see § 13 F138.
-
 - `users manage own subscriptions` — PERMISSIVE, ALL, `auth.uid() = user_id AND tenant_id = current_tenant_id()`
-- `admins view tenant subscriptions` — PERMISSIVE, SELECT, `tenant_id = current_tenant_id() AND current_user_is_admin()`
+- `admins manage tenant subscriptions` — PERMISSIVE, ALL, `current_user_is_admin() AND tenant_id = current_tenant_id()` (both `USING` and `WITH CHECK`) — added by F138 (2026-08-22), replacing the prior SELECT-only `admins view tenant subscriptions`
 - `blocked accounts cannot create subscriptions` — RESTRICTIVE, INSERT, `WITH CHECK current_user_is_active()` (F127)
 - `blocked accounts cannot change subscriptions` — RESTRICTIVE, UPDATE, `USING (true)`, `WITH CHECK current_user_is_active()` (F127)
-- ~~No admin write policy — deliberate, not a gap.~~ **Superseded by F138
-  (2026-08-22).** Rick originally decided 2026-08-10 (F128) that admins get
-  no permission to unsubscribe on a customer's behalf, and the client-side
-  impersonation guard was the whole fix for that finding. Rick reversed that
-  decision 2026-08-22 (F138): admins now get full write access, scoped to
-  their own tenant, matching how `preorders`' admin policy already works.
-  §7.1's general claim that "admins use impersonation to manage on behalf of
-  users" — which F128 had called wrong for this table specifically — is
-  correct again once F138 lands.
+- **Admin write access is intentional (F138, 2026-08-22), reversing F128's
+  2026-08-10 "no" and its "do not add this later" note.** Rick asked for
+  full admin management (subscribe + unsubscribe) of a customer's
+  subscriptions during impersonation, matching how `preorders`' admin
+  policy already works. §7.1's general claim that "admins use impersonation
+  to manage on behalf of users" — which F128 had called wrong for this
+  table specifically — is correct again as of this policy.
 
-✅ **Verified live 2026-08-18 on both environments** — matches the policy list
-above exactly (pre-F138 state); no third PERMISSIVE policy, no admin write
-policy. **Not yet re-verified post-F138** — re-audit both environments after
-each migration run and update this line.
+✅ **Verified live on staging 2026-08-22** (F138 migration confirmed via
+`pg_policies`: exactly the 4 policies above, `admins manage tenant
+subscriptions` PERMISSIVE ALL `{authenticated}` in place of the old SELECT
+policy). **Production not yet run** — this section describes staging only
+until F138's production gate closes.
 
 #### `reservation_history` (see F17)
 - `users view own history` — SELECT where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
@@ -4459,7 +4448,9 @@ reasoning — only the disposition changed, not the diagnosis.
 
 - **Status:** filed 2026-08-22, Rick's explicit request. **IN PROGRESS** —
   client code done on branch `feature/f138-admin-subscription-management-impersonation`;
-  RLS migration written but **not yet run on any environment**.
+  RLS migration **run and verified on staging 2026-08-22** (V1 green, below).
+  Not yet merged to staging (V2-V4 + smoke gate still open), not yet run on
+  production.
 - **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
   with no admin write policy, on Rick's explicit "no" to admins
   unsubscribing customers during impersonation — see that entry's "Do not
@@ -4498,6 +4489,11 @@ reasoning — only the disposition changed, not the diagnosis.
     policies (§ 7.1 subscriptions); post-migration query shows
     `admins manage tenant subscriptions` (ALL) in place of the old SELECT
     policy, 4 policies total.
+    **GREEN 2026-08-22** — Rick ran the migration on staging; post-check
+    `pg_policies` read matches exactly: `admins manage tenant subscriptions`
+    (PERMISSIVE, ALL, `{authenticated}`), the two F127 RESTRICTIVE policies,
+    and `users manage own subscriptions` — 4 rows, no leftover SELECT-only
+    admin policy.
   - V2 — functional, from the app: admin impersonates a customer, subscribes
     them to a series from the reserved-suggestions list, confirms (via
     PostgREST or SQL Editor) the row's `user_id` is the **customer's**, not
@@ -4510,11 +4506,11 @@ reasoning — only the disposition changed, not the diagnosis.
     session still can't subscribe to new series but can still unsubscribe
     (F127-style client gate, untouched by this finding).
   - Full `run-smoke.ps1` green before any production promotion request.
-- **Docs to update once staging V1 confirms the migration is live:** § 7.1
-  subscriptions policy list above (remove the ⚠️ pending note, mark
-  "Verified live" with the date), `docs/subscription-reserved-suggestions.md`
-  § 4c (superseded pointer already added), CLAUDE.md § Series Subscriptions
-  (impersonation bullet already updated to match the new behavior).
+- **Docs updated for V1 (2026-08-22):** § 7.1 subscriptions policy list above
+  (pending note removed, "Verified live on staging" with date),
+  `docs/subscription-reserved-suggestions.md` § 4c (superseded pointer),
+  CLAUDE.md § Series Subscriptions (impersonation bullet updated to match
+  the new behavior).
 - **Related:** **F128** (the decision this reverses), **F16**/**F127**
   (the `preorders` admin-policy pattern this mirrors), **F58** (same
   silent-no-op shape on `user_profiles`, unrelated table, not in scope
