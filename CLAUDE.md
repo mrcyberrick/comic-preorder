@@ -12,26 +12,32 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F136 S1 build session (`docs/f136-catalog-month-integrity.md`) — Part A
-(catalog-month entry guards: `inferCatalogMonth()` no longer silently guesses the current calendar
-month, returns `null` and requires an explicit typed month instead; new Lunar item-code MMYY-vs-
-confirmed-month cross-check; new distributor-agnostic cross-month collision pre-check, ~5%
-threshold) + Part C(1) (`classifyReservedDateDrift()` gains a third `unreserved` list — the blind
-spot where a stale date on a row nobody has reserved had zero detection) + **F137** (Step 3's
-month-detection query scoped by `tenant_id`, its own commit) + `f136-audit.js` (consolidated
-read-only diagnostic, replacing three scratchpad-only scripts from the planning session). All in
-the **private scripts repo** (`import.js`/`import-staging.js`), not `comic-preorder` — no app
-change in this session. 269/269 unit tests green (63 new); `node --check` clean on both scripts;
-both changed identically. **Gates V0–V4 all green on staging**, V0/V2/V3 observed against real live
-data including deliberately-wrong-month runs that correctly aborted; V4's natural-backfill case
-read 0 (the prior manual 2026-08-21 backfill had already corrected it) so a **constructed** fixture
-(one seeded stale unreserved date, torn down and verified after) demonstrated the code path
-correctly. Merged to `main` in the scripts repo (`f1f90be`) and pushed. **One live discovery, not
-acted on:** `f136-audit.js` found a NEW real stranded reservation on staging (0 on 2026-08-21,
-1 now) — exactly F136 Part 2's failure mode occurring live; repointing is Part D/S3, Rick-gated,
-correctly left untouched this session. **F137 fully RESOLVED.** F136 **S2** (the
-`dedupe_catalog_months()` RPC) is next; **S3** (prod repoints + prod dedupe) stays Rick-gated.
+**Last completed work:** F136 S2 build session (`docs/f136-catalog-month-integrity.md`) — Part B:
+the `dedupe_catalog_months(p_tenant_id uuid)` RPC (`docs/sql/f136-dedupe-catalog-months.sql`),
+implementing the § 3(b) rule (delete every row below a duplicate group's highest `catalog_month`
+that no `preorders` row references, any fulfilled state), `service_role`-only grants. Applied to
+**staging only** by Rick in the Supabase SQL Editor, then wired into `refreshCatalog()`'s new-month
+branch in both `import.js`/`import-staging.js` immediately after `purge_stale_catalog`, as a
+deliberately separate call (purge is date-driven, this isn't) — scripts repo `main` `7a8d6a1`.
+269/269 unit tests green, unchanged (checked first per the handoff's own conditional: no existing
+test covers `purge_stale_catalog`'s call-site shape to mirror, so nothing to extend). **Gates V5–V6
+green**, confirmed two independent ways — Rick's own SQL Editor post-verify, and this session's own
+fresh `f136-audit.js` re-run: staging catalog rows went **9,951 → 8,954 (delta exactly 997)**,
+duplicate pairs **977 → 1**, safe/blocked **997/1 → 0/1**, preorder counts unchanged (**56/22/34**
+total/unfulfilled/fulfilled, before and after). The live-stranded reservation S1 found (Nightmare
+Before Christmas #2) is confirmed still present, still referenced, still exactly as stranded as
+before — dedup does not un-strand a row a preorder still points at; repointing is Part D/S3,
+correctly left untouched this session. Doc-only commit `29780a8` to `staging` (comic-preorder).
+**F136 S3** (the 2 prod repoints + prod dedupe) is next, Rick-gated.
 2026-08-22.
+
+Prior session (same day): **F136 S1** — Part A (catalog-month entry guards: `inferCatalogMonth()`
+no longer silently guesses the current calendar month, returns `null` and requires an explicit
+typed month instead; new Lunar item-code MMYY-vs-confirmed-month cross-check; new
+distributor-agnostic cross-month collision pre-check, ~5% threshold) + Part C(1)
+(`classifyReservedDateDrift()` gains a third `unreserved` list) + **F137** (Step 3's month-detection
+query scoped by `tenant_id`) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
+**F137 fully RESOLVED.**
 **Next free finding ID:** **F138** (unchanged — no new findings filed this session).
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
@@ -61,7 +67,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
 | F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **PRODUCTION REQUESTED 2026-08-21 (gate V8, in progress)** — `docs/sql/f132-order-requirement.sql` must run on prod BEFORE the next production import, or import.js 400s on every catalog upsert) |
-| F136 | **Medium-High** — a distributor's post-solicitation date revision has no detection path on an unreserved catalog row (49 reserved titles found silently stale in production alone before this session's fix); separately, 2,666 `(item_code, distributor)` pairs carry duplicate `catalog_month` rows (2,621 of them `{2026-05,2026-06}`), and 2 live reservations sit on the duplicate row the monthly import can never revisit again | Owner: `docs/f136-catalog-month-integrity.md` (IN PROGRESS — **S1 shipped 2026-08-22** on `main` in the scripts repo: entry guards + widened drift report + F137's fix, all live on staging code, V0-V4 green). **S2 next** (the `dedupe_catalog_months()` RPC, staging-only DB change); S3 (prod repoints + prod dedupe) stays Rick-gated. § 8 still flags the `import.js` collision with F115's held Sept-window work for S3 |
+| F136 | **Medium-High** — a distributor's post-solicitation date revision has no detection path on an unreserved catalog row (49 reserved titles found silently stale in production alone before this session's fix); separately, 2,666 `(item_code, distributor)` pairs carry duplicate `catalog_month` rows (2,621 of them `{2026-05,2026-06}`), and 2 live reservations sit on the duplicate row the monthly import can never revisit again | Owner: `docs/f136-catalog-month-integrity.md` (IN PROGRESS — **S1+S2 shipped 2026-08-22**: S1 entry guards + widened drift report + F137's fix on `main` in the scripts repo, V0-V4 green; S2 `dedupe_catalog_months()` RPC applied to staging + wired into `refreshCatalog()`, V5-V6 green — staging duplicate pairs 977→1, only the pre-existing blocked/stranded row remains). **S3 next** (2 prod repoints + prod dedupe), Rick-gated. § 8 still flags the `import.js` collision with F115's held Sept-window work for S3 |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,

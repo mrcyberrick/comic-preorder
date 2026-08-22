@@ -1,7 +1,13 @@
--- STATUS: staging=PENDING | prod=NOT STARTED
---         F136 S2. Update the staging half of this line to APPLIED the moment
---         Step 1 (CREATE FUNCTION) runs, and again once Step 3 (the actual
---         dedupe invocation) has been run and V5/V6 read green. (F105) A gate
+-- STATUS: staging=APPLIED 2026-08-22 | prod=NOT STARTED
+--         F136 S2. Steps 1-3 run by Rick on staging 2026-08-22. V5/V6 GREEN,
+--         confirmed independently via a fresh f136-audit.js run: catalog rows
+--         9,951 -> 8,954 (delta 997, exact match to the pre-run "safe" count);
+--         duplicate pairs 977 -> 1 (only the pre-existing blocked group
+--         remains); safe/blocked 997/1 -> 0/1 (blocked row untouched, exactly
+--         as stranded as before -- dedupe does not un-strand a REFERENCED
+--         row, see plan § 11 S2). Preorder counts unchanged, 56/22/34 total/
+--         unfulfilled/fulfilled before and after (Rick, SQL Editor). Prod run
+--         is Part D/S3, Rick-gated, not this file's scope. (F105) A gate
 --         that lives only in prose gets missed — F6 sat unapplied on
 --         production for 13 days because nothing machine-readable said so.
 -- ============================================================================

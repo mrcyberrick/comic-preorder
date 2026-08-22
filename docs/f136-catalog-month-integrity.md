@@ -1,11 +1,13 @@
 # F136 — catalog_month integrity: stale-date detection + duplicate-row cleanup
 
-**STATUS:** IN PROGRESS | staging=2026-08-22 (S1 only, code) | prod=— | findings=F136,F137,F122,F110,F115
+**STATUS:** IN PROGRESS | staging=2026-08-22 (S1+S2, code+DB) | prod=— | findings=F136,F137,F122,F110,F115
 **Status:** **S1 COMPLETE 2026-08-22** — Part A (all three entry guards) + Part C(1) (widened
 `unreserved` drift list) + F137 (own commit) + `f136-audit.js` all shipped to the scripts repo
 `main` (`f1f90be`), staging code only, no DB migration, no production touch. Gates V0-V4 all
-green — see § 11. **S2** (`dedupe_catalog_months()` RPC, staging DB) is next; **S3** (prod
-repoints + prod dedupe) stays Rick-gated. Originally written 2026-08-21 in a planning session that
+green — see § 11. **S2 COMPLETE 2026-08-22** — the `dedupe_catalog_months()` RPC
+(`docs/sql/f136-dedupe-catalog-months.sql`) applied to staging by Rick and wired into
+`refreshCatalog()`'s new-month branch (scripts repo `main` `7a8d6a1`). Gates V5-V6 green — see
+§ 11. **S3** (prod repoints + prod dedupe) stays Rick-gated, next. Originally written 2026-08-21 in a planning session that
 also **identified the root cause F136 was filed without** (§ 2) and **corrected two statements in
 the filed finding** (§ 3). All measurements in §§ 2-4 are the *original* read-only GETs from
 2026-08-21 against live staging *and* live production; § 11's are S1's own, from 2026-08-22.
@@ -374,8 +376,8 @@ a verification gate that only one session can run is not a gate.
 - [x] S1 — both scripts changed identically; `node --check` clean; `npm test` extended and green (269/269)
 - [x] S1 — V1–V4 green, evidence pasted into § 11
 - [x] S1 — `f136-audit.js` committed to the scripts repo (`f1f90be`)
-- [ ] S2 — `docs/sql/f136-dedupe-catalog-months.sql` written, applied to staging, V5–V6 green
-- [ ] S2 — RPC wired into the new-month branch, reports its count
+- [x] S2 — `docs/sql/f136-dedupe-catalog-months.sql` written, applied to staging, V5–V6 green
+- [x] S2 — RPC wired into the new-month branch, reports its count
 - [ ] S3 — `docs/monthly-catalog-refresh.md` carries the revision-sweep step
 - [ ] S3 — 2 prod reservations repointed, V7 green
 - [ ] S3 — prod dedupe run, V8 green
@@ -495,3 +497,68 @@ landed on the stale `2026-04` duplicate row instead of the maintained `2026-06` 
 the intervening day. This is a fresh, real instance of this finding's own Part 2 failure mode —
 not a new finding, not fixed here (repointing is Part D/S3, Rick-gated). Logged in
 `technical-reference.md` § 13 F136 "Where" and CLAUDE.md's F136 row.
+
+### S2 — 2026-08-22, staging (`puoaiyezsreowpwxzxhj`)
+
+**Pre-run baseline**, `f136-audit.js` re-run fresh at the start of this session (not trusted from
+S1's snapshot): **977 duplicate pairs, all PRH**, dominant set `{2026-04,2026-06}` (919); **997
+safe / 1 blocked** under the § 3(b) rule; 9,951 total catalog rows for the tenant; preorders
+56 total / 22 unfulfilled / 34 fulfilled.
+
+**B1 — `docs/sql/f136-dedupe-catalog-months.sql` written.** `dedupe_catalog_months(p_tenant_id
+uuid)`, `LANGUAGE sql SECURITY DEFINER`, matching `purge_old_usage_events.sql`'s precedent
+(closest sibling: tenant-scoped, service-role-only, bulk DELETE-and-count) rather than
+`purge_stale_catalog`'s older `plpgsql` shape. Grants: `service_role` only, `anon`/`authenticated`
+explicitly revoked (F124 — Supabase auto-grants both on function creation; `REVOKE … FROM PUBLIC`
+alone does not remove them). File structured as four watched steps (create, dry-run preview,
+invoke, post-verify) rather than one pasteable block, per CLAUDE.md's "a verification step that
+cannot fail is not one" — the dry-run preview runs the identical predicate as the DELETE so it
+cannot silently drift from what Step 3 actually does.
+
+**B2 — applied to staging by Rick**, Supabase SQL Editor, 2026-08-22. Step 1 (CREATE FUNCTION +
+grants) ran clean. Step 3 (the invocation) ran against the staging `raysandjudys` tenant.
+
+**B3 — wired into `refreshCatalog()`'s new-month branch**, both scripts, immediately after the
+`purge_stale_catalog` call inside the `isNewMonth` block, reporting its delete count the same way
+purge's is reported. Deliberately a separate call, not folded into purge (plan § 4 Part B
+rationale — purge is date-driven, this isn't). Commit `7a8d6a1` (scripts repo, `feature/f136-s2-
+dedupe-catalog-months` → `main`, `--ff-only`), pushed.
+
+**B4 — unit suite extension: none, correctly.** Checked first per the handoff's own conditional:
+no existing test covers `purge_stale_catalog`'s call-site shape or its `isNewMonth` gating to
+mirror — `refreshCatalog()` is not exported from either script and nothing in `test/` mocks
+`writeFetch`. 269/269 green, unchanged from S1. `node --check` clean on both scripts.
+
+**V5 — the dedupe refuses referenced rows. GREEN.** Confirmed two independent ways:
+1. Rick's Step 3 invocation and post-verify, staging SQL Editor.
+2. This session's own fresh `f136-audit.js` run immediately after, read-only against live
+   staging: catalog rows for the tenant went **9,951 → 8,954, delta exactly 997** — matching the
+   pre-run "safe" count precisely, not approximately. Duplicate pairs went **977 → 1**; the one
+   surviving pair is the pre-existing blocked group (`64557390089200211`, PRH — Nightmare Before
+   Christmas #2), confirmed still present at both its `2026-04` (referenced) and `2026-06`
+   (maintained) rows. Safe/blocked went **997/1 → 0/1** — the blocked count is unchanged, exactly
+   as expected: the maintained row is never a delete candidate, and the blocked row's own group had
+   exactly one deletable sibling once, which is now the only survivor's month-pair `{2026-04,
+   2026-06}` — i.e. dedup correctly left the referenced row's entire group alone beyond removing
+   nothing else in it, because there was nothing else in it to remove.
+   *Failure would have looked like:* a delta other than 997, a duplicate-pair count other than 1,
+   or either of the two named catalog rows missing. None occurred.
+
+**V6 — reservations are intact. GREEN.** Preorder counts for the tenant, before and after Step 3,
+identical: **56 total / 22 unfulfilled / 34 fulfilled** (Rick, SQL Editor post-verify; independently
+re-confirmed by this session's `f136-audit.js` re-run, which also fetches the full `preorders` set
+and found the same 56 rows). *Failure would have looked like:* any of the three numbers moving.
+
+**Confirming the plan doc's own handoff reasoning against the live result (§ S2 handoff note):**
+correct as predicted — dedupe alone does not un-strand a REFERENCED row. Post-dedupe, the Nightmare
+Before Christmas reservation shows **0** duplicate-group siblings deleted under it (there were none
+to delete — its group's only other member is the one blocked row itself, which the DELETE's own
+predicate excludes), and it remains exactly as stranded as before: `f136-audit.js` still reports it
+under "STRANDED (not on the maintained/highest-month row)". Repointing it is Part D/S3, still
+untouched, still Rick-gated.
+
+**Commits:**
+- `29780a8` (comic-preorder, `staging`) — `docs(F136): S2 dedupe_catalog_months() RPC — staging
+  migration, not yet applied` (written before Rick ran it; superseded by this section)
+- `7a8d6a1` (scripts repo, `main`) — `feat(F136): wire dedupe_catalog_months() into
+  refreshCatalog's new-month branch`
