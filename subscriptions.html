@@ -385,9 +385,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   // RLS boundary. Do not describe it as a hard block.
   //
   // Unsubscribe stays enabled while blocked (Rick 2026-08-10) — a blocked
-  // customer must still be able to leave a series. This composes with, and
-  // does not replace, the AdminContext impersonation guard on .unsub-btn
-  // (F128) — see the click handler below.
+  // customer must still be able to leave a series. Independent of admin
+  // write access (F138, 2026-08-22) — a blocked customer's own unsubscribe
+  // path is unaffected by that change.
   const isPending = !profile?.is_admin && profile?.status === 'pending';
   const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
   const isBlocked = isPending || isPaused;
@@ -471,8 +471,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
   // Build one suggestion per unsubscribed series from the customer's own
   // reservations — always-on, regardless of subscription count. In admin
-  // impersonation this reflects the impersonated customer's reservations
-  // (subscribe buttons render disabled). Preorders.getMy is ordered
+  // impersonation this reflects the impersonated customer's reservations,
+  // and (F138, 2026-08-22) the Subscribe buttons are live — the admin can
+  // subscribe the customer directly from here. Preorders.getMy is ordered
   // created_at desc, so the first occurrence per series is the most recent
   // reservation and Map insertion order gives the recency sort for free.
   async function buildSuggestions() {
@@ -522,7 +523,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
       <div class="reserved-suggestions-section">
         <div class="popular-series-header">📚 Series you're already reading</div>
         <p class="popular-series-note">${AdminContext.isActive()
-          ? 'Series this customer has reserved — subscribe is unavailable while impersonating.'
+          ? "Series this customer has reserved — subscribe on their behalf and it's auto-reserved every month."
           : isBlocked
             ? (isPaused
                 ? "Series you've reserved — subscribing is paused while your account is on hold."
@@ -550,9 +551,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
                   ${s.subscribed
                     ? '<span style="font-size:0.78rem;color:var(--success)">★ Subscribed</span>'
                     : `<button class="btn btn-primary btn-sm rsv-sub-btn" data-key="${escapeHtml(s.key)}"${
-                         AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"'
-                         : isBlocked ? ` disabled title="${escapeHtml(BLOCKED_TITLE)}"`
-                         : ''
+                         isBlocked ? ` disabled title="${escapeHtml(BLOCKED_TITLE)}"` : ''
                        }>☆ Subscribe</button>`}
                 </div>
               </div>`;
@@ -562,14 +561,18 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
     suggestEl.querySelectorAll('.rsv-sub-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (AdminContext.isActive()) return; // belt-and-braces; buttons render disabled
         if (isBlocked) return; // belt-and-braces; buttons render disabled — status gate, composes with the guard above (F127-style, client-side only)
         const s = suggestions.find(x => x.key === btn.dataset.key);
         if (!s || s.subscribed) return;
         btn.disabled = true;
         btn.textContent = 'Subscribing…';
+        // F138 (2026-08-22): writes route through the impersonated customer's
+        // id, not the admin's own — admins now have write access to
+        // subscriptions (see docs/sql/2026-08-22-f138-...sql), so this must
+        // land on the customer's row, not the admin's.
+        const targetUserId = AdminContext.resolveUserId(user.id);
         const { error } = await Subscriptions.subscribe(
-          user.id, s.series_name, s.distributor, s.format || null, 'reserved_suggestion'
+          targetUserId, s.series_name, s.distributor, s.format || null, 'reserved_suggestion'
         );
         if (error) {
           toast('Failed to subscribe', 'error');
@@ -587,7 +590,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
         renderSuggestions(); // row flips to ★ Subscribed; remaining rows persist
         renderSubs();        // subscriptions table below picks up the new row
         toastAction(`Subscribed to ${s.series_name}!`, 'Undo', async () => {
-          const { error: undoErr } = await Subscriptions.unsubscribe(user.id, s.series_name, s.distributor);
+          const { error: undoErr } = await Subscriptions.unsubscribe(targetUserId, s.series_name, s.distributor);
           if (undoErr) { toast('Failed to undo', 'error'); return; }
           s.subscribed = false;
           allSubs = allSubs.filter(x =>
@@ -647,9 +650,7 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
               <td style="text-align:right">
                 <button class="btn btn-danger btn-sm unsub-btn"
                   data-series="${escapeHtml(sub.series_name)}"
-                  data-distributor="${escapeHtml(sub.distributor)}"${
-                    AdminContext.isActive() ? ' disabled title="Unavailable while impersonating"' : ''
-                  }>
+                  data-distributor="${escapeHtml(sub.distributor)}">
                   Unsubscribe
                 </button>
               </td>
@@ -661,13 +662,13 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     // Unsubscribe buttons
     container.querySelectorAll('.unsub-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        // Admins have no write permission on subscriptions by design (Rick,
-        // 2026-08-10): there is no admin write policy on the table, so an
-        // impersonated DELETE is filtered to zero rows by RLS and PostgREST
-        // still returns success — the toast below would report a change that
-        // did not happen. Buttons render disabled above; this is belt-and-
-        // braces, matching the subscribe paths. See F128.
-        if (AdminContext.isActive()) return;
+        // F128 (2026-08-10) originally blocked this during impersonation:
+        // admins had no write policy on subscriptions, so an impersonated
+        // DELETE was filtered to zero rows by RLS while PostgREST still
+        // reported success. F138 (2026-08-22) reverses that at Rick's
+        // request — admins now have a write policy scoped to their own
+        // tenant (docs/sql/2026-08-22-f138-...sql), so this DELETE lands
+        // for real.
         if (!(await confirmDialog(`Unsubscribe from "${btn.dataset.series}"?`))) return;
         btn.disabled = true;
         const targetUserId = AdminContext.resolveUserId(user.id);
@@ -692,17 +693,18 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
   // ── Series Search ──────────────────────────────────────────
   // Queries the catalog for matching series names (standard covers only)
-  // and lets the customer subscribe directly from the results.
-  // Skips search in admin impersonation context — subscribe button is hidden there.
+  // and lets the customer (or, per F138, an admin on their behalf) subscribe
+  // directly from the results. The subscribe path below already routed
+  // through AdminContext.resolveUserId(user.id) before F138 — only this
+  // input-level gate blocked it during impersonation.
   const searchInput   = document.getElementById('search');
   const resultsPanel  = document.getElementById('search-results-panel');
 
-  if (AdminContext.isActive()) {
-    searchInput.disabled = true;
-    searchInput.placeholder = 'Series search unavailable in admin context';
-  } else if (isBlocked) {
+  if (isBlocked) {
     searchInput.disabled = true;
     searchInput.placeholder = BLOCKED_TITLE;
+  } else if (AdminContext.isActive()) {
+    searchInput.placeholder = "Search series to subscribe this customer";
   }
 
   async function searchSeries(query) {

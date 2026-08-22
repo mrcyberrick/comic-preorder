@@ -1749,23 +1749,35 @@ they cannot widen it the way a third PERMISSIVE policy would. See
 proof F16 was already closed before F127 added these two, and § 13 F127 for
 what they do.
 
-#### `subscriptions` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F128, F127)
+#### `subscriptions` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F138, F127)
+⚠️ **F138 (2026-08-22, IN PROGRESS) reverses the "no admin write policy"
+disposition documented below** — Rick asked for admins to fully manage a
+customer's subscriptions during impersonation. The migration
+(`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`)
+has **not yet been run on any environment** as of this writing — the list
+below is still what's live. Once applied, `admins view tenant subscriptions`
+(SELECT) is replaced by `admins manage tenant subscriptions` (ALL), same
+predicate. Do not trust the "No admin write policy" framing below until
+F138's staging gate confirms the migration ran — see § 13 F138.
+
 - `users manage own subscriptions` — PERMISSIVE, ALL, `auth.uid() = user_id AND tenant_id = current_tenant_id()`
 - `admins view tenant subscriptions` — PERMISSIVE, SELECT, `tenant_id = current_tenant_id() AND current_user_is_admin()`
 - `blocked accounts cannot create subscriptions` — RESTRICTIVE, INSERT, `WITH CHECK current_user_is_active()` (F127)
 - `blocked accounts cannot change subscriptions` — RESTRICTIVE, UPDATE, `USING (true)`, `WITH CHECK current_user_is_active()` (F127)
-- No admin write policy — **deliberate, not a gap.** Rick decided 2026-08-10
-  (F128) that admins get no permission to unsubscribe on a customer's behalf;
-  the client-side impersonation guard is the whole fix for that finding.
-  Admins otherwise use impersonation (`AdminContext`) to act on behalf of
-  users, but this table's read-only admin access is a correction to §7.1's
-  own prior wording, flagged by F128 and applied here 2026-08-18: it is not
-  true generally that "admins use impersonation to manage on behalf of users"
-  for this table specifically.
+- ~~No admin write policy — deliberate, not a gap.~~ **Superseded by F138
+  (2026-08-22).** Rick originally decided 2026-08-10 (F128) that admins get
+  no permission to unsubscribe on a customer's behalf, and the client-side
+  impersonation guard was the whole fix for that finding. Rick reversed that
+  decision 2026-08-22 (F138): admins now get full write access, scoped to
+  their own tenant, matching how `preorders`' admin policy already works.
+  §7.1's general claim that "admins use impersonation to manage on behalf of
+  users" — which F128 had called wrong for this table specifically — is
+  correct again once F138 lands.
 
-✅ **Verified live 2026-08-18 on both environments** — matches this list
-exactly; no third PERMISSIVE policy, no admin write policy (confirming F128's
-disposition still holds).
+✅ **Verified live 2026-08-18 on both environments** — matches the policy list
+above exactly (pre-F138 state); no third PERMISSIVE policy, no admin write
+policy. **Not yet re-verified post-F138** — re-audit both environments after
+each migration run and update this line.
 
 #### `reservation_history` (see F17)
 - `users view own history` — SELECT where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
@@ -4256,6 +4268,12 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F128 — impersonated unsubscribe silently no-ops and reports success to the admin
 
+⚠️ **Reversed by F138 (2026-08-22, Rick's request).** This entry's "no admin
+write policy — do not add one later" disposition no longer holds; see F138
+for the reversal, its migration, and its client-code changes. Left below
+unedited as the historical record of the original decision and its
+reasoning — only the disposition changed, not the diagnosis.
+
 - **Status:** filed **and RESOLVED 2026-08-10** — **LIVE IN PRODUCTION 2026-08-11** via PR #117 (`230d84b`); post-deploy write-smoke passed. **Rick's decision settled the product question the fix depended on: admins get NO permission to unsubscribe on a customer's behalf.** So the missing admin write policy on `subscriptions` is **correct, not a gap** — it is now a documented design property rather than an oversight, and the fix is the client half only. **No DDL, no policy change, no RLS work.** Anyone later "fixing" the missing policy would be reversing a decision, not closing a hole.
 - **Fix applied (`subscriptions.html`, client-only).** Two changes mirroring the precedent the *subscribe* paths already used at `:490`: the `.unsub-btn` now renders `disabled title="Unavailable while impersonating"` when `AdminContext.isActive()`, and the click handler early-returns on the same condition as belt-and-braces (matching `:500`). Disabled, **not hidden** — the existing convention on this page. Verified: inline script parses clean.
 - **The finding's own caveat was discharged before editing.** It was filed read-from-code and flagged *"confirm empirically before fixing"*. The code was re-read at the fix: the button markup carried no guard, and the handler called `AdminContext.resolveUserId(user.id)` then treated `error === null` as success — filtering `allSubs` locally and toasting. Confirmed as filed. The *runtime* no-op was still not probed, but that no longer gates anything: the guard is correct whether or not RLS discards the DELETE, because admins are not supposed to make this write at all.
@@ -4437,7 +4455,72 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `catalogs/scripts/import.js` ~1789, `catalogs/scripts/import-staging.js` ~1781 — the Step 3 `monthRes` fetch inside the `isNewMonth`/`isOlderMonth` detection block.
 - **Related:** **F136** (owner plan `docs/f136-catalog-month-integrity.md`; the fix rides in its S1), **F110** (single-month scope blind spot), **F122** (the drift report F136 S1 also widens), **F15**/**F20** (tenant-isolation coverage — Playwright specs assert the app's isolation, but the import scripts run outside RLS and have no equivalent).
 
-Next free finding ID: **F138**.
+#### F138 — reverses F128: admins now get write access to `subscriptions` so impersonation can fully manage a customer's subscriptions
+
+- **Status:** filed 2026-08-22, Rick's explicit request. **IN PROGRESS** —
+  client code done on branch `feature/f138-admin-subscription-management-impersonation`;
+  RLS migration written but **not yet run on any environment**.
+- **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
+  with no admin write policy, on Rick's explicit "no" to admins
+  unsubscribing customers during impersonation — see that entry's "Do not
+  add an admin write policy to `subscriptions` later." Rick reversed that
+  2026-08-22: admin impersonation should manage a customer's subscriptions
+  the same way it already manages their preorders (subscribe **and**
+  unsubscribe on the customer's behalf), not just view them.
+- **DB half.** New PERMISSIVE ALL policy `admins manage tenant subscriptions`
+  (`current_user_is_admin() AND tenant_id = current_tenant_id()`, same
+  predicate for `USING`/`WITH CHECK`) replaces the old SELECT-only `admins
+  view tenant subscriptions`, keeping the same 4-policy shape `preorders`
+  already has. Migration:
+  `docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`
+  — staging first, production only after Rick confirms staging is green.
+- **Client half (`subscriptions.html`).** Removed the three impersonation
+  guards F128 added / that predate it: the reserved-suggestions Subscribe
+  button's `disabled` state and its click-handler early return, the main
+  table's Unsubscribe button's `disabled` state and its click-handler early
+  return, and the series-search input's impersonation disable. Fixed two
+  write-target bugs uncovered while re-enabling the suggestions path: its
+  subscribe call and its Undo-toast unsubscribe call were passing `user.id`
+  (the admin's own id) instead of `AdminContext.resolveUserId(user.id)` —
+  harmless while the buttons were disabled and unreachable, but would have
+  written to the admin's own subscriptions instead of the customer's the
+  moment they were enabled. The series-search subscribe path already used
+  `resolveUserId` correctly (F128 never touched it; only the input-disable
+  blocked it), so it needed no write-target fix, just the gate removed.
+- **Sequencing risk, deliberately avoided.** The client fix alone, pushed
+  ahead of the DB migration, would silently reproduce F128's exact bug
+  shape (a write reported as successful that RLS actually filtered to zero
+  rows) — for subscribe as well as unsubscribe this time. **Do not merge
+  this branch to staging until the migration has been run and verified on
+  staging.**
+- **Verification gates (staging):**
+  - V1 — migration pre-flight query shows the expected 4 pre-migration
+    policies (§ 7.1 subscriptions); post-migration query shows
+    `admins manage tenant subscriptions` (ALL) in place of the old SELECT
+    policy, 4 policies total.
+  - V2 — functional, from the app: admin impersonates a customer, subscribes
+    them to a series from the reserved-suggestions list, confirms (via
+    PostgREST or SQL Editor) the row's `user_id` is the **customer's**, not
+    the admin's.
+  - V3 — same for series search subscribe, and for Unsubscribe from the main
+    table — confirm the row is actually gone, not silently retained (the
+    F128 failure mode, now checked for both directions).
+  - V4 — regression: non-impersonated customer subscribe/unsubscribe/search
+    still work unchanged; a blocked (`pending`/`suspended`) customer's own
+    session still can't subscribe to new series but can still unsubscribe
+    (F127-style client gate, untouched by this finding).
+  - Full `run-smoke.ps1` green before any production promotion request.
+- **Docs to update once staging V1 confirms the migration is live:** § 7.1
+  subscriptions policy list above (remove the ⚠️ pending note, mark
+  "Verified live" with the date), `docs/subscription-reserved-suggestions.md`
+  § 4c (superseded pointer already added), CLAUDE.md § Series Subscriptions
+  (impersonation bullet already updated to match the new behavior).
+- **Related:** **F128** (the decision this reverses), **F16**/**F127**
+  (the `preorders` admin-policy pattern this mirrors), **F58** (same
+  silent-no-op shape on `user_profiles`, unrelated table, not in scope
+  here).
+
+Next free finding ID: **F139**.
 
 ---
 
