@@ -4411,7 +4411,30 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `catalogs/scripts/import.js` / `import-staging.js` — `inferCatalogMonth()` (~212), `classifyReservedDateDrift()` / `reportReservedInStoreDateChanges()` (F122, ~465/~512), the month-confirm prompt and its two guards (~1723-1765), the catalog upsert conflict key (`on_conflict=tenant_id,item_code,distributor,catalog_month`); `purge_stale_catalog()`; `catalog` table. **Staging scope measured 2026-08-21: 977 duplicate pairs, 100% PRH, dominant set `{2026-04, 2026-06}` (919), zero Lunar duplicates and zero live-stranded reservations** — so staging can rehearse the bulk dedup but cannot rehearse the Lunar half.
 - **Related:** **F122** (the existing reservation-scoped drift report this extends/limits), **F111** (cross-month FOC handling), **F115** (arrival-truth persistence — same "distributor reality vs. stored schedule" family), **F110** (`delete_dropped_catalog_items`'s single-month scope — same structural blind-spot class, different mechanism).
 
-Next free finding ID: **F137**.
+#### F137 — the import scripts' catalog-month detection is not scoped by tenant, so another tenant a month ahead silently disables the entire new-month sequence
+
+- **Status:** filed 2026-08-22. Found while planning F136 (`docs/f136-catalog-month-integrity.md` § 7). **Latent — not currently biting on either environment**, measured below. Rick's call 2026-08-22: fix it inside **F136 S1**, as its own commit, since it is one line in a function that sub-deploy already edits.
+- **Severity:** **Medium.** No wrong data today. When it fires it is silent and total: a genuinely new catalog month is classified as "same month", and `archive_stale_reservations`, `purge_stale_catalog` and `delete_dropped_catalog_items` all skip with no error, no warning, and a plausible-looking "♻️ Same month — upsert refresh only" on the console.
+- **The defect.** Step 3 of both scripts reads the current database catalog month with **no tenant filter**:
+  ```js
+  `${SUPABASE_URL}/rest/v1/catalog?select=catalog_month&order=catalog_month.desc&limit=1`
+  ```
+  `import.js` ~1789, `import-staging.js` ~1781. Every other catalog query in both files passes `tenant_id=eq.${TENANT_ID}` — this one is the exception, and the scripts run on the **service-role key**, which bypasses RLS. So `currentDbMonth` is the newest `catalog_month` **across all tenants**, and `isNewMonth = confirmedMonth > currentDbMonth` compares the importing tenant's incoming month against somebody else's catalog.
+- **How it fires.** Any secondary tenant whose catalog is a month ahead of the importing tenant. Onboard a tenant mid-month with a newer file, or let a demo tenant carry a forward-dated month, and the founding tenant's next real month-turnover import runs the mid-month refresh path instead of the new-month path. Reservation history is not archived, stale rows are not purged, dropped titles are not removed — and the operator sees a successful import.
+- **Measured 2026-08-21** — latent on both environments, but the second tenants are real, not hypothetical:
+
+  | Env | Tenants (catalog rows) | Max `catalog_month` per tenant | Unfiltered read |
+  |---|---|---|---|
+  | Production | `rjbookstop` (12,087), `comicstore` (2) | 2026-08 / 2026-06 | 2026-08 — correct by luck |
+  | Staging | `raysandjudys` (9,951), `pw-56132e92` (1), `pw-fc2e3fc7` (0) | 2026-08 / 2026-08 / — | 2026-08 — correct by luck |
+
+  Both read correctly **only because the importing tenant currently holds the newest month**. `comicstore` sitting at 2026-06 with two rows is enough to demonstrate the mechanism; it needs to be two rows at 2026-09.
+- **Fix shape:** add `tenant_id=eq.${TENANT_ID}` to the query in both scripts. One line each, no schema change, no behaviour change on either environment today — which is also why it needs a **constructed** verification rather than a live one: seed a secondary-tenant catalog row at a month ahead of the importing tenant on staging, confirm `isNewMonth` is computed **true** for a genuinely new month with that row present, then remove the seed. A check that passes before and after the fix (which any check against today's data will) is not a check — see § "A verification step that cannot fail is not a verification step".
+- **Why this is a sibling of F136, not a duplicate.** F136's duplicate rows accumulate because `purge_stale_catalog` cannot delete future-dated duplicates. F137 is a second, independent way the purge fails to run **at all**. Same blind spot class as **F110** (`delete_dropped_catalog_items`'s single-month scope): a month-scoped decision made from the wrong input, failing quietly.
+- **Where:** `catalogs/scripts/import.js` ~1789, `catalogs/scripts/import-staging.js` ~1781 — the Step 3 `monthRes` fetch inside the `isNewMonth`/`isOlderMonth` detection block.
+- **Related:** **F136** (owner plan `docs/f136-catalog-month-integrity.md`; the fix rides in its S1), **F110** (single-month scope blind spot), **F122** (the drift report F136 S1 also widens), **F15**/**F20** (tenant-isolation coverage — Playwright specs assert the app's isolation, but the import scripts run outside RLS and have no equivalent).
+
+Next free finding ID: **F138**.
 
 ---
 

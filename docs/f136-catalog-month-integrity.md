@@ -1,6 +1,6 @@
 # F136 — catalog_month integrity: stale-date detection + duplicate-row cleanup
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=F136,F122,F110,F115
+**STATUS:** NOT STARTED | staging=— | prod=— | findings=F136,F137,F122,F110,F115
 **Status:** **PLANNED — not started.** Written 2026-08-21 in a planning session that also
 **identified the root cause F136 was filed without** (§ 2) and **corrected two statements in the
 filed finding** (§ 3). No code was changed. All measurements in this doc are read-only GETs run
@@ -164,6 +164,10 @@ touch data.
    record count), report and require confirmation. This is distributor-agnostic and catches the
    failure regardless of cause.
 
+4. **Scope the Step 3 month-detection query by tenant (F137).** Add `tenant_id=eq.${TENANT_ID}`
+   to the `monthRes` fetch in both scripts — `import.js` ~1789, `import-staging.js` ~1781. One
+   line each, its own commit, F137 in the message. Full reasoning in § 7 and § 13 F137.
+
 > **Rejected: deriving `catalog_month` per-record from the Lunar prefix.** It is the "correct"
 > model, and it is out of proportion to the defect — `catalog_month` is load-bearing for
 > `isNewMonth`, `purge_stale_catalog`'s `current_month`, `delete_dropped_catalog_items`,
@@ -212,7 +216,7 @@ month scope.
 
 | Session | Scope | Gate to the next |
 |---|---|---|
-| **S1** | Part A + Part C(1) — guards and the widened report, both scripts, `npm test` extended | V1–V4 green |
+| **S1** | Part A (incl. the F137 one-liner) + Part C(1) — guards and the widened report, both scripts, `npm test` extended | V0–V4 green |
 | **S2** | Part B — the dedupe RPC, applied and run on **staging only** | V5–V6 green |
 | **S3** | Part C(2) + Part D — runbook edit, the 2 prod repoints, prod dedupe | Rick-gated, prod |
 
@@ -228,6 +232,16 @@ Every gate below states **what its output looks like when the thing has failed**
 § "A verification step that cannot fail is not a verification step."
 
 **S1**
+
+- **V0 — F137: month detection is tenant-scoped.** Constructed, because live data cannot fail it.
+  On staging, seed **one** catalog row for a secondary tenant (`pw-56132e92`) at a
+  `catalog_month` one month ahead of `raysandjudys` — e.g. `2026-09` — then run the Step 3
+  detection path. It must report the **importing tenant's** month (2026-08) and classify a
+  `2026-09` import as a new month. *Failure looks like:* `currentDbMonth` comes back `2026-09`
+  and the import announces "♻️ Same month — upsert refresh only". **Delete the seed row and
+  confirm with a live SELECT returning zero rows** (CLAUDE.md § Definition of Done — fixture
+  teardown is verified, not assumed). Run this check **against the unfixed code first** and observe
+  it fail; a V0 that was only ever run after the fix proves nothing.
 
 - **V1 — `inferCatalogMonth()` no longer guesses.** Unit test: a path with no parseable month
   returns `null`. *Failure looks like:* it returns the current calendar month string.
@@ -271,7 +285,8 @@ Every gate below states **what its output looks like when the thing has failed**
 **Not in this plan:** anything in `comic-preorder` (no app change); F115's arrival-truth work;
 F132's prod migration; partial-fulfillment representability.
 
-**⚠️ Discovered while writing this plan — needs its own finding ID before S1 starts.**
+**⚠️ Discovered while writing this plan — now filed as F137, and Rick's call 2026-08-22 is that
+its fix rides in S1 as its own commit.** Recorded here because the reasoning is F136's:
 `import.js:1789` and `import-staging.js:1781`, the Step 3 month-detection query, are **not scoped
 by tenant**:
 
@@ -293,9 +308,14 @@ Measured 2026-08-21 — latent today, not currently biting, and the second tenan
 | Staging | `raysandjudys` (9,951), `pw-56132e92` (1), `pw-fc2e3fc7` (0) | 2026-08 / 2026-08 | 2026-08 ✅ |
 
 This is one line, in the same two functions S1 already edits, and it is in F136's own failure class
-(the purge not running is *why* duplicates accumulate). **Recommendation: file it as F137 and fold
-the one-line fix into S1** — but per CLAUDE.md § "Stop and ask, don't fix inline", that is Rick's
-call, and S1's handoff must not assume it.
+(the purge not running is *why* duplicates accumulate). **Filed as F137 on 2026-08-22
+(`docs/technical-reference.md` § 13); Rick approved folding the one-line fix into S1 the same day,
+as a separate commit carrying the F137 ID.** It is therefore IN scope for S1 — see § 4 Part A(4),
+gate V0, and § 10.
+
+**F137 needs a constructed verification, not a live one.** Today's data passes the check both
+before and after the fix, on both environments, because the importing tenant happens to hold the
+newest month everywhere. A gate that cannot fail is not a gate (CLAUDE.md). See V0.
 
 ---
 
@@ -341,6 +361,8 @@ a verification gate that only one session can run is not a gate.
 
 ## 10. Completion criteria
 
+- [ ] S1 — **F137**: Step 3 month-detection query scoped by `tenant_id` in both scripts, own commit
+- [ ] S1 — V0 green, observed failing against the unfixed code first, seed row torn down and verified
 - [ ] S1 — `inferCatalogMonth()` returns `null` on no match; prompt requires explicit month
 - [ ] S1 — Lunar MMYY mismatch guard aborts without a typed `yes`
 - [ ] S1 — cross-month collision pre-check reports and gates
