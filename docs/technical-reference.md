@@ -1762,11 +1762,10 @@ what they do.
   to manage on behalf of users" — which F128 had called wrong for this
   table specifically — is correct again as of this policy.
 
-✅ **Verified live on staging 2026-08-22** (F138 migration confirmed via
-`pg_policies`: exactly the 4 policies above, `admins manage tenant
-subscriptions` PERMISSIVE ALL `{authenticated}` in place of the old SELECT
-policy). **Production not yet run** — this section describes staging only
-until F138's production gate closes.
+✅ **Verified live on BOTH environments 2026-08-22** (F138 migration
+confirmed via `pg_policies` on staging, then production: exactly the 4
+policies above, `admins manage tenant subscriptions` PERMISSIVE ALL
+`{authenticated}` in place of the old SELECT policy, identical on both).
 
 #### `reservation_history` (see F17)
 - `users view own history` — SELECT where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
@@ -4449,8 +4448,13 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Status:** filed 2026-08-22, Rick's explicit request. **RESOLVED on
   staging 2026-08-22** — V1-V4 all green (below), branch merged
   `--ff-only` and pushed, full `run-smoke.ps1` green (269 unit + 139
-  Playwright, 0 failures, 0 retries). **Not yet run on production** —
-  that's a separate later request via `/promote-prod`.
+  Playwright, 0 failures, 0 retries). **Production RLS migration APPLIED
+  2026-08-22** (Rick, via `/promote-prod`'s unapplied-migration gate — ran
+  ahead of the client-code merge for the same reason F128 fixed the client
+  side: promoting the write-enabled client without the policy first would
+  have silently reproduced F128's bug on production). Client-code
+  promotion (this section's app files) in progress via the same
+  `/promote-prod` run.
 - **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
   with no admin write policy, on Rick's explicit "no" to admins
   unsubscribing customers during impersonation — see that entry's "Do not

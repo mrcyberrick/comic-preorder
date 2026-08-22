@@ -1,4 +1,4 @@
--- STATUS: IN PROGRESS | staging=APPLIED 2026-08-22 | prod=NOT APPLIED | findings=F138 (reverses F128)
+-- STATUS: COMPLETE | staging=APPLIED 2026-08-22 | prod=APPLIED 2026-08-22 | findings=F138 (reverses F128)
 --
 -- F138: grant admins write access to `subscriptions` so impersonation can
 -- fully manage a customer's subscriptions (subscribe + unsubscribe).
