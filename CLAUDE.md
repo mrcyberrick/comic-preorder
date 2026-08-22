@@ -12,32 +12,33 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F136 S2 build session (`docs/f136-catalog-month-integrity.md`) — Part B:
-the `dedupe_catalog_months(p_tenant_id uuid)` RPC (`docs/sql/f136-dedupe-catalog-months.sql`),
-implementing the § 3(b) rule (delete every row below a duplicate group's highest `catalog_month`
-that no `preorders` row references, any fulfilled state), `service_role`-only grants. Applied to
-**staging only** by Rick in the Supabase SQL Editor, then wired into `refreshCatalog()`'s new-month
-branch in both `import.js`/`import-staging.js` immediately after `purge_stale_catalog`, as a
-deliberately separate call (purge is date-driven, this isn't) — scripts repo `main` `7a8d6a1`.
-269/269 unit tests green, unchanged (checked first per the handoff's own conditional: no existing
-test covers `purge_stale_catalog`'s call-site shape to mirror, so nothing to extend). **Gates V5–V6
-green**, confirmed two independent ways — Rick's own SQL Editor post-verify, and this session's own
-fresh `f136-audit.js` re-run: staging catalog rows went **9,951 → 8,954 (delta exactly 997)**,
-duplicate pairs **977 → 1**, safe/blocked **997/1 → 0/1**, preorder counts unchanged (**56/22/34**
-total/unfulfilled/fulfilled, before and after). The live-stranded reservation S1 found (Nightmare
-Before Christmas #2) is confirmed still present, still referenced, still exactly as stranded as
-before — dedup does not un-strand a row a preorder still points at; repointing is Part D/S3,
-correctly left untouched this session. Doc-only commit `29780a8` to `staging` (comic-preorder).
-**F136 S3** (the 2 prod repoints + prod dedupe) is next, Rick-gated.
-2026-08-22.
+**Last completed work:** F136 fully RESOLVED 2026-08-22 — S1, S2, and S3 all shipped the same day
+(`docs/f136-catalog-month-integrity.md`). S3 (this session's own work): created
+`dedupe_catalog_months()` on **production** (S2's migration was staging-only); added the Part C(2)
+revision-sweep runbook step to `docs/monthly-catalog-refresh.md`; re-measured live production fresh
+rather than trusting the 2026-08-21 snapshot (2,666 duplicate pairs / 2,667 safe / 29 blocked,
+unchanged — of the 29 blocked, only 2 are unfulfilled, matching § 3(d) exactly, the other 27
+historical/fulfilled); repointed the 2 unfulfilled reservations (Alex Alvarez / TMNT #40 Variant C,
+Brian Moss / Action Comics #1 Facsimile) from `2026-05` to the maintained `2026-06` rows; ran the
+production dedupe. **Gates V7–V8 green**, confirmed three independent ways — production catalog
+rows **12,087 → 9,418 (delta exactly 2,669)** matching the dry-run preview precisely, preorder
+counts unchanged (**2,021/1,049/972** total/unfulfilled/fulfilled), duplicate pairs **2,666 → 27** /
+safe-blocked **2,667/29 → 0/27** (the 27 survivors are the historical rows Rick chose to leave
+blocked — zero customer risk, permanent minor bloat, accepted). Staging's one residual (Nightmare
+Before Christmas #2) confirmed `fulfilled = true`, same accepted category. **Also fixed in-session:**
+CLAUDE.md's and `technical-reference.md`'s F132 findings both still read "production not yet run"
+when the DB half had actually been `APPLIED` 2026-08-21 — corrected (commit `7d4df83`), found while
+confirming F136 S3 wasn't blocked by that gate. **No further F136 sessions planned.**
 
-Prior session (same day): **F136 S1** — Part A (catalog-month entry guards: `inferCatalogMonth()`
-no longer silently guesses the current calendar month, returns `null` and requires an explicit
-typed month instead; new Lunar item-code MMYY-vs-confirmed-month cross-check; new
-distributor-agnostic cross-month collision pre-check, ~5% threshold) + Part C(1)
-(`classifyReservedDateDrift()` gains a third `unreserved` list) + **F137** (Step 3's month-detection
-query scoped by `tenant_id`) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
-**F137 fully RESOLVED.**
+Prior work, same day: **F136 S2** — the `dedupe_catalog_months()` RPC applied to **staging**, wired
+into `refreshCatalog()`'s new-month branch in both `import.js`/`import-staging.js` (scripts repo
+`main` `7a8d6a1`, which is why S3 needed no additional code change — the wiring already covered
+production). **F136 S1** — Part A (catalog-month entry guards: `inferCatalogMonth()` no longer
+silently guesses, requires an explicit typed month; Lunar MMYY-vs-confirmed-month cross-check;
+distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyReservedDateDrift()`
+gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
+**fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
+2026-08-22.
 **Next free finding ID:** **F138** (unchanged — no new findings filed this session).
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
@@ -67,7 +68,6 @@ residual to another finding as open until that other finding demonstrably absorb
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
 | F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **Gate V8 — DB half APPLIED to production 2026-08-21** (verified 0 non-null/11,726, Rick) — the `import.js` 400 risk this was blocking is cleared; **client code half (app.js/catalog.html/style.css via `/promote-prod`) still not promoted**, in progress) |
-| F136 | **Medium-High** — a distributor's post-solicitation date revision has no detection path on an unreserved catalog row (49 reserved titles found silently stale in production alone before this session's fix); separately, 2,666 `(item_code, distributor)` pairs carry duplicate `catalog_month` rows (2,621 of them `{2026-05,2026-06}`), and 2 live reservations sit on the duplicate row the monthly import can never revisit again | Owner: `docs/f136-catalog-month-integrity.md` (IN PROGRESS — **S1+S2 shipped 2026-08-22**: S1 entry guards + widened drift report + F137's fix on `main` in the scripts repo, V0-V4 green; S2 `dedupe_catalog_months()` RPC applied to staging + wired into `refreshCatalog()`, V5-V6 green — staging duplicate pairs 977→1, only the pre-existing blocked/stranded row remains). **S3 next** (2 prod repoints + prod dedupe), Rick-gated. § 8 still flags the `import.js` collision with F115's held Sept-window work for S3 |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,
@@ -670,7 +670,8 @@ Do NOT touch any of the below in agentic sessions without explicit approval.
 **Genuinely still open or deferred:** Partial fulfillment is not representable (product decision,
 deferred until product scoping — no finding ID). Everything else currently open is F72, F89, F90,
 F99, and F126's residual — see the open-findings table in § Current Migration Phase; full
-detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-18** — see § 13.
+detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-18, F136+F137 closed
+2026-08-22** — see § 13.
 
 **Closed work — kept here as a "don't re-open without asking" index only. Each doc's own
 `**STATUS:**` token and `docs/technical-reference.md` § 13 are the evidence; this table is not:**
@@ -687,6 +688,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | `preorders` authorization boundary (status gate + ordered-cancel trigger) | `preorders-authorization-boundary-f127-f109.md` | F127, F109 |
 | Phase 5 — second-tenant onboarding (all sub-deploys) | `phase-5-second-tenant-onboarding.md` | F105 |
 | Test-infrastructure maintenance | `test-infra-maintenance-f91-f95-f103.md` | F91, F95, F103, F107 |
+| Catalog-month integrity — stale-date detection + duplicate-row cleanup (S1-S3) | `f136-catalog-month-integrity.md` | F136, F137 |
 | `import.js` maintenance (key rotation, historical dedup, cross-month fix) | `import-js-maintenance-f75-f78-f85.md` | F75, F78, F85 |
 | F86 prod legacy API key retirement | `f86-anon-key-migration.md` | F86, F88 |
 | Mobile thumb-reach tab bar + live-review follow-up | `mobile-nav-tab-bar.md` | — |

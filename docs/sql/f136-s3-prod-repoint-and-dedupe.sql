@@ -1,8 +1,20 @@
--- STATUS: staging=N/A (prod-only file) | prod=PENDING
---         F136 S3, Part D. Update to APPLIED the moment Step 5 (the dedupe
---         invocation) has run and V7/V8 read green. (F105) A gate that lives
---         only in prose gets missed — F6 sat unapplied on production for 13
---         days because nothing machine-readable said so.
+-- STATUS: staging=N/A (prod-only file) | prod=APPLIED 2026-08-22
+--         F136 S3, Part D. All six steps run by Rick on production
+--         2026-08-22. V7/V8 GREEN, confirmed three independent ways: prod
+--         catalog rows 12,087 -> 9,418 (delta exactly 2,669, matching the
+--         Step 5 preview precisely); preorder counts unchanged, 2,021/1,049/
+--         972 total/unfulfilled/fulfilled before and after; a fresh
+--         f136-audit.js --prod re-run shows duplicate pairs 2,666 -> 27,
+--         safe/blocked 2,667/29 -> 0/27 -- the 27 survivors are exactly the
+--         historical fulfilled rows this session deliberately left blocked
+--         (see plan § 11 S3). NOTE on this file's own Step 6 post-verify
+--         comment below: it predicted 27 for a query that actually counts
+--         PREORDER rows, not catalog rows -- the live result was 33, which
+--         is correct (27 catalog rows referenced by 33 preorders, since a
+--         few of the 27 titles carry more than one reservation). Comment
+--         corrected in place rather than left wrong. (F105) A gate that
+--         lives only in prose gets missed — F6 sat unapplied on production
+--         for 13 days because nothing machine-readable said so.
 -- ============================================================================
 -- F136 S3 — production repoint + production dedupe
 -- Prepared 2026-08-22. Plan: docs/f136-catalog-month-integrity.md § 4 Part D,
@@ -223,9 +235,18 @@ WHERE p.tenant_id = '20941129-c35a-476d-ae21-44b8f77af89c'
     WHERE c2.tenant_id = '20941129-c35a-476d-ae21-44b8f77af89c'
       AND c2.item_code = c.item_code AND c2.distributor = c.distributor
   );
--- EXPECTED: 27. FAIL = 0 (the 27 got deleted despite being referenced —
--- something is badly wrong with the function's predicate) or any number
--- other than 27 (re-derive rather than assume which direction is wrong).
+-- EXPECTED: 33, NOT 27 — this query counts PREORDER rows referencing a
+-- below-maintained catalog row, not distinct catalog rows. 27 is the
+-- catalog-row count (matches f136-audit.js's "blocked" metric and Step 5's
+-- preview); several of those 27 titles carry more than one reservation
+-- (Book Stop plus an individual customer, in a few cases), so the preorder
+-- count is higher. 35 originally-stranded preorders minus the 2 repointed =
+-- 33. CORRECTED 2026-08-22 after Rick's live run returned 33 and it was
+-- reconciled against the original stranded-detail query rather than assumed
+-- wrong — the first version of this comment said "EXPECTED: 27" and
+-- conflated the two metrics. FAIL = 0 (the 27 catalog rows got deleted
+-- despite being referenced) or any number that does NOT reconcile to 27
+-- distinct catalog rows via a GROUP BY on (item_code, distributor).
 
 
 -- After Step 6 and both post-verifies read green, run

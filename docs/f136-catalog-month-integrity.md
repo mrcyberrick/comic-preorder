@@ -1,13 +1,18 @@
 # F136 — catalog_month integrity: stale-date detection + duplicate-row cleanup
 
-**STATUS:** IN PROGRESS | staging=2026-08-22 (S1+S2, code+DB) | prod=— | findings=F136,F137,F122,F110,F115
-**Status:** **S1 COMPLETE 2026-08-22** — Part A (all three entry guards) + Part C(1) (widened
-`unreserved` drift list) + F137 (own commit) + `f136-audit.js` all shipped to the scripts repo
-`main` (`f1f90be`), staging code only, no DB migration, no production touch. Gates V0-V4 all
-green — see § 11. **S2 COMPLETE 2026-08-22** — the `dedupe_catalog_months()` RPC
-(`docs/sql/f136-dedupe-catalog-months.sql`) applied to staging by Rick and wired into
-`refreshCatalog()`'s new-month branch (scripts repo `main` `7a8d6a1`). Gates V5-V6 green — see
-§ 11. **S3** (prod repoints + prod dedupe) stays Rick-gated, next. Originally written 2026-08-21 in a planning session that
+**STATUS:** COMPLETE | staging=2026-08-22 (S1+S2+S3, code+DB) | prod=2026-08-22 (S3, DB) | findings=F136,F137,F122,F110,F115
+**Status:** **RESOLVED 2026-08-22 — S1, S2, and S3 all complete, same day.** S1: Part A (all three
+entry guards) + Part C(1) (widened `unreserved` drift list) + F137 (own commit) + `f136-audit.js`,
+scripts repo `main` (`f1f90be`), staging code only. S2: the `dedupe_catalog_months()` RPC
+(`docs/sql/f136-dedupe-catalog-months.sql`) applied to staging by Rick, wired into
+`refreshCatalog()`'s new-month branch (scripts repo `main` `7a8d6a1`, covering both environments
+since import.js/import-staging.js share one repo/branch). S3: Part C(2) (the revision-sweep step
+added to `docs/monthly-catalog-refresh.md`) + Part D (`dedupe_catalog_months()` created on
+production, the 2 unfulfilled stranded reservations repointed, production dedupe run — 2,669
+rows). Gates V0-V8 all green — see § 11. **Residual, known and accepted, not further work:**
+27 production + 1 staging catalog rows remain permanently blocked from dedupe because a
+**fulfilled/historical** preorder still references them — zero customer-facing risk (fulfillment
+already happened), but they will never be deleted by this or any future dedupe run. Originally written 2026-08-21 in a planning session that
 also **identified the root cause F136 was filed without** (§ 2) and **corrected two statements in
 the filed finding** (§ 3). All measurements in §§ 2-4 are the *original* read-only GETs from
 2026-08-21 against live staging *and* live production; § 11's are S1's own, from 2026-08-22.
@@ -378,10 +383,10 @@ a verification gate that only one session can run is not a gate.
 - [x] S1 — `f136-audit.js` committed to the scripts repo (`f1f90be`)
 - [x] S2 — `docs/sql/f136-dedupe-catalog-months.sql` written, applied to staging, V5–V6 green
 - [x] S2 — RPC wired into the new-month branch, reports its count
-- [ ] S3 — `docs/monthly-catalog-refresh.md` carries the revision-sweep step
-- [ ] S3 — 2 prod reservations repointed, V7 green
-- [ ] S3 — prod dedupe run, V8 green
-- [ ] § 13 F136 status advanced; CLAUDE.md open-findings row updated or removed
+- [x] S3 — `docs/monthly-catalog-refresh.md` carries the revision-sweep step
+- [x] S3 — 2 prod reservations repointed, V7 green
+- [x] S3 — prod dedupe run, V8 green
+- [x] § 13 F136 status advanced; CLAUDE.md open-findings row updated or removed
 
 ---
 
@@ -562,3 +567,82 @@ untouched, still Rick-gated.
   migration, not yet applied` (written before Rick ran it; superseded by this section)
 - `7a8d6a1` (scripts repo, `main`) — `feat(F136): wire dedupe_catalog_months() into
   refreshCatalog's new-month branch`
+
+### S3 — 2026-08-22, production (`plgegklqtdjxeglvyjte`)
+
+**Pre-run baseline**, re-measured fresh via `node f136-audit.js --prod` at the start of this
+session (not trusted from the plan's 2026-08-21 snapshot): **2,666 duplicate pairs**, Lunar 1,688 /
+PRH 978; **2,667 safe / 29 blocked** under the § 3(b) rule; 12,087 total catalog rows; preorders
+2,021 total. The plan doc's § 3(d) claimed only **2** stranded reservations — a direct read of the
+audit's "STRANDED" list initially looked like it had grown to **29**, which would have been a real
+scope change. Reconciled by querying fulfilled state directly (see chat record, not reproduced
+here): of the 29 blocked/stranded rows, exactly **2 are unfulfilled** — the same two named in
+§ 3(d) on 2026-08-21 (Alex Alvarez / TMNT #40 Variant C, Brian Moss / Action Comics #1 Facsimile),
+unchanged. The other 27 are **fulfilled/historical** (24 of them Book Stop's own past shelf-copy
+reservations) and were never part of § 3(d)'s count, which was explicitly scoped to *unfulfilled*
+reservations. No scope change; two different metrics were being compared.
+
+**Rick's call, 2026-08-22: repoint only the 2 unfulfilled reservations, matching Part D.1 as
+written.** The 27 historical rows are left permanently blocked — zero customer-facing risk since
+fulfillment already happened, known and accepted, not fixed this session.
+
+**Part C(2) — revision-sweep step added to the runbook.** New Step 3 in
+`docs/monthly-catalog-refresh.md`, inserted before the new-month import (old Steps 3–7 renumbered
+4–8; Step 2 is referenced by name in `shelf-copy-suggested-order.md` and was left alone): re-pull
+the previous 1–2 still-open months from the Lunar portal, re-import them oldest-to-newest with
+`--skip-autoreserve`, and read the console's F136 `unreserved`-drift report on each run. Turns the
+one-off rescue Rick ran by hand on 2026-08-21 into a documented recurring step.
+
+**Part D.1 — the 2 repoints.** New `docs/sql/f136-s3-prod-repoint-and-dedupe.sql`, six watched
+steps run one at a time by Rick in the Supabase SQL Editor:
+1. Created `dedupe_catalog_months(p_tenant_id uuid)` on **production** (S2's migration was
+   staging-only — separate database, needs its own `CREATE`; the import-script *code* wiring
+   already covered production, since `import.js`/`import-staging.js` share one repo/branch and
+   S2's commit touched both files).
+2. Captured the baseline: **2,021 total / 1,049 unfulfilled / 972 fulfilled** preorders — the
+   unfulfilled figure matches the plan's original 2026-08-21 measurement exactly.
+3. Pre-flight: confirmed both reservations still on their expected stale rows, and confirmed
+   neither customer already separately held the target (maintained) row — the
+   `UNIQUE(user_id, catalog_id)` collision check that would have blocked the `UPDATE` outright.
+   Both came back clean.
+4. Ran the two repoint `UPDATE`s.
+
+**V7 — the 2 repoints landed. GREEN.** Post-`UPDATE` SELECT: both rows read `(correct)` — Alex
+Alvarez → `2026-06`, Brian Moss → `2026-06`.
+
+**Part D.2 — the production dedupe.**
+5. Dry-run preview: `would_delete = 2669` (the 2,667 pre-measured safe count, plus the 2 rows the
+   repoints had just freed — each repointed reservation's old row had no other referencing
+   preorder, so both became unreferenced the moment the `UPDATE`s landed).
+6. Invoked `dedupe_catalog_months()` against production.
+
+**V8 — production dedupe. GREEN, confirmed three independent ways:**
+1. Preorder counts unchanged after the run: **2,021 / 1,049 / 972**, identical to the baseline.
+2. This session's own fresh `f136-audit.js --prod` re-run: catalog rows **12,087 → 9,418, delta
+   exactly 2,669** (matching the preview precisely); duplicate pairs **2,666 → 27**; safe/blocked
+   **2,667/29 → 0/27**. Both repointed titles are gone from the stranded list; the 27 survivors are
+   exactly the 27 historical rows this session deliberately left alone.
+3. Rick's own post-verify query for "rows still blocked" returned **33**, not the SQL file's
+   inline comment's predicted 27 — reconciled, not a failure: 27 is the **catalog-row** count
+   (matching the audit tool's metric and the query's own preview), 33 is the **preorder-row**
+   count, because several of the 27 blocked titles carry more than one reservation (Book Stop plus
+   an individual customer on the same title, in a few cases). 35 originally-stranded preorders
+   minus the 2 repointed = 33, exactly. The SQL file's comment conflated the two metrics; the live
+   number was correct throughout.
+
+**Confirming Part D.3's literal wording against the live result, rather than assuming it holds:**
+Part D.3 says "confirm the duplicate-pair count is 0 and the live-stranded count is 0" on both
+environments. **Neither reads exactly 0** — production shows 27 duplicate pairs / 27 stranded,
+staging shows 1 of each (checked: staging's sole survivor, the Nightmare Before Christmas #2 row,
+is **`fulfilled = true`** — historical, same category as production's 27, confirmed by direct
+query). This is not a gate failure: Part D.3 was written before this session discovered the
+fulfilled/unfulfilled split, and the number that actually matters — **unfulfilled, customer-facing
+stranded reservations** — is 0 on both environments now. The nonzero counts are entirely accounted
+for by rows this session explicitly, deliberately left blocked (Rick's call, this section). Recorded
+here precisely rather than silently marking the box "0" when the live data reads otherwise.
+
+**Commits:**
+- `7d4df83` (comic-preorder, `staging`) — F132 stale-status correction, found while confirming S3
+  wasn't blocked by it (unrelated to F136 itself, doc hygiene only)
+- `3d5ecba` (comic-preorder, `staging`) — `docs(F136): S3 runbook — Part C(2) revision-sweep step +
+  prod repoint/dedupe SQL` (written before Rick ran it; superseded by this section)
