@@ -1749,23 +1749,23 @@ they cannot widen it the way a third PERMISSIVE policy would. See
 proof F16 was already closed before F127 added these two, and § 13 F127 for
 what they do.
 
-#### `subscriptions` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F128, F127)
+#### `subscriptions` (4 policies; 2 PERMISSIVE + 2 RESTRICTIVE — see F138, F127)
 - `users manage own subscriptions` — PERMISSIVE, ALL, `auth.uid() = user_id AND tenant_id = current_tenant_id()`
-- `admins view tenant subscriptions` — PERMISSIVE, SELECT, `tenant_id = current_tenant_id() AND current_user_is_admin()`
+- `admins manage tenant subscriptions` — PERMISSIVE, ALL, `current_user_is_admin() AND tenant_id = current_tenant_id()` (both `USING` and `WITH CHECK`) — added by F138 (2026-08-22), replacing the prior SELECT-only `admins view tenant subscriptions`
 - `blocked accounts cannot create subscriptions` — RESTRICTIVE, INSERT, `WITH CHECK current_user_is_active()` (F127)
 - `blocked accounts cannot change subscriptions` — RESTRICTIVE, UPDATE, `USING (true)`, `WITH CHECK current_user_is_active()` (F127)
-- No admin write policy — **deliberate, not a gap.** Rick decided 2026-08-10
-  (F128) that admins get no permission to unsubscribe on a customer's behalf;
-  the client-side impersonation guard is the whole fix for that finding.
-  Admins otherwise use impersonation (`AdminContext`) to act on behalf of
-  users, but this table's read-only admin access is a correction to §7.1's
-  own prior wording, flagged by F128 and applied here 2026-08-18: it is not
-  true generally that "admins use impersonation to manage on behalf of users"
-  for this table specifically.
+- **Admin write access is intentional (F138, 2026-08-22), reversing F128's
+  2026-08-10 "no" and its "do not add this later" note.** Rick asked for
+  full admin management (subscribe + unsubscribe) of a customer's
+  subscriptions during impersonation, matching how `preorders`' admin
+  policy already works. §7.1's general claim that "admins use impersonation
+  to manage on behalf of users" — which F128 had called wrong for this
+  table specifically — is correct again as of this policy.
 
-✅ **Verified live 2026-08-18 on both environments** — matches this list
-exactly; no third PERMISSIVE policy, no admin write policy (confirming F128's
-disposition still holds).
+✅ **Verified live on BOTH environments 2026-08-22** (F138 migration
+confirmed via `pg_policies` on staging, then production: exactly the 4
+policies above, `admins manage tenant subscriptions` PERMISSIVE ALL
+`{authenticated}` in place of the old SELECT policy, identical on both).
 
 #### `reservation_history` (see F17)
 - `users view own history` — SELECT where `auth.uid() = user_id AND tenant_id = current_tenant_id()`
@@ -4256,6 +4256,12 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F128 — impersonated unsubscribe silently no-ops and reports success to the admin
 
+⚠️ **Reversed by F138 (2026-08-22, Rick's request).** This entry's "no admin
+write policy — do not add one later" disposition no longer holds; see F138
+for the reversal, its migration, and its client-code changes. Left below
+unedited as the historical record of the original decision and its
+reasoning — only the disposition changed, not the diagnosis.
+
 - **Status:** filed **and RESOLVED 2026-08-10** — **LIVE IN PRODUCTION 2026-08-11** via PR #117 (`230d84b`); post-deploy write-smoke passed. **Rick's decision settled the product question the fix depended on: admins get NO permission to unsubscribe on a customer's behalf.** So the missing admin write policy on `subscriptions` is **correct, not a gap** — it is now a documented design property rather than an oversight, and the fix is the client half only. **No DDL, no policy change, no RLS work.** Anyone later "fixing" the missing policy would be reversing a decision, not closing a hole.
 - **Fix applied (`subscriptions.html`, client-only).** Two changes mirroring the precedent the *subscribe* paths already used at `:490`: the `.unsub-btn` now renders `disabled title="Unavailable while impersonating"` when `AdminContext.isActive()`, and the click handler early-returns on the same condition as belt-and-braces (matching `:500`). Disabled, **not hidden** — the existing convention on this page. Verified: inline script parses clean.
 - **The finding's own caveat was discharged before editing.** It was filed read-from-code and flagged *"confirm empirically before fixing"*. The code was re-read at the fix: the button markup carried no guard, and the handler called `AdminContext.resolveUserId(user.id)` then treated `error === null` as success — filtering `allSubs` locally and toasting. Confirmed as filed. The *runtime* no-op was still not probed, but that no longer gates anything: the guard is correct whether or not RLS discards the DELETE, because admins are not supposed to make this write at all.
@@ -4327,7 +4333,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F132 — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time, so a customer can reserve a copy the store may never actually receive
 
-- **Status:** filed 2026-08-20 during the scoping session for `docs/order-restriction-alert-badge.md`. **STAGING COMPLETE 2026-08-21, PRODUCTION REQUESTED same day — not yet run.** Filed at Rick's request (two asks: alert restricted titles, badge restricted/incentive variants with a "Learn more" disclosure).
+- **Status:** filed 2026-08-20 during the scoping session for `docs/order-restriction-alert-badge.md`. **STAGING COMPLETE 2026-08-21. PRODUCTION — DB half APPLIED 2026-08-21** (`docs/sql/f132-order-requirement.sql`, verified 0 non-null/11,726, Rick, SQL Editor) — **client code half (app.js/catalog.html/style.css) not yet promoted.** Corrected here 2026-08-22: this line previously read "not yet run" for the whole gate, which was stale for the DB half specifically — found while confirming F136 S3 wasn't blocked by it (`docs/order-restriction-alert-badge.md` § 7 S8 already recorded "DB half GREEN, code half in progress"; this section and CLAUDE.md's F132 row had not been updated to match). Filed at Rick's request (two asks: alert restricted titles, badge restricted/incentive variants with a "Learn more" disclosure).
 - **Severity:** **Medium.** Not a defect — every component works as designed. The gap is a missing *proactive* signal: today the customer finds out a restricted title didn't arrive only *after* the fact, via the same rejected-badge mechanism (**F117**/**F120**) used for ordinary rejections, which conflates "distributor allocation risk was known at reservation time" with "distributor rejected this order."
 - **Measured, not assumed (2026-08-20):** PRH's `OrderRequirement` column (`2026_08_PRH_metadata_full_active.csv`, 879 rows) carries a real restriction on 133 rows (15%) — ratios from `1:5` to `1:250`, always on a `Variant Title` row, never `Primary Title`, and self-contained (`OrderRequirementUPC` empty in all 133 — no cross-row lookup needed).
 - **CORRECTED same day, before production was touched.** The original survey also claimed "Lunar has no equivalent structured field" — **wrong.** Rick found a live restricted Lunar variant on staging showing no badge, which prompted a re-measurement: Lunar's `VariantType` field **is** the structured signal — a ratio string on **562/4,799 rows on staging (over 4x PRH's volume)**, versus `'Open Order'`/`'OPEN ORDER'`/`'Open order'` (1,832 rows, three castings of the no-restriction marker — Lunar's own `'Order All'`) for unrestricted variants. `title_note` (free-text, overloaded with discount/territory/returnability info) remains a separate, still-real, still out-of-scope gap — it was never the actual signal, `VariantType` was. Full correction: `docs/order-restriction-alert-badge.md` § 1.
@@ -4336,7 +4342,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Built and verified on staging, 2026-08-20–21, STAGING COMPLETE.** Migration applied (Rick) — 0 non-null over 9,589 rows, then a real import (Rick, 2026-08-21, catalog-refresh step only) populated real restricted rows from live data on both distributors — confirmed by direct query. Import-script normalizers + 210/210 unit suite green (`e57ade4`, then `0f5d9ae` for the Lunar correction). Badge real-browser-verified via a new Playwright spec (`20-restricted-variant-badge.spec.ts`, 4/4 green) — including catching that `catalog.html`'s `#filter-variants` defaults to "Standard Covers," which hides every restricted row by construction until a customer switches to "All Covers" (not a defect, existing catalog behavior).
 - **A second real bug found the same way, same day: cover badges vanished on card hover.** Rick, testing real staging data, reported the badge "hides when mouse hovers over title box" and no tooltip. Root-caused with data (`document.elementFromPoint()` at the badge's position returned the `<img>`, not the badge, during hover; confirmed visually with before/after screenshots) — **one mechanism explained both symptoms**: `.comic-card:hover .comic-cover img { transform: scale(1.03) }` creates a new stacking context on hover, and with no `z-index` on the badges, the later-in-DOM image painted above them, both hiding them visually and capturing the hover that would have triggered the badge's `title=` tooltip. **Pre-existing on `.distributor-badge`/`.reserved-indicator` too — not introduced by F132, just surfaced by it.** Fixed with `z-index: 2` on all three cover badges (`style.css`, `3b345bf`), re-verified (`elementFromPoint` now returns the badge), and covered by a permanent Playwright regression (spec 20's 4th test, asserting the mechanism directly rather than just visual appearance).
 - **A third same-day item: the mobile-tooltip gap § 5 explicitly flagged for revisit turned out to matter.** Rick: the native `title=` tooltip "does not work on mobile touch screens." Fixed by reusing the existing detail modal (`openModal()`, `catalog.html`) — it already opens on a real click/tap on both mobile and desktop, so no new popover component was needed. New `#modal-restriction-notice` element, same disclosure copy as the tooltip, shown when `order_requirement` is set (`style.css`/`catalog.html`, commit `704820e`). Playwright coverage added; regression-checked against the other modal-heavy specs (02, 14) — no impact.
-- **Production requested by Rick 2026-08-21, gate V8, in progress.** Sequencing matters: `docs/sql/f132-order-requirement.sql` must run against production BEFORE the next production import — `import.js` already carries the F132 normalizer changes, and would 400 on every catalog upsert (not just restricted rows) without the column. Client code is additive-safe to promote before or after the DB migration. Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
+- **Production DB half APPLIED 2026-08-21** (`docs/sql/f132-order-requirement.sql`, verified 0 non-null/11,726, Rick, SQL Editor) — this was the not-optional pre-work, since `import.js` already carries the F132 normalizer changes and would 400 on every catalog upsert (not just restricted rows) without the column. **Client code half (app.js/catalog.html/style.css via `/promote-prod`) still not promoted** — additive-safe to promote before or after the DB migration, so this is not itself blocking. Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
 - **Where:** `catalog` table (new column) · `catalogs/scripts/import.js` / `import-staging.js` normalizers — private scripts repo · `app.js:1748` (`buildComicCard()`) · `catalog.html`.
 - **Related:** **F117**/**F120** (the retrospective rejected-badge mechanism this is an earlier, non-replacing signal for — see explicit OUT-of-scope note in the plan doc). **F115** (same additive-nullable-column, no-backfill-needed shape, different fact). **F123** (the key-shape rule this column's normalizer must respect across both distributors in one upsert batch).
 
@@ -4353,7 +4359,8 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F134 — Order Follow-Up's "Never arrived" rows have no exit and no way to resolve them, so a known outcome nags forever
 
-- **Status:** filed 2026-08-21, surfaced by Rick on the first production run of the F115 panel — five rows appeared and none could be cleared. **LIVE IN PRODUCTION 2026-08-21.** DB migration applied (Rick, SQL Editor — constraint-definition query confirmed `'damaged'` in the allowed set; a bogus-value-rejection check alone was insufficient proof since 'bogus' fails under either the old or new constraint, same trap F115's own prod migration note records). Client promoted via **PR #127** (`726f8df`) — `admin.html`/`app.js`/`mylist.html` new bytes confirmed served on `pulllist.app`. **Post-deploy write-smoke pending (Rick)** before this is marked fully RESOLVED. Plan: `docs/f134-arrival-resolution.md`.
+- **Status:** filed 2026-08-21, surfaced by Rick on the first production run of the F115 panel — five rows appeared and none could be cleared. **RESOLVED AND LIVE IN PRODUCTION 2026-08-21.** DB migration applied (Rick, SQL Editor — constraint-definition query confirmed `'damaged'` in the allowed set; a bogus-value-rejection check alone was insufficient proof since 'bogus' fails under either the old or new constraint, same trap F115's own prod migration note records). Client promoted via **PR #127** (`726f8df`) — `admin.html`/`app.js`/`mylist.html` new bytes confirmed served on `pulllist.app`. **Post-deploy write-smoke passed (Rick)** — reserve/confirm/cancel through the live app. Plan: `docs/f134-arrival-resolution.md`.
+  - **The write-smoke surfaced one real, unrelated bug** — the My List desktop table's cover `<img>` had no `onerror` fallback (`git blame`: `mrcyberrick`, 2026-02-23, five months before this session), so a `cover_url` that failed to load showed a broken-image icon instead of the placeholder the mobile card and Upcoming Arrivals grid already fall back to. Out of scope for F134, fixed same session on Rick's explicit go-ahead (stop-and-ask per CLAUDE.md § Anti-Drift Rules; he chose "fix now" over filing it). One attribute, `onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;"`, matching the pattern already used twice in the same file. Promoted separately via **PR #128** (`bfa687c`), verified live on `pulllist.app`. No new finding ID — fixed immediately, not deferred.
   - **Part 1** (`admin.html` staging `bfb2be8`): gates V1/V2 observed **FAILING** against the pre-fix build (both seeded titles wrongly stayed in the panel), then **GREEN** after the fix, against confirmed-fresh staging bytes — 8.2s/11.1s, `21-arrival-resolution.spec.ts` (local-only, not committed, per § What's tracked vs local-only).
   - **Part 2a** — `docs/sql/f134-arrival-outcome-widen.sql` applied to staging (Rick, SQL Editor, 2026-08-20). Gate **V3** verified live: pre-check confirmed the original tri-state constraint before the run; DDL applied clean; row-count check unaffected (54 null / 2 arrived / 0 damaged / 0 not_arrived); `'damaged'` write accepted in a rolled-back transaction; a bogus value still rejected `23514` on `preorders_arrival_outcome_check`, DETAIL line confirming the staging founding tenant.
   - **Part 2b/2c** (`admin.html`, `app.js`, `mylist.html` staging `c4f3b59` then `667c397`): admin resolve control (Received / Didn't arrive / Damaged) writes `arrival_outcome` for every preorder row a Never Arrived group collapsed, via `groupByExportCode()`'s new `rows` array (additive). My List's three status call sites gained `not_arrived`/`damaged` copy per § 4.3's settled rule. Gates V4/V5/V5b/V6 all green (`c4f3b59` run below).
@@ -4399,7 +4406,148 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `catalogs/scripts/import.js` — Step 6's publish block (~line 1931) and `resolveFeedWeek()` (~line 1510); `mrcyberrick/weekly-pull-feed` — `build-pull-feed.js`, `send-brevo-campaign.js`, and the send workflow.
 - **Related:** **F134** (makes ad-hoc imports routine, which is what turns this from dormant to live), **F98**/**F100** (the publish-ordering and two-deployer history), **F96**/**F106** (why a quiet failure is worse than a loud one), **F84** (the shipment-label inversion in the same import path).
 
-Next free finding ID: **F136**.
+#### F136 — a distributor's post-solicitation date revision has no detection path on an unreserved row, and 2,666 duplicate catalog rows mean some reservations sit on a row the monthly import can never revisit again
+
+- **Status:** filed 2026-08-21. Discovered by Rick cross-checking the Arrivals admin "Not in shipment" count against Lunar's own site for SPAWN SCORCHED #54 (`0626IM0402`): the app showed in-store `8/26/2026`, the distributor showed `9/2/2026` (FOC pushed to `8/10/2026`). Reproduced and fixed live via three sequential backfill imports, oldest-to-newest (June→July→August), first on staging (`import-staging.js`) then on production (`import.js`). **RESOLVED 2026-08-22 — owner: `docs/f136-catalog-month-integrity.md` (S1+S2+S3 all shipped same day).** Root cause **identified 2026-08-21** — see below; fix shape sized into three sessions there, all now complete.
+- **S1 shipped 2026-08-22** (scripts repo `main`, `f1f90be`, `e3c15e5`, `3a1bede`): Part A's three entry guards (`inferCatalogMonth()` no longer silently guesses — returns `null` and requires an explicit typed month; a Lunar item-code MMYY-vs-confirmed-month cross-check; a distributor-agnostic cross-month collision pre-check gating above ~5% of the incoming record count) and Part C(1)'s widened drift report (`classifyReservedDateDrift()` gains a third `unreserved` list) are live on staging's import scripts. All four gates (V0–V4) green — V0/V2/V3 against real live data including deliberately-wrong-month runs observed to correctly abort; V4's natural 2026-06 backfill case read 0 for `unreserved` (the prior manual 2026-08-21 backfill had already applied the corrected dates to every row, reserved or not, so there was no live drift left to detect), so a constructed fixture — one seeded stale `on_sale_date` on a genuinely unreserved row, re-imported, then reverted and verified torn down — demonstrated the code path fires correctly end to end. `f136-audit.js` (consolidated read-only diagnostic replacing the three scratchpad-only planning scripts) reproduces this doc's own recorded staging numbers exactly (977 duplicate pairs, `{2026-04,2026-06}`=919, 997 safe/1 blocked) and additionally surfaced **one new live-stranded reservation on staging** not present on 2026-08-21 (see § "Where" below) — reported, not acted on; repointing is Part D/S3.
+- **S2 shipped 2026-08-22** (`docs/sql/f136-dedupe-catalog-months.sql`, applied to staging by Rick; scripts repo `main` `7a8d6a1`): the `dedupe_catalog_months(p_tenant_id uuid)` RPC implementing the § 3(b) rule, `service_role`-only grants, wired into `refreshCatalog()`'s new-month branch immediately after `purge_stale_catalog`, as a deliberately separate call (purge is date-driven, this isn't). Gates V5–V6 green, confirmed two ways: Rick's own SQL Editor post-verify, and an independent `f136-audit.js` re-run showing staging catalog rows going **9,951 → 8,954 (delta exactly 997)**, duplicate pairs **977 → 1** (only the pre-existing blocked group survives), safe/blocked **997/1 → 0/1**, and preorder counts unchanged (**56 total / 22 unfulfilled / 34 fulfilled**, both before and after). The one live-stranded reservation (Nightmare Before Christmas #2) is confirmed still present, still referenced, still exactly as stranded as before — dedup does not un-strand a row a preorder still points at; only Part D/S3's repoint does that.
+- **S3 shipped 2026-08-22** (`docs/sql/f136-s3-prod-repoint-and-dedupe.sql`, all six steps run by Rick on production): created `dedupe_catalog_months()` on production (S2's migration was staging-only); added the Part C(2) revision-sweep step to `docs/monthly-catalog-refresh.md`; re-measured live production fresh rather than trusting the 2026-08-21 snapshot — confirmed 2,666 duplicate pairs / 2,667 safe / 29 blocked unchanged, and that of the 29 blocked rows only the same **2** named in § 3(d) are unfulfilled (the other 27 are historical fulfilled rows, mostly Book Stop's own past shelf-copy reservations, never part of § 3(d)'s count). Repointed the 2 unfulfilled reservations (Alex Alvarez / TMNT #40 Variant C, Brian Moss / Action Comics #1 Facsimile) from their `2026-05` rows to the maintained `2026-06` rows, then ran the production dedupe. Gates V7–V8 green, confirmed three independent ways: production catalog rows **12,087 → 9,418 (delta exactly 2,669)**, matching the dry-run preview precisely; preorder counts unchanged (**2,021 total / 1,049 unfulfilled / 972 fulfilled**, before and after); duplicate pairs **2,666 → 27**, safe/blocked **2,667/29 → 0/27** — the 27 survivors are exactly the historical rows this session deliberately left blocked, per Rick's explicit call. Staging's one residual (Nightmare Before Christmas #2) was confirmed `fulfilled = true` — same accepted-residual category, zero customer-facing risk. **F136 fully RESOLVED — no further sessions planned.** Full detail: `docs/f136-catalog-month-integrity.md` § 11.
+- **Severity:** **Medium-High.** Confirmed customer-facing wrong dates existed silently on both environments before this session's backfills. Confirmed structurally-orphaned reservations remain today on at least 2 production rows that are not currently wrong but cannot receive any future correction through the normal import pipeline — the same failure class as SPAWN SCORCHED, just not yet triggered.
+- **Part 1 — stale dates on unreserved rows go undetected.** Lunar's monthly Product Data CSV is keyed by solicitation month (`MMYY` prefix in `item_code`), but the file for a given month **can be re-fetched later and carries revised FOC/in-store dates** for items still open — confirmed: the original June import wrote `on_sale_date=2026-08-26` for `0626IM0402`; a freshly re-pulled June file today shows `InStoreDate=9/2/2026`, matching the distributor's own site exactly. Nothing in `import.js`/`import-staging.js` triggers a re-fetch of an older still-open month — it only happens if someone manually re-supplies the file. The closest existing mechanism, `reportReservedInStoreDateChanges()` (built for **F122**), only diffs titles that are **currently reserved**; an unreserved row with a stale date is invisible to it. Measured: the June backfill's "corrected" report showed 3 reserved titles on staging and **18 on production**; the July backfill showed **31 more on production** (49 total) — none of which had any signal before this session's manual distributor cross-check.
+- **Part 2 — 2,666 duplicate catalog rows, some of which strand a reservation.** `catalog` contains **2,666 `(item_code, distributor)` pairs with more than one `catalog_month` row** (measured on production 2026-08-21; staging not yet checked at this depth) — **2,621 of them exactly the pair `{2026-05, 2026-06}`**, with smaller clusters spanning 3+ months (`{2026-05,06,07}`: 24, `{2026-05,07}`: 7, and several 1-2-item pairs elsewhere). The catalog upsert key is `(tenant_id, item_code, distributor, catalog_month)` — `catalog_month` is not authoritative per item, so nothing prevents two rows existing for the same physical product. `preorders.catalog_id` points at one specific row: of the ~92 duplicate-pair items currently carrying a reservation, all but two sit on the row the normal cycle will keep maintaining (the `catalog_month` matching the item's own `MMYY` code). Two do not — `0626DC0190` and `82771403150804031` — both anchored to their `2026-05` duplicate. Checked directly: both rows in each pair currently hold identical dates, so nothing is wrong *today*, but the `2026-05` side is not the row any future `2026-06`-confirmed import will ever touch again — a future distributor revision to either title would silently fail to reach these two reservations, the same way one already did for SPAWN SCORCHED before this session.
+- **Root cause — IDENTIFIED 2026-08-21** (superseding the "not fully identified" text this entry was filed with). **Neither distributor's monthly file overlaps months**, measured on the files on disk: Lunar `0626`∩`0726`∩`0826` share **0** codes, PRH `2026_06`∩`2026_07`∩`2026_08` share **0**; each Lunar file is 100% one MMYY prefix. So normal one-import-per-month operation **cannot** create a duplicate — one can only exist if the same file was imported under two different `catalog_month` values. Production proves that: `catalog_month=2026-05` holds **1,353 rows carrying `0626` (June) codes**, created 2026-05-31/06-01, and the same June file was imported again correctly as `2026-06` on 06-02/06-05. The enabling mechanism is `inferCatalogMonth()` (`import.js:212`), which **falls back to the current calendar month** when the filename carries no parseable month (`import.js:228-229`) — on 2026-05-31 that silently returns `2026-05` for a June file, and neither existing guard fires (guard (a) compares the two filenames to each other, so a shared fallback agrees; guard (b) only warns at a >1-month delta, and this delta is 0). `purge_stale_catalog` then cannot clean it: its predicate requires `on_sale_date < cutoff_date`, so every still-future duplicate survives forever.
+- **Fix shape — sized 2026-08-21** in `docs/f136-catalog-month-integrity.md` § 4: (A) guards so a wrong month cannot be entered silently — `inferCatalogMonth()` returns null instead of guessing, a Lunar MMYY-vs-confirmed-month cross-check, and a distributor-agnostic cross-month collision pre-check; (B) a new `dedupe_catalog_months()` RPC making the bloat self-healing; (C) a third `unreserved` list in the drift report plus a documented monthly revision sweep (re-pull the previous 1–2 still-open months and re-import oldest-to-newest — the sequence Rick ran on 2026-08-21); (D) the cleanup runbook. **The "PRH needs a different resolution method" concern in the original filing does not hold:** the cleanup needs no per-distributor canonical rule, because the highest-`catalog_month` row in a group is by definition the one the live cycle maintains, and every lower-month row holding **no** `preorders` reference is safe to delete outright. Measured: **prod 2,667 deletable / 29 blocked; staging 997 deletable / 1 blocked**, leaving only the 2 prod rows below to decide by hand.
+- **Where:** `catalogs/scripts/import.js` / `import-staging.js` — `inferCatalogMonth()` (~212), `classifyReservedDateDrift()` / `reportReservedInStoreDateChanges()` (F122, ~465/~512), the month-confirm prompt and its two guards (~1723-1765), the catalog upsert conflict key (`on_conflict=tenant_id,item_code,distributor,catalog_month`); `purge_stale_catalog()`; `catalog` table. **Staging scope measured 2026-08-21: 977 duplicate pairs, 100% PRH, dominant set `{2026-04, 2026-06}` (919), zero Lunar duplicates and zero live-stranded reservations** — so staging can rehearse the bulk dedup but cannot rehearse the Lunar half. **Corrected 2026-08-22, via `f136-audit.js` (S1's committed re-run of this same scan): staging now has ONE live-stranded reservation**, not zero — a real customer reservation on "Disney Tim Burton's The Nightmare Before Christmas: All Hail the Pumpkin King #2" (`64557390089200211`, PRH) sits on the stale `2026-04` duplicate row rather than the maintained `2026-06` row. This is a fresh, real occurrence of exactly this finding's Part 2 failure mode, not a new finding — it happened live sometime between the 2026-08-21 measurement and this S1 session. **Confirmed S3 (2026-08-22): this reservation is `fulfilled = true`** — historical, already resolved, zero future-correction risk — so it was deliberately left blocked rather than repointed, same as production's 27. **Final state, post-S3: production 27 blocked rows / staging 1 blocked row, both entirely fulfilled/historical, 0 unfulfilled-stranded on either environment.**
+- **Related:** **F122** (the existing reservation-scoped drift report this extends/limits), **F111** (cross-month FOC handling), **F115** (arrival-truth persistence — same "distributor reality vs. stored schedule" family), **F110** (`delete_dropped_catalog_items`'s single-month scope — same structural blind-spot class, different mechanism).
+
+#### F137 — the import scripts' catalog-month detection is not scoped by tenant, so another tenant a month ahead silently disables the entire new-month sequence
+
+- **Status:** filed 2026-08-22. Found while planning F136 (`docs/f136-catalog-month-integrity.md` § 7). **Latent — not currently biting on either environment**, measured below. Rick's call 2026-08-22: fix it inside **F136 S1**, as its own commit, since it is one line in a function that sub-deploy already edits. **RESOLVED 2026-08-22** — fixed on the scripts repo `main` (`3a1bede`), own commit as directed. **V0 (constructed) green**: seeded one catalog row for `pw-56132e92` at `catalog_month=2026-09` on staging (one month ahead of `raysandjudys`' real 2026-08 max), ran the literal Step 3 query text from BOTH the unfixed (git HEAD before the fix) and fixed versions against live staging. Unfixed returned `2026-09` (the exact failure mode: `isNewMonth` would compute `false`, "♻️ Same month — upsert refresh only"); fixed, tenant-scoped query returned `2026-08` (correctly `isNewMonth = true`). Seed row deleted and teardown confirmed by live SELECT returning zero rows.
+- **Severity:** **Medium.** No wrong data today. When it fires it is silent and total: a genuinely new catalog month is classified as "same month", and `archive_stale_reservations`, `purge_stale_catalog` and `delete_dropped_catalog_items` all skip with no error, no warning, and a plausible-looking "♻️ Same month — upsert refresh only" on the console.
+- **The defect.** Step 3 of both scripts reads the current database catalog month with **no tenant filter**:
+  ```js
+  `${SUPABASE_URL}/rest/v1/catalog?select=catalog_month&order=catalog_month.desc&limit=1`
+  ```
+  `import.js` ~1789, `import-staging.js` ~1781. Every other catalog query in both files passes `tenant_id=eq.${TENANT_ID}` — this one is the exception, and the scripts run on the **service-role key**, which bypasses RLS. So `currentDbMonth` is the newest `catalog_month` **across all tenants**, and `isNewMonth = confirmedMonth > currentDbMonth` compares the importing tenant's incoming month against somebody else's catalog.
+- **How it fires.** Any secondary tenant whose catalog is a month ahead of the importing tenant. Onboard a tenant mid-month with a newer file, or let a demo tenant carry a forward-dated month, and the founding tenant's next real month-turnover import runs the mid-month refresh path instead of the new-month path. Reservation history is not archived, stale rows are not purged, dropped titles are not removed — and the operator sees a successful import.
+- **Measured 2026-08-21** — latent on both environments, but the second tenants are real, not hypothetical:
+
+  | Env | Tenants (catalog rows) | Max `catalog_month` per tenant | Unfiltered read |
+  |---|---|---|---|
+  | Production | `rjbookstop` (12,087), `comicstore` (2) | 2026-08 / 2026-06 | 2026-08 — correct by luck |
+  | Staging | `raysandjudys` (9,951), `pw-56132e92` (1), `pw-fc2e3fc7` (0) | 2026-08 / 2026-08 / — | 2026-08 — correct by luck |
+
+  Both read correctly **only because the importing tenant currently holds the newest month**. `comicstore` sitting at 2026-06 with two rows is enough to demonstrate the mechanism; it needs to be two rows at 2026-09.
+- **Fix shape:** add `tenant_id=eq.${TENANT_ID}` to the query in both scripts. One line each, no schema change, no behaviour change on either environment today — which is also why it needs a **constructed** verification rather than a live one: seed a secondary-tenant catalog row at a month ahead of the importing tenant on staging, confirm `isNewMonth` is computed **true** for a genuinely new month with that row present, then remove the seed. A check that passes before and after the fix (which any check against today's data will) is not a check — see § "A verification step that cannot fail is not a verification step".
+- **Why this is a sibling of F136, not a duplicate.** F136's duplicate rows accumulate because `purge_stale_catalog` cannot delete future-dated duplicates. F137 is a second, independent way the purge fails to run **at all**. Same blind spot class as **F110** (`delete_dropped_catalog_items`'s single-month scope): a month-scoped decision made from the wrong input, failing quietly.
+- **Where:** `catalogs/scripts/import.js` ~1789, `catalogs/scripts/import-staging.js` ~1781 — the Step 3 `monthRes` fetch inside the `isNewMonth`/`isOlderMonth` detection block.
+- **Related:** **F136** (owner plan `docs/f136-catalog-month-integrity.md`; the fix rides in its S1), **F110** (single-month scope blind spot), **F122** (the drift report F136 S1 also widens), **F15**/**F20** (tenant-isolation coverage — Playwright specs assert the app's isolation, but the import scripts run outside RLS and have no equivalent).
+
+#### F138 — reverses F128: admins now get write access to `subscriptions` so impersonation can fully manage a customer's subscriptions
+
+- **Status:** filed 2026-08-22, Rick's explicit request. **RESOLVED on
+  staging 2026-08-22** — V1-V4 all green (below), branch merged
+  `--ff-only` and pushed, full `run-smoke.ps1` green (269 unit + 139
+  Playwright, 0 failures, 0 retries). **Production RLS migration APPLIED
+  2026-08-22** (Rick, via `/promote-prod`'s unapplied-migration gate — ran
+  ahead of the client-code merge for the same reason F128 fixed the client
+  side: promoting the write-enabled client without the policy first would
+  have silently reproduced F128's bug on production). Client-code
+  promotion (this section's app files) in progress via the same
+  `/promote-prod` run.
+- **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
+  with no admin write policy, on Rick's explicit "no" to admins
+  unsubscribing customers during impersonation — see that entry's "Do not
+  add an admin write policy to `subscriptions` later." Rick reversed that
+  2026-08-22: admin impersonation should manage a customer's subscriptions
+  the same way it already manages their preorders (subscribe **and**
+  unsubscribe on the customer's behalf), not just view them.
+- **DB half.** New PERMISSIVE ALL policy `admins manage tenant subscriptions`
+  (`current_user_is_admin() AND tenant_id = current_tenant_id()`, same
+  predicate for `USING`/`WITH CHECK`) replaces the old SELECT-only `admins
+  view tenant subscriptions`, keeping the same 4-policy shape `preorders`
+  already has. Migration:
+  `docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`
+  — staging first, production only after Rick confirms staging is green.
+- **Client half (`subscriptions.html`).** Removed the three impersonation
+  guards F128 added / that predate it: the reserved-suggestions Subscribe
+  button's `disabled` state and its click-handler early return, the main
+  table's Unsubscribe button's `disabled` state and its click-handler early
+  return, and the series-search input's impersonation disable. Fixed two
+  write-target bugs uncovered while re-enabling the suggestions path: its
+  subscribe call and its Undo-toast unsubscribe call were passing `user.id`
+  (the admin's own id) instead of `AdminContext.resolveUserId(user.id)` —
+  harmless while the buttons were disabled and unreachable, but would have
+  written to the admin's own subscriptions instead of the customer's the
+  moment they were enabled. The series-search subscribe path already used
+  `resolveUserId` correctly (F128 never touched it; only the input-disable
+  blocked it), so it needed no write-target fix, just the gate removed.
+- **Sequencing risk, deliberately avoided.** The client fix alone, pushed
+  ahead of the DB migration, would silently reproduce F128's exact bug
+  shape (a write reported as successful that RLS actually filtered to zero
+  rows) — for subscribe as well as unsubscribe this time. **Do not merge
+  this branch to staging until the migration has been run and verified on
+  staging.**
+- **Verification gates (staging):**
+  - V1 — migration pre-flight query shows the expected 4 pre-migration
+    policies (§ 7.1 subscriptions); post-migration query shows
+    `admins manage tenant subscriptions` (ALL) in place of the old SELECT
+    policy, 4 policies total.
+    **GREEN 2026-08-22** — Rick ran the migration on staging; post-check
+    `pg_policies` read matches exactly: `admins manage tenant subscriptions`
+    (PERMISSIVE, ALL, `{authenticated}`), the two F127 RESTRICTIVE policies,
+    and `users manage own subscriptions` — 4 rows, no leftover SELECT-only
+    admin policy.
+  - V2 — functional, from the app: admin impersonates a customer, subscribes
+    them to a series from the reserved-suggestions list, confirms (via
+    PostgREST or SQL Editor) the row's `user_id` is the **customer's**, not
+    the admin's.
+    **GREEN 2026-08-22** — new Playwright test in
+    `11-reserved-suggestions.spec.ts` (local suite): impersonated admin
+    subscribes from the reserved-suggestions list, row flips to ★
+    Subscribed, DB row polled via `getSubscription` lands under the
+    customer's `user_id` (asserted `sub.user_id === custId`), and a parallel
+    check confirms no row was created under the admin's own id — the exact
+    write-target bug this session found and fixed while re-enabling the
+    button.
+  - V3 — same for series search subscribe, and for Unsubscribe from the main
+    table — confirm the row is actually gone, not silently retained (the
+    F128 failure mode, now checked for both directions).
+    **GREEN 2026-08-22** — same test continues: Unsubscribe from the main
+    table (admin, impersonating), confirm dialog accepted, row disappears
+    from the UI, and `getSubscription` polls to `null` — the exact
+    verification F128's original bug lacked (a DELETE reported as
+    successful that RLS had silently filtered to zero rows). Series-search
+    subscribe path unchanged by this finding (it never had a write-target
+    bug — only the input-level disable blocked it) and is covered by the
+    pre-existing `series_search` attribution test in the same spec, which
+    stayed green.
+  - V4 — regression: non-impersonated customer subscribe/unsubscribe/search
+    still work unchanged; a blocked (`pending`/`suspended`) customer's own
+    session still can't subscribe to new series but can still unsubscribe
+    (F127-style client gate, untouched by this finding).
+    **GREEN 2026-08-22** — full `run-smoke.ps1`: 269 unit tests + 139
+    Playwright tests (specs 01-21, including the new F138 test and every
+    pre-existing subscription/impersonation spec), 0 failures, 0 retries.
+  - Full `run-smoke.ps1` green before any production promotion request.
+    **Satisfied 2026-08-22** — see V4 above; branch merged to `staging`
+    `--ff-only` (fast-forward, no conflicts) and pushed
+    (`ba6217b..5692419`); new bytes confirmed served via `curl -L` before
+    the gate ran.
+- **Docs updated (2026-08-22):** § 7.1 subscriptions policy list above
+  (pending note removed, "Verified live on staging" with date),
+  `docs/subscription-reserved-suggestions.md` § 4c (superseded pointer),
+  CLAUDE.md § Series Subscriptions (impersonation bullet updated to match
+  the new behavior) and its findings table/status section. Local-only
+  (never committed): `11-reserved-suggestions.spec.ts`'s admin-impersonation
+  test rewritten from asserting the old disabled state to exercising the
+  new write path end-to-end (subscribe + unsubscribe, both DB-verified).
+- **Related:** **F128** (the decision this reverses), **F16**/**F127**
+  (the `preorders` admin-policy pattern this mirrors), **F58** (same
+  silent-no-op shape on `user_profiles`, unrelated table, not in scope
+  here).
+
+Next free finding ID: **F139**.
 
 ---
 

@@ -266,6 +266,15 @@ Rick's V5 pass produced two change requests, both accepted after discussion:
    catalog modal's hide-in-impersonation rule — CLAUDE.md § Series
    Subscriptions gets a clarifying line at close.
 
+   ⚠️ **Superseded 2026-08-22 (F138, reversing F128's later hardening of
+   this same disabled-button decision).** Rick asked for the deferred
+   "subscribe-on-behalf" option after all — admin impersonation now fully
+   manages a customer's subscriptions (subscribe and unsubscribe), gated
+   by a new admin write RLS policy. See `docs/technical-reference.md` § 13
+   F138. This item's disabled-button decision and F128 are both historical
+   from here — left as-is for the record of what was decided and why at
+   the time.
+
 Gate impact: spec 11 tests 4 (has-sub) and 5 (admin) inverted to the new
 behavior; V1's has-sub and admin rows re-earned under the amended matrix;
 V4 full-suite re-run required; V5 re-check by Rick after deploy.
