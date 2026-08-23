@@ -12,7 +12,20 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F138 RESOLVED on staging 2026-08-22 (reverses F128, Rick's explicit
+**Last completed work:** F139 fully RESOLVED 2026-08-23 (both environments) — a live customer-
+reported catalog bug (a real reservation showing unreserved, omitted from the Reserved filter, and
+hitting a 23505 on re-reserve) traced to `Preorders.getMyIds()`/`getMy()` having no pagination
+against PostgREST's default 1000-row cap on unbounded selects. Diagnosed against live production
+data (confirmed the row was correct in the DB before touching any code — no RLS gap, no data
+corruption), fixed with a new `Preorders._fetchAllRows()` range()-based pagination loop in `app.js`,
+no schema change. Verified on staging via full `run-smoke.ps1` (269 unit + 139 Playwright, 0
+failures) and a targeted 37/37 rerun of every reserve/My List/subscriptions/arrivals spec; promoted
+to production same day (PR #130) and re-verified directly against live prod data post-deploy — the
+account that surfaced the bug (1,223 preorders as of the recheck) now correctly returns the
+previously-dropped reservation via the fixed pagination. See `docs/technical-reference.md` § 13
+F139. Standalone bug fix, not scoped to any active sub-deploy.
+
+Prior work, same day: **F138** RESOLVED on staging 2026-08-22 (reverses F128, Rick's explicit
 request) — admin impersonation gets full write access to `subscriptions` (subscribe **and**
 unsubscribe on a customer's behalf), matching how `preorders`' admin policy already works. New
 `admins manage tenant subscriptions` RLS policy (`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`)
@@ -77,7 +90,6 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F139 | **Medium** — `Preorders.getMyIds()`/`getMy()` had no pagination; PostgREST silently caps an unbounded select at 1000 rows, so any account past that lifetime-preorder count silently loses reservations off the catalog reserved-status map (and eventually My List/Arrivals/Subscriptions too). Found live via the Book Stop admin test account (1,212 preorders) | Owner: `docs/technical-reference.md` § 13 F139. **RESOLVED on staging 2026-08-23** — `Preorders._fetchAllRows()` pagination added, merged and pushed to `staging`, verified (range-paging replication + 37/37 targeted Playwright). Not yet promoted to production |
 | F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. **RESOLVED on staging 2026-08-22** — V1-V4 all green, merged and pushed to `staging`. Next: production promotion is a separate explicit request via `/promote-prod` (not requested yet) |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
@@ -721,6 +733,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Analytics cycle-alignment | `analytics-cycle-alignment.md` | — |
 | Analytics v2 engagement dashboard | `analytics-v2-engagement-dashboard.md` | — |
 | Catalog info-card reserve-sync fix (no plan doc — direct bug fix, PR #99) | — | F103 (coverage gap it exposed) |
+| `Preorders` pagination past PostgREST's 1000-row cap (no plan doc — direct bug fix, PR #130) | — | F139 |
 | Subscription reserved-suggestions | `subscription-reserved-suggestions.md` | — |
 | Subscription promotion | `subscription-promotion.md` | — |
 | Apex marketing page + universal login | `apex-landing-tenant-subdomains.md`, `apex-marketing-page-design.md` | — |

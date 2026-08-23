@@ -4549,10 +4549,16 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F139 — `Preorders.getMyIds()`/`getMy()` had no pagination; PostgREST silently caps an unbounded select at 1000 rows
 
-- **Status:** filed and **RESOLVED on staging 2026-08-23**, same session.
-  Not scoped to any active sub-deploy (Current Migration Phase is none) — a
-  standalone bug fix reported live by Rick. Not yet promoted to production —
-  a separate explicit request.
+- **Status:** filed and **fully RESOLVED 2026-08-23, both environments**,
+  same session. Not scoped to any active sub-deploy (Current Migration Phase
+  is none) — a standalone bug fix reported live by Rick. Promoted to
+  production via PR #130 (`e71f94c`, merged `d017fc0`), same day as the
+  staging fix, per Rick's explicit `/promote-prod` request. New production
+  bytes confirmed served, and the fix re-verified directly against live
+  production data post-deploy: replicated the fixed `getMyIds()` pagination
+  loop against the Book Stop admin account (grown to 1,223 preorders by the
+  time of the recheck) — 2 pages (1000 + 223), and the previously-dropped
+  AMAZING SPIDER-MAN #1002 reservation is now present in the result.
 - **Symptom, live in production:** the Book Stop admin account (1,212 total
   lifetime preorders) had a real, correctly tenant/user-scoped reservation
   for AMAZING SPIDER-MAN #1002 (standard cover) that `catalog.html` rendered
@@ -4610,10 +4616,13 @@ reasoning — only the disposition changed, not the diagnosis.
     unco​mmitted before anything landed there) and the correct
     `feature/f139-preorders-pagination-cap` branch off `staging`.
 - **Where:** `app.js` — `Preorders._fetchAllRows()` (new),
-  `Preorders.getMyIds()`, `Preorders.getMy()`. Commit `856c178` on
+  `Preorders.getMyIds()`, `Preorders.getMy()`. Staging: commit `856c178` on
   `feature/f139-preorders-pagination-cap`, fast-forward merged to `staging`,
   pushed (`e4a7370..856c178`); new bytes confirmed served via `curl -L`
-  before the smoke gate ran.
+  before the smoke gate ran. Production: PR #130
+  (`feat/f139-preorders-pagination-cap-prod` → `main`, commit `e71f94c`,
+  merge `d017fc0`); F105 migration gate clean (no schema change) and F59
+  merge-base check confirmed `app.js` differed from `main` as expected.
 - **Scope:** both environments share the same client code; production has
   not been promoted. The only account known to have crossed the 1000-row
   cap today is the Book Stop admin test account — a real customer is very
