@@ -38,8 +38,11 @@ Playwright test in local spec `11-reserved-suggestions.spec.ts` that subscribes 
 a customer's behalf during impersonation and DB-verifies both the correct `user_id` and the actual
 row deletion (not F128's silent no-op), V4 the full `run-smoke.ps1` — 269 unit + 139 Playwright, 0
 failures. Branch `feature/f138-admin-subscription-management-impersonation` merged to `staging`
-`--ff-only` and pushed. **Not promoted to production** — separate later request via
-`/promote-prod`. See `docs/technical-reference.md` § 13 F138.
+`--ff-only` and pushed. **Promoted to production 2026-08-22** — RLS migration applied same day,
+client code via PR #129 (`f1364a785`). **F138 fully RESOLVED, both environments.** *(This section
+previously read "Not promoted to production" after the promotion had already completed — the same
+stale-doc pattern as F132 below; corrected 2026-08-23, found while promoting F139.)* See
+`docs/technical-reference.md` § 13 F138.
 
 Prior work, same day: **F136** fully RESOLVED 2026-08-22 — S1, S2, and S3 all shipped the same day
 (`docs/f136-catalog-month-integrity.md`). S3 (an earlier session that same day): created
@@ -90,7 +93,6 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. **RESOLVED on staging 2026-08-22** — V1-V4 all green, merged and pushed to `staging`. Next: production promotion is a separate explicit request via `/promote-prod` (not requested yet) |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
@@ -734,6 +736,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Analytics v2 engagement dashboard | `analytics-v2-engagement-dashboard.md` | — |
 | Catalog info-card reserve-sync fix (no plan doc — direct bug fix, PR #99) | — | F103 (coverage gap it exposed) |
 | `Preorders` pagination past PostgREST's 1000-row cap (no plan doc — direct bug fix, PR #130) | — | F139 |
+| Admin write access to `subscriptions` during impersonation (no plan doc — direct fix, PR #129) | — | F138 (reverses F128) |
 | Subscription reserved-suggestions | `subscription-reserved-suggestions.md` | — |
 | Subscription promotion | `subscription-promotion.md` | — |
 | Apex marketing page + universal login | `apex-landing-tenant-subdomains.md`, `apex-marketing-page-design.md` | — |

@@ -4452,9 +4452,14 @@ reasoning — only the disposition changed, not the diagnosis.
   2026-08-22** (Rick, via `/promote-prod`'s unapplied-migration gate — ran
   ahead of the client-code merge for the same reason F128 fixed the client
   side: promoting the write-enabled client without the policy first would
-  have silently reproduced F128's bug on production). Client-code
-  promotion (this section's app files) in progress via the same
-  `/promote-prod` run.
+  have silently reproduced F128's bug on production). **Client-code
+  promotion COMPLETE 2026-08-22** — PR #129 merged to `main`
+  (`f1364a785`). **F138 is fully RESOLVED on both environments.** This
+  completion was not reflected in CLAUDE.md's open-findings table or
+  "Last completed work" section until corrected 2026-08-23 (found while
+  promoting F139 — the same stale-doc pattern the project's Document
+  Integrity rule exists to catch; see F139's own filing for the F136/F132
+  precedents of this exact drift shape).
 - **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
   with no admin write policy, on Rick's explicit "no" to admins
   unsubscribing customers during impersonation — see that entry's "Do not
