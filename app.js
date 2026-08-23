@@ -983,11 +983,34 @@ async function checkMaintenanceMode(isAdmin) {
 
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
+  // Shared pagination helper. PostgREST silently caps an unbounded select()
+  // at 1000 rows (its default max-rows setting) instead of erroring, so any
+  // per-user preorders query needs to loop by range() once that user's
+  // lifetime row count crosses 1000. F139 (2026-08-23): the reserved-status
+  // map on catalog.html was silently missing the admin test account's own
+  // reservation because getMyIds() had no ORDER BY at all, so which rows got
+  // dropped by the cap was arbitrary rather than merely "oldest missing."
+  // buildQuery is a zero-arg function returning a fresh query builder
+  // (already filtered/ordered) — a new one is needed per page since range()
+  // must be chained on each call.
+  async _fetchAllRows(buildQuery, pageSize = 1000) {
+    let all = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await buildQuery().range(offset, offset + pageSize - 1);
+      if (error) return { data: all, error };
+      all = all.concat(data || []);
+      if (!data || data.length < pageSize) break;
+      offset += pageSize;
+    }
+    return { data: all, error: null };
+  },
+
   async getMyIds(userId) {
-    const { data } = await db
+    const { data } = await this._fetchAllRows(() => db
       .from('preorders')
       .select('catalog_id, quantity')
-      .eq('user_id', userId);
+      .eq('user_id', userId));
     // Returns Map of catalogId -> quantity
     const map = new Map();
     (data || []).forEach(r => map.set(r.catalog_id, r.quantity || 1));
@@ -995,7 +1018,7 @@ const Preorders = {
   },
 
   async getMy(userId) {
-    const { data, error } = await db
+    const { data, error } = await this._fetchAllRows(() => db
       .from('preorders')
       .select(`
         id,
@@ -1013,7 +1036,7 @@ const Preorders = {
         )
       `)
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }));
     return { items: data || [], error };
   },
 
