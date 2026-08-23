@@ -55,9 +55,11 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F139**. **F138 filed this session** (reverses
-F128 at Rick's request — see table below and `docs/technical-reference.md`
-§ 13).
+**Next free finding ID:** **F140**. **F139 filed and RESOLVED on staging
+2026-08-23** (`Preorders.getMyIds()`/`getMy()` silently truncated at
+PostgREST's 1000-row cap — see table below and `docs/technical-reference.md`
+§ 13). **F138 filed 2026-08-22** (reverses F128 at Rick's request — see table
+below and `docs/technical-reference.md` § 13).
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -75,6 +77,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F139 | **Medium** — `Preorders.getMyIds()`/`getMy()` had no pagination; PostgREST silently caps an unbounded select at 1000 rows, so any account past that lifetime-preorder count silently loses reservations off the catalog reserved-status map (and eventually My List/Arrivals/Subscriptions too). Found live via the Book Stop admin test account (1,212 preorders) | Owner: `docs/technical-reference.md` § 13 F139. **RESOLVED on staging 2026-08-23** — `Preorders._fetchAllRows()` pagination added, merged and pushed to `staging`, verified (range-paging replication + 37/37 targeted Playwright). Not yet promoted to production |
 | F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. **RESOLVED on staging 2026-08-22** — V1-V4 all green, merged and pushed to `staging`. Next: production promotion is a separate explicit request via `/promote-prod` (not requested yet) |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |

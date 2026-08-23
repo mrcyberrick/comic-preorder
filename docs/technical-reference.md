@@ -4547,7 +4547,84 @@ reasoning — only the disposition changed, not the diagnosis.
   silent-no-op shape on `user_profiles`, unrelated table, not in scope
   here).
 
-Next free finding ID: **F139**.
+#### F139 — `Preorders.getMyIds()`/`getMy()` had no pagination; PostgREST silently caps an unbounded select at 1000 rows
+
+- **Status:** filed and **RESOLVED on staging 2026-08-23**, same session.
+  Not scoped to any active sub-deploy (Current Migration Phase is none) — a
+  standalone bug fix reported live by Rick. Not yet promoted to production —
+  a separate explicit request.
+- **Symptom, live in production:** the Book Stop admin account (1,212 total
+  lifetime preorders) had a real, correctly tenant/user-scoped reservation
+  for AMAZING SPIDER-MAN #1002 (standard cover) that `catalog.html` rendered
+  as unreserved, the Reserved-Only filter omitted, and clicking Reserve
+  again hit a `23505` unique-violation against the row that was there all
+  along — with no Cancel option surfaced, since the UI believed nothing was
+  reserved.
+- **Root cause:** `Preorders.getMyIds(userId)` selected `catalog_id,
+  quantity` from `preorders` filtered only by `user_id`, with **no `ORDER
+  BY` and no pagination at all**. PostgREST's default `max-rows` setting
+  silently truncates any unbounded select at 1000 rows rather than erroring.
+  Once an account's lifetime preorder count crosses that line, which rows
+  survive is arbitrary — Postgres makes no ordering guarantee absent an
+  explicit `ORDER BY`, so the dropped rows are not reliably "the oldest" or
+  any other predictable subset.
+  `Preorders.getMy(userId)` (used by `mylist.html`, `arrivals.html`,
+  `subscriptions.html`) has the identical unbounded-select shape and is
+  subject to the same 1000-row cap — not yet symptomatic because it *does*
+  order by `created_at DESC`, so a user's most-recent reservations survive
+  the cap, and no customer account has crossed 1000 lifetime preorders yet.
+  Confirmed the row was correct in the database (right `user_id`, right
+  `tenant_id`, `fulfilled: false`) via a direct service-role read against
+  production before concluding this was a client-side query defect rather
+  than data corruption or an RLS gap — `preorders` carries no RESTRICTIVE
+  SELECT policy that could explain the omission (§ 7.1).
+- **The fix:** added `Preorders._fetchAllRows(buildQuery, pageSize = 1000)`
+  in `app.js` — a `range()`-based pagination loop that re-invokes
+  `buildQuery()` per page until a page returns fewer than `pageSize` rows —
+  and routed both `getMyIds()` and `getMy()` through it. `buildQuery` is a
+  zero-arg function returning a fresh, already-filtered/ordered query
+  builder, since `range()` must be chained onto a new builder each page.
+- **Verification (staging, 2026-08-23):**
+  - Manual replication of the exact pagination shape against a real staging
+    account's 32 preorders, paged in batches of 10 via raw `Range` headers:
+    4 pages (10/10/10/2), 32 total rows collected, 32 unique — exact match
+    against the `Content-Range` exact count, no duplicates, correct
+    termination on the short final page.
+  - Targeted Playwright rerun (37 specs directly touching reserve/My
+    List/subscriptions/arrivals, including the F138 impersonation-subscribe
+    spec and both catalog info-card reserve specs): **37/37 passed, exit
+    0**, clean synthetic-tenant teardown.
+  - A first full-suite `run-smoke.ps1` run also completed **269 unit + 139
+    Playwright, 0 failures** (`test-results/.last-run.json`:
+    `"status":"passed"`, `"failedTests":[]`) but was initially read as a
+    failure — the background log-capture pipe stopped writing 21 minutes
+    before the run actually finished, and the harness's own exit-code signal
+    for that broken pipe was mistaken for a test failure until the on-disk
+    report timestamps and the targeted rerun cross-checked it. Recorded here
+    per the project's own "a verification step that cannot fail is not a
+    verification step" rule (§ Known Issues) — the artifact-based check
+    (`.last-run.json`), not the process exit code, was the one that actually
+    could have shown red.
+  - `node --check app.js` clean; JS syntax verified on both the accidental
+    first checkout (`feat/f138-admin-subscription-management-prod`, reverted
+    unco​mmitted before anything landed there) and the correct
+    `feature/f139-preorders-pagination-cap` branch off `staging`.
+- **Where:** `app.js` — `Preorders._fetchAllRows()` (new),
+  `Preorders.getMyIds()`, `Preorders.getMy()`. Commit `856c178` on
+  `feature/f139-preorders-pagination-cap`, fast-forward merged to `staging`,
+  pushed (`e4a7370..856c178`); new bytes confirmed served via `curl -L`
+  before the smoke gate ran.
+- **Scope:** both environments share the same client code; production has
+  not been promoted. The only account known to have crossed the 1000-row
+  cap today is the Book Stop admin test account — a real customer is very
+  unlikely to individually reach it, but the defect is independent of that
+  and will recur for any account (customer or admin, either environment)
+  that does.
+- **Related:** none — a standalone data-visibility defect, found by
+  diagnosing a live report with real data rather than by theory (per
+  `feedback_diagnose_with_data_not_theory` working practice).
+
+Next free finding ID: **F140**.
 
 ---
 
