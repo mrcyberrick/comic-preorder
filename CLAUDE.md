@@ -12,7 +12,54 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F140 fully RESOLVED 2026-08-24 (both environments) — promoted to
+**Last completed work:** **Lighthouse performance sweep** RESOLVED on staging 2026-08-24 —
+triggered by Rick asking why Performance scored consistently below 80 on both mobile and desktop.
+Five items, **no finding ID filed** (fixed in-session rather than deferred, Rick's call — **F141 is
+still free**). Measured against live production first, which localised three of Lighthouse's four
+categories onto specific files instead of generic advice.
+
+**Artwork (items 1, 2, 5).** Three assets were bitmaps in formats that could not compress them, two
+of them wrapped in SVG: `favico.svg` was an Inkscape export around a 1254×1254 RGBA PNG — **931 KB
+(710 KB brotli'd), linked from all eight pages and refetched on every load**, to be painted into a
+16–32px tab slot; `comic-cover-fallback.svg` was 203 KB of SVG around a 300×450 base64 PNG for a
+slot CSS renders at 150×225; `assets/hero.jpg` was a 1600×854 JPEG served full-size to phones.
+Re-encoded in-session with Pillow (no GIMP/Inkscape round-trip needed) to `icon-192-v2.png`
+(3,162 B) + `apple-touch-icon-v2.png` (2,939 B — new; iOS previously had no home-screen icon),
+`comic-cover-fallback-v2.webp` (10,764 B), and `hero-v2.webp` (71,166 B) + `hero-mobile-v2.webp`
+(31,784 B). Per page: **866,187 B → 13,926 B** on catalog/mylist/arrivals/etc., **845,694 B →
+74,328 B** desktop / **34,946 B** mobile on the apex page.
+
+**Fonts (item 4).** `style.css` opened with an `@import` of the Google Fonts CSS. An `@import` is
+invisible to the preload scanner, so first paint waited on three strictly serialized round trips
+across two cold origins (`style.css` → parse → `fonts.googleapis.com` → parse →
+`fonts.gstatic.com`) — Lighthouse's 1,610 ms mobile / 510 ms desktop render-block. Replaced with
+`preconnect` + a direct `<link>` in all eight heads; the `_headers` CSP already allowed both
+origins, so no policy change was needed. **Do not reintroduce the `@import`** — a comment sits at
+its old location in `style.css` saying so.
+
+**Caching (item 3).** `_headers` only ever *shortened* lifetimes (`no-cache` on
+`app.js`/`config.js`/vendor, for the F79 skew reason); everything else fell to Cloudflare Pages'
+default `max-age=0, must-revalidate`. Added long lifetimes for static artwork in two groups.
+**The `-vN` filename suffix is load-bearing:** files served `immutable` for a year carry it, and
+re-exporting one REQUIRES bumping N and updating every reference — a year-long immutable cache on a
+stable filename is a trap. `style.css` is deliberately in neither group: unfingerprinted and
+deploy-variable, so the F79 reasoning that governs `app.js` governs it too.
+
+**Verified 2026-08-24**: `node --check` clean on `app.js`, `shelf-order.js` and all 10 extracted
+inline `<script>` blocks; full `run-smoke.ps1` — **269 unit + 139 Playwright, 0 failures, exit 0**,
+both stages present in the log; every `_headers` path resolves to a real file; HTML diffs confined
+to `<head>`, so the six-page nav/footer sync set is untouched. **Because essentially none of this
+is spec-covered** — no spec asserts font rendering, cache headers or favicons — a separate
+real-browser check against deployed staging confirmed what a green suite could not:
+`document.fonts.check()` true for both families (no silent fallback to `sans-serif`), **exactly one
+hero request per viewport** (so the `matchMedia` preload agrees with the stylesheet — no
+double-download), and zero requests for the three deleted assets. Standalone perf work, not scoped
+to any active sub-deploy. **Not yet promoted to production** — prod still serves the 931 KB
+favicon, so the same per-page win is still waiting there. On promotion, note that `.gitattributes`
+sets `app.js merge=ours` and this change set touches `app.js` — exactly what the F59 merge-base
+assertion in `/promote-prod` exists to catch.
+
+Prior work (2026-08-24): **F140** fully RESOLVED (both environments) — promoted to
 production same day as the staging fix (PR #131, `2acc78d`/`26a2c80`), per Rick's explicit
 `/promote-prod` request. New production bytes confirmed served; both high-risk findings
 re-verified directly against live production data post-deploy — the current catalog month
@@ -103,9 +150,13 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F141**. **F140 filed and RESOLVED on staging
-2026-08-24** (six more unbounded-query pagination gaps, found auditing F139 —
-see table below and `docs/technical-reference.md` § 13). **F139 filed and
+**Next free finding ID:** **F141** — still free; the 2026-08-24 Lighthouse
+performance sweep was fixed in-session and consumed no ID. **F140 filed
+2026-08-24 and RESOLVED on both environments the same day** (six more
+unbounded-query pagination gaps, found auditing F139 — see table below and
+`docs/technical-reference.md` § 13). *(This pointer read "RESOLVED on staging"
+for a few hours after the prod promotion had already landed — corrected
+2026-08-24.)* **F139 filed and
 RESOLVED on both environments 2026-08-23** (`Preorders.getMyIds()`/`getMy()`
 silently truncated at PostgREST's 1000-row cap — see table below and
 `docs/technical-reference.md` § 13). **F138 filed 2026-08-22** (reverses F128
@@ -896,7 +947,8 @@ npx playwright test 17-admin-modes --grep "V1 — get_account_activity"
 npx playwright test 15-order-export-ledger
 
 # Once, before promotion — this is the gate
-.un-smoke.ps1
+.
+un-smoke.ps1
 ```
 
 **Measured, 2026-08-09** (Rick asked whether the suite was earning its keep —
