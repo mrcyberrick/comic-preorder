@@ -146,7 +146,7 @@
    the only tuning knobs (design reference § 5.4). */
 .ax-hero-photo {
   position: absolute; inset: 0; z-index: 0;
-  background: 62% center/cover no-repeat url("assets/hero.jpg");
+  background: 62% center/cover no-repeat url("assets/hero-v2.webp");
 }
 .ax-scrim {
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
@@ -419,7 +419,13 @@
 @media (max-width: 900px) {
   .ax-navpill { display: none; }
   .ax-hero { min-height: 640px; }
-  .ax-hero-photo { background-position: 80% center; }
+  /* 900-wide variant (31.8 KB vs 71.2 KB). Swapped at the same
+     breakpoint the crop shifts at, so there is one mobile boundary,
+     not two. Keep in sync with the matchMedia preload in index.html. */
+  .ax-hero-photo {
+    background-position: 80% center;
+    background-image: url("assets/hero-mobile-v2.webp");
+  }
   .ax-scrim {
     background:
       linear-gradient(90deg, rgba(8,5,4,0.94) 0%, rgba(8,5,4,0.76) 34%, rgba(8,5,4,0.3) 62%, transparent 84%),
