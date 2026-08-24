@@ -981,33 +981,38 @@ async function checkMaintenanceMode(isAdmin) {
   }
 }
 
+// ── Pagination helper (shared across API objects) ──────────────
+// PostgREST silently caps an unbounded select() at 1000 rows (its default
+// max-rows setting) instead of erroring, so any query that can outgrow that
+// — per-user across a long lifetime, or tenant-wide across all customers —
+// needs to loop by range() rather than issue a single unbounded request.
+// F139 (2026-08-23): catalog.html's reserved-status map was silently
+// missing the admin test account's own reservation because getMyIds() had
+// no ORDER BY at all, so which rows got dropped by the cap was arbitrary
+// rather than merely "oldest missing." F140 (2026-08-24): audited every
+// other Supabase query in the app for the same shape and found five more
+// live instances — Recommendations' per-user signal queries and
+// Subscriptions.getAllAdmin() below both now route through this same
+// helper. buildQuery is a zero-arg function returning a fresh query builder
+// (already filtered/ordered) — a new one is needed per page since range()
+// must be chained on each call.
+async function fetchAllRows(buildQuery, pageSize = 1000) {
+  let all = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await buildQuery().range(offset, offset + pageSize - 1);
+    if (error) return { data: all, error };
+    all = all.concat(data || []);
+    if (!data || data.length < pageSize) break;
+    offset += pageSize;
+  }
+  return { data: all, error: null };
+}
+
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
-  // Shared pagination helper. PostgREST silently caps an unbounded select()
-  // at 1000 rows (its default max-rows setting) instead of erroring, so any
-  // per-user preorders query needs to loop by range() once that user's
-  // lifetime row count crosses 1000. F139 (2026-08-23): the reserved-status
-  // map on catalog.html was silently missing the admin test account's own
-  // reservation because getMyIds() had no ORDER BY at all, so which rows got
-  // dropped by the cap was arbitrary rather than merely "oldest missing."
-  // buildQuery is a zero-arg function returning a fresh query builder
-  // (already filtered/ordered) — a new one is needed per page since range()
-  // must be chained on each call.
-  async _fetchAllRows(buildQuery, pageSize = 1000) {
-    let all = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await buildQuery().range(offset, offset + pageSize - 1);
-      if (error) return { data: all, error };
-      all = all.concat(data || []);
-      if (!data || data.length < pageSize) break;
-      offset += pageSize;
-    }
-    return { data: all, error: null };
-  },
-
   async getMyIds(userId) {
-    const { data } = await this._fetchAllRows(() => db
+    const { data } = await fetchAllRows(() => db
       .from('preorders')
       .select('catalog_id, quantity')
       .eq('user_id', userId));
@@ -1018,7 +1023,7 @@ const Preorders = {
   },
 
   async getMy(userId) {
-    const { data, error } = await this._fetchAllRows(() => db
+    const { data, error } = await fetchAllRows(() => db
       .from('preorders')
       .select(`
         id,
@@ -1036,7 +1041,13 @@ const Preorders = {
         )
       `)
       .eq('user_id', userId)
-      .order('created_at', { ascending: false }));
+      // id tiebreaker (F140, 2026-08-24): created_at alone has ties — bulk
+      // auto-reserve inserts for subscribers can share one timestamp — and
+      // an ORDER BY without a unique tiebreaker isn't guaranteed stable
+      // across separate range() page requests once this account's total
+      // crosses 1000 rows (F139).
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }));
     return { items: data || [], error };
   },
 
@@ -1259,11 +1270,19 @@ const Subscriptions = {
   },
 
   // Admin: get all subscriptions across all users
+  // F140 (2026-08-24): tenant-wide and unbounded — will silently truncate
+  // (alphabetically, past whatever series_name sorts last) once a tenant's
+  // total subscription count crosses 1000. Same cap as F139, different table.
   async getAllAdmin() {
-    const { data, error } = await db
+    // id tiebreaker: series_name alone has many ties, and an ORDER BY without
+    // a unique tiebreaker is not guaranteed stable across separate range()
+    // page requests — a tie straddling a page boundary could duplicate or
+    // drop a row once this crosses 1000 total rows.
+    const { data, error } = await fetchAllRows(() => db
       .from('subscriptions')
       .select('id, series_name, distributor, format, created_at, user_profiles ( full_name )')
-      .order('series_name', { ascending: true });
+      .order('series_name', { ascending: true })
+      .order('id', { ascending: true }));
     return { items: data || [], error };
   },
 };
@@ -1455,14 +1474,17 @@ const Recommendations = {
   // Unions reservation_history (past months, archived) with current live preorders.
   // Both tables are accessible via RLS using the user's own session.
   async _getUserSignal(userId) {
+    // F140 (2026-08-24): both queries are per-user and unbounded — same cap
+    // risk as F139's getMyIds()/getMy(), just feeding personalization signal
+    // instead of reserved-status. Routed through the shared fetchAllRows().
     const [histRes, preorderRes] = await Promise.all([
-      db.from('reservation_history')
+      fetchAllRows(() => db.from('reservation_history')
         .select('series_name, distributor')
         .eq('user_id', userId)
-        .not('series_name', 'is', null),
-      db.from('preorders')
+        .not('series_name', 'is', null)),
+      fetchAllRows(() => db.from('preorders')
         .select('catalog(series_name, distributor)')
-        .eq('user_id', userId),
+        .eq('user_id', userId)),
     ]);
 
     const signal = new Set();

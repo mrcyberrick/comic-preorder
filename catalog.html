@@ -605,8 +605,8 @@
     // Fetches the full catalog for the month (respecting distributor/publisher/search
     // and variant filters), then client-side filters to items where foc_date falls
     // within the current calendar month. Sorted by foc_date ascending so the most
-    // urgent deadlines appear first. Uses the same two-batch count-first approach as
-    // the reserved/unreserved path to avoid Supabase 416 errors.
+    // urgent deadlines appear first. Count-first, then pages in full — same
+    // shape as the reserved/unreserved path below.
     if (reserveFilter === 'foc-this-month') {
       const buildFilters = (q) => {
         if (currentMonth) q = q.eq('catalog_month', currentMonth);
@@ -626,24 +626,31 @@
       }
       const total = countRes.count ?? 0;
 
+      // F140 (2026-08-24): this used to hard-stop at two 1000-row batches
+      // (a fixed 2,000-row ceiling) — the same shape F82 was fixed for,
+      // just re-capped higher instead of made unbounded. A single catalog
+      // month with no distributor/publisher filter has run well past 2,000
+      // rows in production, so items past row 2000 could be silently
+      // dropped from this filtered view. id tiebreaker: foc_date + title
+      // can tie (e.g. two variants with identical dates), and an ORDER BY
+      // without a unique tiebreaker isn't guaranteed stable across separate
+      // range() page requests.
       let items = [];
       if (total > 0) {
         const buildQuery = (from, to) =>
           buildFilters(db.from('catalog').select('*'))
             .order('foc_date', { ascending: true })
             .order('title',    { ascending: true })
+            .order('id',       { ascending: true })
             .range(from, to);
 
-        const batch1 = await buildQuery(0, Math.min(999, total - 1));
-        if (batch1.error) {
-          grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(batch1.error.message)}</div>`;
-          return;
-        }
-        items = batch1.data || [];
-
-        if (total > 1000) {
-          const batch2 = await buildQuery(1000, Math.min(1999, total - 1));
-          if (!batch2.error) items = [...items, ...(batch2.data || [])];
+        for (let from = 0; from < total; from += 1000) {
+          const batch = await buildQuery(from, Math.min(from + 999, total - 1));
+          if (batch.error) {
+            grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(batch.error.message)}</div>`;
+            return;
+          }
+          items = items.concat(batch.data || []);
         }
       }
 
@@ -770,10 +777,15 @@
     // ── FIX: When filtering by reserved/unreserved, we must fetch ALL matching
     // items across the full catalog — not just the current page — because
     // reservedIds is a client-side Set and pagination would hide results on
-    // other pages. We bypass server-side paging and fetch in two batches of
-    // 1000 (Supabase silently caps any single request at 1000 rows, so a
-    // single pageSize:2000 call only ever returns the first 1000 items,
-    // which meant PRH items — sorted after Lunar — were always missing).
+    // other pages. We bypass server-side paging and page through in full
+    // (Supabase silently caps any single request at 1000 rows, so a single
+    // pageSize:2000 call only ever returns the first 1000 items, which meant
+    // PRH items — sorted after Lunar — were always missing). F140
+    // (2026-08-24): this loop used to hard-stop at exactly two 1000-row
+    // batches (a fixed 2,000-row ceiling) instead of continuing — the same
+    // shape as the bug this comment already describes, just re-introduced
+    // at a higher threshold. A single catalog month with no distributor/
+    // publisher filter has run well past 2,000 rows in production.
     if (reserveFilter === 'reserved' || reserveFilter === 'unreserved') {
       // Step 1: Get total count first (head request — no rows returned)
       // This tells us how many rows to expect before we fetch, avoiding
@@ -796,7 +808,11 @@
       }
       const total = countRes.count ?? 0;
 
-      // Step 2: Fetch rows only if we know they exist
+      // Step 2: Fetch rows only if we know they exist. id tiebreaker: the
+      // three sort columns still tie constantly (many titles share a
+      // publisher+series+title root across variants/issues), and an
+      // ORDER BY without a unique tiebreaker isn't guaranteed stable across
+      // separate range() page requests.
       let items = [];
       if (total > 0) {
         const buildQuery = (from, to) =>
@@ -804,22 +820,16 @@
             .order('publisher',    { ascending: true })
             .order('series_name',  { ascending: true })
             .order('title',        { ascending: true })
+            .order('id',           { ascending: true })
             .range(from, to);
 
-        const batch1 = await buildQuery(0, Math.min(999, total - 1));
-        if (batch1.error) {
-          grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(batch1.error.message || JSON.stringify(batch1.error))}</div>`;
-          return;
-        }
-        items = batch1.data || [];
-
-        if (total > 1000) {
-          const batch2 = await buildQuery(1000, Math.min(1999, total - 1));
-          if (batch2.error) {
-            grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(batch2.error.message || JSON.stringify(batch2.error))}</div>`;
+        for (let from = 0; from < total; from += 1000) {
+          const batch = await buildQuery(from, Math.min(from + 999, total - 1));
+          if (batch.error) {
+            grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${escapeHtml(batch.error.message || JSON.stringify(batch.error))}</div>`;
             return;
           }
-          items = [...items, ...(batch2.data || [])];
+          items = items.concat(batch.data || []);
         }
       }
 
