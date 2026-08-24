@@ -211,12 +211,12 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **RESOLVED on staging 2026-08-24** (`a2a2583`) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green. **Not yet promoted to production.** Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
+| F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
-| F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures; profile deletes succeed, auth-user deletes do not. Test-infra only, no live app impact | deferred — dedicated test-infra session. **Date-bucket the 197 against F95's 2026-08-02 fix BEFORE any bulk delete** — if they postdate it, cleanup without a code fix is pointless |
-| F133 | **Low** — three Playwright specs (V7, F111 cross-month gather, print-media panel) share a `focThisMonthFuture()` fixture-date helper that silently crossed the live `order_deadline` (2026-08-21, real data) boundary on 2026-08-20, flipping them red with zero code involved. Test-infra only, will recur | deferred — no plan doc. Fix shape: make the helper deadline-aware, or have the three tests capture+restore `order_deadline` like the one describe block that already does |
+| F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
+| F133 | **Low** — date-dependent specs flip red with zero code involved, via the live `order_deadline` (2026-08-21). **Two variants, not one:** (a) a fixture FOC crossing *past* the deadline (2026-08-20, three specs); (b) **the deadline having LAPSED** re-admits *real* catalog rows into `#backorder-risk-panel`, breaking any spec that assumes the panel holds only its fixture — **recurred 2026-08-24 in a fourth spec** (`21-arrival-resolution:136`) — **but only in a TARGETED run; it passes in the full suite**, because spec 15 runs first and leaves the state it needs. Test-infra only | deferred — no plan doc. **The entry's prediction that a lapse would end this was wrong — a lapse started variant (b).** Also exposes an **undeclared spec-order dependency**: spec 21 is green by ordering luck, so **targeted runs of these specs are not trustworthy**. Fix: deadline-aware helper closes (a) only; (b) needs panel assertions scoped to the seeded row. See § 13 F133 |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
 | F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **DMARC gate READ 2026-08-20 — inventory complete, 13 msgs / 100% pass / 3 senders, all known.** `p=quarantine` **held**, trigger = MailerLite retirement (not a date). Scoping now unblocked — design together with F72, and **sequence with MailerLite retirement** (`native-customer-signup.md` § S5) |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
@@ -526,6 +526,32 @@ it. Every migration since has gone to `docs/sql/` instead, which is the correct
 convention and is already followed; these two are pre-convention residue.
 (`docs/sql/` tracks forward normally — staging runs ahead of main between
 promotions, which is expected and is not this asymmetry.)
+
+**A fifth trigger, hit for real on 2026-08-24 and caught one step before the
+merge button: a promotion branch accidentally cut from `staging` instead of
+`main`.** The listed triggers above are all deliberate acts (squash, rebase,
+`checkout staging -- .`, `reset --hard`). This one is an accident, which makes
+it more dangerous. A cherry-pick promotion was branched with
+`git checkout -b <branch>` from *ambient HEAD* while a second person was
+committing in the same working tree; HEAD had moved to `staging` in between, so
+the branch inherited staging's tree. The resulting PR would have **deleted both
+`supabase/migrations/` files AND overwritten `config.js` with the staging anon
+key**, pointing production at the staging Supabase project. PR closed unmerged,
+branch deleted, `main` never touched.
+
+**Why the usual checks did not catch it.** Per-file checks all *passed* —
+`ls supabase/migrations/` showed two files, `grep` found no barcode markers,
+`config.js` was not in `git status`. They were reading a working tree that was
+correct at that instant, on a branch that was not. **The check that caught it
+was `git diff --stat origin/main <branch>`** — scope of the whole diff against
+the *remote* base, not spot-checks against local state.
+
+**So, for any promotion branch:** create it from an explicit ref
+(`git checkout -B <branch> origin/main`), never from ambient HEAD, and assert
+the full diff before pushing — exactly one expected scope, `supabase/migrations/`
+still at 2 files, and `config.js` still carrying the prod project ref
+`plgegklqtdjxeglvyjte`. Assume HEAD can move under you: this repo has more than
+one actor in it.
 
 **Local scripts folder** (working tree of the **private scripts repo**
 `github.com/mrcyberrick/comic-preorder-scripts` since 2026-07-08 — only the

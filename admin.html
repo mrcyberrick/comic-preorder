@@ -416,32 +416,37 @@
   <div class="admin-section" id="tab-paper-orders">
 
     <!-- Print the paper catalog (F121 session 6 rename; process map § 3.2).
-         These were "Print Lunar/PRH Order Sheet", two words away from the
-         export bar's "↓ Lunar/PRH Order Sheet" — which submit real money to a
-         distributor. These print a browsing CATALOG for the store, every row
+         This was "Print Lunar/PRH Order Sheet", two words away from the export
+         bar's "↓ Lunar/PRH Order Sheet" — which submit real money to a
+         distributor. This prints a browsing CATALOG for the store, every row
          carrying a blank qty box a customer writes their order into; it is
          the far end of the loop this tab's search box starts next cycle
          (§ 5.5 W7). Before the split the two pairs at least sat on different
          tabs; now both live in Ordering, so the clash got worse. The printed
          page itself is renamed too — it is the artifact that ends up in a
          customer's hands, so renaming only the button would have moved the
-         collision rather than removed it. -->
+         collision rather than removed it.
+
+         ONE button, deliberately (Rick, 2026-08-24). This replaced four: a
+         per-distributor Lunar sheet and PRH sheet, plus a barcode variant.
+         One document instead of two, at no extra paper. The barcode variant
+         was built, printed and tested against the shop's real scanner before
+         being dropped — see buildCombinedCatalogHtml's comment for why, and
+         do not rebuild it without reading that first.
+
+         Labelled just "Print Catalog" (Rick, 2026-08-24): with one button
+         there is nothing to distinguish it FROM, so "Combined" only described
+         an implementation detail the operator never has to think about. The
+         printed page and its <title> match, the latter being the filename
+         offered when the print is saved as a PDF. -->
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" id="btn-print-lunar-order"
+      <button class="btn btn-secondary btn-sm" id="btn-print-combined-catalog"
         style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
           <rect x="6" y="14" width="12" height="8"/>
         </svg>
-        Print Lunar Catalog
-      </button>
-      <button class="btn btn-secondary btn-sm" id="btn-print-prh-order"
-        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-          <rect x="6" y="14" width="12" height="8"/>
-        </svg>
-        Print PRH Catalog
+        Print Catalog
       </button>
     </div>
 
@@ -4475,52 +4480,106 @@
     );
   }
 
-  function buildOrderSheetHtml(distributor, items, monthLabel) {
+  // The code the sheet prints for a row. PRH leads with ISBN, Lunar with UPC.
+  // Lunar tries `isbn` before falling back to `alternate_code` because in a real
+  // month 419 of the 420 Lunar rows with no UPC carry a 13-digit ISBN, and that
+  // ISBN is the code physically printed on the book, whereas alternate_code
+  // (`AUG2671038`) is a Lunar order reference that identifies nothing in the
+  // shop.
+  function catalogScanCode(distributor, c) {
+    return distributor === 'Lunar'
+      ? (c.upc || c.isbn || c.alternate_code || '—')
+      : (c.isbn || c.upc || c.alternate_code || '—');
+  }
+
+  // ── Print the combined paper Catalog (Ordering ▸ Paper Orders) ──
+  // Both distributors in one banded document: every catalog row for the current
+  // month whose publisher has a meaningful reserve history and whose FOC has not
+  // passed, each carrying a blank qty box a customer writes their order into.
+  // Sorted by title within each distributor band.
+  //
+  // Columns: UPC/ISBN | Order Qty (blank write-in) | Title | Publisher | Price | FOC
+  // Header:  catalog month, title count
+  // Footer margin box: Page X of Y · print date · rjbookstop.com (via CSS @page)
+  //
+  // History worth keeping, because it is the reason not to rebuild either of the
+  // two things this replaced. Until 2026-08-24 this was TWO buttons, one per
+  // distributor. A barcode variant was then built and tested with the shop's
+  // real scanner; Rick's verdict was "the scanner is working but resolution
+  // limitations make it less useful", and it was removed along with the
+  // per-distributor prints, leaving this one sheet. The barcode symbols were
+  // measured in spec on paper (145/117/98/89% of nominal, inside the GS1
+  // 80–200% band), so what defeated them was the scanning hardware against a
+  // laser print, not the encoding or the sizing — re-tuning the magnification
+  // would not have changed the outcome. It also cost roughly twice the paper:
+  // 0.384in per row against the 0.219in below, 26 rows per page against 46.
+  // The encoder is gone from this file; it is recoverable from git history at
+  // commit 56c97c9 if that hardware is ever replaced.
+  //
+  // How long this sheet actually runs, and why you cannot tell from the catalog
+  // size (measured 2026-08-24, catalog month 2026-08). getReservedPublishers()
+  // above, not the row count, decides: it keeps only publishers with
+  // MIN_RESERVED+ all-time reservations, and that bar cuts far harder than it
+  // looks. Both environments hold ~2,400 rows across 78 publishers for the same
+  // month, and they print very differently —
+  //   staging     4 publishers pass →   638 rows → 15 pages
+  //   production 14 publishers pass → 1,534 rows → 34 pages
+  // — because staging's reserve history is 24 archived + 64 live rows of test
+  // data against production's 485 + 2,623. So a page count taken on staging says
+  // nothing about the production print, and a count taken from a raw catalog
+  // file says nothing about either. Measure against the environment you mean.
+  function buildCombinedCatalogHtml(groups, monthLabel) {
     const printDate = new Date().toLocaleDateString('en-US', {
       month: 'long', day: 'numeric', year: 'numeric'
     });
 
-    const rows = items.map(c => {
-      // Show UPC for Lunar; ISBN (or UPC fallback) for PRH
-      const scanCode = distributor === 'Lunar'
-        ? (c.upc || c.alternate_code || '—')
-        : (c.isbn || c.upc || c.alternate_code || '—');
+    const total = groups.reduce((n, g) => n + g.items.length, 0);
 
-      const price = c.price_usd ? `$${parseFloat(c.price_usd).toFixed(2)}` : '—';
-      const foc   = c.foc_date  ? (() => {
-        const [y, m, d] = c.foc_date.split('-').map(Number);
-        return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
-      })() : '—';
+    const body = groups.map(g => {
+      const band = `
+        <tr class="dist-row">
+          <td colspan="6">${escapeHtml(g.distributor)} &middot; ${g.items.length.toLocaleString()} titles</td>
+        </tr>`;
+      const rows = g.items.map(c => {
+        const price = c.price_usd ? `$${parseFloat(c.price_usd).toFixed(2)}` : '—';
+        const foc   = c.foc_date  ? (() => {
+          const [y, m, d] = c.foc_date.split('-').map(Number);
+          return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+        })() : '—';
 
-      // Variant label — inline grey suffix on the title line so it never forces
-      // a second line; trimmed by the cell ellipsis if the row runs long.
-      const variantNote = (c.variant_type && c.variant_type !== 'Standard' && c.variant_type !== 'Primary Title')
-        ? ` <span class="variant">&middot; ${escapeHtml(c.variant_type)}</span>` : '';
+        // Variant label — inline grey suffix on the title line so it never forces
+        // a second line; trimmed by the cell ellipsis if the row runs long.
+        const variantNote = (c.variant_type && c.variant_type !== 'Standard' && c.variant_type !== 'Primary Title')
+          ? ` <span class="variant">&middot; ${escapeHtml(c.variant_type)}</span>` : '';
 
-      return `
+        return `
         <tr>
-          <td class="col-code">${escapeHtml(scanCode)}</td>
+          <td class="col-code">${escapeHtml(catalogScanCode(g.distributor, c))}</td>
           <td class="col-qty"><div class="qty-box"></div></td>
           <td class="col-title">${escapeHtml(c.title || '—')}${variantNote}</td>
           <td class="col-pub">${escapeHtml(c.publisher || '—')}</td>
           <td class="col-price">${price}</td>
           <td class="col-foc">${foc}</td>
         </tr>`;
+      }).join('');
+      return band + rows;
     }).join('');
 
     return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${distributor} Catalog — ${monthLabel}</title>
+  <!-- Also the filename the browser suggests when the operator saves the print
+       as a PDF, so it is the name this artifact ends up filed under. -->
+  <title>Catalog — ${monthLabel}</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     /* ── Portrait letter, tight margins, footer margin boxes ── */
     /* Content width: 8.5in − 0.7in = 7.8in                     */
     /* Content height: 11in − 0.9in = 10.1in usable             */
-    /* Single-line 7.5pt rows + 3px padding = ~15px/row          */
-    /* ≈ 65–68 data rows per page (consistent — titles truncate) */
+    /* Single-line 7.5pt rows + 3px padding = ~0.22in/row        */
+    /* ≈ 46 data rows per page (consistent — titles truncate)    */
     @page {
       size: letter portrait;
       margin: 0.4in 0.35in 0.5in 0.35in;
@@ -4670,6 +4729,24 @@
     /* FOC date */
     .col-foc { text-align: center; font-size: 7pt; color: #555; }
 
+    /* Distributor band — RULES AND TYPE, NOT FILL, matching the reserved-titles
+       report: browsers do not print background colours unless the operator ticks
+       "Background graphics", so a grey fill renders on screen and vanishes on
+       paper (Rick, 2026-08-09: "shading is lost on the print out"). */
+    .dist-row td {
+      background: none;
+      border-top: 1.5pt solid #000;
+      border-bottom: 0.5pt solid #bbb;
+      padding: 7pt 3px 2pt 2px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      page-break-after: avoid;
+    }
+    /* First band on a page should not add a gap above the header rule. */
+    thead + tbody .dist-row:first-child td { padding-top: 3pt; }
+
     /* Item count line at end of sheet */
     .sheet-footer {
       margin-top: 6px;
@@ -4684,10 +4761,10 @@
   <div class="page-header">
     <div class="ph-left">
       <div class="ph-logo">PULL<span>LIST</span></div>
-      <div class="ph-dist">${escapeHtml(distributor)} Catalog &mdash; ${escapeHtml(monthLabel)}</div>
+      <div class="ph-dist">Catalog &mdash; ${escapeHtml(monthLabel)}</div>
     </div>
     <div class="ph-right">
-      ${items.length.toLocaleString()} titles
+      ${total.toLocaleString()} titles
     </div>
   </div>
 
@@ -4703,52 +4780,74 @@
       </tr>
     </thead>
     <tbody>
-      ${rows}
+      ${body}
     </tbody>
   </table>
 
-  <div class="sheet-footer">${items.length.toLocaleString()} titles &middot; ${escapeHtml(distributor)} &middot; ${escapeHtml(monthLabel)}</div>
+  <div class="sheet-footer">${total.toLocaleString()} titles &middot; ${
+    groups.map(g => `${escapeHtml(g.distributor)} ${g.items.length.toLocaleString()}`).join(' &middot; ')
+  } &middot; ${escapeHtml(monthLabel)}</div>
 
 </body>
 </html>`;
   }
 
-  async function printOrderSheet(distributor) {
-    const btn = document.getElementById(
-      distributor === 'Lunar' ? 'btn-print-lunar-order' : 'btn-print-prh-order'
-    );
-    const origText = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = 'Loading…';
-
-    const items = await fetchAllCatalogForDistributor(distributor);
-    if (!items) { btn.disabled = false; btn.innerHTML = origText; return; }
-    if (!items.length) {
-      toast(`No ${distributor} items found for ${currentCatalogMonth}`, 'error');
-      btn.disabled = false; btn.innerHTML = origText; return;
-    }
-
+  function catalogMonthLabel() {
     const [y, m] = (currentCatalogMonth || '').split('-');
-    const monthLabel = currentCatalogMonth
+    return currentCatalogMonth
       ? new Date(parseInt(y), parseInt(m) - 1, 1)
           .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
       : '';
+  }
 
-    const html     = buildOrderSheetHtml(distributor, items, monthLabel);
+  function openPrintWindow(html) {
     const printWin = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWin) {
+      toast('Pop-up blocked — allow pop-ups for this site to print', 'error');
+      return false;
+    }
     printWin.document.write(html);
     printWin.document.close();
     printWin.focus();
     setTimeout(() => {
       printWin.print();
     }, 400);
-
-    btn.disabled  = false;
-    btn.innerHTML = origText;
+    return true;
   }
 
-  document.getElementById('btn-print-lunar-order').addEventListener('click', () => printOrderSheet('Lunar'));
-  document.getElementById('btn-print-prh-order').addEventListener('click',   () => printOrderSheet('PRH'));
+  async function printCombinedCatalog() {
+    const btn = document.getElementById('btn-print-combined-catalog');
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    try {
+      // Sequential, not Promise.all: getReservedPublishers() is memoized on
+      // first call, and two parallel callers would both miss the memo and run
+      // the (paged, whole-history) reservation scan twice.
+      const lunar = await fetchAllCatalogForDistributor('Lunar');
+      if (!lunar) return;
+      const prh = await fetchAllCatalogForDistributor('PRH');
+      if (!prh) return;
+
+      const groups = [
+        { distributor: 'Lunar', items: lunar },
+        { distributor: 'PRH',   items: prh }
+      ].filter(g => g.items.length);
+
+      if (!groups.length) {
+        toast(`No catalog items found for ${currentCatalogMonth}`, 'error');
+        return;
+      }
+
+      openPrintWindow(buildCombinedCatalogHtml(groups, catalogMonthLabel()));
+    } finally {
+      btn.disabled  = false;
+      btn.innerHTML = origText;
+    }
+  }
+
+  document.getElementById('btn-print-combined-catalog').addEventListener('click', printCombinedCatalog);
 
   // ── Print / Save Reserved-Titles Report (By Distributor tab) ──
   // Compact, print-optimized report of active titles reserved for the current
