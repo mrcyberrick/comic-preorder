@@ -12,8 +12,19 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F140 RESOLVED on staging 2026-08-24 — audit follow-up to F139, triggered
-by Rick asking "do we have other areas where pagination is causing issues?" Swept every Supabase
+**Last completed work:** F140 fully RESOLVED 2026-08-24 (both environments) — promoted to
+production same day as the staging fix (PR #131, `2acc78d`/`26a2c80`), per Rick's explicit
+`/promote-prod` request. New production bytes confirmed served; both high-risk findings
+re-verified directly against live production data post-deploy — the current catalog month
+(`2026-08`) genuinely had **2,399 rows**, past the old hardcoded 2,000-row ceiling, and the fixed
+loop now correctly retrieves all 2,399 (1000/1000/399); the Book Stop admin account's `preorders`
+total had grown to **1,345**, and the fixed `Recommendations._getUserSignal()` pagination now
+correctly retrieves the full 1,345 across 2 pages, matching the exact DB count. Both were
+confirmed genuinely live-broken before this promotion, not just theoretical risk. See
+`docs/technical-reference.md` § 13 F140.
+
+An audit follow-up to F139, triggered by Rick asking "do we have other areas where pagination is
+causing issues?" Swept every Supabase
 query in the app for the same unbounded-select-no-`.range()` shape and found six more live
 instances — the third occurrence of this defect class overall (after F82, F113). Two judged
 plausibly already live-broken in production: `catalog.html`'s Reserved/Unreserved and
@@ -30,9 +41,8 @@ matching the file's convention otherwise. Also added `id` tiebreakers to three p
 clauses that sorted on non-unique columns (a page-boundary tie risk with no prior symptom, since it
 only matters once a query is paginated at all). **Verified 2026-08-24**: `node --check` clean on
 `app.js` and every extracted inline `<script>` block; full `run-smoke.ps1` — 269 unit + 139
-Playwright, 0 failures, exit 0, no log-capture ambiguity this run. See
-`docs/technical-reference.md` § 13 F140. Standalone audit/fix, not scoped to any active sub-deploy.
-**Not yet promoted to production.**
+Playwright, 0 failures, exit 0, no log-capture ambiguity this run. Standalone audit/fix, not
+scoped to any active sub-deploy. Promotion details above.
 
 Prior work (2026-08-23): **F139** fully RESOLVED (both environments) — a live customer-
 reported catalog bug (a real reservation showing unreserved, omitted from the Reserved filter, and
@@ -117,7 +127,6 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F140 | **Medium/High** — audit follow-up to F139: six more unbounded Supabase queries found across the app (no `.range()`, PostgREST's 1000-row cap), two plausibly already live-broken in prod — `catalog.html`'s Reserved/Unreserved and FOC-Expiring-This-Month filters were hardcoded to a fixed 2,000-row ceiling (re-capped F82, not fixed), and `Recommendations._getUserSignal()` had F139's exact unbounded shape in a different function | Owner: `docs/technical-reference.md` § 13 F140. **RESOLVED on staging 2026-08-24** — all six paginated, merged and pushed to `staging`, verified (`node --check` clean + full `run-smoke.ps1` 269 unit + 139 Playwright, 0 failures). Not yet promoted to production |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
@@ -761,6 +770,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Analytics v2 engagement dashboard | `analytics-v2-engagement-dashboard.md` | — |
 | Catalog info-card reserve-sync fix (no plan doc — direct bug fix, PR #99) | — | F103 (coverage gap it exposed) |
 | `Preorders` pagination past PostgREST's 1000-row cap (no plan doc — direct bug fix, PR #130) | — | F139 |
+| Six more unbounded-query pagination gaps, app-wide audit (no plan doc — direct bug fix, PR #131) | — | F140 |
 | Admin write access to `subscriptions` during impersonation (no plan doc — direct fix, PR #129) | — | F138 (reverses F128) |
 | Subscription reserved-suggestions | `subscription-reserved-suggestions.md` | — |
 | Subscription promotion | `subscription-promotion.md` | — |

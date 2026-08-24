@@ -4642,10 +4642,20 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F140 — audit follow-up to F139: six more unbounded Supabase queries found across the live app, same PostgREST 1000-row cap
 
-- **Status:** filed and **RESOLVED on staging 2026-08-24**, same session as
-  F139. Not scoped to any active sub-deploy — a direct follow-on audit, not
-  a new user-reported symptom. Not yet promoted to production — a separate
-  explicit request.
+- **Status:** filed and **fully RESOLVED 2026-08-24, both environments**,
+  same session as F139. Not scoped to any active sub-deploy — a direct
+  follow-on audit, not a new user-reported symptom. Promoted to production
+  via PR #131 (`2acc78d`, merged `26a2c80`), same day as the staging fix,
+  per Rick's explicit `/promote-prod` request. New production bytes
+  confirmed served, and both high-risk findings re-verified directly
+  against live production data post-deploy: the current catalog month
+  (`2026-08`) has **2,399 rows** — genuinely past the old hardcoded
+  2,000-row ceiling — and the fixed 3-page loop correctly retrieves all
+  2,399 (1000/1000/399); the Book Stop admin account's `preorders` total
+  has grown to **1,345**, and the fixed `Recommendations._getUserSignal()`
+  pagination correctly retrieves the full 1,345 across 2 pages
+  (1000/345), matching the exact `Content-Range` count. Both were
+  genuinely live-broken before this promotion, not just theoretical risk.
 - **Trigger:** after fixing F139, Rick asked "do we have other areas in this
   project where pagination is causing issues?" — audited every `.from(...)`
   call in `app.js`, `catalog.html`, `mylist.html`, `admin.html`,
@@ -4730,14 +4740,18 @@ reasoning — only the disposition changed, not the diagnosis.
   `foc-this-month` and `reserved`/`unreserved` branches of `loadCatalog()`.
   `admin.html` — `loadData()`, `ensureBaggingData()`, `ensureAccounts()`,
   the This Week bagging query. `analytics.html` — `loadData()`.
-  `mylist.html` — `fetchOpenDemandRows()`. Commit `6b763b3` on
+  `mylist.html` — `fetchOpenDemandRows()`. Staging: commit `6b763b3` on
   `feature/f140-pagination-cap-audit`, fast-forward merged to `staging`,
   pushed; new bytes confirmed served via `curl -L` before the smoke gate
-  ran.
-- **Scope:** both environments share the same client code; not yet promoted
-  to production. Items 1 and 2 are the only two judged plausibly already
-  live-broken in production before this fix; items 3–6 are real but lower
-  near-term risk at the founding tenant's current scale.
+  ran. Production: PR #131 (`feat/f140-pagination-cap-audit-prod` → `main`,
+  commit `2acc78d`, merge `26a2c80`); F105 migration gate clean (no schema
+  change) and F59 merge-base check confirmed all five touched files
+  differed from `main` as expected (`arrivals.html` correctly unchanged —
+  not part of this fix).
+- **Scope:** both environments, **fully promoted**. Items 1 and 2 were
+  confirmed genuinely live-broken in production before this fix (see
+  Status above); items 3–6 are real but lower near-term risk at the
+  founding tenant's current scale.
 - **Related:** **F82**, **F113** (the two prior occurrences of this exact
   defect class — this is the third). **F139** (the discovery that triggered
   this audit). **F131** (the SPOF/single-tenant-scale finding several of
