@@ -54,10 +54,40 @@ real-browser check against deployed staging confirmed what a green suite could n
 `document.fonts.check()` true for both families (no silent fallback to `sans-serif`), **exactly one
 hero request per viewport** (so the `matchMedia` preload agrees with the stylesheet — no
 double-download), and zero requests for the three deleted assets. Standalone perf work, not scoped
-to any active sub-deploy. **Not yet promoted to production** — prod still serves the 931 KB
-favicon, so the same per-page win is still waiting there. On promotion, note that `.gitattributes`
-sets `app.js merge=ours` and this change set touches `app.js` — exactly what the F59 merge-base
-assertion in `/promote-prod` exists to catch.
+to any active sub-deploy. **Promoted to production 2026-08-24 via PR #132.** Prod verified
+directly after deploy: all five new assets return 200 with `max-age=31536000, immutable`,
+`style.css` no longer carries the `@import`, and every page's live `<link>` tags point at
+`icon-192-v2.png` / `apple-touch-icon-v2.png`. *(A `favico.svg` string still greps in each head —
+that is the explanatory comment, not a reference; the file is deleted and origin returns the
+not-found fallback. Cloudflare's edge kept serving the orphaned object for a while under Pages'
+7-day `s-maxage`, harmless since nothing links it.)* Production apex now scores **89 mobile / 98
+desktop**, with `cache-insight` at **0 KiB** (was 1,576 KiB desktop / 555 KiB mobile) and
+`image-delivery-insight` at **18 KiB** (was 1,223 / 477 KiB).
+
+**The F59 assertion was extended during this promotion, and the extension is worth keeping.**
+`.gitattributes` sets `app.js merge=ours`. The documented check compares branch *tips*, so it
+reports "ok: differs" even in the exact case the `ours` driver would silently keep `main`'s copy —
+it cannot detect the failure it is named for, on the one file carrying that attribute. The merge
+*result* and git's index were asserted directly instead. (A first attempt at that assertion falsely
+reported three FAILs by combining `[regex]::Escape()` with `-SimpleMatch` in PowerShell, which
+searches for literal backslashes — verified with `grep` before concluding anything. A check that
+can falsely fail aborts a good promotion just as surely as a check that cannot fail passes a bad
+one.)
+
+**Calibration lesson — worth more than the sweep itself.** The opening question was about
+Lighthouse **scores**; the three lines quoted were **Insights**. "Use efficient cache lifetimes"
+and "Improve image delivery" are **diagnostics that contribute nothing to the Performance score**,
+which is only TBT 30% / LCP 25% / CLS 25% / FCP 10% / SI 10%. This sweep closed both diagnostics
+almost entirely and the scores barely moved — exactly what that weighting predicts. Two further
+mismeasurements cost real time the same day: (1) Lighthouse run against `/catalog` **in a private
+window is not signed in**, so `requireAuth()` redirects and it scores the marketing page reached
+via a discarded catalog load — 21 requests, ~554 KiB, precisely where the "555 KiB" figure came
+from; (2) the raw byte sizes of our own assets were assumed to map onto the audit totals, when on
+the **authenticated** catalog every single cache and image item is a third-party
+`media.lunardistribution.com` cover. **Measure the authenticated page, and check whether an audit
+is actually scored before optimising for it.** `playwright/lighthouse-auth.mjs` (local-only, in the
+scripts repo working tree) does the former — it creates a staging user, signs in via magic link,
+runs Lighthouse against the live session, and tears the user down.
 
 Prior work (2026-08-24): **F140** fully RESOLVED (both environments) — promoted to
 production same day as the staging fix (PR #131, `2acc78d`/`26a2c80`), per Rick's explicit
