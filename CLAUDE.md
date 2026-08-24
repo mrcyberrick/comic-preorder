@@ -527,6 +527,32 @@ convention and is already followed; these two are pre-convention residue.
 (`docs/sql/` tracks forward normally — staging runs ahead of main between
 promotions, which is expected and is not this asymmetry.)
 
+**A fifth trigger, hit for real on 2026-08-24 and caught one step before the
+merge button: a promotion branch accidentally cut from `staging` instead of
+`main`.** The listed triggers above are all deliberate acts (squash, rebase,
+`checkout staging -- .`, `reset --hard`). This one is an accident, which makes
+it more dangerous. A cherry-pick promotion was branched with
+`git checkout -b <branch>` from *ambient HEAD* while a second person was
+committing in the same working tree; HEAD had moved to `staging` in between, so
+the branch inherited staging's tree. The resulting PR would have **deleted both
+`supabase/migrations/` files AND overwritten `config.js` with the staging anon
+key**, pointing production at the staging Supabase project. PR closed unmerged,
+branch deleted, `main` never touched.
+
+**Why the usual checks did not catch it.** Per-file checks all *passed* —
+`ls supabase/migrations/` showed two files, `grep` found no barcode markers,
+`config.js` was not in `git status`. They were reading a working tree that was
+correct at that instant, on a branch that was not. **The check that caught it
+was `git diff --stat origin/main <branch>`** — scope of the whole diff against
+the *remote* base, not spot-checks against local state.
+
+**So, for any promotion branch:** create it from an explicit ref
+(`git checkout -B <branch> origin/main`), never from ambient HEAD, and assert
+the full diff before pushing — exactly one expected scope, `supabase/migrations/`
+still at 2 files, and `config.js` still carrying the prod project ref
+`plgegklqtdjxeglvyjte`. Assume HEAD can move under you: this repo has more than
+one actor in it.
+
 **Local scripts folder** (working tree of the **private scripts repo**
 `github.com/mrcyberrick/comic-preorder-scripts` since 2026-07-08 — only the
 import scripts, credential-free tests, and repo metadata are tracked; `.env`,
