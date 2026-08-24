@@ -12,7 +12,42 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F138 RESOLVED on staging 2026-08-22 (reverses F128, Rick's explicit
+**Last completed work:** F140 RESOLVED on staging 2026-08-24 — audit follow-up to F139, triggered
+by Rick asking "do we have other areas where pagination is causing issues?" Swept every Supabase
+query in the app for the same unbounded-select-no-`.range()` shape and found six more live
+instances — the third occurrence of this defect class overall (after F82, F113). Two judged
+plausibly already live-broken in production: `catalog.html`'s Reserved/Unreserved and
+FOC-Expiring-This-Month filters were hardcoded to exactly two 1000-row batches (a fixed 2,000-row
+ceiling, re-capped instead of unbounded — the same shape F82 fixed, at a higher threshold); `app.js`
+`Recommendations._getUserSignal()` had the identical unbounded shape as F139's `getMyIds()`/`getMy()`
+in a different function that fix missed. Also fixed: `Subscriptions.getAllAdmin()`,
+`admin.html`'s three `user_profiles` fetches + This Week bagging query, `analytics.html`'s
+`user_profiles`/`subscriptions`/current-month-preorders fetches, `mylist.html`'s shelf-copy demand
+query — all now paginated, reusing each file's existing helper where one exists (`app.js`'s
+`Preorders._fetchAllRows` generalized to a shared top-level `fetchAllRows()`; `admin.html`'s
+`fetchPaged()`; `analytics.html`'s `countRows()`/`fetchRanged()`) or a local count-first+loop
+matching the file's convention otherwise. Also added `id` tiebreakers to three paginated `ORDER BY`
+clauses that sorted on non-unique columns (a page-boundary tie risk with no prior symptom, since it
+only matters once a query is paginated at all). **Verified 2026-08-24**: `node --check` clean on
+`app.js` and every extracted inline `<script>` block; full `run-smoke.ps1` — 269 unit + 139
+Playwright, 0 failures, exit 0, no log-capture ambiguity this run. See
+`docs/technical-reference.md` § 13 F140. Standalone audit/fix, not scoped to any active sub-deploy.
+**Not yet promoted to production.**
+
+Prior work (2026-08-23): **F139** fully RESOLVED (both environments) — a live customer-
+reported catalog bug (a real reservation showing unreserved, omitted from the Reserved filter, and
+hitting a 23505 on re-reserve) traced to `Preorders.getMyIds()`/`getMy()` having no pagination
+against PostgREST's default 1000-row cap on unbounded selects. Diagnosed against live production
+data (confirmed the row was correct in the DB before touching any code — no RLS gap, no data
+corruption), fixed with a new `Preorders._fetchAllRows()` range()-based pagination loop in `app.js`,
+no schema change. Verified on staging via full `run-smoke.ps1` (269 unit + 139 Playwright, 0
+failures) and a targeted 37/37 rerun of every reserve/My List/subscriptions/arrivals spec; promoted
+to production same day (PR #130) and re-verified directly against live prod data post-deploy — the
+account that surfaced the bug (1,223 preorders as of the recheck) now correctly returns the
+previously-dropped reservation via the fixed pagination. See `docs/technical-reference.md` § 13
+F139. Standalone bug fix, not scoped to any active sub-deploy.
+
+Prior work, same day: **F138** RESOLVED on staging 2026-08-22 (reverses F128, Rick's explicit
 request) — admin impersonation gets full write access to `subscriptions` (subscribe **and**
 unsubscribe on a customer's behalf), matching how `preorders`' admin policy already works. New
 `admins manage tenant subscriptions` RLS policy (`docs/sql/2026-08-22-f138-admin-subscription-management-impersonation.sql`)
@@ -25,8 +60,11 @@ Playwright test in local spec `11-reserved-suggestions.spec.ts` that subscribes 
 a customer's behalf during impersonation and DB-verifies both the correct `user_id` and the actual
 row deletion (not F128's silent no-op), V4 the full `run-smoke.ps1` — 269 unit + 139 Playwright, 0
 failures. Branch `feature/f138-admin-subscription-management-impersonation` merged to `staging`
-`--ff-only` and pushed. **Not promoted to production** — separate later request via
-`/promote-prod`. See `docs/technical-reference.md` § 13 F138.
+`--ff-only` and pushed. **Promoted to production 2026-08-22** — RLS migration applied same day,
+client code via PR #129 (`f1364a785`). **F138 fully RESOLVED, both environments.** *(This section
+previously read "Not promoted to production" after the promotion had already completed — the same
+stale-doc pattern as F132 below; corrected 2026-08-23, found while promoting F139.)* See
+`docs/technical-reference.md` § 13 F138.
 
 Prior work, same day: **F136** fully RESOLVED 2026-08-22 — S1, S2, and S3 all shipped the same day
 (`docs/f136-catalog-month-integrity.md`). S3 (an earlier session that same day): created
@@ -55,11 +93,13 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F140**. **F139 filed and RESOLVED on staging
-2026-08-23** (`Preorders.getMyIds()`/`getMy()` silently truncated at
-PostgREST's 1000-row cap — see table below and `docs/technical-reference.md`
-§ 13). **F138 filed 2026-08-22** (reverses F128 at Rick's request — see table
-below and `docs/technical-reference.md` § 13).
+**Next free finding ID:** **F141**. **F140 filed and RESOLVED on staging
+2026-08-24** (six more unbounded-query pagination gaps, found auditing F139 —
+see table below and `docs/technical-reference.md` § 13). **F139 filed and
+RESOLVED on both environments 2026-08-23** (`Preorders.getMyIds()`/`getMy()`
+silently truncated at PostgREST's 1000-row cap — see table below and
+`docs/technical-reference.md` § 13). **F138 filed 2026-08-22** (reverses F128
+at Rick's request — see table below and `docs/technical-reference.md` § 13).
 
 Every `docs/*.md` plan doc carries a machine-readable `**STATUS:**` token (state · staging/prod
 dates · PR · findings) as the first line after its title. Trust that token — not narrative
@@ -77,8 +117,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F139 | **Medium** — `Preorders.getMyIds()`/`getMy()` had no pagination; PostgREST silently caps an unbounded select at 1000 rows, so any account past that lifetime-preorder count silently loses reservations off the catalog reserved-status map (and eventually My List/Arrivals/Subscriptions too). Found live via the Book Stop admin test account (1,212 preorders) | Owner: `docs/technical-reference.md` § 13 F139. **RESOLVED on staging 2026-08-23** — `Preorders._fetchAllRows()` pagination added, merged and pushed to `staging`, verified (range-paging replication + 37/37 targeted Playwright). Not yet promoted to production |
-| F138 | **Reverses F128** — admins had no write access to `subscriptions`, so impersonation couldn't manage a customer's subscriptions; Rick asked for full manage (subscribe + unsubscribe) on 2026-08-22 | Owner: `docs/technical-reference.md` § 13 F138. **RESOLVED on staging 2026-08-22** — V1-V4 all green, merged and pushed to `staging`. Next: production promotion is a separate explicit request via `/promote-prod` (not requested yet) |
+| F140 | **Medium/High** — audit follow-up to F139: six more unbounded Supabase queries found across the app (no `.range()`, PostgREST's 1000-row cap), two plausibly already live-broken in prod — `catalog.html`'s Reserved/Unreserved and FOC-Expiring-This-Month filters were hardcoded to a fixed 2,000-row ceiling (re-capped F82, not fixed), and `Recommendations._getUserSignal()` had F139's exact unbounded shape in a different function | Owner: `docs/technical-reference.md` § 13 F140. **RESOLVED on staging 2026-08-24** — all six paginated, merged and pushed to `staging`, verified (`node --check` clean + full `run-smoke.ps1` 269 unit + 139 Playwright, 0 failures). Not yet promoted to production |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
@@ -721,6 +760,8 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Analytics cycle-alignment | `analytics-cycle-alignment.md` | — |
 | Analytics v2 engagement dashboard | `analytics-v2-engagement-dashboard.md` | — |
 | Catalog info-card reserve-sync fix (no plan doc — direct bug fix, PR #99) | — | F103 (coverage gap it exposed) |
+| `Preorders` pagination past PostgREST's 1000-row cap (no plan doc — direct bug fix, PR #130) | — | F139 |
+| Admin write access to `subscriptions` during impersonation (no plan doc — direct fix, PR #129) | — | F138 (reverses F128) |
 | Subscription reserved-suggestions | `subscription-reserved-suggestions.md` | — |
 | Subscription promotion | `subscription-promotion.md` | — |
 | Apex marketing page + universal login | `apex-landing-tenant-subdomains.md`, `apex-marketing-page-design.md` | — |

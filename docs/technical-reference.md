@@ -4452,9 +4452,14 @@ reasoning — only the disposition changed, not the diagnosis.
   2026-08-22** (Rick, via `/promote-prod`'s unapplied-migration gate — ran
   ahead of the client-code merge for the same reason F128 fixed the client
   side: promoting the write-enabled client without the policy first would
-  have silently reproduced F128's bug on production). Client-code
-  promotion (this section's app files) in progress via the same
-  `/promote-prod` run.
+  have silently reproduced F128's bug on production). **Client-code
+  promotion COMPLETE 2026-08-22** — PR #129 merged to `main`
+  (`f1364a785`). **F138 is fully RESOLVED on both environments.** This
+  completion was not reflected in CLAUDE.md's open-findings table or
+  "Last completed work" section until corrected 2026-08-23 (found while
+  promoting F139 — the same stale-doc pattern the project's Document
+  Integrity rule exists to catch; see F139's own filing for the F136/F132
+  precedents of this exact drift shape).
 - **What changed and why.** F128 (2026-08-10) deliberately left `subscriptions`
   with no admin write policy, on Rick's explicit "no" to admins
   unsubscribing customers during impersonation — see that entry's "Do not
@@ -4549,10 +4554,16 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F139 — `Preorders.getMyIds()`/`getMy()` had no pagination; PostgREST silently caps an unbounded select at 1000 rows
 
-- **Status:** filed and **RESOLVED on staging 2026-08-23**, same session.
-  Not scoped to any active sub-deploy (Current Migration Phase is none) — a
-  standalone bug fix reported live by Rick. Not yet promoted to production —
-  a separate explicit request.
+- **Status:** filed and **fully RESOLVED 2026-08-23, both environments**,
+  same session. Not scoped to any active sub-deploy (Current Migration Phase
+  is none) — a standalone bug fix reported live by Rick. Promoted to
+  production via PR #130 (`e71f94c`, merged `d017fc0`), same day as the
+  staging fix, per Rick's explicit `/promote-prod` request. New production
+  bytes confirmed served, and the fix re-verified directly against live
+  production data post-deploy: replicated the fixed `getMyIds()` pagination
+  loop against the Book Stop admin account (grown to 1,223 preorders by the
+  time of the recheck) — 2 pages (1000 + 223), and the previously-dropped
+  AMAZING SPIDER-MAN #1002 reservation is now present in the result.
 - **Symptom, live in production:** the Book Stop admin account (1,212 total
   lifetime preorders) had a real, correctly tenant/user-scoped reservation
   for AMAZING SPIDER-MAN #1002 (standard cover) that `catalog.html` rendered
@@ -4610,21 +4621,130 @@ reasoning — only the disposition changed, not the diagnosis.
     unco​mmitted before anything landed there) and the correct
     `feature/f139-preorders-pagination-cap` branch off `staging`.
 - **Where:** `app.js` — `Preorders._fetchAllRows()` (new),
-  `Preorders.getMyIds()`, `Preorders.getMy()`. Commit `856c178` on
+  `Preorders.getMyIds()`, `Preorders.getMy()`. Staging: commit `856c178` on
   `feature/f139-preorders-pagination-cap`, fast-forward merged to `staging`,
   pushed (`e4a7370..856c178`); new bytes confirmed served via `curl -L`
-  before the smoke gate ran.
-- **Scope:** both environments share the same client code; production has
-  not been promoted. The only account known to have crossed the 1000-row
-  cap today is the Book Stop admin test account — a real customer is very
-  unlikely to individually reach it, but the defect is independent of that
-  and will recur for any account (customer or admin, either environment)
-  that does.
-- **Related:** none — a standalone data-visibility defect, found by
-  diagnosing a live report with real data rather than by theory (per
-  `feedback_diagnose_with_data_not_theory` working practice).
+  before the smoke gate ran. Production: PR #130
+  (`feat/f139-preorders-pagination-cap-prod` → `main`, commit `e71f94c`,
+  merge `d017fc0`); F105 migration gate clean (no schema change) and F59
+  merge-base check confirmed `app.js` differed from `main` as expected.
+- **Scope:** both environments share the same client code; **promoted to
+  both** (see Status above — this bullet previously read "production has
+  not been promoted" after promotion had already completed, corrected
+  2026-08-24 while filing F140, same stale-doc pattern as F138). The only
+  account known to have crossed the 1000-row cap is the Book Stop admin
+  test account — a real customer is very unlikely to individually reach it,
+  but the defect is independent of that and will recur for any account
+  (customer or admin, either environment) that does.
+- **Related:** **F140** (an audit of every other Supabase query in the app
+  for this same shape, triggered by this finding, found six more live
+  instances — see that entry).
 
-Next free finding ID: **F140**.
+#### F140 — audit follow-up to F139: six more unbounded Supabase queries found across the live app, same PostgREST 1000-row cap
+
+- **Status:** filed and **RESOLVED on staging 2026-08-24**, same session as
+  F139. Not scoped to any active sub-deploy — a direct follow-on audit, not
+  a new user-reported symptom. Not yet promoted to production — a separate
+  explicit request.
+- **Trigger:** after fixing F139, Rick asked "do we have other areas in this
+  project where pagination is causing issues?" — audited every `.from(...)`
+  call in `app.js`, `catalog.html`, `mylist.html`, `admin.html`,
+  `analytics.html`, and `subscriptions.html` for the same unbounded-select
+  shape. This is the third occurrence of this defect class in the codebase
+  (after **F82** and **F113**), and the audit confirmed the established
+  count-first-then-`range()`-loop pattern from those two fixes was already
+  correctly applied to every high-traffic path (`Catalog.fetch()`/
+  `getPublishers()`, `admin.html`'s `fetchAllPreorders()`/
+  `fetchAllCatalogForDistributor()`/`fetchPaged()` for `order_submissions`
+  and `weekly_shipment`, `analytics.html`'s `usage_events` load) — six
+  smaller, newer, or less-trafficked queries had never been brought under
+  it.
+- **Findings, ranked by live risk:**
+  1. **High — `catalog.html` Reserved/Unreserved and FOC-Expiring-This-Month
+     filters.** Both were hardcoded to exactly two 1000-row batches (a fixed
+     2,000-row ceiling), not a loop — the same shape **F82** was originally
+     fixed for (`getPublishers()`, "July 2026 hit 2,776 rows and Vault/Viz/
+     Yen Press vanished from the dropdown"), just re-capped higher instead
+     of made unbounded. A single catalog month with no distributor/publisher
+     filter has run well past 2,000 rows in production (§ 4.3: 9,586–11,724
+     total rows across environments), so applying either filter with no
+     other filter active could have been silently dropping items.
+  2. **High — `app.js` `Recommendations._getUserSignal()`.** The per-user
+     `preorders` and `reservation_history` queries powering "series you've
+     reserved before" catalog personalization had the identical unbounded/
+     no-`ORDER BY` shape as F139's `getMyIds()`/`getMy()` — same
+     `preorders` table, different function, missed by that fix because it
+     only touched the `Preorders` object.
+  3. **Medium — `app.js` `Subscriptions.getAllAdmin()`.** Tenant-wide, every
+     subscription across every customer, ordered by `series_name` alone
+     (unbounded and, pre-fix, no tiebreaker — see below).
+  4. **Medium — `analytics.html`.** `user_profiles` and `subscriptions`
+     tenant-wide fetches, plus the current-month `preorders` fetch, were all
+     unbounded.
+  5. **Low-medium — tenant-wide `user_profiles` fetches.** `admin.html`'s
+     main dashboard load, bagging-data load, and Accounts tab (three
+     separate call sites) — low risk today for a single-shop customer
+     count, but ties into **F131** (single-tenant assumptions not yet built
+     for multi-tenant scale) for when that changes.
+  6. **Low — naturally-scoped tenant-wide queries.** `admin.html`'s This
+     Week bagging query (all customers, one week's on-sale titles) and
+     `mylist.html`'s shelf-copy open-demand query (all customers, current
+     month, unfulfilled only) — smallest realistic row counts of the group,
+     fixed for consistency rather than urgency.
+- **The fix:** extracted `app.js`'s pagination helper
+  (`Preorders._fetchAllRows`, added by F139) to a shared top-level
+  `fetchAllRows(buildQuery, pageSize = 1000)`, so `Recommendations` and
+  `Subscriptions` — separate object literals that can't reach a method via
+  `this` from `Preorders` — can reuse it (items 2 and 3). `admin.html` and
+  `analytics.html` fixes reuse each file's own existing pagination helper
+  (`fetchPaged()`; `countRows()`/`fetchRanged()`) where the helper's count
+  step matches the query's actual filter scope — the This Week query needed
+  its own filtered count instead, since `fetchPaged()`'s count is an
+  unfiltered whole-table count and would have paged far past the query's
+  real (small) result set. `catalog.html` and `mylist.html` fixes are local
+  count-first + `range()` loops matching each file's own established
+  convention (mirrors `fetchAllCatalogForDistributor()`).
+- **Also fixed while in this code: three missing pagination tiebreakers.**
+  `Preorders.getMy()` (`created_at` alone — bulk auto-reserve inserts can
+  share one timestamp), `Subscriptions.getAllAdmin()` (`series_name` alone
+  — constant ties), and both `catalog.html` filters (`foc_date`/`title` or
+  `publisher`/`series_name`/`title` alone) all paginated on an `ORDER BY`
+  with no unique tiebreaker column. PostgREST does not guarantee a stable
+  row order across separate `range()` requests when the sort key ties —
+  under the old single-request-only code this was invisible, but once a
+  query is paginated, a tie straddling a page boundary could duplicate or
+  silently drop a row. All four now add an `id` (or `id` + existing key)
+  tiebreaker, matching the convention `fetchAllCatalogForDistributor()` and
+  `analytics.html`'s `fetchRanged()` already used.
+- **Verification (staging, 2026-08-24):**
+  - `node --check` clean on `app.js` and every extracted inline `<script>`
+    block from the four edited HTML files (`catalog.html`, `admin.html`,
+    `analytics.html`, `mylist.html`) — no build step exists for this repo,
+    so each inline script was pulled out and checked individually.
+  - Full `run-smoke.ps1`, run clean end-to-end with no log-capture ambiguity
+    this time (see F139's own entry for that pitfall): **269 unit + 139
+    Playwright, 0 failures, exit 0.**
+- **Where:** `app.js` — `fetchAllRows()` (new, top-level),
+  `Recommendations._getUserSignal()`, `Subscriptions.getAllAdmin()`,
+  `Preorders.getMy()` (tiebreaker only). `catalog.html` — the
+  `foc-this-month` and `reserved`/`unreserved` branches of `loadCatalog()`.
+  `admin.html` — `loadData()`, `ensureBaggingData()`, `ensureAccounts()`,
+  the This Week bagging query. `analytics.html` — `loadData()`.
+  `mylist.html` — `fetchOpenDemandRows()`. Commit `6b763b3` on
+  `feature/f140-pagination-cap-audit`, fast-forward merged to `staging`,
+  pushed; new bytes confirmed served via `curl -L` before the smoke gate
+  ran.
+- **Scope:** both environments share the same client code; not yet promoted
+  to production. Items 1 and 2 are the only two judged plausibly already
+  live-broken in production before this fix; items 3–6 are real but lower
+  near-term risk at the founding tenant's current scale.
+- **Related:** **F82**, **F113** (the two prior occurrences of this exact
+  defect class — this is the third). **F139** (the discovery that triggered
+  this audit). **F131** (the SPOF/single-tenant-scale finding several of
+  the lower-risk tenant-wide items here will matter more against, once the
+  Founding Partner cohort onboards).
+
+Next free finding ID: **F141**.
 
 ---
 

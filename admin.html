@@ -1146,7 +1146,10 @@
 
     const [preordersRes, profilesRes] = await Promise.all([
       fetchAllPreorders(),
-      db.from('user_profiles').select('id, full_name'),
+      // F140 (2026-08-24): tenant-wide and unbounded, same F82/F113 shape as
+      // fetchAllPreorders() above — low risk today for a single-shop customer
+      // count, but the same cap once that grows (F131).
+      fetchPaged('user_profiles', () => db.from('user_profiles').select('id, full_name')),
       loadOrderLedger(),
       loadShipmentEvidence(),
       Settings.getOrderDeadline().then(v => { orderDeadline = v; }),
@@ -1311,7 +1314,7 @@
     if (baggingDataLoaded || fullDataLoaded) return;
     baggingDataLoaded = true;
     const [profilesRes] = await Promise.all([
-      db.from('user_profiles').select('id, full_name'),
+      fetchPaged('user_profiles', () => db.from('user_profiles').select('id, full_name')), // F140
       loadOrderLedger(),
     ]);
     profileMap = {};
@@ -3247,18 +3250,44 @@
     // supplier — can be flagged instead of silently appearing as a normal
     // book to bag. isbn/upc are needed for exportCode() (PRH's fallback
     // chain starts at isbn, not item_code).
-    const { data, error } = await db
-      .from('preorders')
-      .select(`
-        id, user_id, quantity, fulfilled, fulfilled_at,
-        catalog!inner(
-          id, distributor, item_code, isbn, upc, title, series_name, publisher,
-          price_usd, on_sale_date, cover_url, variant_type, catalog_month, withdrawn_at
-        )
-      `)
+    // F140 (2026-08-24): tenant-wide across all customers for the week, and
+    // was unbounded — same cap shape as fetchAllPreorders() above, just not
+    // reusable via fetchPaged() (its count step counts the whole table, not
+    // this query's date-filtered subset), so this pages itself the same way
+    // catalog.html's filtered fetches do: a fresh, identically-filtered
+    // query per step (count first, then each data page — .select() is only
+    // ever called once per query builder, immediately after .from()).
+    const applyWeekFilters = (q) => q
       .gte('catalog.on_sale_date', weekStart)
-      .lte('catalog.on_sale_date', weekEnd)
-      .order('user_id');
+      .lte('catalog.on_sale_date', weekEnd);
+
+    const weekCountRes = await applyWeekFilters(
+      db.from('preorders').select('id, catalog!inner(on_sale_date)', { count: 'exact', head: true })
+    );
+    if (weekCountRes.error) {
+      container.innerHTML = `<div class="alert alert-error">Failed to load: ${escapeHtml(weekCountRes.error.message)}</div>`;
+      return;
+    }
+    const weekTotal = weekCountRes.count ?? 0;
+
+    let data = [];
+    let error = null;
+    for (let from = 0; from < weekTotal; from += 1000) {
+      const batch = await applyWeekFilters(
+        db.from('preorders').select(`
+          id, user_id, quantity, fulfilled, fulfilled_at,
+          catalog!inner(
+            id, distributor, item_code, isbn, upc, title, series_name, publisher,
+            price_usd, on_sale_date, cover_url, variant_type, catalog_month, withdrawn_at
+          )
+        `)
+      )
+        .order('user_id')
+        .order('id')
+        .range(from, Math.min(from + 999, weekTotal - 1));
+      if (batch.error) { error = batch.error; break; }
+      data = data.concat(batch.data || []);
+    }
 
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load: ${escapeHtml(error.message)}</div>`;
@@ -3540,9 +3569,11 @@
 
   async function ensureAccounts({ force = false } = {}) {
     if (accountsLoaded && !force) return;
-    const { data, error } = await db
+    // F140 (2026-08-24): tenant-wide and unbounded, same cap shape as
+    // fetchAllPreorders() above (F82/F113).
+    const { data, error } = await fetchPaged('user_profiles', () => db
       .from('user_profiles')
-      .select('id, full_name, email, status, is_paper, is_admin, created_at, created_by_admin');
+      .select('id, full_name, email, status, is_paper, is_admin, created_at, created_by_admin'));
     if (error) {
       document.getElementById('accounts-list').innerHTML =
         `<div class="alert alert-error">Failed to load accounts: ${escapeHtml(error.message)}</div>`;
