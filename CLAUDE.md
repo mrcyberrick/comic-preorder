@@ -12,8 +12,66 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** F140 RESOLVED on staging 2026-08-24 — audit follow-up to F139, triggered
-by Rick asking "do we have other areas where pagination is causing issues?" Swept every Supabase
+**Last completed work:** **Lighthouse performance sweep** RESOLVED on staging 2026-08-24 —
+triggered by Rick asking why Performance scored consistently below 80 on both mobile and desktop.
+Five items, **no finding ID filed** (fixed in-session rather than deferred, Rick's call — **F141 is
+still free**). Measured against live production first, which localised three of Lighthouse's four
+categories onto specific files instead of generic advice.
+
+**Artwork (items 1, 2, 5).** Three assets were bitmaps in formats that could not compress them, two
+of them wrapped in SVG: `favico.svg` was an Inkscape export around a 1254×1254 RGBA PNG — **931 KB
+(710 KB brotli'd), linked from all eight pages and refetched on every load**, to be painted into a
+16–32px tab slot; `comic-cover-fallback.svg` was 203 KB of SVG around a 300×450 base64 PNG for a
+slot CSS renders at 150×225; `assets/hero.jpg` was a 1600×854 JPEG served full-size to phones.
+Re-encoded in-session with Pillow (no GIMP/Inkscape round-trip needed) to `icon-192-v2.png`
+(3,162 B) + `apple-touch-icon-v2.png` (2,939 B — new; iOS previously had no home-screen icon),
+`comic-cover-fallback-v2.webp` (10,764 B), and `hero-v2.webp` (71,166 B) + `hero-mobile-v2.webp`
+(31,784 B). Per page: **866,187 B → 13,926 B** on catalog/mylist/arrivals/etc., **845,694 B →
+74,328 B** desktop / **34,946 B** mobile on the apex page.
+
+**Fonts (item 4).** `style.css` opened with an `@import` of the Google Fonts CSS. An `@import` is
+invisible to the preload scanner, so first paint waited on three strictly serialized round trips
+across two cold origins (`style.css` → parse → `fonts.googleapis.com` → parse →
+`fonts.gstatic.com`) — Lighthouse's 1,610 ms mobile / 510 ms desktop render-block. Replaced with
+`preconnect` + a direct `<link>` in all eight heads; the `_headers` CSP already allowed both
+origins, so no policy change was needed. **Do not reintroduce the `@import`** — a comment sits at
+its old location in `style.css` saying so.
+
+**Caching (item 3).** `_headers` only ever *shortened* lifetimes (`no-cache` on
+`app.js`/`config.js`/vendor, for the F79 skew reason); everything else fell to Cloudflare Pages'
+default `max-age=0, must-revalidate`. Added long lifetimes for static artwork in two groups.
+**The `-vN` filename suffix is load-bearing:** files served `immutable` for a year carry it, and
+re-exporting one REQUIRES bumping N and updating every reference — a year-long immutable cache on a
+stable filename is a trap. `style.css` is deliberately in neither group: unfingerprinted and
+deploy-variable, so the F79 reasoning that governs `app.js` governs it too.
+
+**Verified 2026-08-24**: `node --check` clean on `app.js`, `shelf-order.js` and all 10 extracted
+inline `<script>` blocks; full `run-smoke.ps1` — **269 unit + 139 Playwright, 0 failures, exit 0**,
+both stages present in the log; every `_headers` path resolves to a real file; HTML diffs confined
+to `<head>`, so the six-page nav/footer sync set is untouched. **Because essentially none of this
+is spec-covered** — no spec asserts font rendering, cache headers or favicons — a separate
+real-browser check against deployed staging confirmed what a green suite could not:
+`document.fonts.check()` true for both families (no silent fallback to `sans-serif`), **exactly one
+hero request per viewport** (so the `matchMedia` preload agrees with the stylesheet — no
+double-download), and zero requests for the three deleted assets. Standalone perf work, not scoped
+to any active sub-deploy. **Not yet promoted to production** — prod still serves the 931 KB
+favicon, so the same per-page win is still waiting there. On promotion, note that `.gitattributes`
+sets `app.js merge=ours` and this change set touches `app.js` — exactly what the F59 merge-base
+assertion in `/promote-prod` exists to catch.
+
+Prior work (2026-08-24): **F140** fully RESOLVED (both environments) — promoted to
+production same day as the staging fix (PR #131, `2acc78d`/`26a2c80`), per Rick's explicit
+`/promote-prod` request. New production bytes confirmed served; both high-risk findings
+re-verified directly against live production data post-deploy — the current catalog month
+(`2026-08`) genuinely had **2,399 rows**, past the old hardcoded 2,000-row ceiling, and the fixed
+loop now correctly retrieves all 2,399 (1000/1000/399); the Book Stop admin account's `preorders`
+total had grown to **1,345**, and the fixed `Recommendations._getUserSignal()` pagination now
+correctly retrieves the full 1,345 across 2 pages, matching the exact DB count. Both were
+confirmed genuinely live-broken before this promotion, not just theoretical risk. See
+`docs/technical-reference.md` § 13 F140.
+
+An audit follow-up to F139, triggered by Rick asking "do we have other areas where pagination is
+causing issues?" Swept every Supabase
 query in the app for the same unbounded-select-no-`.range()` shape and found six more live
 instances — the third occurrence of this defect class overall (after F82, F113). Two judged
 plausibly already live-broken in production: `catalog.html`'s Reserved/Unreserved and
@@ -30,9 +88,8 @@ matching the file's convention otherwise. Also added `id` tiebreakers to three p
 clauses that sorted on non-unique columns (a page-boundary tie risk with no prior symptom, since it
 only matters once a query is paginated at all). **Verified 2026-08-24**: `node --check` clean on
 `app.js` and every extracted inline `<script>` block; full `run-smoke.ps1` — 269 unit + 139
-Playwright, 0 failures, exit 0, no log-capture ambiguity this run. See
-`docs/technical-reference.md` § 13 F140. Standalone audit/fix, not scoped to any active sub-deploy.
-**Not yet promoted to production.**
+Playwright, 0 failures, exit 0, no log-capture ambiguity this run. Standalone audit/fix, not
+scoped to any active sub-deploy. Promotion details above.
 
 Prior work (2026-08-23): **F139** fully RESOLVED (both environments) — a live customer-
 reported catalog bug (a real reservation showing unreserved, omitted from the Reserved filter, and
@@ -93,9 +150,16 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F141**. **F140 filed and RESOLVED on staging
-2026-08-24** (six more unbounded-query pagination gaps, found auditing F139 —
-see table below and `docs/technical-reference.md` § 13). **F139 filed and
+**Next free finding ID:** **F142**. **F141 filed 2026-08-24** (desktop CLS
+0.636 — the catalog grid fills after first paint with no reserved space;
+found re-measuring Lighthouse against *authenticated* staging after the
+performance sweep, which itself consumed no ID — see table below and
+`docs/technical-reference.md` § 13). **F140 filed
+2026-08-24 and RESOLVED on both environments the same day** (six more
+unbounded-query pagination gaps, found auditing F139 — see table below and
+`docs/technical-reference.md` § 13). *(This pointer read "RESOLVED on staging"
+for a few hours after the prod promotion had already landed — corrected
+2026-08-24.)* **F139 filed and
 RESOLVED on both environments 2026-08-23** (`Preorders.getMyIds()`/`getMy()`
 silently truncated at PostgREST's 1000-row cap — see table below and
 `docs/technical-reference.md` § 13). **F138 filed 2026-08-22** (reverses F128
@@ -117,7 +181,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F140 | **Medium/High** — audit follow-up to F139: six more unbounded Supabase queries found across the app (no `.range()`, PostgREST's 1000-row cap), two plausibly already live-broken in prod — `catalog.html`'s Reserved/Unreserved and FOC-Expiring-This-Month filters were hardcoded to a fixed 2,000-row ceiling (re-capped F82, not fixed), and `Recommendations._getUserSignal()` had F139's exact unbounded shape in a different function | Owner: `docs/technical-reference.md` § 13 F140. **RESOLVED on staging 2026-08-24** — all six paginated, merged and pushed to `staging`, verified (`node --check` clean + full `run-smoke.ps1` 269 unit + 139 Playwright, 0 failures). Not yet promoted to production |
+| F141 | **Medium** — `#catalog-grid` is emitted empty and filled after the Supabase fetch with nothing reserving its space, so the page grows ~5,400 px in one frame. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one; mobile is 0.097 / **86**. `cls-culprits-insight` puts 96% of it on a single element | open, no plan doc. Owner: `docs/technical-reference.md` § 13 F141. Fix shape: reserve space before the fetch resolves (`min-height` on `.catalog-grid`, or skeleton cards) — **not** by delaying first paint (desktop FCP is 0.4 s). Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
@@ -761,6 +825,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Analytics v2 engagement dashboard | `analytics-v2-engagement-dashboard.md` | — |
 | Catalog info-card reserve-sync fix (no plan doc — direct bug fix, PR #99) | — | F103 (coverage gap it exposed) |
 | `Preorders` pagination past PostgREST's 1000-row cap (no plan doc — direct bug fix, PR #130) | — | F139 |
+| Six more unbounded-query pagination gaps, app-wide audit (no plan doc — direct bug fix, PR #131) | — | F140 |
 | Admin write access to `subscriptions` during impersonation (no plan doc — direct fix, PR #129) | — | F138 (reverses F128) |
 | Subscription reserved-suggestions | `subscription-reserved-suggestions.md` | — |
 | Subscription promotion | `subscription-promotion.md` | — |
@@ -886,7 +951,8 @@ npx playwright test 17-admin-modes --grep "V1 — get_account_activity"
 npx playwright test 15-order-export-ledger
 
 # Once, before promotion — this is the gate
-.un-smoke.ps1
+.
+un-smoke.ps1
 ```
 
 **Measured, 2026-08-09** (Rick asked whether the suite was earning its keep —

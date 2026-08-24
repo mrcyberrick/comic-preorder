@@ -4,8 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Analytics — Pull List</title>
-  <link rel="icon" type="image/svg+xml" href="favico.svg">
+  <!-- favico.svg (931 KB) was an Inkscape wrapper around a 1254x1254 RGBA
+       PNG, refetched on every page. Replaced 2026-08-24 with real icons
+       at the sizes browsers actually paint: 3.1 KB + 2.9 KB. -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192-v2.png">
   <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+  <!-- Google Fonts: preconnect + direct <link>. Was an @import at the top of
+       style.css until 2026-08-24, which the preload scanner cannot see: the
+       browser had to fetch style.css, parse it, THEN discover the font CSS,
+       THEN open two more cold origins. Three serialized round trips before
+       first paint (Lighthouse: 1,610 ms render-blocking on mobile). CSP in
+       _headers already allows both origins - no policy change needed. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Analytics 3-tier redesign — page-scoped styles ───────────
