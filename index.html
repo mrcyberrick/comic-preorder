@@ -4,8 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PULLLIST — Your pre-order superpower</title>
-  <link rel="icon" type="image/svg+xml" href="favico.svg">
+  <!-- favico.svg (931 KB) was an Inkscape wrapper around a 1254x1254 RGBA
+       PNG, refetched on every page. Replaced 2026-08-24 with real icons
+       at the sizes browsers actually paint: 3.1 KB + 2.9 KB. -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192-v2.png">
   <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
   <meta name="description" content="PULLLIST turns each month's distributor catalog into a pre-order storefront your comic or book shop's customers run themselves.">
   <!-- Google Fonts: preconnect + direct <link>. Was an @import at the top of
        style.css until 2026-08-24, which the preload scanner cannot see: the
@@ -51,8 +55,15 @@
       if (/[?&#](token_hash|access_token|type)=/.test(raw) || location.hash === '#signin') {
         root.setAttribute('data-signin', 'open');
       }
+      // Preload the SAME hero variant apex.css will ask for. The 900px
+      // breakpoint below must stay in sync with the .ax-hero-photo rule in
+      // apex.css - if they disagree the page preloads one file and then
+      // downloads the other, which is worse than not preloading at all.
       var pre = document.createElement('link');
-      pre.rel = 'preload'; pre.as = 'image'; pre.href = 'assets/hero.jpg';
+      pre.rel = 'preload'; pre.as = 'image';
+      pre.href = window.matchMedia('(max-width: 900px)').matches
+        ? 'assets/hero-mobile-v2.webp'
+        : 'assets/hero-v2.webp';
       document.head.appendChild(pre);
     }
   })();

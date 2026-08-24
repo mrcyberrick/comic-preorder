@@ -1786,10 +1786,15 @@ function renderSkeletons(count = 12, container) {
 }
 
 // Cover placeholder — shown while image loads and as fallback if it breaks.
-// Static asset at repo root (comic-cover-fallback.svg), same convention as
-// favico.svg / bookstop_logo.png. Was an inline gray-bars data URI until
-// 2026-08-17, when it was swapped for a designed fallback image.
-const COVER_PLACEHOLDER = 'comic-cover-fallback.svg';
+// Static asset at repo root, same convention as bookstop_logo.png. Was an
+// inline gray-bars data URI until 2026-08-17, when it was swapped for a
+// designed fallback image.
+//
+// 2026-08-24: was comic-cover-fallback.svg, a 203 KB SVG wrapping a 300x450
+// base64 PNG — 156 KB on the wire for a 150x225 slot. Same artwork as WebP
+// is 10.8 KB. The -v2 suffix is load-bearing: _headers serves this path
+// immutable for a year, so re-exporting the art REQUIRES bumping to -v3.
+const COVER_PLACEHOLDER = 'comic-cover-fallback-v2.webp';
 
 function buildComicCard(comic, reservedQty, focLocked = false) {
   const isReserved = reservedQty > 0;
