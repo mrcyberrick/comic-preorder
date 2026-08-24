@@ -80,13 +80,28 @@
 #   connect-src also carries it as a precaution against Turnstile's own
 #   background requests, even with pre-clearance off (Cloudflare's own CSP
 #   guidance flags connect-src as pre-clearance-relevant; harmless either way).
-# - style-src/font-src allow the Google Fonts import in style.css.
+# - Cloudflare Web Analytics (added 2026-08-24). Cloudflare INJECTS its RUM
+#   beacon at the edge — it is in no file in this repo, which is why nothing
+#   here mentions it and why `curl` does not show it (injection is
+#   browser-conditional). script-src therefore has to allow
+#   static.cloudflareinsights.com or the beacon is blocked, and connect-src
+#   has to allow cloudflareinsights.com or allowing the script alone just
+#   moves the error to the RUM POST at /cdn-cgi/rum. This was blocked from
+#   the CSP's introduction (9579ce1, 2026-07-08) until 2026-08-24, so Web
+#   Analytics collected nothing in that window — harmless, but it meant the
+#   only performance data available was Lighthouse lab runs, never real
+#   users. If Web Analytics is ever turned off in the dashboard, these two
+#   origins can come back out.
+# - style-src/font-src allow Google Fonts. These were an @import inside
+#   style.css until 2026-08-24; they are now a <link> in each page head
+#   (the @import was invisible to the preload scanner). Same two origins
+#   either way, so this directive did not change.
 # - connect-src lists BOTH Supabase projects so this file merges cleanly
 #   between the staging and main branches (config.js picks the live one).
 # - img-src https: covers distributor cover CDNs (PRH, Lunar, misc);
 #   data: covers the inline SVG cover placeholder.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://plgegklqtdjxeglvyjte.supabase.co https://puoaiyezsreowpwxzxhj.supabase.co https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://plgegklqtdjxeglvyjte.supabase.co https://puoaiyezsreowpwxzxhj.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
