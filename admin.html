@@ -416,39 +416,26 @@
   <div class="admin-section" id="tab-paper-orders">
 
     <!-- Print the paper catalog (F121 session 6 rename; process map § 3.2).
-         These were "Print Lunar/PRH Order Sheet", two words away from the
-         export bar's "↓ Lunar/PRH Order Sheet" — which submit real money to a
-         distributor. These print a browsing CATALOG for the store, every row
+         This was "Print Lunar/PRH Order Sheet", two words away from the export
+         bar's "↓ Lunar/PRH Order Sheet" — which submit real money to a
+         distributor. This prints a browsing CATALOG for the store, every row
          carrying a blank qty box a customer writes their order into; it is
          the far end of the loop this tab's search box starts next cycle
          (§ 5.5 W7). Before the split the two pairs at least sat on different
          tabs; now both live in Ordering, so the clash got worse. The printed
          page itself is renamed too — it is the artifact that ends up in a
          customer's hands, so renaming only the button would have moved the
-         collision rather than removed it. -->
+         collision rather than removed it.
+
+         ONE button, deliberately (Rick, 2026-08-24). This replaced four: a
+         per-distributor Lunar sheet and PRH sheet, plus a barcode variant of
+         the combined sheet. The combined sheet costs no more paper than the
+         two per-distributor prints it replaces (49 pages against 30 + 19,
+         measured on a full month) and saves handling two documents. The
+         barcode variant was built, printed and tested against the shop's real
+         scanner before being dropped — see buildCombinedCatalogHtml's comment
+         for why, and do not rebuild it without reading that first. -->
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" id="btn-print-lunar-order"
-        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-          <rect x="6" y="14" width="12" height="8"/>
-        </svg>
-        Print Lunar Catalog
-      </button>
-      <button class="btn btn-secondary btn-sm" id="btn-print-prh-order"
-        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-          <rect x="6" y="14" width="12" height="8"/>
-        </svg>
-        Print PRH Catalog
-      </button>
-      <!-- Third print: the same two catalogs above in one document, digits
-           only. Same rows, same filters, same columns and the same row metrics
-           as the two per-distributor sheets — the only addition is a band
-           separating the Lunar and PRH halves. This is the combined print to
-           reach for; the barcode one below is kept but is no longer the
-           recommendation (see its comment). -->
       <button class="btn btn-secondary btn-sm" id="btn-print-combined-catalog"
         style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -456,22 +443,6 @@
           <rect x="6" y="14" width="12" height="8"/>
         </svg>
         Print Combined Catalog
-      </button>
-      <!-- Fourth print: the combined catalog with the UPC/ISBN drawn as a
-           scannable barcode rather than a digit string. Kept, but demoted below
-           the digits-only print after Rick tested it with the shop's actual
-           scanner on 2026-08-24: "the scanner is working but resolution
-           limitations make it less useful." The symbols measure in spec on
-           paper, so that is a limit of the scanning hardware against a laser
-           print rather than something further tuning fixes — and it costs
-           roughly twice the paper, since the barcode sets the row height. -->
-      <button class="btn btn-secondary btn-sm" id="btn-print-barcode-catalog"
-        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M3 5v14"/><path d="M6 5v14"/><path d="M10 5v14"/><path d="M14 5v14"/>
-          <path d="M17 5v14"/><path d="M21 5v14"/>
-        </svg>
-        Print Scannable Catalog
       </button>
     </div>
 
@@ -4505,32 +4476,96 @@
     );
   }
 
-  // Shared print CSS for every paper-catalog sheet — the two per-distributor
-  // sheets (buildOrderSheetHtml) and both combined sheets, text and barcode
-  // (buildCombinedCatalogHtml). Only the column widths, the row padding and a
-  // small per-sheet `extra` block differ; the @page margin boxes, the page-1
-  // header, the repeating table head and the qty/title/publisher/price/FOC
-  // treatment are identical across all four and must stay identical, which is
-  // the whole reason this lives in one function instead of three copies.
-  // Widths are inch values passed as STRINGS — they are echoed verbatim into
-  // both the CSS and the arithmetic comment beside it, so "4.0" stays "4.0"
-  // rather than being normalised to "4" by Number→String. They must sum to the
-  // 7.8in content width (8.5 − 0.7); `sum` is computed, not typed, so the
-  // comment cannot drift from the declarations it is describing.
-  function catalogSheetStyles(o) {
-    const sum = ['code','qty','title','pub','price','foc']
-      .reduce((n, k) => n + parseFloat(o[k]), 0).toFixed(2);
-    return `
+  // The code the sheet prints for a row. PRH leads with ISBN, Lunar with UPC.
+  // Lunar tries `isbn` before falling back to `alternate_code` because in a real
+  // month 419 of the 420 Lunar rows with no UPC carry a 13-digit ISBN, and that
+  // ISBN is the code physically printed on the book, whereas alternate_code
+  // (`AUG2671038`) is a Lunar order reference that identifies nothing in the
+  // shop.
+  function catalogScanCode(distributor, c) {
+    return distributor === 'Lunar'
+      ? (c.upc || c.isbn || c.alternate_code || '—')
+      : (c.isbn || c.upc || c.alternate_code || '—');
+  }
+
+  // ── Print the combined paper Catalog (Ordering ▸ Paper Orders) ──
+  // Both distributors in one banded document: every catalog row for the current
+  // month whose publisher has a meaningful reserve history and whose FOC has not
+  // passed, each carrying a blank qty box a customer writes their order into.
+  // Sorted by title within each distributor band.
+  //
+  // Columns: UPC/ISBN | Order Qty (blank write-in) | Title | Publisher | Price | FOC
+  // Header:  catalog month, title count
+  // Footer margin box: Page X of Y · print date · rjbookstop.com (via CSS @page)
+  //
+  // History worth keeping, because it is the reason not to rebuild either of the
+  // two things this replaced. Until 2026-08-24 this was TWO buttons, one per
+  // distributor. A barcode variant was then built and tested with the shop's
+  // real scanner; Rick's verdict was "the scanner is working but resolution
+  // limitations make it less useful", and it was removed along with the
+  // per-distributor prints, leaving this one sheet. The barcode symbols were
+  // measured in spec on paper (145/117/98/89% of nominal, inside the GS1
+  // 80–200% band), so what defeated them was the scanning hardware against a
+  // laser print, not the encoding or the sizing — re-tuning the magnification
+  // would not have changed the outcome. It also cost roughly twice the paper:
+  // 0.384in per row against the 0.219in below, 26 rows per page against 46.
+  // The encoder is gone from this file; it is recoverable from git history at
+  // commit 56c97c9 if that hardware is ever replaced.
+  function buildCombinedCatalogHtml(groups, monthLabel) {
+    const printDate = new Date().toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric'
+    });
+
+    const total = groups.reduce((n, g) => n + g.items.length, 0);
+
+    const body = groups.map(g => {
+      const band = `
+        <tr class="dist-row">
+          <td colspan="6">${escapeHtml(g.distributor)} &middot; ${g.items.length.toLocaleString()} titles</td>
+        </tr>`;
+      const rows = g.items.map(c => {
+        const price = c.price_usd ? `$${parseFloat(c.price_usd).toFixed(2)}` : '—';
+        const foc   = c.foc_date  ? (() => {
+          const [y, m, d] = c.foc_date.split('-').map(Number);
+          return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+        })() : '—';
+
+        // Variant label — inline grey suffix on the title line so it never forces
+        // a second line; trimmed by the cell ellipsis if the row runs long.
+        const variantNote = (c.variant_type && c.variant_type !== 'Standard' && c.variant_type !== 'Primary Title')
+          ? ` <span class="variant">&middot; ${escapeHtml(c.variant_type)}</span>` : '';
+
+        return `
+        <tr>
+          <td class="col-code">${escapeHtml(catalogScanCode(g.distributor, c))}</td>
+          <td class="col-qty"><div class="qty-box"></div></td>
+          <td class="col-title">${escapeHtml(c.title || '—')}${variantNote}</td>
+          <td class="col-pub">${escapeHtml(c.publisher || '—')}</td>
+          <td class="col-price">${price}</td>
+          <td class="col-foc">${foc}</td>
+        </tr>`;
+      }).join('');
+      return band + rows;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Combined Catalog — ${monthLabel}</title>
+  <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     /* ── Portrait letter, tight margins, footer margin boxes ── */
     /* Content width: 8.5in − 0.7in = 7.8in                     */
     /* Content height: 11in − 0.9in = 10.1in usable             */
-${o.rowNote}    @page {
+    /* Single-line 7.5pt rows + 3px padding = ~0.22in/row        */
+    /* ≈ 46 data rows per page (consistent — titles truncate)    */
+    @page {
       size: letter portrait;
       margin: 0.4in 0.35in 0.5in 0.35in;
       @bottom-left {
-        content: "Printed ${o.printDate}";
+        content: "Printed ${printDate}";
         font-family: Arial, sans-serif;
         font-size: 6.5pt;
         color: #999;
@@ -4614,20 +4649,20 @@ ${o.rowNote}    @page {
     /* fills the page edge-to-edge (fixed layout no longer stretches the    */
     /* under-filled columns into big gaps) and the title gets the reclaimed */
     /* space. Title + Publisher truncate with an ellipsis; codes never do.  */
-    /* ${o.codeLabel}:${o.code} + Qty:${o.qty} + Title:${o.title} + Pub:${o.pub} + Price:${o.price} + FOC:${o.foc} = ${sum}in */
-    .col-code  { width: ${o.code}in; }
-    .col-qty   { width: ${o.qty}in; }
-    .col-title { width: ${o.title}in;  }
-    .col-pub   { width: ${o.pub}in;  }
-    .col-price { width: ${o.price}in;  }
-    .col-foc   { width: ${o.foc}in;  }
+    /* UPC:1.05 + Qty:0.45 + Title:4.0 + Pub:1.2 + Price:0.5 + FOC:0.6 = 7.8in */
+    .col-code  { width: 1.05in; }
+    .col-qty   { width: 0.45in; }
+    .col-title { width: 4.0in;  }
+    .col-pub   { width: 1.2in;  }
+    .col-price { width: 0.5in;  }
+    .col-foc   { width: 0.6in;  }
 
     /* ── Data rows — no page-break-inside so rows pack tightly ── */
     tbody tr { border-bottom: 1px solid #e8e8e8; }
     tbody tr:nth-child(even) { background: #f7f7f7; }
 
     td {
-      padding: ${o.rowPad};
+      padding: 1.5px 4px 1.5px 2px;
       vertical-align: middle;
       font-size: 7.5pt;
       /* Single-line rows — truncate with an ellipsis instead of wrapping, so   */
@@ -4675,309 +4710,10 @@ ${o.rowNote}    @page {
     /* FOC date */
     .col-foc { text-align: center; font-size: 7pt; color: #555; }
 
-    /* Item count line at end of sheet */
-    .sheet-footer {
-      margin-top: 6px;
-      font-size: 6.5pt;
-      color: #aaa;
-      text-align: right;
-    }${o.extra || ''}`;
-  }
-
-  // ── Barcode encoding (UPC-A / EAN-13 + supplement, Code 128 fallback) ──
-  // Pure JS, no library — the app has no build step and the print window is
-  // written with document.write(), so an external script is not an option.
-  //
-  // Symbology choice is driven by what the catalog actually carries (measured
-  // against a real normalized_catalog.json, 2,390 rows):
-  //   • 17 digits (1,604 rows) = UPC-A(12) + EAN-5 supplement — the standard
-  //     comic barcode; the supplement is the issue/variant number.
-  //   • 13 digits (784 rows)   = EAN-13, i.e. the ISBN on a trade/omnibus.
-  //   • 15 / 14 digits         = EAN-13 or UPC-A + EAN-2 supplement (magazines).
-  //   • anything else (2 rows) = Code 128, which encodes arbitrary text. This
-  //     catches malformed codes and Lunar's alphanumeric alternate_code.
-  // The base is check-digit validated before being drawn as UPC/EAN, so a
-  // malformed 12-digit code falls through to Code 128 rather than printing a
-  // barcode that scans to the wrong product.
-  const EAN_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
-  const EAN_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
-  const EAN_R = EAN_L.map(p => p.replace(/./g, c => (c === '0' ? '1' : '0')));
-  const EAN13_PARITY  = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
-  const ADDON5_PARITY = ['GGLLL','GLGLL','GLLGL','GLLLG','LGGLL','LLGGL','LLLGG','LGLGL','LGLLG','LLGLG'];
-  const ADDON2_PARITY = ['LL','LG','GL','GG'];
-  // Code 128 symbol table, values 0–106, each as bar/space run lengths.
-  const CODE128_PATTERNS = (
-    '212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 ' +
-    '221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 ' +
-    '221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 ' +
-    '212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 ' +
-    '231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 ' +
-    '231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 ' +
-    '314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 ' +
-    '112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 ' +
-    '111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 ' +
-    '214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 ' +
-    '114131 311141 411131 211412 211214 211232 2331112'
-  ).split(/\s+/);
-
-  function eanCheckDigit(digits) {
-    let sum = 0;
-    for (let i = digits.length - 1, w = 3; i >= 0; i--, w = 4 - w) sum += Number(digits[i]) * w;
-    return (10 - (sum % 10)) % 10;
-  }
-
-  function ean13Bits(code13) {
-    const parity = EAN13_PARITY[Number(code13[0])];
-    let bits = '101';
-    for (let i = 0; i < 6; i++) bits += (parity[i] === 'L' ? EAN_L : EAN_G)[Number(code13[i + 1])];
-    bits += '01010';
-    for (let i = 7; i < 13; i++) bits += EAN_R[Number(code13[i])];
-    return bits + '101';
-  }
-
-  function addonBits(addon) {
-    const d = addon.split('').map(Number);
-    const parity = d.length === 5
-      ? ADDON5_PARITY[(3 * (d[0] + d[2] + d[4]) + 9 * (d[1] + d[3])) % 10]
-      : ADDON2_PARITY[Number(addon) % 4];
-    let bits = '01011';
-    for (let i = 0; i < d.length; i++) {
-      if (i > 0) bits += '01';
-      bits += (parity[i] === 'L' ? EAN_L : EAN_G)[d[i]];
-    }
-    return bits;
-  }
-
-  function code128Bits(text) {
-    const vals = [104]; // Start B
-    for (const ch of text) {
-      const v = ch.charCodeAt(0) - 32;
-      vals.push(v >= 0 && v <= 94 ? v : 0);
-    }
-    let sum = 104;
-    for (let i = 1; i < vals.length; i++) sum += vals[i] * i;
-    vals.push(sum % 103, 106); // check symbol, Stop
-    let bits = '';
-    for (const v of vals) {
-      let bar = true;
-      for (const run of CODE128_PATTERNS[v]) {
-        bits += (bar ? '1' : '0').repeat(Number(run));
-        bar = !bar;
-      }
-    }
-    return bits;
-  }
-
-  // Raw code → { bits, modules, type, hr } or null when there is nothing to draw.
-  function encodeBarcode(raw) {
-    const digits = String(raw || '').replace(/\D/g, '');
-    const split = { 18: [13, 5], 17: [12, 5], 15: [13, 2], 14: [12, 2], 13: [13, 0], 12: [12, 0] }[digits.length];
-    if (split) {
-      const base  = digits.slice(0, split[0]);
-      const addon = split[1] ? digits.slice(split[0]) : '';
-      if (eanCheckDigit(base.slice(0, -1)) === Number(base.slice(-1))) {
-        // UPC-A is EAN-13 with a leading zero — same bars, 12-digit caption.
-        let bits = ean13Bits(base.length === 12 ? '0' + base : base);
-        if (addon) bits += '0000000' + addonBits(addon); // 7-module inter-symbol gap
-        return {
-          bits, modules: bits.length,
-          type: base.length === 12 ? 'UPC-A' : 'EAN-13',
-          hr: base + (addon ? ' ' + addon : '')
-        };
-      }
-    }
-    const text = String(raw || '').trim();
-    if (!text || text === '—') return null;
-    const bits = code128Bits(text);
-    return { bits, modules: bits.length, type: 'CODE128', hr: text };
-  }
-
-  // Render as inline SVG. The viewBox is the module count and
-  // preserveAspectRatio="none" scales X only, so every symbol prints at exactly
-  // the column width regardless of length — for the code lengths this catalog
-  // carries that puts magnification inside the GS1 80–200% band at a 1.8in
-  // column. Quiet zones are inside the viewBox: a barcode butted up against a
-  // cell edge is the classic reason a printed sheet will not scan.
-  function barcodeSvg(raw) {
-    const enc = encodeBarcode(raw);
-    if (!enc) return null;
-    const QUIET = 10;
-    const total = enc.modules + QUIET * 2;
-    let rects = '';
-    for (let i = 0; i < enc.bits.length; ) {
-      if (enc.bits[i] === '0') { i++; continue; }
-      let j = i;
-      while (j < enc.bits.length && enc.bits[j] === '1') j++;
-      rects += `<rect x="${i + QUIET}" width="${j - i}" height="100"/>`;
-      i = j;
-    }
-    enc.svg = `<svg class="bc" viewBox="0 0 ${total} 100" preserveAspectRatio="none" ` +
-      `shape-rendering="crispEdges" role="img" aria-label="${escapeHtml(enc.hr)}">` +
-      `<rect width="${total}" height="100" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
-    return enc;
-  }
-
-  // Shared row cells for every catalog sheet — everything except the code cell,
-  // which is a monospace string on the text sheets and an SVG on the barcode
-  // sheet. Keeping this in one place is what makes "same formatting" true
-  // rather than aspirational.
-  function catalogRowCells(c) {
-    const price = c.price_usd ? `$${parseFloat(c.price_usd).toFixed(2)}` : '—';
-    const foc   = c.foc_date  ? (() => {
-      const [y, m, d] = c.foc_date.split('-').map(Number);
-      return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
-    })() : '—';
-
-    // Variant label — inline grey suffix on the title line so it never forces
-    // a second line; trimmed by the cell ellipsis if the row runs long.
-    const variantNote = (c.variant_type && c.variant_type !== 'Standard' && c.variant_type !== 'Primary Title')
-      ? ` <span class="variant">&middot; ${escapeHtml(c.variant_type)}</span>` : '';
-
-    return `
-          <td class="col-qty"><div class="qty-box"></div></td>
-          <td class="col-title">${escapeHtml(c.title || '—')}${variantNote}</td>
-          <td class="col-pub">${escapeHtml(c.publisher || '—')}</td>
-          <td class="col-price">${price}</td>
-          <td class="col-foc">${foc}</td>`;
-  }
-
-  // The code a sheet prints for a row. PRH leads with ISBN, Lunar with UPC —
-  // that is the pre-existing chain and it is preserved. The one addition, made
-  // for the barcode sheet's sake and applied to all three so they never
-  // disagree, is that Lunar now tries `isbn` before falling back to
-  // `alternate_code`: in a real month 419 of the 420 Lunar rows with no UPC
-  // carry a 13-digit ISBN, and that ISBN is the barcode physically printed on
-  // the book, whereas alternate_code (`AUG2671038`) is a Lunar order reference
-  // no scanner resolves to a product.
-  function catalogScanCode(distributor, c) {
-    return distributor === 'Lunar'
-      ? (c.upc || c.isbn || c.alternate_code || '—')
-      : (c.isbn || c.upc || c.alternate_code || '—');
-  }
-
-  function buildOrderSheetHtml(distributor, items, monthLabel) {
-    const printDate = new Date().toLocaleDateString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric'
-    });
-
-    const rows = items.map(c => `
-        <tr>
-          <td class="col-code">${escapeHtml(catalogScanCode(distributor, c))}</td>${catalogRowCells(c)}
-        </tr>`).join('');
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${distributor} Catalog — ${monthLabel}</title>
-  <style>${catalogSheetStyles({
-    printDate, codeLabel: 'UPC',
-    code: '1.05', qty: '0.45', title: '4.0', pub: '1.2', price: '0.5', foc: '0.6',
-    rowPad: '1.5px 4px 1.5px 2px',
-    // Corrected 2026-08-24: this read "~15px/row / ≈ 65–68 data rows per page"
-    // since the sheet was written. Measured in print media at the real 7.8in
-    // content width it is 0.219in (21px) and 46 rows/page — the old figure was
-    // an estimate that was never checked. Comment-only; no layout changed.
-    rowNote: '    /* Single-line 7.5pt rows + 3px padding = ~0.22in/row        */\n' +
-             '    /* ≈ 46 data rows per page (consistent — titles truncate)    */\n'
-  })}
-  </style>
-</head>
-<body>
-
-  <div class="page-header">
-    <div class="ph-left">
-      <div class="ph-logo">PULL<span>LIST</span></div>
-      <div class="ph-dist">${escapeHtml(distributor)} Catalog &mdash; ${escapeHtml(monthLabel)}</div>
-    </div>
-    <div class="ph-right">
-      ${items.length.toLocaleString()} titles
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th class="col-code">UPC / ISBN</th>
-        <th class="col-qty" style="text-align:center">Qty</th>
-        <th class="col-title">Title</th>
-        <th class="col-pub">Publisher</th>
-        <th class="col-price" style="text-align:right">Price</th>
-        <th class="col-foc"  style="text-align:center">FOC</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-
-  <div class="sheet-footer">${items.length.toLocaleString()} titles &middot; ${escapeHtml(distributor)} &middot; ${escapeHtml(monthLabel)}</div>
-
-</body>
-</html>`;
-  }
-
-  // ── Combined catalog (both distributors in one banded document) ──
-  // One builder, two modes, because the ONLY thing that differs between them is
-  // the code cell:
-  //   'text'    — the digit string, set exactly as the per-distributor sheets
-  //               set it. This is the one Rick actually orders from.
-  //   'barcode' — a scannable UPC-A / EAN-13 / Code 128 symbol.
-  // Filters, columns, distributor bands, header and footer are shared, so the
-  // two combined sheets cannot drift from each other or from the two
-  // per-distributor prints. `groups` is [{ distributor, items }] in print order.
-  //
-  // On the barcode mode, kept but no longer the recommended print (Rick,
-  // 2026-08-24, after testing with the shop's actual scanner): "the scanner is
-  // working but resolution limitations make it less useful." The symbols are
-  // in spec on paper — measured at 145% / 117% / 98% / 89% of nominal, all
-  // inside the GS1 80–200% band — so this is a limit of the scanning hardware
-  // against a laser print, not an encoding or sizing defect, and no amount of
-  // further tuning at letter size will fix it. It also costs roughly twice the
-  // paper: the barcode forces a 0.384in row against text's 0.219in, i.e. 26
-  // rows per page against 46. Text mode is the default for those two reasons.
-  function buildCombinedCatalogHtml(groups, monthLabel, mode) {
-    const barcode = mode === 'barcode';
-    const printDate = new Date().toLocaleDateString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric'
-    });
-
-    const sheetName = barcode ? 'Scannable Catalog' : 'Combined Catalog';
-    const total = groups.reduce((n, g) => n + g.items.length, 0);
-    let unscannable = 0;
-
-    const body = groups.map(g => {
-      const band = `
-        <tr class="dist-row">
-          <td colspan="6">${escapeHtml(g.distributor)} &middot; ${g.items.length.toLocaleString()} titles</td>
-        </tr>`;
-      const rows = g.items.map(c => {
-        const raw = catalogScanCode(g.distributor, c);
-        let codeCell;
-        if (barcode) {
-          const bc = barcodeSvg(raw);
-          if (!bc || bc.type === 'CODE128') unscannable++;
-          codeCell = bc
-            ? `${bc.svg}<div class="bc-hr">${escapeHtml(bc.hr)}</div>`
-            : `<div class="bc-none">${escapeHtml(raw)}</div>`;
-        } else {
-          codeCell = escapeHtml(raw);
-        }
-        return `
-        <tr>
-          <td class="col-code">${codeCell}</td>${catalogRowCells(c)}
-        </tr>`;
-      }).join('');
-      return band + rows;
-    }).join('');
-
-    // Distributor band — RULES AND TYPE, NOT FILL, matching the reserved-titles
-    // report: browsers do not print background colours unless the operator ticks
-    // "Background graphics", so a grey fill renders on screen and vanishes on
-    // paper (Rick, 2026-08-09: "shading is lost on the print out").
-    const bandCss = `
-
-    /* ── Distributor band ── */
+    /* Distributor band — RULES AND TYPE, NOT FILL, matching the reserved-titles
+       report: browsers do not print background colours unless the operator ticks
+       "Background graphics", so a grey fill renders on screen and vanishes on
+       paper (Rick, 2026-08-09: "shading is lost on the print out"). */
     .dist-row td {
       background: none;
       border-top: 1.5pt solid #000;
@@ -4990,57 +4726,15 @@ ${o.rowNote}    @page {
       page-break-after: avoid;
     }
     /* First band on a page should not add a gap above the header rule. */
-    thead + tbody .dist-row:first-child td { padding-top: 3pt; }`;
+    thead + tbody .dist-row:first-child td { padding-top: 3pt; }
 
-    const barcodeCss = `
-
-    /* ── Barcode cell ── */
-    .col-code { font-family: Arial, sans-serif; letter-spacing: normal; }
-    .bc { display: block; width: 100%; height: 0.24in; }
-    /* The digits stay printed under the bars: a damaged or unreadable symbol
-       still has to be keyable by hand, which is the whole reason UPC-A carries
-       its own caption. 6pt is the floor at which Courier stays legible on a
-       laser print — 5.5pt fit but could not be read back. */
-    .bc-hr {
-      font-family: 'Courier New', monospace;
-      font-size: 6pt;
-      letter-spacing: 0.03em;
-      color: #444;
-      text-align: center;
-      line-height: 1.1;
+    /* Item count line at end of sheet */
+    .sheet-footer {
+      margin-top: 6px;
+      font-size: 6.5pt;
+      color: #aaa;
+      text-align: right;
     }
-    .bc-none { font-family: 'Courier New', monospace; font-size: 6.5pt; color: #444; }
-
-    /* A barcode split across a page break is unreadable — unlike the text
-       sheets, these rows must not fracture. */
-    tbody tr { page-break-inside: avoid; }`;
-
-    const layout = barcode
-      ? {
-          codeLabel: 'Barcode',
-          code: '1.8', qty: '0.4', title: '3.4', pub: '1.1', price: '0.5', foc: '0.6',
-          rowPad: '2px 4px 2px 2px',
-          extra: bandCss + barcodeCss,
-          rowNote: '    /* 0.24in barcode + 6pt caption + padding = 0.38in/row       */\n' +
-                   '    /* ≈ 26 data rows per page — the barcode sets the row height */\n'
-        }
-      : {
-          // Identical to the per-distributor sheets, so a combined print and two
-          // separate prints put the same row on the page the same way.
-          codeLabel: 'UPC',
-          code: '1.05', qty: '0.45', title: '4.0', pub: '1.2', price: '0.5', foc: '0.6',
-          rowPad: '1.5px 4px 1.5px 2px',
-          extra: bandCss,
-          rowNote: '    /* Single-line 7.5pt rows + 3px padding = ~0.22in/row        */\n' +
-                   '    /* ≈ 46 data rows per page (consistent — titles truncate)    */\n'
-        };
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${sheetName} — ${monthLabel}</title>
-  <style>${catalogSheetStyles(Object.assign({ printDate }, layout))}
   </style>
 </head>
 <body>
@@ -5048,7 +4742,7 @@ ${o.rowNote}    @page {
   <div class="page-header">
     <div class="ph-left">
       <div class="ph-logo">PULL<span>LIST</span></div>
-      <div class="ph-dist">${sheetName} &mdash; ${escapeHtml(monthLabel)}</div>
+      <div class="ph-dist">Combined Catalog &mdash; ${escapeHtml(monthLabel)}</div>
     </div>
     <div class="ph-right">
       ${total.toLocaleString()} titles
@@ -5073,9 +4767,7 @@ ${o.rowNote}    @page {
 
   <div class="sheet-footer">${total.toLocaleString()} titles &middot; ${
     groups.map(g => `${escapeHtml(g.distributor)} ${g.items.length.toLocaleString()}`).join(' &middot; ')
-  } &middot; ${escapeHtml(monthLabel)}${
-    unscannable ? ` &middot; ${unscannable} code${unscannable === 1 ? '' : 's'} not a valid UPC/EAN &mdash; printed as Code 128` : ''
-  }</div>
+  } &middot; ${escapeHtml(monthLabel)}</div>
 
 </body>
 </html>`;
@@ -5104,32 +4796,8 @@ ${o.rowNote}    @page {
     return true;
   }
 
-  async function printOrderSheet(distributor) {
-    const btn = document.getElementById(
-      distributor === 'Lunar' ? 'btn-print-lunar-order' : 'btn-print-prh-order'
-    );
-    const origText = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = 'Loading…';
-
-    const items = await fetchAllCatalogForDistributor(distributor);
-    if (!items) { btn.disabled = false; btn.innerHTML = origText; return; }
-    if (!items.length) {
-      toast(`No ${distributor} items found for ${currentCatalogMonth}`, 'error');
-      btn.disabled = false; btn.innerHTML = origText; return;
-    }
-
-    openPrintWindow(buildOrderSheetHtml(distributor, items, catalogMonthLabel()));
-
-    btn.disabled  = false;
-    btn.innerHTML = origText;
-  }
-
-  // mode: 'text' (digits — the default print) or 'barcode' (scannable symbols).
-  async function printCombinedCatalog(mode) {
-    const btn = document.getElementById(
-      mode === 'barcode' ? 'btn-print-barcode-catalog' : 'btn-print-combined-catalog'
-    );
+  async function printCombinedCatalog() {
+    const btn = document.getElementById('btn-print-combined-catalog');
     const origText = btn.innerHTML;
     btn.disabled = true;
     btn.textContent = 'Loading…';
@@ -5153,17 +4821,14 @@ ${o.rowNote}    @page {
         return;
       }
 
-      openPrintWindow(buildCombinedCatalogHtml(groups, catalogMonthLabel(), mode));
+      openPrintWindow(buildCombinedCatalogHtml(groups, catalogMonthLabel()));
     } finally {
       btn.disabled  = false;
       btn.innerHTML = origText;
     }
   }
 
-  document.getElementById('btn-print-lunar-order').addEventListener('click', () => printOrderSheet('Lunar'));
-  document.getElementById('btn-print-prh-order').addEventListener('click',   () => printOrderSheet('PRH'));
-  document.getElementById('btn-print-combined-catalog').addEventListener('click', () => printCombinedCatalog('text'));
-  document.getElementById('btn-print-barcode-catalog').addEventListener('click',  () => printCombinedCatalog('barcode'));
+  document.getElementById('btn-print-combined-catalog').addEventListener('click', printCombinedCatalog);
 
   // ── Print / Save Reserved-Titles Report (By Distributor tab) ──
   // Compact, print-optimized report of active titles reserved for the current
