@@ -4758,7 +4758,59 @@ reasoning — only the disposition changed, not the diagnosis.
   the lower-risk tenant-wide items here will matter more against, once the
   Founding Partner cohort onboards).
 
-Next free finding ID: **F141**.
+#### F141 — the catalog grid renders after first paint with no reserved space, producing a 0.636 desktop CLS
+
+- **Status:** open, filed 2026-08-24. Not scoped to any active sub-deploy.
+  Found while re-measuring Lighthouse against **authenticated** staging after
+  the 2026-08-24 performance sweep. The sweep did not cause this and none of
+  its items touch it — the defect is pre-existing and was simply invisible
+  while a 931 KB favicon and an `@import` font chain dominated the score.
+- **Symptom:** Lighthouse Performance on a signed-in
+  `staging.pulllist.pages.dev/catalog` scores **75 on desktop** against **86
+  on mobile**. Desktop **CLS is 0.636** — Google's "good" threshold is
+  < 0.1; mobile is 0.097, itself borderline. `layout-shifts` reports 5
+  shifts and `cls-culprits-insight` attributes **0.610 of the 0.636 (96%) to
+  one element, `body > div.container`**. Every other desktop metric is
+  excellent (FCP 0.4 s, LCP 1.1 s, TBT 0 ms), so CLS is essentially the
+  entire gap between 75 and a passing score.
+- **Root cause:** `#catalog-grid` (`catalog.html`) is emitted empty and
+  filled from JS only after the Supabase catalog fetch resolves. Nothing
+  reserves vertical space for it, so the container grows from near-zero to
+  ~5,400 px in a single frame when ~50 cards are inserted, displacing
+  everything below. Measured contributions: `div.container` 0.610, the
+  footer 0.013, `#catalog-grid` itself 0.008. `.catalog-grid`'s
+  `grid-template-columns` and `.comic-cover`'s `aspect-ratio: 2/3` size each
+  card correctly *once it exists* — they cannot reserve space for cards not
+  yet in the DOM. **Why desktop is far worse than mobile:** desktop paints
+  much sooner (FCP 0.4 s vs 1.3 s) and shows more of the page, so more
+  already-visible layout is displaced when the grid lands. Same defect,
+  larger measured impact.
+- **Scope:** both environments — the render path is identical in production.
+  Measured on staging only because the measurement harness is staging-only.
+  The shape is generic to any grid or table filled after an async fetch, so
+  `mylist.html` and `arrivals.html` are plausible carriers; **only
+  `catalog.html` has actually been measured — do not assume the others
+  without measuring.**
+- **Fix shape (not started):** reserve the space before the fetch resolves.
+  Cheapest is a `min-height` on `.catalog-grid` sized to roughly one viewport
+  of cards; better UX is rendering skeleton placeholder cards at the known
+  column count and swapping them for real ones. **Do NOT fix this by delaying
+  first paint until data arrives** — that trades a CLS problem for an
+  FCP/LCP one, and desktop FCP is currently 0.4 s.
+- **Related:** the 2026-08-24 **Lighthouse performance sweep** (deliberately
+  consumed no finding ID — see CLAUDE.md § Current Migration Phase), which
+  cleared the artwork, font-chain and cache-header items and left this as the
+  dominant remaining drag. Measured in the same run but **third-party and
+  therefore explicitly NOT part of this finding**: every `cache-insight`
+  (412 KiB) and `image-delivery-insight` (277 KiB) item is a
+  `media.lunardistribution.com` cover, served with **no `Cache-Control`
+  header at all**. Lunar's `large/` variant (450x683) is correctly sized for
+  a 2x phone but oversized for desktop's ~250 CSS px slots, and the
+  no-`large/` variant (180x273) is too small for mobile — so there is no
+  URL-swap fix; closing that needs an image proxy such as Cloudflare Image
+  Resizing, which is its own piece of work.
+
+Next free finding ID: **F142**.
 
 ---
 

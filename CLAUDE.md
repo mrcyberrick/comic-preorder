@@ -150,8 +150,11 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F141** — still free; the 2026-08-24 Lighthouse
-performance sweep was fixed in-session and consumed no ID. **F140 filed
+**Next free finding ID:** **F142**. **F141 filed 2026-08-24** (desktop CLS
+0.636 — the catalog grid fills after first paint with no reserved space;
+found re-measuring Lighthouse against *authenticated* staging after the
+performance sweep, which itself consumed no ID — see table below and
+`docs/technical-reference.md` § 13). **F140 filed
 2026-08-24 and RESOLVED on both environments the same day** (six more
 unbounded-query pagination gaps, found auditing F139 — see table below and
 `docs/technical-reference.md` § 13). *(This pointer read "RESOLVED on staging"
@@ -178,6 +181,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F141 | **Medium** — `#catalog-grid` is emitted empty and filled after the Supabase fetch with nothing reserving its space, so the page grows ~5,400 px in one frame. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one; mobile is 0.097 / **86**. `cls-culprits-insight` puts 96% of it on a single element | open, no plan doc. Owner: `docs/technical-reference.md` § 13 F141. Fix shape: reserve space before the fetch resolves (`min-height` on `.catalog-grid`, or skeleton cards) — **not** by delaying first paint (desktop FCP is 0.4 s). Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
