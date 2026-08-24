@@ -21,6 +21,49 @@
 /vendor/supabase.min.js
   Cache-Control: no-cache
 
+# Static artwork caching (2026-08-24 Lighthouse perf sweep).
+#
+# Everything NOT named in this file falls to Cloudflare Pages' default,
+# `public, max-age=0, must-revalidate` - i.e. every asset revalidates on
+# every page load. That is what Lighthouse reports as "Use efficient cache
+# lifetimes" (1,576 KiB desktop / 555 KiB mobile, measured 2026-08-24).
+#
+# The artwork below is safe to cache hard because, unlike app.js/config.js,
+# nothing about it can desync from a freshly-served HTML page - there is no
+# F79-shaped version-skew failure mode for a logo.
+#
+# THE VERSIONING CONTRACT: files served `immutable` carry a `-vN` suffix in
+# their filename. A year-long immutable cache on a stable filename is a trap
+# - re-export the art and returning visitors keep the old bytes for up to a
+# year with no way to bust it. So: RE-EXPORTING ANY `-vN` ASSET MEANS BUMPING
+# N AND UPDATING EVERY REFERENCE. If you are not prepared to do that, add the
+# file to the 30-day group below instead, not this one.
+/comic-cover-fallback-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+/assets/hero-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+/assets/hero-mobile-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+/icon-192-v2.png
+  Cache-Control: public, max-age=31536000, immutable
+/apple-touch-icon-v2.png
+  Cache-Control: public, max-age=31536000, immutable
+
+# 30-day group - filenames fixed by convention or by DB reference, so they
+# cannot carry a -vN suffix. Long enough to clear the Lighthouse audit's
+# worst case, short enough that a re-export self-heals without a rename.
+/favicon.ico
+  Cache-Control: public, max-age=2592000
+/bookstop_logo.png
+  Cache-Control: public, max-age=2592000
+/assets/pulllist-logo.png
+  Cache-Control: public, max-age=2592000
+
+# style.css is deliberately absent from every group above. It is
+# unfingerprinted and changes with deploys, so the F79 skew reasoning that
+# governs app.js governs it too. It stays on the Pages default: 13 KB
+# brotli'd, revalidating to a cheap 304.
+
 # Security headers (2026-07 review, A11).
 #
 # CSP notes — scoped to what the pages actually use:

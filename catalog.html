@@ -6,6 +6,15 @@
   <title>Catalog — Pull List</title>
   <link rel="icon" type="image/svg+xml" href="favico.svg">
   <link rel="icon" href="favicon.ico">
+  <!-- Google Fonts: preconnect + direct <link>. Was an @import at the top of
+       style.css until 2026-08-24, which the preload scanner cannot see: the
+       browser had to fetch style.css, parse it, THEN discover the font CSS,
+       THEN open two more cold origins. Three serialized round trips before
+       first paint (Lighthouse: 1,610 ms render-blocking on mobile). CSP in
+       _headers already allows both origins - no policy change needed. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
   <link rel="stylesheet" href="style.css">
   <style>
     /* Search + filter toggle row — always visible */
