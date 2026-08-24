@@ -4760,9 +4760,11 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F141 — the catalog grid renders after first paint with no reserved space, producing a 0.636 desktop CLS
 
-- **Status:** filed **and RESOLVED on staging 2026-08-24**, same day
-  (`a2a2583`). **Not yet promoted to production.** Not scoped to any active
-  sub-deploy. Found while re-measuring Lighthouse against **authenticated**
+- **Status:** filed **and fully RESOLVED 2026-08-24, both environments**, same
+  day (staging `a2a2583`; production via **PR #133**, merged 18:44 UTC).
+  Production verified post-deploy: `renderSkeletons(PAGE_SIZE)`,
+  `.skeleton-card` and `.catalog-grid:empty` all live, stale `skeleton-body`
+  gone. Not scoped to any active sub-deploy. Found while re-measuring Lighthouse against **authenticated**
   staging after the 2026-08-24 performance sweep. The sweep did not cause this
   and none of its items touch it — the defect is pre-existing and was simply
   invisible while a 931 KB favicon and an `@import` font chain dominated the
