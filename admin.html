@@ -428,13 +428,17 @@
          collision rather than removed it.
 
          ONE button, deliberately (Rick, 2026-08-24). This replaced four: a
-         per-distributor Lunar sheet and PRH sheet, plus a barcode variant of
-         the combined sheet. The combined sheet costs no more paper than the
-         two per-distributor prints it replaces (49 pages against 30 + 19,
-         measured on a full month) and saves handling two documents. The
-         barcode variant was built, printed and tested against the shop's real
-         scanner before being dropped — see buildCombinedCatalogHtml's comment
-         for why, and do not rebuild it without reading that first. -->
+         per-distributor Lunar sheet and PRH sheet, plus a barcode variant.
+         One document instead of two, at no extra paper. The barcode variant
+         was built, printed and tested against the shop's real scanner before
+         being dropped — see buildCombinedCatalogHtml's comment for why, and
+         do not rebuild it without reading that first.
+
+         Labelled just "Print Catalog" (Rick, 2026-08-24): with one button
+         there is nothing to distinguish it FROM, so "Combined" only described
+         an implementation detail the operator never has to think about. The
+         printed page and its <title> match, the latter being the filename
+         offered when the print is saved as a PDF. -->
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" id="btn-print-combined-catalog"
         style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
@@ -442,7 +446,7 @@
           <path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
           <rect x="6" y="14" width="12" height="8"/>
         </svg>
-        Print Combined Catalog
+        Print Catalog
       </button>
     </div>
 
@@ -4511,6 +4515,19 @@
   // 0.384in per row against the 0.219in below, 26 rows per page against 46.
   // The encoder is gone from this file; it is recoverable from git history at
   // commit 56c97c9 if that hardware is ever replaced.
+  //
+  // How long this sheet actually runs, and why you cannot tell from the catalog
+  // size (measured 2026-08-24, catalog month 2026-08). getReservedPublishers()
+  // above, not the row count, decides: it keeps only publishers with
+  // MIN_RESERVED+ all-time reservations, and that bar cuts far harder than it
+  // looks. Both environments hold ~2,400 rows across 78 publishers for the same
+  // month, and they print very differently —
+  //   staging     4 publishers pass →   638 rows → 15 pages
+  //   production 14 publishers pass → 1,534 rows → 34 pages
+  // — because staging's reserve history is 24 archived + 64 live rows of test
+  // data against production's 485 + 2,623. So a page count taken on staging says
+  // nothing about the production print, and a count taken from a raw catalog
+  // file says nothing about either. Measure against the environment you mean.
   function buildCombinedCatalogHtml(groups, monthLabel) {
     const printDate = new Date().toLocaleDateString('en-US', {
       month: 'long', day: 'numeric', year: 'numeric'
@@ -4552,7 +4569,9 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Combined Catalog — ${monthLabel}</title>
+  <!-- Also the filename the browser suggests when the operator saves the print
+       as a PDF, so it is the name this artifact ends up filed under. -->
+  <title>Catalog — ${monthLabel}</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -4742,7 +4761,7 @@
   <div class="page-header">
     <div class="ph-left">
       <div class="ph-logo">PULL<span>LIST</span></div>
-      <div class="ph-dist">Combined Catalog &mdash; ${escapeHtml(monthLabel)}</div>
+      <div class="ph-dist">Catalog &mdash; ${escapeHtml(monthLabel)}</div>
     </div>
     <div class="ph-right">
       ${total.toLocaleString()} titles
