@@ -1580,16 +1580,33 @@ function confirmDialog(message, okLabel = 'Remove') {
   // count BookStop's own shelf copies as demand and inflate the suggestion
   // forever (self-count ratchet).
   async function fetchOpenDemandRows() {
-    const { data, error } = await db
-      .from('preorders')
-      .select(`
-        quantity,
-        catalog!inner ( id, title, foc_date, catalog_month ),
-        user_profiles ( is_admin )
-      `)
+    // F140 (2026-08-24): tenant-wide (all customers' current-month open
+    // demand) and was unbounded — same PostgREST 1000-row cap as F139, just
+    // naturally smaller in practice since it's scoped to one month's
+    // unfulfilled rows. Count-first, then page in full; id is already a
+    // unique PK so no separate tiebreaker column is needed.
+    const applyDemandFilters = (q) => q
       .eq('fulfilled', false)
       .eq('catalog.catalog_month', currentMonth);
-    if (error) return { rows: null, error };
+
+    const countRes = await applyDemandFilters(
+      db.from('preorders').select('id, catalog!inner(catalog_month)', { count: 'exact', head: true })
+    );
+    if (countRes.error) return { rows: null, error: countRes.error };
+    const total = countRes.count ?? 0;
+
+    let data = [];
+    for (let from = 0; from < total; from += 1000) {
+      const batch = await applyDemandFilters(
+        db.from('preorders').select(`
+          quantity,
+          catalog!inner ( id, title, foc_date, catalog_month ),
+          user_profiles ( is_admin )
+        `)
+      ).order('id').range(from, Math.min(from + 999, total - 1));
+      if (batch.error) return { rows: null, error: batch.error };
+      data = data.concat(batch.data || []);
+    }
 
     const byCatalog = new Map();
     (data || []).forEach(p => {

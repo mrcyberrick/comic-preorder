@@ -624,13 +624,19 @@
     const currentMonth = await Catalog.getLatestMonth();
     const prevMonth = shiftMonth(currentMonth, -1);
 
-    const [{ data: profiles }, ueTotal, orderDeadline, cycleStart, prevStart] = await Promise.all([
-      db.from('user_profiles').select('id, full_name, email, is_admin, is_paper, status, created_at'),
+    // F140 (2026-08-24): user_profiles was a single unbounded select — same
+    // cap shape as usage_events already handles below (F82), just not yet
+    // applied here. Low risk today for a single-shop customer count, but the
+    // same helpers already exist in this file, so routed through them.
+    const profilesSelect = 'id, full_name, email, is_admin, is_paper, status, created_at';
+    const [profilesTotal, ueTotal, orderDeadline, cycleStart, prevStart] = await Promise.all([
+      countRows('user_profiles'),
       countRows('usage_events', ueFilter),
       Settings.getOrderDeadline().catch(() => null),
       fetchCycleStart(currentMonth),
       fetchCycleStart(prevMonth),
     ]);
+    const profiles = await fetchRanged('user_profiles', profilesSelect, null, profilesTotal);
 
     state.profiles = new Map();
     state.adminIds = new Set();
@@ -649,13 +655,33 @@
     state.prevStart = prevStart;
     state.cycle = computeCycle(cycleStart, prevStart);
     if (currentMonth) {
-      const [{ data: preorderRows }, { data: subRows }] = await Promise.all([
-        db.from('preorders')
-          .select('user_id, catalog!inner(price_usd, catalog_month)')
-          .eq('catalog.catalog_month', currentMonth),
-        db.from('subscriptions').select('user_id'),
-      ]);
-      state.preorderRows = preorderRows || [];
+      // F140 (2026-08-24): both were unbounded, tenant-wide selects. The
+      // preorders count needs the catalog embed present to filter on
+      // catalog.catalog_month (countRows()'s generic '*' select can't
+      // express that), so this pages itself the same way admin.html's
+      // This Week query does; subscriptions has no such filter and reuses
+      // countRows/fetchRanged directly.
+      const preorderSelect = 'user_id, catalog!inner(price_usd, catalog_month)';
+      const preorderCountRes = await db.from('preorders')
+        .select('id, catalog!inner(catalog_month)', { count: 'exact', head: true })
+        .eq('catalog.catalog_month', currentMonth);
+      const preorderTotal = preorderCountRes.count ?? 0;
+
+      const preorderRows = [];
+      for (let from = 0; from < preorderTotal; from += 1000) {
+        const { data, error } = await db.from('preorders')
+          .select(preorderSelect)
+          .eq('catalog.catalog_month', currentMonth)
+          .order('user_id').order('id')
+          .range(from, Math.min(from + 999, preorderTotal - 1));
+        if (error) { console.error('preorders range fetch failed', error); break; }
+        preorderRows.push(...(data || []));
+      }
+
+      const subTotal = await countRows('subscriptions');
+      const subRows = await fetchRanged('subscriptions', 'user_id', null, subTotal);
+
+      state.preorderRows = preorderRows;
       state.subscriberIds = new Set((subRows || []).map(r => r.user_id));
     } else {
       state.preorderRows = [];
