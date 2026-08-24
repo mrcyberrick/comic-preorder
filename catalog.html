@@ -609,7 +609,9 @@
 
   // ── Load + Render ─────────────────────────────────────────
   async function loadCatalog(page = 1) {
-    renderSkeletons(10, grid);
+    // F141: PAGE_SIZE, not a literal. This used to be 10 while PAGE_SIZE is
+    // 50, so the grid reserved two desktop rows and then grew to ten.
+    renderSkeletons(PAGE_SIZE, grid);
     currentPage = page;
 
     const reserveFilter = resEl.value;
