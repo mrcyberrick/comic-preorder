@@ -90,17 +90,56 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
    ```
    Any unexpected WARN → halt and investigate before committing.
 
+2b. **Tree-integrity assertions (F125) — run BEFORE pushing any promotion branch.**
+
+   **Create the branch from an explicit ref, never from ambient HEAD:**
+   ```powershell
+   git checkout -B feat/<description>-prod origin/main
+   ```
+   `git checkout -b <name>` takes whatever HEAD happens to be. On 2026-08-24 a
+   second person committed in this same working tree mid-promotion, HEAD had
+   moved to `staging`, and the branch silently inherited staging's tree. That PR
+   would have **deleted both prod-only `supabase/migrations/` files and
+   overwritten `config.js` with the staging anon key**, pointing production at
+   the staging Supabase project. Assume HEAD can move under you.
+
+   **Then assert the BRANCH TREE, not the working tree:**
+   ```powershell
+   $b = git rev-parse --abbrev-ref HEAD
+   git fetch origin
+   git diff --stat origin/main $b                                    # scope = intent, nothing more
+   @(git ls-tree -r --name-only $b -- supabase/migrations/).Count    # expect 2
+   git show "${b}:config.js" | Select-String plgegklqtdjxeglvyjte    # expect a match
+   ```
+
+   **Do not substitute per-file spot checks.** On 2026-08-24 `ls
+   supabase/migrations/`, a `grep` of `config.js` and `git status` all PASSED on
+   the bad branch — they read a working tree that was correct at that instant,
+   on a branch that was not. Only `git diff --stat origin/main <branch>`, the
+   whole diff against the *remote* base, exposed it.
+
+   `.claude/hooks/guard-git.ps1` **Guard 3** now enforces the last two
+   mechanically on any push of a `*-prod` branch. It was tested against the real
+   failure: blocks a `*-prod` branch cut from staging (missing migrations) and
+   one carrying staging's `config.js`; allows a branch cut from main, a staging
+   push, a non-prod branch, and prose that merely names a prod push. Treat it as
+   a backstop, not a substitute for reading the diff.
+
 3. **Commit and open PR**
    ```powershell
    git commit -m "<type>: <description>"
-   git checkout -b feat/<description>-prod
+   git checkout -B feat/<description>-prod origin/main   # explicit ref — see 2b
    git push origin feat/<description>-prod
    ```
    Open PR `feat/<description>-prod → main` with `gh pr create` (run `gh auth status`
    first — a missing gh auth has derailed sessions before).
 
 4. **Verify PR diff** — confirm `config.js` is NOT in the PR diff before the user
-   merges. Report the PR URL and stop; the user merges.
+   merges, and re-check the file list **on GitHub** (`gh pr diff <n> --name-only`)
+   rather than trusting the local diff: what is local and what was pushed can
+   disagree, which is exactly how the 2026-08-24 near-miss reached an open PR.
+   The list must match your intended scope exactly. Report the PR URL and stop;
+   the user merges.
 
 5. **Post-merge verification** — after the user confirms merge + CF Pages deploy:
    - Post-deploy write-smoke: reserve one item through the live app as a test user,
