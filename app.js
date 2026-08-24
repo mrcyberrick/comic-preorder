@@ -1773,14 +1773,29 @@ function debounce(fn, delay) {
   };
 }
 
+// F141: the skeleton reuses the real card's structural classes inside
+// (.comic-cover / .comic-info / .comic-actions), and its root .skeleton-card
+// shares .comic-card's box rule in style.css. Height therefore matches a real
+// card by construction — same padding, gap, aspect-ratio and button box —
+// rather than by tuned magic numbers that drift the next time a card gains a
+// row. The root is deliberately NOT .comic-card: several specs use a
+// `.comic-card` match as "the catalog has loaded", and a skeleton must not
+// satisfy that. The shimmer blocks are the only skeleton-specific pieces.
+//
+// Callers must pass the page size they are about to render. Reserving fewer
+// rows than arrive is what produced F141's 0.636 desktop CLS: 10 skeletons
+// stood in for 50 cards, so the grid grew 5x on load and shoved everything
+// below it down the page.
 function renderSkeletons(count = 12, container) {
   container.innerHTML = Array(count).fill(0).map(() => `
-    <div class="skeleton">
-      <div class="skeleton-cover"></div>
-      <div class="skeleton-body">
+    <div class="skeleton-card" aria-hidden="true">
+      <div class="comic-cover"><div class="skeleton-block"></div></div>
+      <div class="comic-info">
         <div class="skeleton-line"></div>
         <div class="skeleton-line short"></div>
+        <div class="skeleton-line short"></div>
       </div>
+      <div class="comic-actions"><div class="skeleton-btn"></div></div>
     </div>
   `).join('');
 }

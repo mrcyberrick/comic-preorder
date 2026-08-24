@@ -4760,11 +4760,24 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F141 — the catalog grid renders after first paint with no reserved space, producing a 0.636 desktop CLS
 
-- **Status:** open, filed 2026-08-24. Not scoped to any active sub-deploy.
-  Found while re-measuring Lighthouse against **authenticated** staging after
-  the 2026-08-24 performance sweep. The sweep did not cause this and none of
-  its items touch it — the defect is pre-existing and was simply invisible
-  while a 931 KB favicon and an `@import` font chain dominated the score.
+- **Status:** filed **and RESOLVED on staging 2026-08-24**, same day
+  (`a2a2583`). **Not yet promoted to production.** Not scoped to any active
+  sub-deploy. Found while re-measuring Lighthouse against **authenticated**
+  staging after the 2026-08-24 performance sweep. The sweep did not cause this
+  and none of its items touch it — the defect is pre-existing and was simply
+  invisible while a 931 KB favicon and an `@import` font chain dominated the
+  score.
+  **Measured before → after, authenticated staging `/catalog`:** desktop
+  **75 → 98** with CLS **0.636 → 0.02**; mobile **86 → 93** with CLS
+  **0.097 → 0.008**. Full `run-smoke.ps1` green afterwards (269 unit + 139
+  Playwright, 0 failures).
+  **Unplanned secondary win:** mobile `cache-insight` fell **412 KiB → 23 KiB**
+  and `image-delivery-insight` **277 KiB → 15 KiB**, with LCP 3.8 s → 3.2 s.
+  Reserving the grid's true height puts below-fold covers genuinely off-screen,
+  so `loading="lazy"` finally suppresses them — the third-party Lunar cover
+  cost noted under **Related** below is therefore much smaller in practice than
+  it first measured, though the underlying no-`Cache-Control` issue is
+  unchanged for covers that *are* in view.
 - **Symptom:** Lighthouse Performance on a signed-in
   `staging.pulllist.pages.dev/catalog` scores **75 on desktop** against **86
   on mobile**. Desktop **CLS is 0.636** — Google's "good" threshold is
@@ -4791,7 +4804,26 @@ reasoning — only the disposition changed, not the diagnosis.
   `mylist.html` and `arrivals.html` are plausible carriers; **only
   `catalog.html` has actually been measured — do not assume the others
   without measuring.**
-- **Fix shape (not started):** reserve the space before the fetch resolves.
+- **Fix as shipped (`a2a2583`).** The original scoping was wrong in an
+  instructive way: it proposed *adding* skeleton cards, but `loadCatalog()`
+  had been calling `renderSkeletons()` all along. The defect was that the
+  skeletons **under-reserved**, two ways that compounded. (1)
+  `renderSkeletons(10, grid)` against `PAGE_SIZE = 50` — two desktop rows
+  standing in for ten; now passes `PAGE_SIZE`. (2) The skeleton was a parallel
+  `.skeleton-*` layout (cover + two 10 px lines) against a real card's cover +
+  three info rows + a button, so it under-reserved *every* row even at the
+  right count; it now uses the card's own structural classes inside
+  (`.comic-cover` / `.comic-info` / `.comic-actions`) with its root
+  `.skeleton-card` sharing `.comic-card`'s box rule, so height matches **by
+  construction** rather than by tuned numbers that drift the next time a card
+  gains a row. Plus `.catalog-grid:empty { min-height: 100vh }` for the window
+  before JS runs at all, which releases the moment any child lands.
+  **The skeleton root is deliberately NOT `.comic-card`:** specs 02, 07 and 14
+  use a `.comic-card` match as "the catalog has loaded", and a skeleton
+  carrying that class would have satisfied the guard before any data arrived —
+  weakening those tests without ever failing them. A first draft did exactly
+  that and was caught before push.
+- **Original fix shape (superseded, kept for the reasoning):** reserve the space before the fetch resolves.
   Cheapest is a `min-height` on `.catalog-grid` sized to roughly one viewport
   of cards; better UX is rendering skeleton placeholder cards at the known
   column count and swapping them for real ones. **Do NOT fix this by delaying
