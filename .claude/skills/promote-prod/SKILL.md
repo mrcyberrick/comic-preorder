@@ -131,10 +131,13 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
 
 2b. **Tree-integrity assertions (F125) — run BEFORE pushing any promotion branch.**
 
-   **Create the branch from an explicit ref, never from ambient HEAD:**
-   ```powershell
-   git checkout -B feat/<description>-prod origin/main
-   ```
+   **The branch already exists — step 1 created it from `origin/main` and merged
+   into it. Do NOT re-create it here**; running `git checkout -B … origin/main`
+   at this point would reset the branch and discard the merge, which is the bug
+   that made steps 1 and 3 contradict each other before 2026-08-24. This section
+   explains *why* step 1 cuts it from an explicit ref, and then asserts the
+   result.
+
    `git checkout -b <name>` takes whatever HEAD happens to be. On 2026-08-24 a
    second person committed in this same working tree mid-promotion, HEAD had
    moved to `staging`, and the branch silently inherited staging's tree. That PR
