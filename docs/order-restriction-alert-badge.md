@@ -1,6 +1,6 @@
 # Ordering-restriction alert + badge — warn customers before they reserve a limited-ratio variant
 
-**STATUS:** IN PROGRESS — PRODUCTION REQUESTED 2026-08-21 | staging=V1-V7 ALL GREEN (migration, both distributors, hover-stacking fix, mobile Learn More via the detail modal) | prod=V8 PENDING — `f132-order-requirement.sql` must run on production BEFORE the next production import (see § 7 S8); Rick requested the promotion, not yet executed | findings=F132, F133 (unrelated test-infra bug surfaced while verifying this)
+**STATUS:** COMPLETE — staging 2026-08-21 | prod 2026-08-21 (DB half, `f132-order-requirement.sql`, verified 0 non-null/11,726) + client half live, verified 2026-08-24 against the served bytes on `pulllist.app` | staging=V1-V8 ALL GREEN | prod=V8 GREEN | findings=F132 (resolved), F133 (unrelated test-infra bug surfaced while verifying this; still open). Token corrected 2026-08-24: it read IN PROGRESS / prod=V8 PENDING for three days after both halves had shipped, which is exactly the drift `/preflight`'s token cross-check exists to catch.
 
 **Origin:** Rick's request, 2026-08-20. Today a title PRH restricts (`OrderRequirement != 'Order All'`,
 shown in the UI as a ratio like `1:10`) can be reserved by any number of customers with no signal
@@ -270,7 +270,7 @@ other modal-heavy paths) — no impact. **Gate V7.**
    production import would have 400d on every catalog upsert without this column.
 2. Client code (`app.js`, `catalog.html`, `style.css`) promoted via the standard `/promote-prod`
    flow — config.js preservation, F59 merge-base check, PR to `main`, post-deploy write-smoke.
-**Gate V8 — DB half GREEN, code half in progress.**
+**Gate V8 — GREEN, both halves.** DB half applied 2026-08-21; client half live on production, verified 2026-08-24 against the served bytes.
 
 ---
 
@@ -308,5 +308,5 @@ other modal-heavy paths) — no impact. **Gate V7.**
 (§ 1, Lunar), a same-day UI bug found by Rick testing real data and fixed same session (§ 7 S6), and
 § 5's explicitly-flagged mobile-tooltip revisit, also triggered the same session (§ 7 S7).
 V1–V7 all green: migration applied, both distributors' halves built, real import run confirms real
-data, hover-stacking bug fixed and covered by regression. **Production promotion requested by Rick
-2026-08-21** — § 7 S8 / gate V8, in progress.
+data, hover-stacking bug fixed and covered by regression. **Production promotion completed** — DB half
+2026-08-21, client half live and verified 2026-08-24 against the served bytes. § 7 S8 / gate V8 GREEN.

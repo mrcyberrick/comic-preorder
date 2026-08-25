@@ -4334,7 +4334,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F132 — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time, so a customer can reserve a copy the store may never actually receive
 
-- **Status:** filed 2026-08-20 during the scoping session for `docs/order-restriction-alert-badge.md`. **STAGING COMPLETE 2026-08-21. PRODUCTION — DB half APPLIED 2026-08-21** (`docs/sql/f132-order-requirement.sql`, verified 0 non-null/11,726, Rick, SQL Editor) — **client code half (app.js/catalog.html/style.css) not yet promoted.** Corrected here 2026-08-22: this line previously read "not yet run" for the whole gate, which was stale for the DB half specifically — found while confirming F136 S3 wasn't blocked by it (`docs/order-restriction-alert-badge.md` § 7 S8 already recorded "DB half GREEN, code half in progress"; this section and CLAUDE.md's F132 row had not been updated to match). Filed at Rick's request (two asks: alert restricted titles, badge restricted/incentive variants with a "Learn more" disclosure).
+- **Status:** filed 2026-08-20 during the scoping session for `docs/order-restriction-alert-badge.md`. **STAGING COMPLETE 2026-08-21. PRODUCTION — DB half APPLIED 2026-08-21** (`docs/sql/f132-order-requirement.sql`, verified 0 non-null/11,726, Rick, SQL Editor) — **FULLY RESOLVED — the client code half is live on production too, measured 2026-08-24 against the SERVED BYTES**, not against a branch or a doc: `curl` of `pulllist.app` returns `order_requirement` in `app.js` (×3), `catalog.html` (×2) and `style.css` (×1), `restriction-badge` in `app.js` (×1) and `style.css` (×2), the hover-stacking `z-index: 2` fix (×6), and the mobile "Learn more" disclosure (×1); `app.js`, `catalog.html` and `style.css` are byte-identical on `main` and `staging`. This line read "not yet promoted" for three days after it had shipped, and was found only while scoping an unrelated promotion that would otherwise have carried the stale claim onto `main`. **That makes two stale-status corrections on F132 alone, and the pattern is the finding rather than either entry:** a status written when work is *planned* does not get revisited when it *ships*. When the answer matters, check the live system rather than any recorded status. Corrected here 2026-08-22: this line previously read "not yet run" for the whole gate, which was stale for the DB half specifically — found while confirming F136 S3 wasn't blocked by it (`docs/order-restriction-alert-badge.md` § 7 S8 already recorded "DB half GREEN, code half in progress"; this section and CLAUDE.md's F132 row had not been updated to match). Filed at Rick's request (two asks: alert restricted titles, badge restricted/incentive variants with a "Learn more" disclosure).
 - **Severity:** **Medium.** Not a defect — every component works as designed. The gap is a missing *proactive* signal: today the customer finds out a restricted title didn't arrive only *after* the fact, via the same rejected-badge mechanism (**F117**/**F120**) used for ordinary rejections, which conflates "distributor allocation risk was known at reservation time" with "distributor rejected this order."
 - **Measured, not assumed (2026-08-20):** PRH's `OrderRequirement` column (`2026_08_PRH_metadata_full_active.csv`, 879 rows) carries a real restriction on 133 rows (15%) — ratios from `1:5` to `1:250`, always on a `Variant Title` row, never `Primary Title`, and self-contained (`OrderRequirementUPC` empty in all 133 — no cross-row lookup needed).
 - **CORRECTED same day, before production was touched.** The original survey also claimed "Lunar has no equivalent structured field" — **wrong.** Rick found a live restricted Lunar variant on staging showing no badge, which prompted a re-measurement: Lunar's `VariantType` field **is** the structured signal — a ratio string on **562/4,799 rows on staging (over 4x PRH's volume)**, versus `'Open Order'`/`'OPEN ORDER'`/`'Open order'` (1,832 rows, three castings of the no-restriction marker — Lunar's own `'Order All'`) for unrestricted variants. `title_note` (free-text, overloaded with discount/territory/returnability info) remains a separate, still-real, still out-of-scope gap — it was never the actual signal, `VariantType` was. Full correction: `docs/order-restriction-alert-badge.md` § 1.
@@ -4343,7 +4343,7 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Built and verified on staging, 2026-08-20–21, STAGING COMPLETE.** Migration applied (Rick) — 0 non-null over 9,589 rows, then a real import (Rick, 2026-08-21, catalog-refresh step only) populated real restricted rows from live data on both distributors — confirmed by direct query. Import-script normalizers + 210/210 unit suite green (`e57ade4`, then `0f5d9ae` for the Lunar correction). Badge real-browser-verified via a new Playwright spec (`20-restricted-variant-badge.spec.ts`, 4/4 green) — including catching that `catalog.html`'s `#filter-variants` defaults to "Standard Covers," which hides every restricted row by construction until a customer switches to "All Covers" (not a defect, existing catalog behavior).
 - **A second real bug found the same way, same day: cover badges vanished on card hover.** Rick, testing real staging data, reported the badge "hides when mouse hovers over title box" and no tooltip. Root-caused with data (`document.elementFromPoint()` at the badge's position returned the `<img>`, not the badge, during hover; confirmed visually with before/after screenshots) — **one mechanism explained both symptoms**: `.comic-card:hover .comic-cover img { transform: scale(1.03) }` creates a new stacking context on hover, and with no `z-index` on the badges, the later-in-DOM image painted above them, both hiding them visually and capturing the hover that would have triggered the badge's `title=` tooltip. **Pre-existing on `.distributor-badge`/`.reserved-indicator` too — not introduced by F132, just surfaced by it.** Fixed with `z-index: 2` on all three cover badges (`style.css`, `3b345bf`), re-verified (`elementFromPoint` now returns the badge), and covered by a permanent Playwright regression (spec 20's 4th test, asserting the mechanism directly rather than just visual appearance).
 - **A third same-day item: the mobile-tooltip gap § 5 explicitly flagged for revisit turned out to matter.** Rick: the native `title=` tooltip "does not work on mobile touch screens." Fixed by reusing the existing detail modal (`openModal()`, `catalog.html`) — it already opens on a real click/tap on both mobile and desktop, so no new popover component was needed. New `#modal-restriction-notice` element, same disclosure copy as the tooltip, shown when `order_requirement` is set (`style.css`/`catalog.html`, commit `704820e`). Playwright coverage added; regression-checked against the other modal-heavy specs (02, 14) — no impact.
-- **Production DB half APPLIED 2026-08-21** (`docs/sql/f132-order-requirement.sql`, verified 0 non-null/11,726, Rick, SQL Editor) — this was the not-optional pre-work, since `import.js` already carries the F132 normalizer changes and would 400 on every catalog upsert (not just restricted rows) without the column. **Client code half (app.js/catalog.html/style.css via `/promote-prod`) still not promoted** — additive-safe to promote before or after the DB migration, so this is not itself blocking. Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
+- **Production DB half APPLIED 2026-08-21** (`docs/sql/f132-order-requirement.sql`, verified 0 non-null/11,726, Rick, SQL Editor) — this was the not-optional pre-work, since `import.js` already carries the F132 normalizer changes and would 400 on every catalog upsert (not just restricted rows) without the column. **Client code half (app.js/catalog.html/style.css) is ALSO LIVE on production** — verified 2026-08-24 against the served bytes (see the Status line above). It was additive-safe to promote before or after the DB migration, so it never blocked anything. Full runbook + gate detail: `docs/order-restriction-alert-badge.md` § 7–9.
 - **Where:** `catalog` table (new column) · `catalogs/scripts/import.js` / `import-staging.js` normalizers — private scripts repo · `app.js:1748` (`buildComicCard()`) · `catalog.html`.
 - **Related:** **F117**/**F120** (the retrospective rejected-badge mechanism this is an earlier, non-replacing signal for — see explicit OUT-of-scope note in the plan doc). **F115** (same additive-nullable-column, no-backfill-needed shape, different fact). **F123** (the key-shape rule this column's normalizer must respect across both distributors in one upsert batch).
 
@@ -4851,7 +4851,82 @@ reasoning — only the disposition changed, not the diagnosis.
   URL-swap fix; closing that needs an image proxy such as Cloudflare Image
   Resizing, which is its own piece of work.
 
-Next free finding ID: **F142**.
+#### F142 — Order Builder's own Held Back panel never checks the ledger for a rejection, so a title an admin just recorded as rejected keeps reappearing as "Backordered — FOC passed, never ordered"
+
+- **Status:** filed 2026-08-24. **RESOLVED on staging 2026-08-24** (`staging`
+  `9e41e52`, branch `feature/f142-held-back-rejected-state`). **Not yet
+  promoted to production.** Discovered live on production while Rick
+  reconciled his first real Order Builder run — walked through recording
+  **AMAZING SPIDER-MAN #1000 STEVE DITKO BLACK AND WHITE VARIANT** (PRH,
+  item_code `75960621001503633`) as rejected by the distributor. The write
+  succeeded (confirmed via direct SQL — an `order_submissions` row, `quantity
+  0`, `order_type monthly`, `submitted_on 2026-08-24`) and the title correctly
+  cleared from the separate dashboard "⚠ Order Follow-Up" panel. It did
+  **not** clear from the Order Builder modal's own Held Back list, on every
+  reopen, indefinitely.
+  **Fix verified live on staging** via real-browser check (no Playwright
+  coverage exists for this panel) — screenshot of the Lunar Order Builder
+  shows a new collapsed "✕ Rejected by distributor — recorded, not on order
+  (2)" section correctly holding two previously-misclassified titles (*DC
+  PORTFOLIO OF MICHAEL TURNER SUPERMAN & BATMAN 9 PRINT SET*, *LYCAN #2 (OF 3)
+  CVR A TIM BRADSTREET*), with the Backordered list above it now correctly
+  showing only the one genuinely untouched title (*CONAN THE BARBARIAN #34*).
+- **Symptom:** inside the PRH/Lunar Order Builder modal (`admin.html`), the
+  Held Back section's "🔴 Backordered — FOC passed, never ordered, still
+  orderable" list continues to show a title after the operator has explicitly
+  recorded a distributor rejection for it via the modal's own "Record
+  submitted order" step. The label itself becomes false the moment this
+  happens — the title *was* ordered, and refused, not "never ordered."
+  Reproduces every time the modal is closed and reopened, because
+  `openOrderBuilder()` resets the cycle selection to only the nearest future
+  FOC date, and the rejected title's (past) cycle then evaluates as
+  unselected + FOC-passed again.
+- **Root cause:** two different functions read the same
+  `order_submissions` ledger and disagree about what "rejected" means.
+  `computeBackorderRisk()` (drives the dashboard "⚠ Order Follow-Up" panel)
+  explicitly checks `ledgerRejected(distributor, code)` — rows exist, net
+  quantity ≤ 0 — and clears the title (`admin.html:1609-1615`).
+  `classifyForExport()` (drives the Order Builder modal's own Held Back list,
+  `admin.html:1035-1113`) has no such check: it only branches on
+  `ledgerNetQty(...) > 0` to route a code into the Already Ordered panel: any
+  other value — including a genuinely rejected code — falls straight through
+  to date-based bucketing (`backordered` / `atRisk` / `outsideCycle` /
+  `included`) with no distinction from a code that was never touched at all.
+  This is deliberate for *export inclusion* — a rejected code is meant to
+  stay eligible to be offered again on a future run (see the comment at
+  `admin.html:1067-1073`) — but the same fallthrough also drives the
+  **display label**, so "eligible to re-offer" and "never ordered" collapse
+  into one bucket with one (wrong) sentence.
+- **Scope:** both environments — `classifyForExport()` and
+  `computeBackorderRisk()` are identical code on `main` and `staging`; not
+  data-dependent, will reproduce for any tenant, any distributor, any
+  rejected title.
+- **Consequence:** an admin has no way to confirm, from inside the Order
+  Builder itself, that a rejection they just recorded actually took —
+  the only place that reflects it is the separate dashboard panel, which
+  isn't where the recording UI lives. Cost real time this session chasing a
+  "did my write fail?" dead end before the dashboard panel was checked. Will
+  recur every reconciliation cycle until fixed.
+- **Fix shape (not sized, no code touched):** `classifyForExport()` should
+  check `ledgerRejected(distributor, code)` before falling through to
+  date-based bucketing, and either (a) exclude a rejected code from the
+  Backordered/At-risk buckets and instead render it in its own visually
+  distinct "rejected" state within Held Back (mirroring
+  `computeBackorderRisk()`'s exit), or (b) at minimum stop labeling it "never
+  ordered" when ledger rows exist. Whichever is chosen must not change which
+  codes are *eligible for re-export* — only the display bucket/label — since
+  the "fall through so it can be re-offered" behavior is intentional and
+  should be preserved.
+- **Related:** a second, separate observation surfaced during the same
+  investigation and **deliberately not folded into this finding**: this
+  title's item_code (`75960621001503633`) is also carried by an unrelated
+  PRH title, AMAZING SPIDER-MAN #36 STEVE DITKO BLACK AND WHITE VARIANT — a
+  distributor item_code collision across two different SKUs, which blends
+  unrelated `order_submissions` history under one ledger key. Not scoped or
+  sized here; file separately if the collision turns out to be more than a
+  one-off (a systemic scope query was proposed but not yet run).
+
+Next free finding ID: **F143**.
 
 ---
 
