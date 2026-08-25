@@ -1047,6 +1047,16 @@
       // MORE; applying it to codes with nothing to decide buried the few
       // that mattered.
       orderedOtherCycle: [],
+      // F142: a code with ledger rows netting to <= 0 (ledgerRejected()'s own
+      // definition) is a SETTLED case, not an open one — the distributor's
+      // rejection has already been recorded. Before this bucket existed it
+      // fell straight through to the date-based classification below and
+      // landed in `backordered`/`atRisk` with a label ("never ordered") that
+      // was flatly false for it. It still only lands here when its cycle is
+      // NOT currently selected — ticking that cycle still routes it to
+      // `included` same as before, so a rejected code stays re-offerable on
+      // a future run (the exact behavior § 4.4's comment above protects).
+      rejected: [],
     };
 
     rows.forEach(p => {
@@ -1098,6 +1108,14 @@
       }
       if (selectedFocDates.has(c.foc_date)) {
         buckets.included.push(p);
+        return;
+      }
+      // F142: settled (rejected) — `matches` is already known non-empty-or-
+      // netting-<=0 here, since the netQty>0 branch above already returned.
+      // `matches.length` alone is enough: this point is only reached with
+      // net <= 0, so any row at all means "rejected", not "untouched".
+      if (matches.length > 0) {
+        buckets.rejected.push({ p, matches });
         return;
       }
       if (isFocPast(c.foc_date)) {
@@ -2615,7 +2633,8 @@
 
     const fulfilledCount = gatherCollapsed.filter(p => p.catalog?.distributor === distributor && p.fulfilled).length;
     const nothingHeld = !buckets.backordered.length && !buckets.atRisk.length && !buckets.outsideCycle.length
-      && !buckets.adhocOrdered.length && !buckets.noFoc.length && !buckets.withdrawn.length;
+      && !buckets.adhocOrdered.length && !buckets.noFoc.length && !buckets.withdrawn.length
+      && !buckets.rejected.length;
 
     obHeldback.innerHTML = `
       <h3 style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin:0 0 10px;letter-spacing:0.03em">HELD BACK</h3>
@@ -2625,9 +2644,14 @@
       ${section('🟡 At risk — needs an ad-hoc order before FOC', 'var(--warning)', buckets.atRisk)}
       ${/* COLLAPSED — correctly excluded, nothing to decide. "Outside
            selected cycle" is the big one: on production Lunar it was 36
-           titles, all belonging to LATER ordering cycles. */''}
+           titles, all belonging to LATER ordering cycles. F142: "Rejected"
+           joined this group 2026-08-24 — a code already recorded as
+           rejected is a settled case (mirrors computeBackorderRisk()'s own
+           ledgerRejected() exit), not a nag. Tick its cycle above to
+           re-offer it, same as any other held-back title. */''}
       ${section('Outside selected cycle — belongs to a later ordering cycle', 'var(--text-muted)', buckets.outsideCycle, { collapsed: true })}
       ${section('Ad-hoc ordered — excluded automatically', 'var(--text-muted)', buckets.adhocOrdered, { collapsed: true })}
+      ${section('✕ Rejected by distributor — recorded, not on order', 'var(--text-muted)', buckets.rejected, { collapsed: true })}
       ${collapseSection}
       ${buckets.noFoc.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${buckets.noFoc.length} title${buckets.noFoc.length===1?'':'s'} with no FOC date on file — included regardless of cycle selection.</div>` : ''}
       ${buckets.orderedOtherCycle.length ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${groupByExportCode(buckets.orderedOtherCycle).length} title${groupByExportCode(buckets.orderedOtherCycle).length===1?'':'s'} already ordered on other FOC cycles — not part of this export. Tick that cycle above to review them.</div>` : ''}
