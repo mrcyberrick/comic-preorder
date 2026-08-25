@@ -4851,7 +4851,73 @@ reasoning — only the disposition changed, not the diagnosis.
   URL-swap fix; closing that needs an image proxy such as Cloudflare Image
   Resizing, which is its own piece of work.
 
-Next free finding ID: **F142**.
+#### F142 — Order Builder's own Held Back panel never checks the ledger for a rejection, so a title an admin just recorded as rejected keeps reappearing as "Backordered — FOC passed, never ordered"
+
+- **Status:** filed 2026-08-24. **Open, no plan doc.** Discovered live on
+  production while Rick reconciled his first real Order Builder run — walked
+  through recording **AMAZING SPIDER-MAN #1000 STEVE DITKO BLACK AND WHITE
+  VARIANT** (PRH, item_code `75960621001503633`) as rejected by the
+  distributor. The write succeeded (confirmed via direct SQL — an
+  `order_submissions` row, `quantity 0`, `order_type monthly`, `submitted_on
+  2026-08-24`) and the title correctly cleared from the separate dashboard
+  "⚠ Order Follow-Up" panel. It did **not** clear from the Order Builder
+  modal's own Held Back list, on every reopen, indefinitely.
+- **Symptom:** inside the PRH/Lunar Order Builder modal (`admin.html`), the
+  Held Back section's "🔴 Backordered — FOC passed, never ordered, still
+  orderable" list continues to show a title after the operator has explicitly
+  recorded a distributor rejection for it via the modal's own "Record
+  submitted order" step. The label itself becomes false the moment this
+  happens — the title *was* ordered, and refused, not "never ordered."
+  Reproduces every time the modal is closed and reopened, because
+  `openOrderBuilder()` resets the cycle selection to only the nearest future
+  FOC date, and the rejected title's (past) cycle then evaluates as
+  unselected + FOC-passed again.
+- **Root cause:** two different functions read the same
+  `order_submissions` ledger and disagree about what "rejected" means.
+  `computeBackorderRisk()` (drives the dashboard "⚠ Order Follow-Up" panel)
+  explicitly checks `ledgerRejected(distributor, code)` — rows exist, net
+  quantity ≤ 0 — and clears the title (`admin.html:1609-1615`).
+  `classifyForExport()` (drives the Order Builder modal's own Held Back list,
+  `admin.html:1035-1113`) has no such check: it only branches on
+  `ledgerNetQty(...) > 0` to route a code into the Already Ordered panel: any
+  other value — including a genuinely rejected code — falls straight through
+  to date-based bucketing (`backordered` / `atRisk` / `outsideCycle` /
+  `included`) with no distinction from a code that was never touched at all.
+  This is deliberate for *export inclusion* — a rejected code is meant to
+  stay eligible to be offered again on a future run (see the comment at
+  `admin.html:1067-1073`) — but the same fallthrough also drives the
+  **display label**, so "eligible to re-offer" and "never ordered" collapse
+  into one bucket with one (wrong) sentence.
+- **Scope:** both environments — `classifyForExport()` and
+  `computeBackorderRisk()` are identical code on `main` and `staging`; not
+  data-dependent, will reproduce for any tenant, any distributor, any
+  rejected title.
+- **Consequence:** an admin has no way to confirm, from inside the Order
+  Builder itself, that a rejection they just recorded actually took —
+  the only place that reflects it is the separate dashboard panel, which
+  isn't where the recording UI lives. Cost real time this session chasing a
+  "did my write fail?" dead end before the dashboard panel was checked. Will
+  recur every reconciliation cycle until fixed.
+- **Fix shape (not sized, no code touched):** `classifyForExport()` should
+  check `ledgerRejected(distributor, code)` before falling through to
+  date-based bucketing, and either (a) exclude a rejected code from the
+  Backordered/At-risk buckets and instead render it in its own visually
+  distinct "rejected" state within Held Back (mirroring
+  `computeBackorderRisk()`'s exit), or (b) at minimum stop labeling it "never
+  ordered" when ledger rows exist. Whichever is chosen must not change which
+  codes are *eligible for re-export* — only the display bucket/label — since
+  the "fall through so it can be re-offered" behavior is intentional and
+  should be preserved.
+- **Related:** a second, separate observation surfaced during the same
+  investigation and **deliberately not folded into this finding**: this
+  title's item_code (`75960621001503633`) is also carried by an unrelated
+  PRH title, AMAZING SPIDER-MAN #36 STEVE DITKO BLACK AND WHITE VARIANT — a
+  distributor item_code collision across two different SKUs, which blends
+  unrelated `order_submissions` history under one ledger key. Not scoped or
+  sized here; file separately if the collision turns out to be more than a
+  one-off (a systemic scope query was proposed but not yet run).
+
+Next free finding ID: **F143**.
 
 ---
 
