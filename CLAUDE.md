@@ -12,7 +12,52 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** **Lighthouse performance sweep** RESOLVED on staging 2026-08-24 —
+**Last completed work:** **Single combined catalog print** — fully RESOLVED both environments
+2026-08-24 (staging `56c97c9`/`c54cf88`/`d0a5f9d`, production **PR #137** `8ae9b2d`). Ordering ▸
+Paper Orders had two per-distributor catalog prints; it now has one **Print Catalog** button
+emitting a single banded document covering both distributors. Same rows, same filters, same column
+and row geometry — the only addition is a distributor band. Prod verified after deploy: 1,534 rows
+(Lunar 1,028 / PRH 506), 35 pages, rendered from the deployed bytes over live prod data; Rick
+confirmed the physical print. **No finding ID consumed** (built to request, not a defect — F142 is
+still free).
+
+**A barcode variant was built, printed, tested against the shop's real scanner, and deliberately
+dropped.** Rick's verdict: *"the scanner is working but resolution limitations make it less
+useful."* The symbols were not the problem — they measured **in spec on paper** (145/117/98/89% of
+nominal, inside the GS1 80–200% band, verified by decoding all 2,171 rendered SVGs with an
+independently-written decoder). The limit is the scanning hardware against a laser print, so
+**re-tuning the magnification will not change the outcome** — do not rebuild it on that assumption.
+It also cost roughly twice the paper (0.384in/row against 0.219in). The whole UPC-A/EAN-13/Code-128
+encoder is recoverable from `56c97c9` if that hardware is ever replaced.
+
+**The measurement trap, which is the part worth carrying forward.** A page count for this sheet
+**cannot be inferred from catalog size**, and two wrong numbers were quoted before that was
+understood. `getReservedPublishers()`'s `MIN_RESERVED = 7` bar decides the length, and it cuts far
+harder than the row count suggests. Both environments held ~2,400 rows across **78 publishers** for
+`2026-08` and printed completely differently: **staging 4 publishers → 638 rows → 15 pages**,
+**production 14 → 1,534 → 35**, because staging's reserve history is 24 archived + 64 live rows of
+test data against production's 485 + 2,623. A count taken on staging says nothing about production,
+and a count taken from a raw `normalized_catalog.json` (no publisher filter available offline) says
+nothing about either — that last one produced a "49 pages" claim that never described a real print.
+Measure against the environment you mean. The builder's own comment now records this.
+
+**Also worth knowing: the publisher bar is self-reinforcing.** A publisher under 7 all-time
+reservations never prints, so customers never see it, so it never earns reservations. On production
+that excludes **64 of 78** publishers — Oni Press, Viz Media, Yen Press, Seven Seas and Vault among
+them. Pre-existing and deliberate, not introduced here; surfaced because nobody had measured which
+publishers it actually drops. **No finding filed** — Rick's call whether that trade is right.
+
+**Two process corrections came out of this.** (1) The claim "this change has no spec coverage" was
+**wrong** and nearly shipped a regression: the print *windows* have none, but
+`17-admin-modes.spec.ts` V1/V5 assert the *buttons*, and deleting them turned the suite red. V1 used
+`#btn-print-lunar-order` merely as a witness that the Paper Orders tab was on screen; V5's whole
+subject was the two-button pair. Both were repaired to the new single button (V5 now also asserts
+the three removed ids are `toHaveCount(0)`, making it stronger than before) and a negative control
+confirmed the rewritten assertions can still fail — necessary discipline whenever a test is edited
+to match one's own code. **Sweep the suite for references before deleting any element with an id.**
+(2) `/promote-prod` steps 1+3 contradict each other — see the skill's own note, fixed same day.
+
+Prior work (2026-08-24): **Lighthouse performance sweep** RESOLVED on staging 2026-08-24 —
 triggered by Rick asking why Performance scored consistently below 80 on both mobile and desktop.
 Five items, **no finding ID filed** (fixed in-session rather than deferred, Rick's call — **F141 is
 still free**). Measured against live production first, which localised three of Lighthouse's four
