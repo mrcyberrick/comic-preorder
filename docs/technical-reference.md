@@ -4853,15 +4853,24 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F142 — Order Builder's own Held Back panel never checks the ledger for a rejection, so a title an admin just recorded as rejected keeps reappearing as "Backordered — FOC passed, never ordered"
 
-- **Status:** filed 2026-08-24. **Open, no plan doc.** Discovered live on
-  production while Rick reconciled his first real Order Builder run — walked
-  through recording **AMAZING SPIDER-MAN #1000 STEVE DITKO BLACK AND WHITE
-  VARIANT** (PRH, item_code `75960621001503633`) as rejected by the
-  distributor. The write succeeded (confirmed via direct SQL — an
-  `order_submissions` row, `quantity 0`, `order_type monthly`, `submitted_on
-  2026-08-24`) and the title correctly cleared from the separate dashboard
-  "⚠ Order Follow-Up" panel. It did **not** clear from the Order Builder
-  modal's own Held Back list, on every reopen, indefinitely.
+- **Status:** filed 2026-08-24. **RESOLVED on staging 2026-08-24** (`staging`
+  `9e41e52`, branch `feature/f142-held-back-rejected-state`). **Not yet
+  promoted to production.** Discovered live on production while Rick
+  reconciled his first real Order Builder run — walked through recording
+  **AMAZING SPIDER-MAN #1000 STEVE DITKO BLACK AND WHITE VARIANT** (PRH,
+  item_code `75960621001503633`) as rejected by the distributor. The write
+  succeeded (confirmed via direct SQL — an `order_submissions` row, `quantity
+  0`, `order_type monthly`, `submitted_on 2026-08-24`) and the title correctly
+  cleared from the separate dashboard "⚠ Order Follow-Up" panel. It did
+  **not** clear from the Order Builder modal's own Held Back list, on every
+  reopen, indefinitely.
+  **Fix verified live on staging** via real-browser check (no Playwright
+  coverage exists for this panel) — screenshot of the Lunar Order Builder
+  shows a new collapsed "✕ Rejected by distributor — recorded, not on order
+  (2)" section correctly holding two previously-misclassified titles (*DC
+  PORTFOLIO OF MICHAEL TURNER SUPERMAN & BATMAN 9 PRINT SET*, *LYCAN #2 (OF 3)
+  CVR A TIM BRADSTREET*), with the Backordered list above it now correctly
+  showing only the one genuinely untouched title (*CONAN THE BARBARIAN #34*).
 - **Symptom:** inside the PRH/Lunar Order Builder modal (`admin.html`), the
   Held Back section's "🔴 Backordered — FOC passed, never ordered, still
   orderable" list continues to show a title after the operator has explicitly
