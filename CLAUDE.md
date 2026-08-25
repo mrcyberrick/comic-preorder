@@ -831,9 +831,15 @@ Items from previous months where `on_sale_date < today` are hidden from My List
   — reserved-suggestions list, series search, and the main subscriptions
   table all write through `AdminContext.resolveUserId(user.id)`, backed by a
   new `admins manage tenant subscriptions` RLS policy mirroring `preorders`'.
-  **Live on staging 2026-08-22 (V1–V4 green); not yet promoted to
-  production.** See `docs/technical-reference.md` § 13 F138 for status
-  before relying on this in production contexts.
+  **Fully RESOLVED, both environments, 2026-08-22** (staging V1–V4 green;
+  production RLS migration same day + client code via PR #129 `f1364a785`).
+  Re-verified 2026-08-24 against the served bytes: `pulllist.app`'s
+  `subscriptions.html` calls `resolveUserId` ×6 and carries **zero**
+  impersonation guards, and § 4.x records the `admins manage tenant
+  subscriptions` policy as verified live on both environments.
+  *(This line read "not yet promoted to production" until 2026-08-24 — the
+  2026-08-23 correction fixed § Current Migration Phase and § 13 but missed
+  this copy in § Key Business Logic. Same defect, third surface.)*
 - Import script auto-reserves standard covers for subscribers each month
 - `subscriptions.html` shows an always-on "Series you're already reading"
   one-click subscribe list built from the customer's own reservations; the
