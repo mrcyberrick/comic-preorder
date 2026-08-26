@@ -857,6 +857,7 @@ said "by convention but is not enforced by FK" — see the FKs block below and
 | `has_seen_welcome` | boolean | YES | `false` |
 | `is_paper` | boolean | YES | `false` |
 | `tenant_id` | uuid | NO | — |
+| `phone` | text | YES | — |
 
 **Constraints:**
 - PK: `id`
@@ -893,6 +894,12 @@ said "by convention but is not enforced by FK" — see the FKs block below and
 - `has_seen_welcome` gates the first-login welcome modal in `app.js`
   (`WelcomeModal`). Dual-guarded with localStorage so the modal can't
   reappear before the DB write commits.
+- `phone` (added 2026-08-26, `docs/sql/2026-08-26-user-profiles-phone.sql`,
+  no finding ID — feature build, not a defect) is free text, no format
+  constraint. Set/edited only via `admin.html` Customers ▸ Accounts ▸ Edit
+  Account modal (`app.js` `Users.setProfile`); no other page reads or writes
+  it. Covered by the existing `admins manage tenant profiles` ALL policy
+  (F58) — no RLS change needed.
 
 ### 4.10 `weekly_shipment`
 
@@ -4853,24 +4860,32 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F142 — Order Builder's own Held Back panel never checks the ledger for a rejection, so a title an admin just recorded as rejected keeps reappearing as "Backordered — FOC passed, never ordered"
 
-- **Status:** filed 2026-08-24. **RESOLVED on staging 2026-08-24** (`staging`
-  `9e41e52`, branch `feature/f142-held-back-rejected-state`). **Not yet
-  promoted to production.** Discovered live on production while Rick
-  reconciled his first real Order Builder run — walked through recording
-  **AMAZING SPIDER-MAN #1000 STEVE DITKO BLACK AND WHITE VARIANT** (PRH,
-  item_code `75960621001503633`) as rejected by the distributor. The write
-  succeeded (confirmed via direct SQL — an `order_submissions` row, `quantity
-  0`, `order_type monthly`, `submitted_on 2026-08-24`) and the title correctly
-  cleared from the separate dashboard "⚠ Order Follow-Up" panel. It did
-  **not** clear from the Order Builder modal's own Held Back list, on every
-  reopen, indefinitely.
-  **Fix verified live on staging** via real-browser check (no Playwright
-  coverage exists for this panel) — screenshot of the Lunar Order Builder
-  shows a new collapsed "✕ Rejected by distributor — recorded, not on order
-  (2)" section correctly holding two previously-misclassified titles (*DC
-  PORTFOLIO OF MICHAEL TURNER SUPERMAN & BATMAN 9 PRINT SET*, *LYCAN #2 (OF 3)
-  CVR A TIM BRADSTREET*), with the Backordered list above it now correctly
-  showing only the one genuinely untouched title (*CONAN THE BARBARIAN #34*).
+- **Status:** filed 2026-08-24. **Fully RESOLVED, both environments.** Staging
+  2026-08-24 (`staging` `9e41e52`, branch `feature/f142-held-back-rejected-state`).
+  **Promoted to production 2026-08-26** via **PR #138** (merge commit
+  `ebcdbee1`) — full `run-smoke.ps1` green on staging pre-promotion (269 unit +
+  139 Playwright, 0 failures), config.js/F59/F125 merge-integrity checks all
+  clean, new bytes confirmed served on `pulllist.app` post-deploy (the
+  "Rejected by distributor" marker string present in the served HTML), and
+  both the standard post-deploy write-smoke and an F142-specific real-browser
+  check on production came back green (Rick, 2026-08-26) — a previously
+  rejected title now shows under the collapsed "✕ Rejected by distributor"
+  section instead of Backordered on live production.
+  Discovered live on production while Rick reconciled his first real Order
+  Builder run — walked through recording **AMAZING SPIDER-MAN #1000 STEVE
+  DITKO BLACK AND WHITE VARIANT** (PRH, item_code `75960621001503633`) as
+  rejected by the distributor. The write succeeded (confirmed via direct SQL —
+  an `order_submissions` row, `quantity 0`, `order_type monthly`,
+  `submitted_on 2026-08-24`) and the title correctly cleared from the
+  separate dashboard "⚠ Order Follow-Up" panel. It did **not** clear from the
+  Order Builder modal's own Held Back list, on every reopen, indefinitely.
+  **Fix verified on staging** via real-browser check (no Playwright coverage
+  exists for this panel) — screenshot of the Lunar Order Builder shows a new
+  collapsed "✕ Rejected by distributor — recorded, not on order (2)" section
+  correctly holding two previously-misclassified titles (*DC PORTFOLIO OF
+  MICHAEL TURNER SUPERMAN & BATMAN 9 PRINT SET*, *LYCAN #2 (OF 3) CVR A TIM
+  BRADSTREET*), with the Backordered list above it now correctly showing only
+  the one genuinely untouched title (*CONAN THE BARBARIAN #34*).
 - **Symptom:** inside the PRH/Lunar Order Builder modal (`admin.html`), the
   Held Back section's "🔴 Backordered — FOC passed, never ordered, still
   orderable" list continues to show a title after the operator has explicitly
@@ -4926,7 +4941,60 @@ reasoning — only the disposition changed, not the diagnosis.
   sized here; file separately if the collision turns out to be more than a
   one-off (a systemic scope query was proposed but not yet run).
 
-Next free finding ID: **F143**.
+#### F143 — Order Follow-Up's resolve control cannot record a supplier rejection, so a rejection discovered mid-cycle either corrects the ledger in another tab or silently leaves it wrong
+
+- **Status:** filed 2026-08-26 from an operational walkthrough with Rick of the post-order workflow. **Open — proposal, filed for future consideration; not scheduled.** Small and well-bounded: one additional option on a control that already exists.
+- **Severity:** **Low–Medium.** No customer-facing error and no data corruption — but it silently degrades the order ledger, and the ledger is what drives remainder quantities and re-orderability on the following cycle.
+- **The gap, stated precisely** (it is easy to get backwards — Rick did on first reading, which is why this entry leads with the direction):
+  - **Ledger → panel works.** A recorded rejection **does** clear a row from Never Arrived. F134 Part 1's `ledgerRejected()` exit does exactly that. Live proof: the two production titles rejected on 2026-08-21 (`75960621489100116`, `82771403458501031`) still read `arrival_outcome = 'unknown'` in the database and correctly do **not** appear in the panel.
+  - **Panel → ledger does not.** The resolve control's three options — **Received · Didn't arrive · Damaged** (verified live on `main` 2026-08-26) — write `arrival_outcome` and nothing else. There is no option that records a rejection.
+- **Why that matters.** Marking a rejected title "Didn't arrive" clears the panel while leaving the ledger asserting the copies are on order. Four consequences: By Distributor keeps reading `✓ Ordered (n)`; the next cycle's remainder is computed against a phantom order; **the title is not re-offered for ordering**, though a rejected title is often precisely what one would re-order; and the customer is told "didn't arrive" rather than F120's more accurate "rejected by the supplier."
+- **The interim workaround, corrected 2026-08-26 against a live case (Rick, PRH UPC `75960621630700217`, exactly-matched 1-ordered/1-reserved).** This entry originally read "Ordering ▸ By Distributor ▸ find the title ▸ Mark Ordered ▸ *Adjustment (correction)* ▸ negative quantity" — **that path is unreachable for the common case this finding is about.** By Distributor's Mark Ordered button is disabled whenever the ledger exactly matches reservations (`admin.html`, `orderMatched ? 'disabled' : ''`), which is precisely the state a title is in once it has been ordered and is only later discovered rejected — there is nothing else to click on that row. The action that actually works: open the Order Builder for that distributor, tick the title's own FOC cycle in the cycle selector (it defaults to only the earliest future cycle, so a later-cycle title like this one is bucketed into the hidden `orderedOtherCycle` group otherwise), which surfaces it under **⚠ Already Ordered** with a qty field and an **Include in this export** checkbox; unticking Include and proceeding to the record step writes the zero/negative row. Still four navigations, just not these four. Correct, and deliberately still available on a closed cycle (2026-08-06 decision) — the defect this finding is about stands: the quick, wrong action (the Never Arrived resolve control's three options) sits in front of the operator and the right one is buried in a different tab entirely.
+- **Proposed fix:** a fourth option, **Rejected by supplier**, on the same control, writing the negative adjustment that nets the code to 0. Everything downstream is existing machinery: net ≤ 0 → `ledgerRejected()` → the row clears through F134 Part 1's exit (**no `arrival_outcome` write needed at all**), F120 surfaces the rejection to the customer, By Distributor corrects, and `classifyForExport()` routes the code back to `included` when its cycle is ticked — the re-offer behaviour F142's comment explicitly protects.
+- **Design decision, if built: do NOT also write `arrival_outcome`.** Leave it `'unknown'`. The ledger rejection is the fact; `arrival_outcome` records what the *import* judged about arrival. They are different statements, and writing both creates two records that can later disagree. The two production titles above already demonstrate the intended pattern.
+- **THE THREE ARTIFACTS — corrected 2026-08-26 by Rick, and this is the fact the whole finding rests on.** They are routinely conflated; they are not the same file:
+
+  | Artifact | When | Carries rejections? |
+  |---|---|---|
+  | Order Builder submission | at order time | **No** — for Lunar, unknowable at this moment |
+  | **Order invoice** | after Lunar processing completes | **Yes** — as negative quantities |
+  | **Shipping invoice** (what the weekly import consumes) | at shipment | **No** — shows only what *did* ship |
+
+- **Consequence, and it raises this finding's value above where it was first filed:** because the shipping invoice can only ever say what shipped, **absence is the only automatic signal for a Lunar rejection anywhere in the system.** The chain is: Lunar rejects → nothing in the weekly import can know → no `weekly_shipment` row → the import judges `'unknown'` → the row lands in **Never Arrived**. So this panel is not a convenient place to catch Lunar rejections — it is the **only** place they can surface automatically, which makes the proposed button the *primary* Lunar rejection-recording path rather than a shortcut.
+- **The Order Builder rule that follows, per distributor:** **PRH is single-phase** — rejections are knowable at order time, so untick them in the record step and they never reach this panel. **Lunar is two-phase** — record the **full submitted order and untick nothing**, because the information does not exist in any form at that moment; correct it later via the adjustment path. Unticking a Lunar line at record time would be recording a rejection nobody has observed.
+- **File-selection hazard (recorded 2026-08-26, narrower than first stated).** The shipment parser applies **no negative-quantity filter**, and `hasShipmentEvidence()` matches on UPC / item code / catalog id **without reading quantity**. So if the *order* invoice were ever fed to Step 6 by mistake, each rejected title would gain a `weekly_shipment` row and be read as **arrived** — the customer told "✓ Order placed" on the strength of a line that says the opposite. **This cannot happen through the routine flow** (the shipping invoice never carries negatives) and has not happened (production: 975 shipment rows, **zero** with quantity ≤ 0). It is a wrong-file slip, made more reachable once **F135** normalises ad-hoc imports and two Lunar files are in hand at once. Related quirk in the same expression: `parseInt(qty) || 1` turns a **zero**-quantity line into quantity **1**, because `0` is falsy.
+- **Why this shape and not reconciliation — Rick's operational reasoning, recorded so it is not re-proposed.** Rejections surface at different times per distributor: **PRH's are identifiable at order time** and are caught by unticking in the Order Builder's record step, so they never reach this panel. **Lunar's are not**, and surface later in the cycle — which is exactly where Never Arrived already looks. So the remedy belongs in the ongoing workflow, and **must add no steps to the ordering process** (Rick, 2026-08-26).
+- **Considered and DECLINED at the same time — order-invoice compare-and-report.** Diffing submitted ledger codes against the order invoice would surface rejections as a set difference. Rick's assessment: *"more cumbersome than helpful."* Recorded because it is a natural idea that will recur, and because the analysis genuinely moved since F108 dropped confirmation-file ingest — **two of that decision's four blockers no longer hold**: `CHECK quantity >= 1` was relaxed by **F117** (2026-08-06), so Lunar's negative-quantity export lines no longer abort ingest; and a set difference needs no status column, which is what F108 § 2.8 measured as missing (Lunar: no status at all; PRH: `31/31 Backordered`). The ledger left-hand side that made a diff possible also did not exist when § 2.8 was written. **None of that overrides the operator's judgement or § 1's standing constraint** (*"I do not want to download multiple files to feed the import… should not be a chore to maintain"*). If it is ever revisited, revisit it as a *compare-and-report* that writes nothing automatically and is safely skippable — not as ingest.
+- **Where:** `admin.html` — the Order Follow-Up resolve control and its handler; reuses `ledgerMatchesFor()` / the `order_submissions` insert path already used by the Mark Ordered *Adjustment* type. No schema change (**F117** already permits negative quantities and `order_type = 'adjustment'`).
+- **Related:** **F134** (created the resolve control and the `ledgerRejected()` exit this leans on), **F117** (the signed ledger making the negative adjustment possible), **F120** (the customer-facing rejected badge this would trigger), **F142** (same class — a panel not consulting the ledger — on the Order Builder's Held Back list, resolved), **F129** (the original of that class), **F132** (the *preventive* half: restricted variants flagged at reservation time, which is why the residual here is "the odd missing title" rather than a systemic gap), **F108** § 2.8/§ 3.1 (the dropped ingest analysis this entry deliberately does not reopen).
+
+#### F144 — restriction ratios never reach the ordering side: `order_requirement` is absent from `admin.html` entirely, so the Order Builder cannot flag the titles most likely to be rejected
+
+- **Status:** filed 2026-08-26 from an operational walkthrough with Rick, alongside **F143**. **Open — proposal, not scheduled.** Display-only: the data is already captured and already correct.
+- **Severity:** **Low.** Nothing is wrong; something useful is simply not shown. The value is operator efficiency at the record step, where a rejection decision is actually made.
+- **The gap, measured 2026-08-26:** `order_requirement` appears **0 times in `admin.html`**. F132 delivered it to the customer-facing side (`app.js`, `catalog.html`, `style.css`) but no ordering surface reads it. Meanwhile production already carries it on **809 titles**:
+
+  | Distributor | With `order_requirement` | of | Source |
+  |---|---|---|---|
+  | Lunar | **314** | 5,340 | `variant_type` (`1:25`, `1:40`, `1:50`) |
+  | PRH | **495** | 4,078 | parsed at import |
+
+- **THE TRAP — do not parse the title.** The obvious implementation is to read the ratio out of the PRH title string, and it is **wrong**: the import already resolves ratios that do not appear in the title at all. Two production rows, both `order_requirement = '1:25'` with no ratio anywhere in the title:
+  - `WADE WILSON: DEADPOOL #9 TBD ARTIST VARIANT [BG]`
+  - `PUNISHER SHOWDOWNS: BLACK WIDOW #1 JOE JUSKO VARIANT`
+  Title-parsing would silently miss exactly the titles this feature exists to surface, while appearing to work on the ones where the ratio *is* in the title. **Read the column.**
+- **Proposal (display only, no schema, no import change):**
+  1. **Record step — highest value.** Badge the ratio next to each line's checkbox. For **PRH**, where rejections are knowable at order time, this turns "which did they reject?" from a scan of ~149 lines into a targeted shortlist.
+  2. **Group restricted titles** (Rick's addition, 2026-08-26) — cluster them in the builder rather than leaving them scattered, so the at-risk set is reviewable as a block. A collapsible `Restricted (n)` group is the obvious shape; ordering them first is the cheaper one.
+  3. **Included list** at cycle-selection time, so the risk is visible *before* submission.
+  4. Held-back / already-ordered panels — free once the badge exists, lowest value.
+- **Honest value asymmetry — this helps the two distributors very differently, and the reason is F143's three-artifact split:**
+  - **PRH: actionable.** Rejections are identifiable at order time, so a badge sits next to the control that records them.
+  - **Lunar: advisory only.** Rejections appear as negative quantities on the **order invoice after processing**, and the *shipping* invoice — the file the weekly import consumes — shows only what shipped. So a badge can flag *candidates for suspicion*, never outcomes. Lunar's two-phase rule is unchanged: record the full submitted order, correct later.
+- **Where:** `admin.html` — the Order Builder's included list, its record step, and optionally the held-back/already-ordered panels. The builder already loads `catalog` rows, so the column just needs to be selected and rendered.
+- **Related:** **F132** (captured `order_requirement`, and corrected same-day when Lunar's ratio turned out to live in `variant_type` — this finding is the ordering-side half F132 did not reach), **F143** (the other half of rejection handling: recording one from the follow-up panel; both are about making rejections visible where the work happens), **F117**/**F120** (the ledger rejection and customer badge a targeted untick feeds), **F102** (the remainder control the record step protects).
+
+Next free finding ID: **F145**.
 
 ---
 

@@ -12,7 +12,34 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** **Single combined catalog print** — fully RESOLVED both environments
+**Last completed work:** **Customer phone number** — RESOLVED on staging 2026-08-26
+(`627d411`, `feature/customer-phone-number` → `staging` ff-only), **not yet promoted to
+production**. Rick's request: an editable phone field on customer accounts. New
+`user_profiles.phone` column (nullable text, no format constraint;
+`docs/sql/2026-08-26-user-profiles-phone.sql`, staging post-check confirmed 24 total rows / 0
+with_phone — expected immediately after an `ADD COLUMN` with no default). No RLS change needed —
+covered by the existing `admins manage tenant profiles` ALL policy (F58). Client side:
+`admin.html` Customers ▸ Accounts gained a Phone column plus a new **Edit Account** modal (Name +
+Phone, styled like the existing Invite Customer modal) that replaces the old
+`prompt()`-based rename-only Edit button; `app.js` `Users.setName` → `Users.setProfile(userId, {
+fullName, phone })`, one combined write. **No finding ID consumed** (feature build, not a
+defect).
+
+**The Edit-button UI change broke an existing spec, and it was caught before merge, not after.**
+`17-admin-modes.spec.ts` V6 asserted the old flow via a Playwright `dialog` event handler
+(`adminPage.once('dialog', d => d.accept(after))`) — against the new modal, no native dialog ever
+fires, so the handler would have silently no-op'd and the assertion would have failed against a
+name that never changed. V6 was rewritten to drive the modal directly (fill `#edit-account-name`
+/ `#edit-account-phone`, click `#edit-account-save-btn`) and extended to assert the phone value
+lands on the row; V7's title and assertions were updated from "name only" to "name + phone" to
+match the modal's two fields, while the `is_admin`-absent assertions (Rick 2026-08-09, still not
+here) are unchanged. A negative control (temporarily asserting a value that couldn't be present)
+confirmed the rewritten V6 assertion genuinely fails, not vacuously passes — same discipline the
+F142/single-catalog-print sessions record as necessary whenever a test is edited to match its own
+code. Full gate green: 269 unit + 139 Playwright, 0 failures, ~21 min, run against the deployed
+staging bytes post-push (not a stale pre-push baseline).
+
+Prior work (2026-08-24): **Single combined catalog print** — fully RESOLVED both environments
 2026-08-24 (staging `56c97c9`/`c54cf88`/`d0a5f9d`, production **PR #137** `8ae9b2d`). Ordering ▸
 Paper Orders had two per-distributor catalog prints; it now has one **Print Catalog** button
 emitting a single banded document covering both distributors. Same rows, same filters, same column
@@ -225,12 +252,23 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F143**. **F142 filed 2026-08-24** (Order Builder's
-own Held Back panel never checks the ledger for a rejection, so a title an
-admin just recorded as rejected keeps reappearing as "Backordered... never
-ordered" every time the modal reopens — found live on production during
-Rick's first real Order Builder reconciliation; see table below and
-`docs/technical-reference.md` § 13). **F141 filed 2026-08-24** (desktop CLS
+**Next free finding ID:** **F145**. **F144 filed 2026-08-26** (proposal — restriction
+ratios never reach the ordering side: `order_requirement` is absent from `admin.html`
+entirely, so the Order Builder cannot flag or group the titles most likely to be
+rejected; **do not parse the title** — see § 13). **F143 filed 2026-08-26** (proposal — Order
+Follow-Up's resolve control cannot record a supplier rejection, so a Lunar
+rejection found mid-cycle either corrects the ledger in another tab or silently
+leaves it wrong; order-invoice compare-and-report considered and **declined** in
+the same session — see table below and `docs/technical-reference.md`
+§ 13). **F142 filed 2026-08-24 and fully
+RESOLVED on both environments 2026-08-26** (Order Builder's own Held Back
+panel never checked the ledger for a rejection, so a title an admin recorded
+as rejected kept reappearing as "Backordered... never ordered" every time the
+modal reopened — found live on production during Rick's first real Order
+Builder reconciliation; staging fix `9e41e52`, promoted to production via
+**PR #138** `ebcdbee1`, write-smoke and an F142-specific real-browser check
+both green on production 2026-08-26 — see `docs/technical-reference.md`
+§ 13). **F141 filed 2026-08-24** (desktop CLS
 0.636 — the catalog grid fills after first paint with no reserved space;
 found re-measuring Lighthouse against *authenticated* staging after the
 performance sweep, which itself consumed no ID — see table below and
@@ -261,7 +299,8 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F142 | **Low/Medium** — Order Builder's own Held Back list mislabels a title "Backordered... never ordered" forever after an admin records it as rejected, because `classifyForExport()` never checks `ledgerRejected()` the way the dashboard's Order Follow-Up panel does. Found live on production 2026-08-24 reconciling a real rejected variant | Owner: `docs/technical-reference.md` § 13 F142. **RESOLVED on staging 2026-08-24** (`9e41e52`) — new collapsed "Rejected by distributor" bucket, verified via real-browser check (no Playwright coverage on this panel). **Not yet promoted to production.** |
+| F143 | **Low–Medium** — Order Follow-Up's resolve control offers only Received / Didn't arrive / Damaged, so a **supplier rejection found mid-cycle** cannot be recorded there. Marking it "Didn't arrive" clears the panel but leaves the ledger claiming the copies are on order — wrong remainder next cycle, and the title is never re-offered. Ledger→panel already works (F134 Part 1); it is panel→ledger that is missing | **Proposal, filed for future consideration — not scheduled.** Fix = a fourth option, *Rejected by supplier*, writing the negative adjustment (F117); no schema change, everything downstream is existing machinery. **Order-invoice compare-and-report was considered and DECLINED** (Rick: "more cumbersome than helpful") — do not re-propose without reading § 13 F143 |
+| F144 | **Low** — restriction ratios never reach the ordering side: `order_requirement` is **absent from `admin.html` entirely** (0 refs), though production already carries it on **809 titles** (Lunar 314 / PRH 495). The Order Builder cannot flag or group the titles most likely to be rejected | **Proposal, not scheduled.** Display-only, no schema: badge the ratio in the record step (highest value), **group restricted titles**, and show it in the included list. **TRAP: do not parse the PRH title** — the import already resolves ratios absent from the title. Actionable for PRH, advisory only for Lunar |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |

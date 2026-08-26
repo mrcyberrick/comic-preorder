@@ -1342,17 +1342,19 @@ const Users = {
     return { data: result };
   },
 
-  // Rename a customer. The ONLY editable profile field (F126).
+  // Edit a customer's name + phone. Originally ONE field (F126: full_name
+  // only); extended 2026-08-26 to add `phone` (Rick's request — no finding
+  // ID, feature build not a defect).
   //
-  // Deliberately not here: `email`, because it is a denormalized copy of
-  // auth.users.email with no sync trigger (F25) and auth.users.email is the
-  // login identity — writing this copy alone would silently diverge them.
-  // And `is_admin`, which stays a Supabase-console task: it is a
+  // Deliberately still not here: `email`, because it is a denormalized copy
+  // of auth.users.email with no sync trigger (F25) and auth.users.email is
+  // the login identity — writing this copy alone would silently diverge
+  // them. And `is_admin`, which stays a Supabase-console task: it is a
   // privilege-escalation surface and any guard here would be client-side.
-  async setName(userId, fullName) {
+  async setProfile(userId, { fullName, phone }) {
     const { error } = await db
       .from('user_profiles')
-      .update({ full_name: fullName })
+      .update({ full_name: fullName, phone: phone || null })
       .eq('id', userId);
     return { error };
   },
