@@ -69,14 +69,28 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
    With this step, that file would have printed `prod=PENDING` on every promotion
    in the window (PRs #86, #89, #90, #91) instead of passing silently four times.
 
-1. **Merge with prod-credential preservation**
+1. **Cut the promotion branch, THEN merge into it, with prod-credential preservation**
    ```powershell
-   git checkout main
-   git pull origin main
-   git merge staging --no-commit --no-ff
-   git checkout main -- config.js
+   git fetch origin
+   git status                                              # tree must be clean first
+   git checkout -B feat/<description>-prod origin/main      # explicit ref — see 2b
+   git merge origin/staging --no-commit --no-ff             # explicit ref, not the local branch
+   git checkout origin/main -- config.js
    ```
+   **Order matters.** The branch is created from `origin/main` *first* and the
+   merge lands *on it*, so the promotion is never staged onto local `main` and
+   there is nothing for a later branch-creation to discard (see step 3). Both
+   sides use explicit `origin/*` refs rather than local branch names, because a
+   concurrent session in this same working tree can move local `main`/`staging`
+   under you — that is the 2026-08-24 F125 near-miss recorded in 2b.
+
    `config.js` is tracked per-branch; the checkout step preserves prod values.
+   Assert it landed rather than assuming — the 3-way merge may already have
+   chosen main's copy, which looks the same but for a different reason:
+   ```powershell
+   git diff --quiet :config.js (git show origin/main:config.js | Out-String)  # or:
+   if ((git show :config.js) -join "`n" -eq (git show origin/main:config.js) -join "`n") { "ok: config.js == origin/main" } else { "HALT" }
+   ```
    If the feature added a NEW key to `config.js`, stop — the user must add it
    manually to both branches first (checkout does not propagate new keys).
 
@@ -88,14 +102,42 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
        else { Write-Host "WARN: $f identical to main - verify expected, NOT a merge-base regression" }
    }
    ```
-   Any unexpected WARN → halt and investigate before committing.
+   Any unexpected WARN → halt and investigate before committing. A WARN is
+   *expected* for any file this promotion genuinely does not touch — establish
+   the intended scope first, then read the WARNs against it.
+
+   **The tip comparison above cannot detect the failure F59 is named for.**
+   `.gitattributes` sets `app.js merge=ours` (and `config.js`). The check
+   compares branch *tips*, so it reports "ok: differs" in exactly the case where
+   the `ours` driver would silently keep main's copy — on the one file carrying
+   that attribute. Assert the **merge result** instead, which is what actually
+   ships:
+   ```powershell
+   foreach ($f in @('app.js', 'mylist.html', 'arrivals.html', 'admin.html')) {
+       $merged  = (git show ":$f")               | git hash-object --stdin
+       $staging = (git show "origin/staging:$f") | git hash-object --stdin
+       $main    = (git show "origin/main:$f")    | git hash-object --stdin
+       if     ($merged -eq $staging) { "ok: $f  merge result == staging" }
+       elseif ($merged -eq $main)    { "*** $f  merge result == MAIN - staging's copy was DISCARDED ***" }
+       else                          { "note: $f  true 3-way blend (neither side verbatim)" }
+   }
+   ```
+   Added 2026-08-24 (the extension CLAUDE.md's Lighthouse-sweep note recorded as
+   "worth keeping", finally encoded here). **Do not build this with
+   `[regex]::Escape()` plus `-SimpleMatch`** — that combination searches for
+   literal backslashes and reported three false FAILs the first time it was
+   attempted. A check that can falsely fail aborts a good promotion just as
+   surely as a check that cannot fail passes a bad one.
 
 2b. **Tree-integrity assertions (F125) — run BEFORE pushing any promotion branch.**
 
-   **Create the branch from an explicit ref, never from ambient HEAD:**
-   ```powershell
-   git checkout -B feat/<description>-prod origin/main
-   ```
+   **The branch already exists — step 1 created it from `origin/main` and merged
+   into it. Do NOT re-create it here**; running `git checkout -B … origin/main`
+   at this point would reset the branch and discard the merge, which is the bug
+   that made steps 1 and 3 contradict each other before 2026-08-24. This section
+   explains *why* step 1 cuts it from an explicit ref, and then asserts the
+   result.
+
    `git checkout -b <name>` takes whatever HEAD happens to be. On 2026-08-24 a
    second person committed in this same working tree mid-promotion, HEAD had
    moved to `staging`, and the branch silently inherited staging's tree. That PR
@@ -128,9 +170,19 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
 3. **Commit and open PR**
    ```powershell
    git commit -m "<type>: <description>"
-   git checkout -B feat/<description>-prod origin/main   # explicit ref — see 2b
    git push origin feat/<description>-prod
    ```
+
+   **The branch was already created in step 1 — do NOT create it here.**
+   This step used to read `git checkout -B feat/<description>-prod origin/main`
+   *after* the commit, which **resets the branch to `origin/main` and throws the
+   merge away**. The push then succeeds and uploads nothing, and the PR is empty
+   or never opens. The tell is step 2b's own first assertion:
+   `git diff --stat origin/main $b` comes back **blank** when it should show the
+   promotion's scope. Found 2026-08-24 while promoting the combined catalog
+   print, one commit after 2b was added — 2b's "create the branch from an
+   explicit ref" guidance was correct, but this step was not updated to match,
+   so the two instructions contradicted each other.
    Open PR `feat/<description>-prod → main` with `gh pr create` (run `gh auth status`
    first — a missing gh auth has derailed sessions before).
 

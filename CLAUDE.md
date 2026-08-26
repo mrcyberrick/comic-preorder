@@ -12,7 +12,52 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** **Lighthouse performance sweep** RESOLVED on staging 2026-08-24 —
+**Last completed work:** **Single combined catalog print** — fully RESOLVED both environments
+2026-08-24 (staging `56c97c9`/`c54cf88`/`d0a5f9d`, production **PR #137** `8ae9b2d`). Ordering ▸
+Paper Orders had two per-distributor catalog prints; it now has one **Print Catalog** button
+emitting a single banded document covering both distributors. Same rows, same filters, same column
+and row geometry — the only addition is a distributor band. Prod verified after deploy: 1,534 rows
+(Lunar 1,028 / PRH 506), 35 pages, rendered from the deployed bytes over live prod data; Rick
+confirmed the physical print. **No finding ID consumed** (built to request, not a defect — F142 is
+still free).
+
+**A barcode variant was built, printed, tested against the shop's real scanner, and deliberately
+dropped.** Rick's verdict: *"the scanner is working but resolution limitations make it less
+useful."* The symbols were not the problem — they measured **in spec on paper** (145/117/98/89% of
+nominal, inside the GS1 80–200% band, verified by decoding all 2,171 rendered SVGs with an
+independently-written decoder). The limit is the scanning hardware against a laser print, so
+**re-tuning the magnification will not change the outcome** — do not rebuild it on that assumption.
+It also cost roughly twice the paper (0.384in/row against 0.219in). The whole UPC-A/EAN-13/Code-128
+encoder is recoverable from `56c97c9` if that hardware is ever replaced.
+
+**The measurement trap, which is the part worth carrying forward.** A page count for this sheet
+**cannot be inferred from catalog size**, and two wrong numbers were quoted before that was
+understood. `getReservedPublishers()`'s `MIN_RESERVED = 7` bar decides the length, and it cuts far
+harder than the row count suggests. Both environments held ~2,400 rows across **78 publishers** for
+`2026-08` and printed completely differently: **staging 4 publishers → 638 rows → 15 pages**,
+**production 14 → 1,534 → 35**, because staging's reserve history is 24 archived + 64 live rows of
+test data against production's 485 + 2,623. A count taken on staging says nothing about production,
+and a count taken from a raw `normalized_catalog.json` (no publisher filter available offline) says
+nothing about either — that last one produced a "49 pages" claim that never described a real print.
+Measure against the environment you mean. The builder's own comment now records this.
+
+**Also worth knowing: the publisher bar is self-reinforcing.** A publisher under 7 all-time
+reservations never prints, so customers never see it, so it never earns reservations. On production
+that excludes **64 of 78** publishers — Oni Press, Viz Media, Yen Press, Seven Seas and Vault among
+them. Pre-existing and deliberate, not introduced here; surfaced because nobody had measured which
+publishers it actually drops. **No finding filed** — Rick's call whether that trade is right.
+
+**Two process corrections came out of this.** (1) The claim "this change has no spec coverage" was
+**wrong** and nearly shipped a regression: the print *windows* have none, but
+`17-admin-modes.spec.ts` V1/V5 assert the *buttons*, and deleting them turned the suite red. V1 used
+`#btn-print-lunar-order` merely as a witness that the Paper Orders tab was on screen; V5's whole
+subject was the two-button pair. Both were repaired to the new single button (V5 now also asserts
+the three removed ids are `toHaveCount(0)`, making it stronger than before) and a negative control
+confirmed the rewritten assertions can still fail — necessary discipline whenever a test is edited
+to match one's own code. **Sweep the suite for references before deleting any element with an id.**
+(2) `/promote-prod` steps 1+3 contradict each other — see the skill's own note, fixed same day.
+
+Prior work (2026-08-24): **Lighthouse performance sweep** RESOLVED on staging 2026-08-24 —
 triggered by Rick asking why Performance scored consistently below 80 on both mobile and desktop.
 Five items, **no finding ID filed** (fixed in-session rather than deferred, Rick's call — **F141 is
 still free**). Measured against live production first, which localised three of Lighthouse's four
@@ -180,7 +225,12 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F142**. **F141 filed 2026-08-24** (desktop CLS
+**Next free finding ID:** **F143**. **F142 filed 2026-08-24** (Order Builder's
+own Held Back panel never checks the ledger for a rejection, so a title an
+admin just recorded as rejected keeps reappearing as "Backordered... never
+ordered" every time the modal reopens — found live on production during
+Rick's first real Order Builder reconciliation; see table below and
+`docs/technical-reference.md` § 13). **F141 filed 2026-08-24** (desktop CLS
 0.636 — the catalog grid fills after first paint with no reserved space;
 found re-measuring Lighthouse against *authenticated* staging after the
 performance sweep, which itself consumed no ID — see table below and
@@ -211,6 +261,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F142 | **Low/Medium** — Order Builder's own Held Back list mislabels a title "Backordered... never ordered" forever after an admin records it as rejected, because `classifyForExport()` never checks `ledgerRejected()` the way the dashboard's Order Follow-Up panel does. Found live on production 2026-08-24 reconciling a real rejected variant | Owner: `docs/technical-reference.md` § 13 F142. **RESOLVED on staging 2026-08-24** (`9e41e52`) — new collapsed "Rejected by distributor" bucket, verified via real-browser check (no Playwright coverage on this panel). **Not yet promoted to production.** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
@@ -222,7 +273,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
-| F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **Gate V8 — DB half APPLIED to production 2026-08-21** (verified 0 non-null/11,726, Rick) — the `import.js` 400 risk this was blocking is cleared; **client code half (app.js/catalog.html/style.css via `/promote-prod`) still not promoted**, in progress) |
+| F132 | **Medium** — a title restricted to a distributor allocation ratio (e.g. `1:10`) carries no signal at reservation time; customer only learns via the retrospective F117/F120 rejected badge. **Both distributors** — corrected same-day, Lunar carries the ratio in `variant_type` (562 rows, staging), not absent as first measured | Owner: `docs/order-restriction-alert-badge.md` (staging V1-V7 all GREEN 2026-08-21 — migration, real import, hover-stacking fix, mobile Learn More via the detail modal, 210/210 unit + 6/6 Playwright. **Gate V8 — DB half APPLIED to production 2026-08-21** (verified 0 non-null/11,726, Rick). **Client code half also LIVE on production — measured 2026-08-24 against the served bytes**, not inferred: `order_requirement` present in `app.js` (×3), `catalog.html` (×2) and `style.css` (×1), `restriction-badge` in `app.js`/`style.css`, the hover `z-index: 2` fix (×6) and the mobile "Learn more" disclosure all returned by `pulllist.app`. **F132 is fully RESOLVED, both halves, both environments.** This row read "still not promoted, in progress" for three days after it had shipped — found while scoping a promotion that would have carried the stale line onto `main`) |
 
 Before proposing any work, read the active phase docs and confirm the proposed change is in
 scope. **If something seems related but isn't on the IN scope list in the active sub-deploy plan,
@@ -786,9 +837,15 @@ Items from previous months where `on_sale_date < today` are hidden from My List
   — reserved-suggestions list, series search, and the main subscriptions
   table all write through `AdminContext.resolveUserId(user.id)`, backed by a
   new `admins manage tenant subscriptions` RLS policy mirroring `preorders`'.
-  **Live on staging 2026-08-22 (V1–V4 green); not yet promoted to
-  production.** See `docs/technical-reference.md` § 13 F138 for status
-  before relying on this in production contexts.
+  **Fully RESOLVED, both environments, 2026-08-22** (staging V1–V4 green;
+  production RLS migration same day + client code via PR #129 `f1364a785`).
+  Re-verified 2026-08-24 against the served bytes: `pulllist.app`'s
+  `subscriptions.html` calls `resolveUserId` ×6 and carries **zero**
+  impersonation guards, and § 4.x records the `admins manage tenant
+  subscriptions` policy as verified live on both environments.
+  *(This line read "not yet promoted to production" until 2026-08-24 — the
+  2026-08-23 correction fixed § Current Migration Phase and § 13 but missed
+  this copy in § Key Business Logic. Same defect, third surface.)*
 - Import script auto-reserves standard covers for subscribers each month
 - `subscriptions.html` shows an always-on "Series you're already reading"
   one-click subscribe list built from the customer's own reservations; the
