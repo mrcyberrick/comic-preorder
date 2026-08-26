@@ -1,4 +1,4 @@
--- STATUS: NOT STARTED | staging=NOT RUN | prod=NOT RUN | findings=none (feature build, not a defect)
+-- STATUS: COMPLETE | staging=APPLIED 2026-08-26 (24 total / 0 with_phone) | prod=APPLIED 2026-08-26 (30 total / 0 with_phone) | findings=none (feature build, not a defect)
 --
 -- Add an editable phone number to customer accounts, per Rick's request
 -- 2026-08-26. Displayed + edited on admin.html Customers > Accounts (the
