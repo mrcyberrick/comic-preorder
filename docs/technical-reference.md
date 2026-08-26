@@ -857,6 +857,7 @@ said "by convention but is not enforced by FK" — see the FKs block below and
 | `has_seen_welcome` | boolean | YES | `false` |
 | `is_paper` | boolean | YES | `false` |
 | `tenant_id` | uuid | NO | — |
+| `phone` | text | YES | — |
 
 **Constraints:**
 - PK: `id`
@@ -893,6 +894,12 @@ said "by convention but is not enforced by FK" — see the FKs block below and
 - `has_seen_welcome` gates the first-login welcome modal in `app.js`
   (`WelcomeModal`). Dual-guarded with localStorage so the modal can't
   reappear before the DB write commits.
+- `phone` (added 2026-08-26, `docs/sql/2026-08-26-user-profiles-phone.sql`,
+  no finding ID — feature build, not a defect) is free text, no format
+  constraint. Set/edited only via `admin.html` Customers ▸ Accounts ▸ Edit
+  Account modal (`app.js` `Users.setProfile`); no other page reads or writes
+  it. Covered by the existing `admins manage tenant profiles` ALL policy
+  (F58) — no RLS change needed.
 
 ### 4.10 `weekly_shipment`
 

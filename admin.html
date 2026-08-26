@@ -574,6 +574,55 @@
   </div>
 </div>
 
+<!-- Edit Account Modal (name + phone, 2026-08-26) — replaces the old
+     prompt()-based rename on the Accounts tab's Edit button. Only two
+     fields; email and is_admin are deliberately absent — see the comment
+     on the .acct-edit wiring in the script block below. -->
+<div id="edit-account-overlay" style="display:none;position:fixed;inset:0;z-index:200;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:32px;width:100%;max-width:420px;margin:16px;position:relative;box-sizing:border-box">
+    <button id="edit-account-close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 6px;font-size:1.1rem" id="edit-account-title">Edit Account</h2>
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.6">
+      Email cannot be changed here — it is their login address. To move it, re-invite them.
+    </p>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label for="edit-account-name" style="display:block;font-size:0.78rem;font-weight:600;
+                       color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
+          FULL NAME
+        </label>
+        <input id="edit-account-name" type="text" placeholder="Jane Smith"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+      <div>
+        <label for="edit-account-phone" style="display:block;font-size:0.78rem;font-weight:600;
+                       color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
+          PHONE <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— optional</span>
+        </label>
+        <input id="edit-account-phone" type="tel" placeholder="(973) 555-0142"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="edit-account-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="edit-account-save-btn">Save</button>
+    </div>
+
+    <div id="edit-account-result" style="display:none;margin-top:16px;padding:10px 14px;
+         border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
+  </div>
+</div>
+
 <!-- Order Builder Modal (F101/F102) — shared shell for the Lunar and PRH
      order-cycle selector, populated per-distributor by openOrderBuilder() -->
 <div id="order-builder-overlay" style="display:none;position:fixed;inset:0;z-index:200;
@@ -3188,6 +3237,73 @@
     }
   });
 
+  // ── Edit Account Modal (name + phone, 2026-08-26) ─────────
+  // Opened from the Accounts tab's Edit button (wireAccountRowActions,
+  // below). Declared with `function` so it hoists — the .acct-edit listener
+  // that calls it is wired later in the file, same as openInviteModal above.
+  const editAcctOverlay  = document.getElementById('edit-account-overlay');
+  const editAcctNameEl   = document.getElementById('edit-account-name');
+  const editAcctPhoneEl  = document.getElementById('edit-account-phone');
+  const editAcctResult   = document.getElementById('edit-account-result');
+  const editAcctSaveBtn  = document.getElementById('edit-account-save-btn');
+  let editAcctTarget = null; // { id }
+
+  function openEditAccountModal(id, name, phone) {
+    editAcctTarget = { id };
+    editAcctNameEl.value  = name  || '';
+    editAcctPhoneEl.value = phone || '';
+    editAcctResult.style.display = 'none';
+    editAcctSaveBtn.disabled    = false;
+    editAcctSaveBtn.textContent = 'Save';
+    editAcctOverlay.style.display = 'flex';
+    setTimeout(() => editAcctNameEl.focus(), 50);
+  }
+
+  function closeEditAccountModal() {
+    editAcctOverlay.style.display = 'none';
+    editAcctTarget = null;
+  }
+
+  document.getElementById('edit-account-close').addEventListener('click', closeEditAccountModal);
+  document.getElementById('edit-account-cancel-btn').addEventListener('click', closeEditAccountModal);
+  editAcctOverlay.addEventListener('click', e => { if (e.target === editAcctOverlay) closeEditAccountModal(); });
+
+  // Enter key submits — matches the Invite modal convention above.
+  [editAcctNameEl, editAcctPhoneEl].forEach(el =>
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') editAcctSaveBtn.click(); })
+  );
+
+  editAcctSaveBtn.addEventListener('click', async () => {
+    if (!editAcctTarget) return;
+    const name  = editAcctNameEl.value.trim();
+    const phone = editAcctPhoneEl.value.trim();
+    if (!name) { editAcctNameEl.focus(); return; }
+
+    editAcctSaveBtn.disabled    = true;
+    editAcctSaveBtn.textContent = 'Saving…';
+    editAcctResult.style.display = 'none';
+
+    const { error } = await Users.setProfile(editAcctTarget.id, { fullName: name, phone });
+    if (error) {
+      editAcctResult.style.display    = 'block';
+      editAcctResult.style.background = 'rgba(230,57,70,0.12)';
+      editAcctResult.style.border     = '1px solid rgba(230,57,70,0.3)';
+      editAcctResult.style.color      = 'var(--accent)';
+      editAcctResult.textContent      = `Could not save: ${error.message}`;
+      editAcctSaveBtn.disabled    = false;
+      editAcctSaveBtn.textContent = 'Save';
+      return;
+    }
+    toast(`${name} updated`);
+    closeEditAccountModal();
+    await ensureAccounts({ force: true });
+    renderAccounts();
+    // profileMap feeds By Customer, This Week and the bagging list, so a
+    // rename has to reach them too or the same person shows two names on
+    // two tabs (same reasoning the old rename handler carried).
+    await loadData();
+  });
+
   // ── Maintenance Mode Toggle ───────────────────────────────
   const maintToggle = document.getElementById('maint-toggle');
   const maintStatus = document.getElementById('maint-status');
@@ -3615,7 +3731,7 @@
     // fetchAllPreorders() above (F82/F113).
     const { data, error } = await fetchPaged('user_profiles', () => db
       .from('user_profiles')
-      .select('id, full_name, email, status, is_paper, is_admin, created_at, created_by_admin'));
+      .select('id, full_name, email, phone, status, is_paper, is_admin, created_at, created_by_admin'));
     if (error) {
       document.getElementById('accounts-list').innerHTML =
         `<div class="alert alert-error">Failed to load accounts: ${escapeHtml(error.message)}</div>`;
@@ -3733,7 +3849,8 @@
     if (q) {
       rows = rows.filter(u =>
         (u.full_name || '').toLowerCase().includes(q) ||
-        (u.email     || '').toLowerCase().includes(q));
+        (u.email     || '').toLowerCase().includes(q) ||
+        (u.phone     || '').toLowerCase().includes(q));
     }
 
     const { key, dir } = accountsSort;
@@ -3791,11 +3908,12 @@
     const caret = (k) => accountsSort.key === k ? (accountsSort.dir === 1 ? ' ▲' : ' ▼') : '';
 
     container.innerHTML = `
-      <table class="list-table" id="accounts-table" style="min-width:640px">
+      <table class="list-table" id="accounts-table" style="min-width:760px">
         <thead>
           <tr>
             <th><button class="acct-sort" data-key="full_name">Name${caret('full_name')}</button></th>
             <th><button class="acct-sort" data-key="email">Email${caret('email')}</button></th>
+            <th>Phone</th>
             <th>Status</th>
             <th><button class="acct-sort" data-key="created_at">Created${caret('created_at')}</button></th>
             <th><button class="acct-sort" data-key="last_seen">Last seen${caret('last_seen')}</button></th>
@@ -3815,6 +3933,7 @@
               <td style="color:var(--text-secondary);font-size:0.85rem">${
                 isPaperEmail ? '<span style="color:var(--text-muted)">— no email —</span>' : escapeHtml(u.email || '—')
               }</td>
+              <td style="color:var(--text-secondary);font-size:0.85rem">${escapeHtml(u.phone || '—')}</td>
               <td>
                 <span style="font-size:0.72rem;font-weight:700;letter-spacing:0.04em;
                              text-transform:uppercase;color:${st.color}">${st.label}</span>
@@ -3846,8 +3965,8 @@
                     <button class="btn btn-ghost btn-sm acct-pause" data-id="${u.id}" data-name="${name}"
                             style="color:var(--text-muted)" title="Pause — blocks reserving until resumed">Pause</button>
                   ` : ''}
-                  <button class="btn btn-ghost btn-sm acct-edit" data-id="${u.id}" data-name="${name}"
-                          style="color:var(--text-muted)" title="Edit name">Edit</button>
+                  <button class="btn btn-ghost btn-sm acct-edit" data-id="${u.id}" data-name="${name}" data-phone="${escapeHtml(u.phone || '')}"
+                          style="color:var(--text-muted)" title="Edit name and phone">Edit</button>
                   <button class="btn btn-secondary btn-sm acct-manage" data-id="${u.id}" data-name="${name}"
                           title="Open this customer's pull list">Manage</button>
                   ${u.is_paper ? `
@@ -3873,9 +3992,11 @@
       });
     });
 
-    // Edit — ONE field, deliberately (F126 plan § 3.4).
+    // Edit — TWO fields (F126 plan § 3.4 originally scoped ONE; extended
+    // 2026-08-26 to add `phone`, Rick's request — no finding ID).
     //
     //   full_name  editable
+    //   phone      editable, free text, no format constraint (added 2026-08-26)
     //   email      NOT editable: it is a denormalized copy of auth.users.email
     //              (F25, no sync trigger) and auth.users.email is the LOGIN
     //              IDENTITY. Writing the profile copy alone would look like it
@@ -3889,27 +4010,9 @@
     //              task. A greyed-out control would invite a question it
     //              answers nowhere.
     container.querySelectorAll('.acct-edit').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const { id, name } = btn.dataset;
-        const next = prompt(`Edit name for this customer.\n\nEmail cannot be changed here — it is their login address. To move it, re-invite them.`, name);
-        if (next === null) return;                 // cancelled
-        const trimmed = next.trim();
-        if (!trimmed || trimmed === name) return;  // empty or unchanged
-
-        btn.disabled = true; btn.textContent = 'Saving…';
-        const { error } = await Users.setName(id, trimmed);
-        if (error) {
-          toast(`Could not rename: ${error.message}`, 'error');
-          btn.disabled = false; btn.textContent = 'Edit';
-          return;
-        }
-        toast(`Renamed to ${trimmed}`);
-        await ensureAccounts({ force: true });
-        renderAccounts();
-        // profileMap feeds By Customer, This Week and the bagging list, so a
-        // rename has to reach them too or the same person shows two names on
-        // two tabs.
-        await loadData();
+      btn.addEventListener('click', () => {
+        const { id, name, phone } = btn.dataset;
+        openEditAccountModal(id, name, phone);
       });
     });
 
