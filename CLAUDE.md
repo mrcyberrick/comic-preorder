@@ -225,7 +225,12 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F143**. **F142 filed 2026-08-24 and fully
+**Next free finding ID:** **F144**. **F143 filed 2026-08-26** (proposal — Order
+Follow-Up's resolve control cannot record a supplier rejection, so a Lunar
+rejection found mid-cycle either corrects the ledger in another tab or silently
+leaves it wrong; order-invoice compare-and-report considered and **declined** in
+the same session — see table below and `docs/technical-reference.md`
+§ 13). **F142 filed 2026-08-24 and fully
 RESOLVED on both environments 2026-08-26** (Order Builder's own Held Back
 panel never checked the ledger for a rejection, so a title an admin recorded
 as rejected kept reappearing as "Backordered... never ordered" every time the
@@ -264,6 +269,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F143 | **Low–Medium** — Order Follow-Up's resolve control offers only Received / Didn't arrive / Damaged, so a **supplier rejection found mid-cycle** cannot be recorded there. Marking it "Didn't arrive" clears the panel but leaves the ledger claiming the copies are on order — wrong remainder next cycle, and the title is never re-offered. Ledger→panel already works (F134 Part 1); it is panel→ledger that is missing | **Proposal, filed for future consideration — not scheduled.** Fix = a fourth option, *Rejected by supplier*, writing the negative adjustment (F117); no schema change, everything downstream is existing machinery. **Order-invoice compare-and-report was considered and DECLINED** (Rick: "more cumbersome than helpful") — do not re-propose without reading § 13 F143 |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
