@@ -225,12 +225,15 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F143**. **F142 filed 2026-08-24** (Order Builder's
-own Held Back panel never checks the ledger for a rejection, so a title an
-admin just recorded as rejected keeps reappearing as "Backordered... never
-ordered" every time the modal reopens — found live on production during
-Rick's first real Order Builder reconciliation; see table below and
-`docs/technical-reference.md` § 13). **F141 filed 2026-08-24** (desktop CLS
+**Next free finding ID:** **F143**. **F142 filed 2026-08-24 and fully
+RESOLVED on both environments 2026-08-26** (Order Builder's own Held Back
+panel never checked the ledger for a rejection, so a title an admin recorded
+as rejected kept reappearing as "Backordered... never ordered" every time the
+modal reopened — found live on production during Rick's first real Order
+Builder reconciliation; staging fix `9e41e52`, promoted to production via
+**PR #138** `ebcdbee1`, write-smoke and an F142-specific real-browser check
+both green on production 2026-08-26 — see `docs/technical-reference.md`
+§ 13). **F141 filed 2026-08-24** (desktop CLS
 0.636 — the catalog grid fills after first paint with no reserved space;
 found re-measuring Lighthouse against *authenticated* staging after the
 performance sweep, which itself consumed no ID — see table below and
@@ -261,7 +264,6 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F142 | **Low/Medium** — Order Builder's own Held Back list mislabels a title "Backordered... never ordered" forever after an admin records it as rejected, because `classifyForExport()` never checks `ledgerRejected()` the way the dashboard's Order Follow-Up panel does. Found live on production 2026-08-24 reconciling a real rejected variant | Owner: `docs/technical-reference.md` § 13 F142. **RESOLVED on staging 2026-08-24** (`9e41e52`) — new collapsed "Rejected by distributor" bucket, verified via real-browser check (no Playwright coverage on this panel). **Not yet promoted to production.** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
