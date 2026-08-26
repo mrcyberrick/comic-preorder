@@ -12,7 +12,34 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** **Single combined catalog print** — fully RESOLVED both environments
+**Last completed work:** **Customer phone number** — RESOLVED on staging 2026-08-26
+(`627d411`, `feature/customer-phone-number` → `staging` ff-only), **not yet promoted to
+production**. Rick's request: an editable phone field on customer accounts. New
+`user_profiles.phone` column (nullable text, no format constraint;
+`docs/sql/2026-08-26-user-profiles-phone.sql`, staging post-check confirmed 24 total rows / 0
+with_phone — expected immediately after an `ADD COLUMN` with no default). No RLS change needed —
+covered by the existing `admins manage tenant profiles` ALL policy (F58). Client side:
+`admin.html` Customers ▸ Accounts gained a Phone column plus a new **Edit Account** modal (Name +
+Phone, styled like the existing Invite Customer modal) that replaces the old
+`prompt()`-based rename-only Edit button; `app.js` `Users.setName` → `Users.setProfile(userId, {
+fullName, phone })`, one combined write. **No finding ID consumed** (feature build, not a
+defect).
+
+**The Edit-button UI change broke an existing spec, and it was caught before merge, not after.**
+`17-admin-modes.spec.ts` V6 asserted the old flow via a Playwright `dialog` event handler
+(`adminPage.once('dialog', d => d.accept(after))`) — against the new modal, no native dialog ever
+fires, so the handler would have silently no-op'd and the assertion would have failed against a
+name that never changed. V6 was rewritten to drive the modal directly (fill `#edit-account-name`
+/ `#edit-account-phone`, click `#edit-account-save-btn`) and extended to assert the phone value
+lands on the row; V7's title and assertions were updated from "name only" to "name + phone" to
+match the modal's two fields, while the `is_admin`-absent assertions (Rick 2026-08-09, still not
+here) are unchanged. A negative control (temporarily asserting a value that couldn't be present)
+confirmed the rewritten V6 assertion genuinely fails, not vacuously passes — same discipline the
+F142/single-catalog-print sessions record as necessary whenever a test is edited to match its own
+code. Full gate green: 269 unit + 139 Playwright, 0 failures, ~21 min, run against the deployed
+staging bytes post-push (not a stale pre-push baseline).
+
+Prior work (2026-08-24): **Single combined catalog print** — fully RESOLVED both environments
 2026-08-24 (staging `56c97c9`/`c54cf88`/`d0a5f9d`, production **PR #137** `8ae9b2d`). Ordering ▸
 Paper Orders had two per-distributor catalog prints; it now has one **Print Catalog** button
 emitting a single banded document covering both distributors. Same rows, same filters, same column
