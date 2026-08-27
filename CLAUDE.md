@@ -12,7 +12,28 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** **Customer phone number** — fully RESOLVED both environments 2026-08-26
+**Last completed work:** **Print "View Online" CTA** — fully RESOLVED both environments 2026-08-27
+(staging `55b9ba8`, production **PR #140** `334b5ad`). Rick's request: paper that lands in a
+customer's hands should carry a path back to an account — a short CTA reading "View Online:
+rjbookstop.pulllist.app". Scoped with Rick to exactly two reports: **Print Catalog (Paper
+Orders)** — added to the page-1 header and to the `@page` bottom-right footer margin box so it
+repeats on every printed page — and **Print Bagging List (This Week)** — added as a second line
+under the existing store name/phone/website line in the per-customer `bagging-print-header`.
+`mylist.html`'s personal print and `arrivals.html`'s two print buttons were explicitly asked
+about and confirmed OUT of scope. `rjbookstop.pulllist.app` verified live before any code was
+written (curl 200, serves the tenant front door for the production founding-tenant slug
+`rjbookstop`) despite `apex-landing-tenant-subdomains.md`'s 2026-07-20 note deprioritizing
+dedicated subdomain provisioning — the wildcard `*.pulllist.app` front-door split already covers
+it, no dedicated work needed. **A real bug was caught pre-deploy**: the first draft used a CSS
+`\00b7` escape inside the JS template literal that builds the print HTML — an illegal legacy-octal
+escape inside a JS template string (confirmed via `node -e`; would have been a SyntaxError
+breaking all of `admin.html`'s inline script), replaced with a literal `·` character. Full gate
+green on both promotions: 269 unit + 139 Playwright, 0 failures, run against deployed bytes
+post-push. Prod verified after deploy: `pulllist.app/admin.html` serves the marker string 3× and
+`config.js` still carries the prod Supabase ref. **No finding ID consumed** (feature build, not a
+defect).
+
+Prior work (2026-08-26): **Customer phone number** — fully RESOLVED both environments 2026-08-26
 (staging `627d411`/`00f2594`/`4185e5a`, production **PR #139**, merged and deployed same day).
 Rick's request: an editable phone field on customer accounts. New `user_profiles.phone` column
 (nullable text, no format constraint; `docs/sql/2026-08-26-user-profiles-phone.sql`, staging
