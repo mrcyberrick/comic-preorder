@@ -12,13 +12,16 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Last completed work:** **Customer phone number** — RESOLVED on staging 2026-08-26
-(`627d411`, `feature/customer-phone-number` → `staging` ff-only), **not yet promoted to
-production**. Rick's request: an editable phone field on customer accounts. New
-`user_profiles.phone` column (nullable text, no format constraint;
-`docs/sql/2026-08-26-user-profiles-phone.sql`, staging post-check confirmed 24 total rows / 0
-with_phone — expected immediately after an `ADD COLUMN` with no default). No RLS change needed —
-covered by the existing `admins manage tenant profiles` ALL policy (F58). Client side:
+**Last completed work:** **Customer phone number** — fully RESOLVED both environments 2026-08-26
+(staging `627d411`/`00f2594`/`4185e5a`, production **PR #139**, merged and deployed same day).
+Rick's request: an editable phone field on customer accounts. New `user_profiles.phone` column
+(nullable text, no format constraint; `docs/sql/2026-08-26-user-profiles-phone.sql`, staging
+post-check 24 total rows / 0 with_phone, production post-check 30 total / 0 with_phone — both
+match the migration's expected POST-CHECK exactly, both applied by Rick before their respective
+client-code deploys). No RLS change needed — covered by the existing `admins manage tenant
+profiles` ALL policy (F58). Prod verified after deploy: `admin.html`/`app.js` serving the new
+bytes (`edit-account-overlay`, `setProfile`) directly off `pulllist.app`, and Rick's post-deploy
+write-smoke came back green. Client side:
 `admin.html` Customers ▸ Accounts gained a Phone column plus a new **Edit Account** modal (Name +
 Phone, styled like the existing Invite Customer modal) that replaces the old
 `prompt()`-based rename-only Edit button; `app.js` `Users.setName` → `Users.setProfile(userId, {
