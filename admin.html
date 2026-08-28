@@ -1045,7 +1045,7 @@
       const c = p.catalog;
       const foc = c.foc_date;
       if (!map.has(foc)) {
-        map.set(foc, { titles: new Set(), copies: 0, ordered: new Set(), withdrawn: new Set() });
+        map.set(foc, { titles: new Set(), copies: 0, ordered: new Set(), withdrawn: new Set(), restricted: new Set() });
       }
       const entry = map.get(foc);
       entry.titles.add(c.id);
@@ -1062,6 +1062,12 @@
         entry.withdrawn.add(c.id);
       } else if (ledgerNetQty(c.distributor, exportCode(c, c.distributor)) > 0) {
         entry.ordered.add(c.id);
+      } else if (c.order_requirement) {
+        // F144 — only counted among titles this cycle would actually EXPORT
+        // (not withdrawn, not already ordered elsewhere): the point is to
+        // show the risk before submission, not to flag a title that isn't
+        // going out in this file at all.
+        entry.restricted.add(c.id);
       }
     });
     return [...map.entries()]
@@ -1071,6 +1077,7 @@
         copies:         v.copies,
         orderedCount:   v.ordered.size,
         withdrawnCount: v.withdrawn.size,
+        restrictedCount: v.restricted.size,
       }))
       .sort((a, b) => a.foc.localeCompare(b.foc));
   }
@@ -1200,7 +1207,7 @@
       catalog (
         id, distributor, item_code, upc, isbn, title, series_name, publisher,
         issue_number, format, price_usd, foc_date, on_sale_date,
-        writer, artist, cover_url, variant_type, catalog_month,
+        writer, artist, cover_url, variant_type, order_requirement, catalog_month,
         withdrawn_at, withdrawn_last_seen_month
       )
     `;
@@ -1748,11 +1755,37 @@
     const rowHtml = (entries, stateKey) => entries.map(({ catalog: c, qty, customers, rows }) => {
       const s = STATES[stateKey];
       const ids = (rows || []).map(p => p.id).join(',');
+      // F143 — a fourth option, alongside the three F134 buttons, for a
+      // rejection discovered from THIS panel rather than corrected in a
+      // different tab. It does NOT share wireArrivalResolveActions()'s
+      // code path: it writes order_submissions (the ledger), not
+      // arrival_outcome (§ 13 F143 — they are different statements, and
+      // writing both would let them disagree).
+      //
+      // Rick, 2026-08-27 (§ 5.1 PAUSE): only offered when there is an
+      // actual order to negate — ledgerNetQty > 0. A title with no ledger
+      // rows has nothing to reject; "Didn't arrive" stays the honest
+      // control there. Measured live the same day: 0 of production's
+      // Never Arrived rows currently have net === 0 (the panel itself was
+      // empty), so this is the recommended v1 shipped as-is, not a
+      // guess — see this session's own status update for the count.
+      const rejectCode   = exportCode(c, c.distributor);
+      const rejectNetQty = ledgerNetQty(c.distributor, rejectCode);
+      const rejectBtn = (stateKey === 'neverArrived' && rejectNetQty > 0) ? `
+          <button type="button" class="btn btn-ghost btn-sm arrival-reject-btn"
+                  data-distributor="${escapeHtml(c.distributor || '')}"
+                  data-code="${escapeHtml(rejectCode)}"
+                  data-item-code="${escapeHtml(c.item_code || '')}"
+                  data-title="${escapeHtml(c.title || '')}"
+                  data-foc="${escapeHtml(c.foc_date || '')}"
+                  data-catalog-month="${escapeHtml(c.catalog_month || '')}"
+                  style="font-size:0.68rem;padding:3px 10px">Rejected by supplier</button>` : '';
       const resolveRow = stateKey === 'neverArrived' ? `
         <div class="arrival-resolve-actions" data-ids="${ids}" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="arrived" style="font-size:0.68rem;padding:3px 10px">Received</button>
           <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="not_arrived" style="font-size:0.68rem;padding:3px 10px">Didn't arrive</button>
           <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="damaged" style="font-size:0.68rem;padding:3px 10px">Damaged</button>
+          ${rejectBtn}
         </div>` : '';
       return `
         <div class="backorder-risk-row" data-state="${stateKey}" style="padding:10px 12px;
@@ -1801,6 +1834,7 @@
     `;
 
     wireArrivalResolveActions(panel);
+    wireArrivalRejectActions(panel);
   }
 
   // F134 Part 2b — writes arrival_outcome for every preorder row a Never
@@ -1836,6 +1870,69 @@
               : "Marked didn't arrive");
           await loadData();
         });
+      });
+    });
+  }
+
+  // F143 — records a supplier rejection directly from Order Follow-Up,
+  // writing the negative adjustment that nets the code to 0 (§ 13 F143).
+  // Payload shape copied from the Mark Ordered insert (admin.html, Mark
+  // Ordered modal save handler) so the two writers can never drift apart.
+  // Deliberately separate from wireArrivalResolveActions() above: this
+  // writes order_submissions (the ledger), never arrival_outcome — leaving
+  // it 'unknown' is the point (§ 13 F143's design decision). Everything
+  // downstream is existing machinery: net ≤ 0 → ledgerRejected() → the row
+  // clears through F134 Part 1's exit with no further code needed here.
+  function wireArrivalRejectActions(panel) {
+    panel.querySelectorAll('.arrival-reject-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const distributor = btn.dataset.distributor;
+        const code        = btn.dataset.code;
+        // Recomputed at click time, not read off a data-attribute captured
+        // at render time — the ledger may have changed since (another
+        // admin, or a concurrent action in this same session), and a stale
+        // net quantity would write a wrong adjustment.
+        const netQty = ledgerNetQty(distributor, code);
+        if (netQty <= 0) {
+          toast('Nothing to reject — the order ledger already changed. Refreshing…', 'error');
+          await loadOrderLedger();
+          renderByDistributor();
+          renderBackorderRiskPanel();
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Recording…';
+
+        const { error } = await db.from('order_submissions').insert({
+          tenant_id:     TenantContext.current().id,
+          distributor,
+          order_code:    code,
+          item_code:     btn.dataset.itemCode || null,
+          title:         btn.dataset.title || null,
+          quantity:      -netQty,
+          order_type:    'adjustment',
+          foc_date:      btn.dataset.foc || null,
+          catalog_month: btn.dataset.catalogMonth || currentCatalogMonth,
+          submitted_on:  DateUtils.todayLocal(),
+        });
+
+        if (error) {
+          toast(`Failed to record rejection: ${error.message}`, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Rejected by supplier';
+          return;
+        }
+
+        // Narrower reload than wireArrivalResolveActions()'s loadData() —
+        // only the ledger changed, so this is the same trio ob-record-save
+        // uses (§ 5.2). Confirm the row actually disappears: a re-render
+        // reading a stale orderLedger would leave it on screen and look
+        // like the write failed.
+        await loadOrderLedger();
+        renderByDistributor();
+        renderBackorderRiskPanel();
+        toast('Recorded as rejected — order corrected', 'success');
       });
     });
   }
@@ -2347,6 +2444,7 @@
           Format:      c.format,
           IssueNumber: c.issue_number,
           VariantType: c.variant_type,
+          OrderRequirement: c.order_requirement,
           TotalQty:    0,
           UnitPrice:   c.price_usd,
           TotalValue:  0,
@@ -2459,6 +2557,10 @@
                    style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
               <input type="checkbox" class="ob-cycle-cb" data-foc="${d.foc}" ${checked}>
               ${formatDate(d.foc)} — ${d.titleCount} title${d.titleCount === 1 ? '' : 's'}, ${d.copies} cop${d.copies === 1 ? 'y' : 'ies'}
+              ${/* F144 — restricted titles are still INCLUDED (unlike excl below), so this is its
+                   own clause rather than folded into the excluded-count span: it flags risk in
+                   what you're about to export, before submission, not something left out. */''}
+              ${d.restrictedCount ? `<span style="font-size:0.72rem;color:var(--warning)">· ${d.restrictedCount} restricted</span>` : ''}
               ${excl ? `<span style="font-size:0.72rem;color:var(--text-muted)">· ${excl}</span>` : ''}
               ${excl && exportable === 0 ? '<span style="font-size:0.72rem;color:var(--text-muted)">· nothing to export</span>' : ''}
               ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed — ordering now backorders, availability not guaranteed</span>' : ''}
@@ -2570,7 +2672,7 @@
       const over = priorQty > totalQty;
       return `
         <div style="border:1px solid ${over ? 'rgba(232,50,28,0.5)' : 'var(--border)'};border-radius:var(--radius);padding:10px 12px">
-          <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')}
+          <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')} ${restrictionBadge(c.order_requirement)}
             <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.75rem"> ${escapeHtml(c.item_code || '')}</span>
           </div>
           <div style="font-size:0.75rem;color:var(--text-muted);margin:4px 0">Prior: ${priorLines}</div>
@@ -2649,7 +2751,7 @@
       if (!entries.length) return '';
       const grouped = groupByExportCode(entries);
       const items = grouped.map(({ catalog: c, qty }) =>
-        `<li>${escapeHtml(c.title || '')} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('');
+        `<li>${escapeHtml(c.title || '')} ${restrictionBadge(c.order_requirement)} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('');
       const list = `<ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">${items}</ul>`;
       const heading = `${label} (${grouped.length})`;
       return opts.collapsed
@@ -2755,6 +2857,7 @@
           Distributor: c.distributor, ItemCode: c.item_code, UPC: c.upc, ISBN: c.isbn,
           Title: c.title, Series: c.series_name, Publisher: c.publisher, Format: c.format,
           IssueNumber: c.issue_number, VariantType: c.variant_type,
+          OrderRequirement: c.order_requirement,
           TotalQty: ov.qty, UnitPrice: c.price_usd,
           TotalValue: ((parseFloat(c.price_usd) || 0) * ov.qty).toFixed(2),
           FOCDate: c.foc_date, OnSaleDate: c.on_sale_date,
@@ -2804,6 +2907,23 @@
           `Use "Record submitted order" when you're back from the supplier.`);
   });
 
+  // F144 — a restricted-variant ratio (catalog.order_requirement, e.g.
+  // PRH '1:25') predicts a rejection; badge it wherever the operator
+  // decides what to order. Deliberately its OWN scoped markup, not app.js's
+  // customer-facing .restriction-badge class — that one is absolutely
+  // positioned and sized for a catalog cover, and style.css is shared
+  // across every page, so restyling it here risks the customer-facing
+  // element. Read the column; DO NOT parse the title — the import already
+  // resolves ratios (PRH especially) that appear nowhere in the title
+  // string (§ 13 F144's own trap).
+  function restrictionBadge(orderRequirement) {
+    if (!orderRequirement) return '';
+    return `<span class="ob-restriction-badge" title="Distributor allocation ratio ${escapeHtml(orderRequirement)} — may be reduced or rejected."
+      style="display:inline-block;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+             padding:1px 6px;border-radius:2px;background:rgba(245,158,11,0.16);color:var(--warning);
+             white-space:nowrap;cursor:help">⚠ ${escapeHtml(orderRequirement)}</span>`;
+  }
+
   // ── Step 2 — record what the supplier actually accepted ────────────────
   // Built from buildExportRows(), the SAME function that produced the file, so
   // the list you tick and the file you submitted cannot drift apart. Nothing
@@ -2829,6 +2949,47 @@
       return;
     }
 
+    // F144 — restricted titles (a distributor allocation ratio, e.g. PRH
+    // '1:25') are the ones most likely to come back rejected, so they are
+    // grouped first in this list rather than left scattered alphabetically
+    // by item code (Rick, 2026-08-26). Ordering-first is the v1 shape the
+    // plan calls out as acceptable — a collapsible group fights the
+    // recordSelections keying for no real gain here, since every row in
+    // both groups still needs its own checkbox/qty control.
+    const restrictedRows = rows.filter(r => r.OrderRequirement);
+    const normalRows     = rows.filter(r => !r.OrderRequirement);
+
+    const recRowHtml = (r) => {
+      const code = exportCodeForRow(r, distributor);
+      const sel  = recordSelections[code];
+      return `
+      <div class="ob-rec-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+           border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <input type="checkbox" class="ob-rec-cb" data-code="${escapeHtml(code)}"
+               ${sel.include ? 'checked' : ''} aria-label="Ordered: ${escapeHtml(r.Title || code)}">
+        <span style="flex:1;min-width:180px;font-size:0.85rem">${escapeHtml(r.Title || '—')} ${restrictionBadge(r.OrderRequirement)}</span>
+        <span style="font-family:monospace;font-size:0.72rem;color:var(--text-muted)">${escapeHtml(code)}</span>
+        <input type="number" min="0" class="ob-rec-qty" data-code="${escapeHtml(code)}"
+               value="${sel.qty}" ${sel.include ? '' : 'disabled'}
+               aria-label="Quantity ordered: ${escapeHtml(r.Title || code)}"
+               style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
+                      color:var(--text-primary);padding:4px 6px;border-radius:var(--radius);font-size:0.82rem">
+      </div>`;
+    };
+
+    // Honesty asymmetry (§ 13 F144): PRH rejections are knowable at THIS
+    // step, so the copy invites an action. Lunar's are only known after
+    // processing, from the order invoice the weekly import never sees — a
+    // badge there is a candidate for suspicion, never an outcome, and the
+    // copy must not imply otherwise (Lunar's two-phase rule is unchanged:
+    // record the full submitted order, untick nothing here).
+    const restrictedNote = distributor === 'PRH'
+      ? `${restrictedRows.length} title${restrictedRows.length===1?'':'s'} carr${restrictedRows.length===1?'ies':'y'} a distributor
+         allocation ratio — the ones most likely to come back rejected. Check these first.`
+      : `${restrictedRows.length} title${restrictedRows.length===1?'':'s'} carr${restrictedRows.length===1?'ies':'y'} a distributor
+         allocation ratio. Advisory only — Lunar rejections are only known after processing, so
+         record the full order as submitted; untick nothing here on the strength of this badge alone.`;
+
     obStepRec.innerHTML = `
       <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 6px;line-height:1.5">
         These are the ${rows.length} title${rows.length===1?'':'s'} in the file you submitted to
@@ -2838,25 +2999,16 @@
       <p style="color:var(--text-muted);font-size:0.76rem;margin:0 0 16px;line-height:1.5">
         Adjust a quantity if they filled less than you asked for.
       </p>
-      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
-        ${rows.map(r => {
-          const code = exportCodeForRow(r, distributor);
-          const sel  = recordSelections[code];
-          return `
-          <div class="ob-rec-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;
-               border-bottom:1px solid var(--border);flex-wrap:wrap">
-            <input type="checkbox" class="ob-rec-cb" data-code="${escapeHtml(code)}"
-                   ${sel.include ? 'checked' : ''} aria-label="Ordered: ${escapeHtml(r.Title || code)}">
-            <span style="flex:1;min-width:180px;font-size:0.85rem">${escapeHtml(r.Title || '—')}</span>
-            <span style="font-family:monospace;font-size:0.72rem;color:var(--text-muted)">${escapeHtml(code)}</span>
-            <input type="number" min="0" class="ob-rec-qty" data-code="${escapeHtml(code)}"
-                   value="${sel.qty}" ${sel.include ? '' : 'disabled'}
-                   aria-label="Quantity ordered: ${escapeHtml(r.Title || code)}"
-                   style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
-                          color:var(--text-primary);padding:4px 6px;border-radius:var(--radius);font-size:0.82rem">
-          </div>`;
-        }).join('')}
-      </div>`;
+      ${restrictedRows.length ? `
+        <div style="font-size:0.78rem;color:var(--warning);margin:0 0 6px;line-height:1.5">⚠ ${restrictedNote}</div>
+        <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:${normalRows.length ? '12' : '16'}px">
+          ${restrictedRows.map(recRowHtml).join('')}
+        </div>` : ''}
+      ${normalRows.length ? `
+        ${restrictedRows.length ? `<div style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px">Other titles</div>` : ''}
+        <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          ${normalRows.map(recRowHtml).join('')}
+        </div>` : ''}`;
 
     obStepRec.querySelectorAll('.ob-rec-cb').forEach(cb => {
       cb.addEventListener('change', () => {
