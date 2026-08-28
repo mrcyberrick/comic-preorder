@@ -1755,11 +1755,37 @@
     const rowHtml = (entries, stateKey) => entries.map(({ catalog: c, qty, customers, rows }) => {
       const s = STATES[stateKey];
       const ids = (rows || []).map(p => p.id).join(',');
+      // F143 — a fourth option, alongside the three F134 buttons, for a
+      // rejection discovered from THIS panel rather than corrected in a
+      // different tab. It does NOT share wireArrivalResolveActions()'s
+      // code path: it writes order_submissions (the ledger), not
+      // arrival_outcome (§ 13 F143 — they are different statements, and
+      // writing both would let them disagree).
+      //
+      // Rick, 2026-08-27 (§ 5.1 PAUSE): only offered when there is an
+      // actual order to negate — ledgerNetQty > 0. A title with no ledger
+      // rows has nothing to reject; "Didn't arrive" stays the honest
+      // control there. Measured live the same day: 0 of production's
+      // Never Arrived rows currently have net === 0 (the panel itself was
+      // empty), so this is the recommended v1 shipped as-is, not a
+      // guess — see this session's own status update for the count.
+      const rejectCode   = exportCode(c, c.distributor);
+      const rejectNetQty = ledgerNetQty(c.distributor, rejectCode);
+      const rejectBtn = (stateKey === 'neverArrived' && rejectNetQty > 0) ? `
+          <button type="button" class="btn btn-ghost btn-sm arrival-reject-btn"
+                  data-distributor="${escapeHtml(c.distributor || '')}"
+                  data-code="${escapeHtml(rejectCode)}"
+                  data-item-code="${escapeHtml(c.item_code || '')}"
+                  data-title="${escapeHtml(c.title || '')}"
+                  data-foc="${escapeHtml(c.foc_date || '')}"
+                  data-catalog-month="${escapeHtml(c.catalog_month || '')}"
+                  style="font-size:0.68rem;padding:3px 10px">Rejected by supplier</button>` : '';
       const resolveRow = stateKey === 'neverArrived' ? `
         <div class="arrival-resolve-actions" data-ids="${ids}" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="arrived" style="font-size:0.68rem;padding:3px 10px">Received</button>
           <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="not_arrived" style="font-size:0.68rem;padding:3px 10px">Didn't arrive</button>
           <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="damaged" style="font-size:0.68rem;padding:3px 10px">Damaged</button>
+          ${rejectBtn}
         </div>` : '';
       return `
         <div class="backorder-risk-row" data-state="${stateKey}" style="padding:10px 12px;
@@ -1808,6 +1834,7 @@
     `;
 
     wireArrivalResolveActions(panel);
+    wireArrivalRejectActions(panel);
   }
 
   // F134 Part 2b — writes arrival_outcome for every preorder row a Never
@@ -1843,6 +1870,69 @@
               : "Marked didn't arrive");
           await loadData();
         });
+      });
+    });
+  }
+
+  // F143 — records a supplier rejection directly from Order Follow-Up,
+  // writing the negative adjustment that nets the code to 0 (§ 13 F143).
+  // Payload shape copied from the Mark Ordered insert (admin.html, Mark
+  // Ordered modal save handler) so the two writers can never drift apart.
+  // Deliberately separate from wireArrivalResolveActions() above: this
+  // writes order_submissions (the ledger), never arrival_outcome — leaving
+  // it 'unknown' is the point (§ 13 F143's design decision). Everything
+  // downstream is existing machinery: net ≤ 0 → ledgerRejected() → the row
+  // clears through F134 Part 1's exit with no further code needed here.
+  function wireArrivalRejectActions(panel) {
+    panel.querySelectorAll('.arrival-reject-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const distributor = btn.dataset.distributor;
+        const code        = btn.dataset.code;
+        // Recomputed at click time, not read off a data-attribute captured
+        // at render time — the ledger may have changed since (another
+        // admin, or a concurrent action in this same session), and a stale
+        // net quantity would write a wrong adjustment.
+        const netQty = ledgerNetQty(distributor, code);
+        if (netQty <= 0) {
+          toast('Nothing to reject — the order ledger already changed. Refreshing…', 'error');
+          await loadOrderLedger();
+          renderByDistributor();
+          renderBackorderRiskPanel();
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Recording…';
+
+        const { error } = await db.from('order_submissions').insert({
+          tenant_id:     TenantContext.current().id,
+          distributor,
+          order_code:    code,
+          item_code:     btn.dataset.itemCode || null,
+          title:         btn.dataset.title || null,
+          quantity:      -netQty,
+          order_type:    'adjustment',
+          foc_date:      btn.dataset.foc || null,
+          catalog_month: btn.dataset.catalogMonth || currentCatalogMonth,
+          submitted_on:  DateUtils.todayLocal(),
+        });
+
+        if (error) {
+          toast(`Failed to record rejection: ${error.message}`, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Rejected by supplier';
+          return;
+        }
+
+        // Narrower reload than wireArrivalResolveActions()'s loadData() —
+        // only the ledger changed, so this is the same trio ob-record-save
+        // uses (§ 5.2). Confirm the row actually disappears: a re-render
+        // reading a stale orderLedger would leave it on screen and look
+        // like the write failed.
+        await loadOrderLedger();
+        renderByDistributor();
+        renderBackorderRiskPanel();
+        toast('Recorded as rejected — order corrected', 'success');
       });
     });
   }
