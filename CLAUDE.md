@@ -12,6 +12,12 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
+**Next scheduled work (planned 2026-08-27, not started):** **F143 + F144 — ordering-side rejection
+handling**, plan committed at `docs/f143-f144-ordering-side-rejections.md` (STATUS: NOT STARTED).
+One Sonnet CLI session, `admin.html` only, no schema change, two PAUSE → Rick points. Build F144
+(read-only) before F143 (touches the `order_submissions` write path). **Sequencing constraint:**
+land and promote it **before** F115's ~Sept 7–10 import window opens, or wait until after it
+closes — two sessions must not touch admin ordering surfaces across an import.
 **Last completed work:** **Print "View Online" CTA** — fully RESOLVED both environments 2026-08-27
 (staging `55b9ba8`, production **PR #140** `334b5ad`). Rick's request: paper that lands in a
 customer's hands should carry a path back to an account — a short CTA reading "View Online:
@@ -23,8 +29,17 @@ under the existing store name/phone/website line in the per-customer `bagging-pr
 about and confirmed OUT of scope. `rjbookstop.pulllist.app` verified live before any code was
 written (curl 200, serves the tenant front door for the production founding-tenant slug
 `rjbookstop`) despite `apex-landing-tenant-subdomains.md`'s 2026-07-20 note deprioritizing
-dedicated subdomain provisioning — the wildcard `*.pulllist.app` front-door split already covers
-it, no dedicated work needed. **A real bug was caught pre-deploy**: the first draft used a CSS
+dedicated subdomain provisioning. ***(Corrected 2026-08-27 — F145.* This sentence previously
+continued "the wildcard `*.pulllist.app` front-door split already covers it, no dedicated work
+needed," and **the wildcard half was false.** There is no wildcard record: `foo.pulllist.app` and
+`zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**, while `rjbookstop` and
+`comicstore` resolve because each is an **individually provisioned Cloudflare Pages custom
+hostname**. The *front-door split* is real but is a different mechanism — a pre-paint inline
+script setting `data-front-door` from the hostname, i.e. client-side branding, not DNS. This
+matters because the CTA puts that hostname on **paper in customers' hands**, so it is now a
+durable customer-facing dependency whose provisioning is recorded nowhere; and because **Phase 6's
+S0 wildcard gate is therefore genuinely still closed**, not accidentally satisfied. See § 13
+F145.)* **A real bug was caught pre-deploy**: the first draft used a CSS
 `\00b7` escape inside the JS template literal that builds the print HTML — an illegal legacy-octal
 escape inside a JS template string (confirmed via `node -e`; would have been a SyntaxError
 breaking all of `admin.html`'s inline script), replaced with a literal `·` character. Full gate
@@ -276,7 +291,12 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F145**. **F144 filed 2026-08-26** (proposal — restriction
+**Next free finding ID:** **F146**. **F145 filed 2026-08-27** (documentation defect + untracked
+operational dependency — **there is no wildcard DNS on `pulllist.app`**; an arbitrary subdomain
+returns NXDOMAIN, and `rjbookstop`/`comicstore` resolve only because each is an individually
+provisioned Cloudflare Pages custom hostname. Two docs said otherwise. The print CTA now puts one
+of those hostnames on customer paper; Phase 6's S0 wildcard gate is confirmed **still closed** —
+see table below and `docs/technical-reference.md` § 13). **F144 filed 2026-08-26** (proposal — restriction
 ratios never reach the ordering side: `order_requirement` is absent from `admin.html`
 entirely, so the Order Builder cannot flag or group the titles most likely to be
 rejected; **do not parse the title** — see § 13). **F143 filed 2026-08-26** (proposal — Order
@@ -323,8 +343,9 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F143 | **Low–Medium** — Order Follow-Up's resolve control offers only Received / Didn't arrive / Damaged, so a **supplier rejection found mid-cycle** cannot be recorded there. Marking it "Didn't arrive" clears the panel but leaves the ledger claiming the copies are on order — wrong remainder next cycle, and the title is never re-offered. Ledger→panel already works (F134 Part 1); it is panel→ledger that is missing | **Proposal, filed for future consideration — not scheduled.** Fix = a fourth option, *Rejected by supplier*, writing the negative adjustment (F117); no schema change, everything downstream is existing machinery. **Order-invoice compare-and-report was considered and DECLINED** (Rick: "more cumbersome than helpful") — do not re-propose without reading § 13 F143 |
-| F144 | **Low** — restriction ratios never reach the ordering side: `order_requirement` is **absent from `admin.html` entirely** (0 refs), though production already carries it on **809 titles** (Lunar 314 / PRH 495). The Order Builder cannot flag or group the titles most likely to be rejected | **Proposal, not scheduled.** Display-only, no schema: badge the ratio in the record step (highest value), **group restricted titles**, and show it in the included list. **TRAP: do not parse the PRH title** — the import already resolves ratios absent from the title. Actionable for PRH, advisory only for Lunar |
+| F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
+| F143 | **Low–Medium** — Order Follow-Up's resolve control offers only Received / Didn't arrive / Damaged, so a **supplier rejection found mid-cycle** cannot be recorded there. Marking it "Didn't arrive" clears the panel but leaves the ledger claiming the copies are on order — wrong remainder next cycle, and the title is never re-offered. Ledger→panel already works (F134 Part 1); it is panel→ledger that is missing | **SCHEDULED 2026-08-27** — plan doc `docs/f143-f144-ordering-side-rejections.md` (NOT STARTED), bundled with F144, one Sonnet CLI session. Fix = a fourth option, *Rejected by supplier*, writing the negative adjustment (F117); no schema change, everything downstream is existing machinery. **Order-invoice compare-and-report was considered and DECLINED** (Rick: "more cumbersome than helpful") — do not re-propose without reading § 13 F143 |
+| F144 | **Low** — restriction ratios never reach the ordering side: `order_requirement` is **absent from `admin.html` entirely** (0 refs), though production already carries it on **809 titles** (Lunar 314 / PRH 495). The Order Builder cannot flag or group the titles most likely to be rejected | **SCHEDULED 2026-08-27** — same plan doc as F143; **build this half first** (display-only, no write path). Badge the ratio in the record step (highest value), **group restricted titles**, show it in the included list. **TRAP: do not parse the PRH title** — the import already resolves ratios absent from the title. Actionable for PRH, advisory only for Lunar |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |

@@ -4994,7 +4994,34 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Where:** `admin.html` — the Order Builder's included list, its record step, and optionally the held-back/already-ordered panels. The builder already loads `catalog` rows, so the column just needs to be selected and rendered.
 - **Related:** **F132** (captured `order_requirement`, and corrected same-day when Lunar's ratio turned out to live in `variant_type` — this finding is the ordering-side half F132 did not reach), **F143** (the other half of rejection handling: recording one from the follow-up panel; both are about making rejections visible where the work happens), **F117**/**F120** (the ledger rejection and customer badge a targeted untick feeds), **F102** (the remainder control the record step protects).
 
-Next free finding ID: **F145**.
+#### F145 — there is no wildcard DNS on `pulllist.app`: tenant subdomains are individually provisioned hostnames, and two docs say otherwise
+
+- **Status:** filed 2026-08-27 during the planning session that followed the print "View Online" CTA promotion. **Open — documentation defect plus an untracked operational dependency. No code defect; nothing is broken today.**
+- **Severity:** **Low today, Medium if acted on.** Nothing is currently failing. The risk is that a future session reads the recorded claim, believes tenant subdomains are covered automatically, and either (a) deletes or fails to recreate a Cloudflare Pages custom hostname, or (b) treats Phase 6's gating spike as already satisfied.
+- **What was measured, 2026-08-27** (plain `curl` + `nslookup` against `1.1.1.1`, from the repo working tree):
+
+  | Hostname | DNS | HTTPS |
+  |---|---|---|
+  | `rjbookstop.pulllist.app` | A/AAAA present (Cloudflare) | **200** |
+  | `comicstore.pulllist.app` | A/AAAA present (Cloudflare) | **200** |
+  | `foo.pulllist.app` | **NXDOMAIN** | fails to resolve |
+  | `zzz-does-not-exist-9182.pulllist.app` | **NXDOMAIN** | fails to resolve |
+
+  An arbitrary subdomain does not resolve. **A wildcard `*.pulllist.app` record does not exist.** The two working hostnames are individually provisioned Pages custom domains.
+- **What the docs claim, and where.**
+  1. **`CLAUDE.md` § Current Migration Phase**, in the print-CTA "Last completed work" paragraph, states `rjbookstop.pulllist.app` works because "the wildcard `*.pulllist.app` front-door split already covers it, no dedicated work needed." **The wildcard half is false.** The *front-door split* half is true but is a different mechanism entirely: a pre-paint inline script sets `data-front-door` on `<html>` from the hostname (`apex-landing-tenant-subdomains.md` § "How the split works", ~line 348). All three hostnames serve the identical `index.html` — verified, identical `<title>` on apex, `rjbookstop`, and `comicstore` — and brand themselves client-side. Client-side branding is not DNS.
+  2. **`docs/apex-landing-tenant-subdomains.md`** S4 (line 227) and §§ 61 / 246 / 329 still record provisioning `rjbookstop.pulllist.app` as **"Deferred / Deprioritized 2026-07-20 — founding stays on the apex."** It is live. Nothing in that doc records when or why it was provisioned, so the hostname exists with no changelog entry anywhere in the repo.
+- **Why this is worth an ID rather than a silent edit.** The print "View Online" CTA (shipped 2026-08-27, PR #140) puts `rjbookstop.pulllist.app` on **paper handed to customers** — the Print Catalog page-1 header, its `@page` footer margin box on every page, and the Print Bagging List per-customer header. Printed paper cannot be redeployed. That hostname is now a customer-facing durable dependency whose provisioning is recorded nowhere and whose survival was, until this measurement, believed to be automatic. The CTA itself is correct and was verified live before it shipped; it is the *recorded reason it works* that is wrong.
+- **The Phase 6 consequence, and it cuts the reassuring way.** `docs/phase-6-self-service-signup.md` gates the entire phase on S0 — "wildcard DNS + wildcard TLS for `*.pulllist.app`… a freshly-claimed slug serving instantly with zero per-tenant DNS work." The measurement above confirms that gate is **genuinely still closed**; Phase 6 has not accidentally become unblocked, and the stub's cost analysis (wildcard subdomain vs Cloudflare for SaaS custom hostnames) remains the open question it always was. Per-tenant manual provisioning is exactly the model 5.5 used for `comicstore` and is fine at two tenants; it is not self-service.
+- **Fix shape (documentation + one operational record, no code):**
+  1. ✅ **Done at filing 2026-08-27** — the `CLAUDE.md` claim now says what is actually true: individually provisioned Pages custom hostnames, plus a client-side front-door split.
+  2. ✅ **Done at filing 2026-08-27** — `apex-landing-tenant-subdomains.md` S4 corrected from "deferred" to provisioned. **The provisioning date is still unrecovered**; if it matters, it is in Cloudflare's audit log, not in this repo.
+  3. ⬜ **Still owed** — record both live hostnames in `docs/tenant-onboarding-runbook.md` as durable per-tenant infrastructure, with an explicit note that `rjbookstop.pulllist.app` appears on printed customer material and must not be retired without reprinting. Left open deliberately: it wants Rick's confirmation of the Cloudflare-side inventory rather than an agent's inference from two `curl` results.
+  4. ✅ **No action** — leave Phase 6 S0 as-is. It is correct, and this measurement confirms the gate is still closed.
+- **How this was found:** by probing an arbitrary subdomain rather than the two known-good ones. Checking only `rjbookstop.pulllist.app` returns 200 and confirms nothing about a wildcard — the same "a verification step that cannot fail is not a verification step" shape recorded in `CLAUDE.md` § Smoke Test Suite. **The check that distinguishes the two hypotheses is a hostname nobody provisioned.**
+- **Related:** **F132**/**F138**/**F139** (the stale-status pattern this belongs to — a status written when work is *planned* is not revisited when it *ships*, or in this case when a *deferred* item is quietly done), **F106** (the mechanism: found by checking the live system, not by re-reading the doc), **F125** (the other "`main` is not what the docs imply" trap), **F131** (single-operator structural dependency — same category of undocumented continuity risk).
+
+Next free finding ID: **F146**.
 
 ---
 
