@@ -12,13 +12,56 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Next scheduled work (planned 2026-08-27, not started):** **F143 + F144 — ordering-side rejection
-handling**, plan committed at `docs/f143-f144-ordering-side-rejections.md` (STATUS: NOT STARTED).
-One Sonnet CLI session, `admin.html` only, no schema change, two PAUSE → Rick points. Build F144
-(read-only) before F143 (touches the `order_submissions` write path). **Sequencing constraint:**
-land and promote it **before** F115's ~Sept 7–10 import window opens, or wait until after it
-closes — two sessions must not touch admin ordering surfaces across an import.
-**Last completed work:** **Print "View Online" CTA** — fully RESOLVED both environments 2026-08-27
+**Next scheduled work:** none pending. **Sequencing reminder still live:** whatever lands next on
+admin ordering surfaces must land and promote **before** F115's ~Sept 7–10 import window opens, or
+wait until after it closes — two sessions must not touch admin ordering surfaces across an import.
+**Last completed work:** **F143 + F144 — ordering-side rejection handling** — RESOLVED on staging
+2026-08-27 (`admin.html` `fff78f2` F144, `54126c8` F143; plan
+`docs/f143-f144-ordering-side-rejections.md`, STATUS: COMPLETE staging-only). **Not promoted to
+production** — staging only, pending Rick's explicit request. One Sonnet CLI session, `admin.html`
+only, no schema change. Built F144 (read-only) first, verified V1-V3 green against deployed
+staging, **before** F143 (writes `order_submissions`) landed on top — two separate `--ff-only`
+merges to `staging`, each pushed and tested independently.
+
+**F144** plumbs `catalog.order_requirement` — previously absent from `admin.html` entirely — into
+the Order Builder: `fetchAllPreorders()`'s select, both row-object literals
+(`makeOrderSheetRows()`/`buildExportRows()`'s `extraRows`, the "easy miss" the proposal itself
+named), and a new scoped `restrictionBadge()` helper (deliberately not `app.js`'s customer-facing
+`.restriction-badge` class — that one is absolutely positioned for a catalog cover and shares
+`style.css` with every page). Badged in the record step (highest value, restricted titles grouped
+ahead of the rest, distributor-aware copy — PRH actionable, Lunar advisory-only per its two-phase
+rule), the cycle selector (a restricted count per FOC cycle, its own clause since a restricted
+title is still included, not excluded), and the already-ordered/held-back panels. Reads the column
+directly — does not parse any title string, per the proposal's own trap (two production PRH titles
+carry a ratio with none visible in the title text). V3 (the distributor file byte-unchanged) was
+confirmed via code-diff rather than a second live deploy cycle: the `order-builder-generate` click
+handler's line-building code is byte-identical across the change, and no generic
+`Object.keys()`-driven serializer exists anywhere in `admin.html` that could pull the new field
+into the exported lines.
+
+**F143** adds a fourth Order Follow-Up resolve-control option, **Rejected by supplier**, alongside
+the three F134 buttons — a rejection discovered mid-cycle can now be recorded from the panel where
+it surfaces, instead of correcting the ledger in a different tab. Writes a negative
+`order_submissions` adjustment (`order_type: 'adjustment'`) netting the code to 0, payload shape
+copied from the Mark Ordered insert; deliberately writes **no** `arrival_outcome` — the ledger
+rejection and the import's arrival judgement are different statements, and writing both would let
+them disagree. **PAUSE → Rick point (plan § 5.1), resolved this session:** before writing any
+write-path code, production was measured live (service-role, read-only) for how many current Never
+Arrived rows have `ledgerNetQty === 0` (nothing to negate). The answer was **0 of 0** — production's
+Never Arrived panel held zero rows that day, both of its only two `fulfilled=true,
+arrival_outcome='unknown'` rows already being recorded rejections. Rick's call: ship the
+recommended v1 — offer the button only when `ledgerNetQty(distributor, code) > 0`; a title with no
+ledger rows has nothing to reject, and "Didn't arrive" stays the honest control there.
+
+**Gates:** V1-V7 all green (new local spec `22-f143-f144-ordering-rejections.spec.ts`, never
+committed — 4/4 passing; every new assertion negative-control tested by temporarily inverting it,
+observing 3 of 4 tests go red, then reverting and re-confirming 4/4 green). Full `run-smoke.ps1`
+green: **269 unit + 143 Playwright, 0 failures**, run against deployed staging bytes post-push
+(Playwright count raised from 139 → 143, the four new tests). **V8 — Rick drove the real flow live
+on staging 2026-08-27**: ordered a title, clicked Rejected by supplier from Order Follow-Up,
+confirmed By Distributor corrected and the customer-facing rejected badge (F120) appeared.
+
+Prior work (2026-08-27): **Print "View Online" CTA** — fully RESOLVED both environments 2026-08-27
 (staging `55b9ba8`, production **PR #140** `334b5ad`). Rick's request: paper that lands in a
 customer's hands should carry a path back to an account — a short CTA reading "View Online:
 rjbookstop.pulllist.app". Scoped with Rick to exactly two reports: **Print Catalog (Paper
@@ -296,15 +339,12 @@ operational dependency — **there is no wildcard DNS on `pulllist.app`**; an ar
 returns NXDOMAIN, and `rjbookstop`/`comicstore` resolve only because each is an individually
 provisioned Cloudflare Pages custom hostname. Two docs said otherwise. The print CTA now puts one
 of those hostnames on customer paper; Phase 6's S0 wildcard gate is confirmed **still closed** —
-see table below and `docs/technical-reference.md` § 13). **F144 filed 2026-08-26** (proposal — restriction
-ratios never reach the ordering side: `order_requirement` is absent from `admin.html`
-entirely, so the Order Builder cannot flag or group the titles most likely to be
-rejected; **do not parse the title** — see § 13). **F143 filed 2026-08-26** (proposal — Order
-Follow-Up's resolve control cannot record a supplier rejection, so a Lunar
-rejection found mid-cycle either corrects the ledger in another tab or silently
-leaves it wrong; order-invoice compare-and-report considered and **declined** in
-the same session — see table below and `docs/technical-reference.md`
-§ 13). **F142 filed 2026-08-24 and fully
+see table below and `docs/technical-reference.md` § 13). **F144 filed 2026-08-26 and RESOLVED on
+staging 2026-08-27** (restriction ratios reach the Order Builder — see § Current Migration Phase
+above and `docs/technical-reference.md` § 13). **F143 filed 2026-08-26 and RESOLVED on staging
+2026-08-27** (Order Follow-Up's resolve control gains a fourth "Rejected by supplier" option —
+order-invoice compare-and-report considered and **declined** at filing, not re-proposed — see
+§ Current Migration Phase above and `docs/technical-reference.md` § 13). **F142 filed 2026-08-24 and fully
 RESOLVED on both environments 2026-08-26** (Order Builder's own Held Back
 panel never checked the ledger for a rejection, so a title an admin recorded
 as rejected kept reappearing as "Backordered... never ordered" every time the
@@ -344,8 +384,6 @@ residual to another finding as open until that other finding demonstrably absorb
 | ID | One line | Next step |
 |---|---|---|
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
-| F143 | **Low–Medium** — Order Follow-Up's resolve control offers only Received / Didn't arrive / Damaged, so a **supplier rejection found mid-cycle** cannot be recorded there. Marking it "Didn't arrive" clears the panel but leaves the ledger claiming the copies are on order — wrong remainder next cycle, and the title is never re-offered. Ledger→panel already works (F134 Part 1); it is panel→ledger that is missing | **SCHEDULED 2026-08-27** — plan doc `docs/f143-f144-ordering-side-rejections.md` (NOT STARTED), bundled with F144, one Sonnet CLI session. Fix = a fourth option, *Rejected by supplier*, writing the negative adjustment (F117); no schema change, everything downstream is existing machinery. **Order-invoice compare-and-report was considered and DECLINED** (Rick: "more cumbersome than helpful") — do not re-propose without reading § 13 F143 |
-| F144 | **Low** — restriction ratios never reach the ordering side: `order_requirement` is **absent from `admin.html` entirely** (0 refs), though production already carries it on **809 titles** (Lunar 314 / PRH 495). The Order Builder cannot flag or group the titles most likely to be rejected | **SCHEDULED 2026-08-27** — same plan doc as F143; **build this half first** (display-only, no write path). Badge the ratio in the record step (highest value), **group restricted titles**, show it in the included list. **TRAP: do not parse the PRH title** — the import already resolves ratios absent from the title. Actionable for PRH, advisory only for Lunar |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
@@ -1015,6 +1053,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Phase 5 — second-tenant onboarding (all sub-deploys) | `phase-5-second-tenant-onboarding.md` | F105 |
 | Test-infrastructure maintenance | `test-infra-maintenance-f91-f95-f103.md` | F91, F95, F103, F107 |
 | Catalog-month integrity — stale-date detection + duplicate-row cleanup (S1-S3) | `f136-catalog-month-integrity.md` | F136, F137 |
+| Ordering-side rejection handling (staging only — not yet promoted) | `f143-f144-ordering-side-rejections.md` | F143, F144 |
 | `import.js` maintenance (key rotation, historical dedup, cross-month fix) | `import-js-maintenance-f75-f78-f85.md` | F75, F78, F85 |
 | F86 prod legacy API key retirement | `f86-anon-key-migration.md` | F86, F88 |
 | Mobile thumb-reach tab bar + live-review follow-up | `mobile-nav-tab-bar.md` | — |

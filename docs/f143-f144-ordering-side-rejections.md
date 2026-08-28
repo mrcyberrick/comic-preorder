@@ -1,6 +1,6 @@
 # F143 + F144 — ordering-side rejection handling
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=F143,F144
+**STATUS:** COMPLETE (staging only) | staging=2026-08-27 (`fff78f2` F144, `54126c8` F143) | prod=— | findings=F143,F144
 
 **Type:** Feature build against two filed proposals. **No schema change. No migration. No Edge
 Function change. `admin.html` only** (plus the local Playwright suite, which is never committed).
@@ -266,20 +266,30 @@ at lines 1832-1834.
 
 ## 9. Completion criteria
 
-- [ ] F144: `order_requirement` selected, plumbed through **both** row-object literals, badged in
+- [x] F144: `order_requirement` selected, plumbed through **both** row-object literals, badged in
       the record step, restricted titles grouped or ordered-first, visible in the included list.
-- [ ] F143: fourth button live; writes the netting row; writes **no** `arrival_outcome`; the
-      never-ordered case resolved per § 5.1's PAUSE.
-- [ ] V1-V7 green; V8 confirmed by Rick.
-- [ ] New spec added to the local suite (never committed to the repo) and its assertions
-      negative-control tested.
-- [ ] `docs/technical-reference.md` § 13 F143 and F144 status lines updated to RESOLVED-on-staging
+      Ordered-first (cheaper v1) chosen over a collapsible group, per § 4.2's own allowance.
+- [x] F143: fourth button live; writes the netting row; writes **no** `arrival_outcome`; the
+      never-ordered case resolved per § 5.1's PAUSE — Rick confirmed the recommended v1 (hide the
+      button when `ledgerNetQty === 0`), after a live production measurement found the Never
+      Arrived panel held **0 rows total** that day (both of production's only fulfilled/unknown
+      rows were already-recorded rejections) — nothing with net === 0 to decide against, but the
+      gating logic is in place regardless.
+- [x] V1-V7 green; V8 confirmed by Rick (2026-08-27, live walkthrough on staging).
+- [x] New spec added to the local suite (`22-f143-f144-ordering-rejections.spec.ts`, never
+      committed to the repo) and its assertions negative-control tested — all three
+      safety-critical assertions (V1 badge, V2 ordering, V5 arrival_outcome-untouched) were
+      temporarily inverted, observed failing (3 failed / 1 unmodified passed), then reverted and
+      re-confirmed green (4/4).
+- [x] `docs/technical-reference.md` § 13 F143 and F144 status lines updated to RESOLVED-on-staging
       with date and commit.
-- [ ] This doc's `**STATUS:**` token updated.
-- [ ] `CLAUDE.md` § Current Migration Phase "Last completed work" advanced, and the F143/F144 rows
+- [x] This doc's `**STATUS:**` token updated.
+- [x] `CLAUDE.md` § Current Migration Phase "Last completed work" advanced, and the F143/F144 rows
       removed from the open-findings table.
-- [ ] Merged to `staging` with `--ff-only`.
-- [ ] Production promotion **only** on Rick's explicit request, via `/promote-prod`.
+- [x] Merged to `staging` with `--ff-only` (twice — F144 alone first per the build-order
+      constraint, verified green, then F143 on top).
+- [ ] Production promotion **only** on Rick's explicit request, via `/promote-prod` — **not
+      requested this session; staging only.**
 
 ---
 
