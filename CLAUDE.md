@@ -12,38 +12,51 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Next scheduled work:** none pending. **Sequencing reminder — updated 2026-08-28, window now
-open:** staging's September catalog import already ran (F115's S1/S5/S6, ~10 days ahead of the
-~Sept 7–10 estimate — see "Last completed work" below). **Production has NOT yet run its September
-import** (`catalog_month` there is still `2026-08`) — that transition is still ahead. Whatever
-lands next on admin ordering surfaces must land and promote **before** production's September
-import runs, or wait until after it closes — two sessions must not touch admin ordering surfaces
-across that import.
-**Last completed work:** **F115 staging completion + F146 filed** — 2026-08-28. September catalog
-files arrived early; Rick ran `import-staging.js` for real (staging `catalog_month` 2026-08 →
-2026-09). F115's S1/S5/S6 runbook steps and V1/V4/V5 gates all confirmed green **against the live
-run** — cross-checked line-by-line against the database (CSV row counts vs. DB counts, the 16 F110
-marks vs. the printed list, the 1 auto-fulfilled row vs. a real `weekly_shipment` match), not just
-trusted from the console. S6 backfill (32 reservations / 30 titles, re-measured fresh, not the
-stale 28/23 figure) applied and verified: `arrived=3, unknown=32, not_arrived=0`, zero stragglers.
-Full detail: `docs/f115-arrival-truth-persistence.md` § status note (2026-08-28) and
-`docs/technical-reference.md` § 13 F115. **F115 is RESOLVED on staging; still OPEN overall** —
-production's own September import (S1/S5/S6) hasn't happened yet.
-One real gap surfaced by the run, filed as **F146** and **fixed the same session** (scripts repo
-`main` `415bb38`): same-month catalog refreshes never re-ran F110's withdrawal-detection *clear*
-half, so a title dropped mid-month from the distributor's export (but still live on their site)
-stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if then
-— 16 titles marked on staging's run, at least one (0826AB0593, confirmed live on the distributor's
-site by Rick) a genuine false positive. `detectWithdrawals()` split into a clear half (now runs
-every import, no `isNewMonth` gate) and a mark half (unchanged, still `isNewMonth`-gated); unit
-tested with a negative control, 273/273 green, verified via a `--no-write` dry run that the check
-now fires on a same-month path where it previously didn't exist at all. **The 16 titles on staging
-are not cleared yet** — needs a fresh CSV re-pull (today's file genuinely lacks the reappearance)
-+ re-run. Worth doing **before** production's own September import — production's larger catalog
-makes the same false-positive shape likely to recur, and the flag lets a customer irreversibly
-self-cancel a title the store is still getting (`isWithdrawn` overrides both the FOC lock and the
-ordered lock on My List).
-See `docs/technical-reference.md` § 13 F146.
+**Next scheduled work:** none pending. **Sequencing reminder — window CLOSED 2026-08-28:**
+production ran its real September import this session (`catalog_month` 2026-08 → 2026-09) — the
+transition this reminder existed to protect has already happened, both environments. The
+constraint is dormant until October's import opens the next one; no admin-ordering-surface work is
+currently blocked. **Residual, not yet done:** production's Maintenance Mode is still **ON** and
+`order_deadline` is still cleared (Step 7/8 of `docs/monthly-catalog-refresh.md`) — both need
+action before the store reopens to customers.
+**Last completed work:** **Production's real September import + F147 (severe) + F146 — both found
+and fixed same session, 2026-08-28.** Rick ran `node import.js` for real against production
+(`catalog_month` 2026-08 → 2026-09, archived 357 reservations, purged 2,467 stale rows). It
+surfaced **F147**, more severe than anything found on staging earlier the same day: F110's
+withdrawal detection — its first-ever real run anywhere, staging included — marked **519 of
+production's 1,571 open reservations (33%)** "Withdrawn — cannot be ordered," and **every single
+one** still had a future `foc_date` (example: BATMAN #14, FOC two weeks out, flagged anyway).
+`narrowWithdrawalCandidates()` never checked FOC at all — root cause: a distributor's catalog file
+lists a title once, in its solicitation month, so absence from a later month's file is the *normal*
+state for anything not yet at its ordering deadline, not evidence of withdrawal. **Caught before it
+reached anyone** — Maintenance Mode was on throughout, verified live before and after. Fixed same
+day (scripts repo `main` `e4f968d`): `narrowWithdrawalCandidates()` now also requires a passed
+`foc_date`; 6 new unit tests including BATMAN #14's real shape and MIDNIGHT X-MEN #2's shape (F110's
+own original genuine-withdrawal case) as positive control; negative-control tested; full suite
+279/279. Production's 519 false marks were cleared via a local one-off script
+(`clear-f147-withdrawn.js`, ids captured first for exact revertibility) — **0 of the 519 had a
+passed FOC, so 0 were withheld**, confirming the clear was the mathematically exact right answer
+under the corrected rule, not an approximation. Full detail: `docs/technical-reference.md` § 13
+F147.
+**F146** (found earlier the same day on staging, see "Prior work" below) was also fixed this
+session (scripts repo `main` `415bb38`, before F147 was found) — `detectWithdrawals()`'s
+clear-on-reappearance half no longer waits for a new-month import. Its own 16 staging false
+positives are **not yet cleared** (need a fresh CSV re-pull); production's would-be F146 instances
+were subsumed into the much larger F147 batch and cleared together.
+See `docs/technical-reference.md` § 13 F146 and F147.
+
+**Prior work (2026-08-28, earlier the same session):** **F115 staging completion + F146 filed.**
+September catalog files arrived ~10 days ahead of the ~Sept 7–10 estimate; Rick ran
+`import-staging.js` for real on staging first (`catalog_month` 2026-08 → 2026-09). F115's S1/S5/S6
+runbook steps and V1/V4/V5 gates all confirmed green **against the live run** — cross-checked
+line-by-line against the database (CSV row counts vs. DB counts, the 16 F110 marks vs. the printed
+list, the 1 auto-fulfilled row vs. a real `weekly_shipment` match), not just trusted from the
+console. S6 backfill (32 reservations / 30 titles, re-measured fresh, not the stale 28/23 figure)
+applied and verified: `arrived=3, unknown=32, not_arrived=0`, zero stragglers. **F115 is RESOLVED on
+staging; still OPEN overall** — production's own September import happened later this same session
+(see "Last completed work" above) but S6's backfill re-measurement for production has not been done
+yet. Full detail: `docs/f115-arrival-truth-persistence.md` § status note (2026-08-28) and
+`docs/technical-reference.md` § 13 F115.
 
 **Prior work (2026-08-27):** **F143 + F144 — ordering-side rejection handling** — fully RESOLVED both
 environments 2026-08-27 (staging `admin.html` `fff78f2` F144 / `54126c8` F143; production **PR #141**
@@ -369,7 +382,18 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F147**. **F146 filed 2026-08-28** (same-month catalog refreshes never
+**Next free finding ID:** **F148**. **F147 filed AND fixed 2026-08-28** (withdrawal detection's
+first-ever real run, on production, marked **519 of 1,571 open reservations (33%) "Withdrawn —
+cannot be ordered"** — every single one still inside its own ordering window, `foc_date` not yet
+passed. Example: BATMAN #14, FOC two weeks out, flagged anyway. Root cause:
+`narrowWithdrawalCandidates()` never checked whether FOC had passed — a distributor's catalog file
+lists a title once, in its solicitation month, so absence from a later month's file is the NORMAL
+state for anything not yet at its ordering deadline, not evidence of withdrawal. Fixed same day
+(scripts repo `main` `e4f968d`) — the check now requires `foc_date` present and passed; 6 new unit
+tests including BATMAN #14's exact shape, negative-control tested, 279/279 green. Production's 519
+false marks cleared (0 had a passed FOC, so 0 were withheld) via a local one-off script;
+**Maintenance Mode was on throughout, no customer ever saw this.** See § 13 F147). **F146 filed AND
+fixed 2026-08-28** (same-month catalog refreshes never
 re-run withdrawal detection, so a title dropped mid-month from the distributor's export — but
 still live on their site — stays incorrectly marked "Withdrawn — cannot be ordered" until the next
 new-month import, if then; found live on staging, 16 false-positive titles including item code
@@ -426,7 +450,8 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F146 | **Medium–High, fix shipped 2026-08-28** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`** — clearing now runs on every import (new-month or same-month), marking stays new-month-gated; unit tested + negative-control tested, 273/273 green, verified via a `--no-write` dry run that the new check now fires on a same-month refresh. **Still open:** the 16 titles on staging aren't cleared yet — needs a fresh CSV re-pull (today's file genuinely lacks the reappearance) + re-run. Production hasn't imported September at all. See § 13 F146 |
+| F147 | **High, fixed same day 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. Production's 519 false marks cleared via local one-off script (0 had passed FOC, 0 withheld). **Maintenance Mode was on throughout — no customer ever saw it.** See § 13 F147 |
+| F146 | **Medium–High, fix shipped 2026-08-28** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`** — clearing now runs on every import (new-month or same-month), marking stays new-month-gated; unit tested + negative-control tested, 273/273 green, verified via a `--no-write` dry run that the new check now fires on a same-month refresh. **Still open:** the 16 titles on staging aren't cleared yet — needs a fresh CSV re-pull (today's file genuinely lacks the reappearance) + re-run. Production **has** now imported September (2026-08-28) — its own withdrawn marks were subsumed by the much larger F147 issue and cleared together; watch for F146's narrower shape on the next same-month refresh. See § 13 F146 |
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. **RESOLVED on staging 2026-08-28** (S1/S5/S6 all ran for real, V1/V4/V5 all green, backfill 32/30 applied) — **still open because production hasn't run its September import yet** (prod remains on `catalog_month = 2026-08`) | Owner: `docs/f115-arrival-truth-persistence.md`. **Staging: DONE.** Production: migration APPLIED 2026-08-20; S1/S5/S6 + backfill still owed, no date set, Rick-gated. See § 13 |
