@@ -29,14 +29,20 @@ stale 28/23 figure) applied and verified: `arrived=3, unknown=32, not_arrived=0`
 Full detail: `docs/f115-arrival-truth-persistence.md` § status note (2026-08-28) and
 `docs/technical-reference.md` § 13 F115. **F115 is RESOLVED on staging; still OPEN overall** —
 production's own September import (S1/S5/S6) hasn't happened yet.
-One real gap surfaced by the run and filed separately as **F146**: same-month catalog refreshes
-never re-run F110's withdrawal detection, so a title dropped mid-month from the distributor's
-export (but still live on their site) stays incorrectly marked "Withdrawn — cannot be ordered"
-until the next new-month import, if then. 16 titles marked on staging's run; at least one
-(0826AB0593, confirmed live on the distributor's site by Rick) is a genuine false positive. Worth a
-decision **before** production's own September import — production's larger catalog makes the same
-shape likely to recur, and the false flag lets a customer irreversibly self-cancel a title the
-store is still getting (`isWithdrawn` overrides both the FOC lock and the ordered lock on My List).
+One real gap surfaced by the run, filed as **F146** and **fixed the same session** (scripts repo
+`main` `415bb38`): same-month catalog refreshes never re-ran F110's withdrawal-detection *clear*
+half, so a title dropped mid-month from the distributor's export (but still live on their site)
+stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if then
+— 16 titles marked on staging's run, at least one (0826AB0593, confirmed live on the distributor's
+site by Rick) a genuine false positive. `detectWithdrawals()` split into a clear half (now runs
+every import, no `isNewMonth` gate) and a mark half (unchanged, still `isNewMonth`-gated); unit
+tested with a negative control, 273/273 green, verified via a `--no-write` dry run that the check
+now fires on a same-month path where it previously didn't exist at all. **The 16 titles on staging
+are not cleared yet** — needs a fresh CSV re-pull (today's file genuinely lacks the reappearance)
++ re-run. Worth doing **before** production's own September import — production's larger catalog
+makes the same false-positive shape likely to recur, and the flag lets a customer irreversibly
+self-cancel a title the store is still getting (`isWithdrawn` overrides both the FOC lock and the
+ordered lock on My List).
 See `docs/technical-reference.md` § 13 F146.
 
 **Prior work (2026-08-27):** **F143 + F144 — ordering-side rejection handling** — fully RESOLVED both
@@ -420,7 +426,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F146 | **Medium–High** — same-month catalog refreshes never re-run withdrawal detection (`detectWithdrawals()` is gated behind `isNewMonth` in `import.js`, both the mark **and** the clear half), so a title dropped mid-month from the distributor's export but still live on their site stays incorrectly marked "Withdrawn — cannot be ordered." **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site). The false flag lets a customer **irreversibly** self-cancel via the same override that legitimately unlocks cancellation on a real withdrawal | open, no plan doc. **Interim, no code:** confirm against the distributor's site, then a scoped `UPDATE catalog SET withdrawn_at = NULL, withdrawn_last_seen_month = NULL` for that row. **Proposed fix:** split the clear-on-reappearance half out from the new-month gate so it runs on every import; leave the mark half new-month-gated as-is. See § 13 F146 |
+| F146 | **Medium–High, fix shipped 2026-08-28** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`** — clearing now runs on every import (new-month or same-month), marking stays new-month-gated; unit tested + negative-control tested, 273/273 green, verified via a `--no-write` dry run that the new check now fires on a same-month refresh. **Still open:** the 16 titles on staging aren't cleared yet — needs a fresh CSV re-pull (today's file genuinely lacks the reappearance) + re-run. Production hasn't imported September at all. See § 13 F146 |
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. **RESOLVED on staging 2026-08-28** (S1/S5/S6 all ran for real, V1/V4/V5 all green, backfill 32/30 applied) — **still open because production hasn't run its September import yet** (prod remains on `catalog_month = 2026-08`) | Owner: `docs/f115-arrival-truth-persistence.md`. **Staging: DONE.** Production: migration APPLIED 2026-08-20; S1/S5/S6 + backfill still owed, no date set, Rick-gated. See § 13 |
