@@ -1045,7 +1045,7 @@
       const c = p.catalog;
       const foc = c.foc_date;
       if (!map.has(foc)) {
-        map.set(foc, { titles: new Set(), copies: 0, ordered: new Set(), withdrawn: new Set() });
+        map.set(foc, { titles: new Set(), copies: 0, ordered: new Set(), withdrawn: new Set(), restricted: new Set() });
       }
       const entry = map.get(foc);
       entry.titles.add(c.id);
@@ -1062,6 +1062,12 @@
         entry.withdrawn.add(c.id);
       } else if (ledgerNetQty(c.distributor, exportCode(c, c.distributor)) > 0) {
         entry.ordered.add(c.id);
+      } else if (c.order_requirement) {
+        // F144 — only counted among titles this cycle would actually EXPORT
+        // (not withdrawn, not already ordered elsewhere): the point is to
+        // show the risk before submission, not to flag a title that isn't
+        // going out in this file at all.
+        entry.restricted.add(c.id);
       }
     });
     return [...map.entries()]
@@ -1071,6 +1077,7 @@
         copies:         v.copies,
         orderedCount:   v.ordered.size,
         withdrawnCount: v.withdrawn.size,
+        restrictedCount: v.restricted.size,
       }))
       .sort((a, b) => a.foc.localeCompare(b.foc));
   }
@@ -1200,7 +1207,7 @@
       catalog (
         id, distributor, item_code, upc, isbn, title, series_name, publisher,
         issue_number, format, price_usd, foc_date, on_sale_date,
-        writer, artist, cover_url, variant_type, catalog_month,
+        writer, artist, cover_url, variant_type, order_requirement, catalog_month,
         withdrawn_at, withdrawn_last_seen_month
       )
     `;
@@ -2347,6 +2354,7 @@
           Format:      c.format,
           IssueNumber: c.issue_number,
           VariantType: c.variant_type,
+          OrderRequirement: c.order_requirement,
           TotalQty:    0,
           UnitPrice:   c.price_usd,
           TotalValue:  0,
@@ -2459,6 +2467,10 @@
                    style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;${past ? 'color:#ff8070' : ''}">
               <input type="checkbox" class="ob-cycle-cb" data-foc="${d.foc}" ${checked}>
               ${formatDate(d.foc)} — ${d.titleCount} title${d.titleCount === 1 ? '' : 's'}, ${d.copies} cop${d.copies === 1 ? 'y' : 'ies'}
+              ${/* F144 — restricted titles are still INCLUDED (unlike excl below), so this is its
+                   own clause rather than folded into the excluded-count span: it flags risk in
+                   what you're about to export, before submission, not something left out. */''}
+              ${d.restrictedCount ? `<span style="font-size:0.72rem;color:var(--warning)">· ${d.restrictedCount} restricted</span>` : ''}
               ${excl ? `<span style="font-size:0.72rem;color:var(--text-muted)">· ${excl}</span>` : ''}
               ${excl && exportable === 0 ? '<span style="font-size:0.72rem;color:var(--text-muted)">· nothing to export</span>' : ''}
               ${past ? ' <span style="font-size:0.72rem">⚠ FOC passed — ordering now backorders, availability not guaranteed</span>' : ''}
@@ -2570,7 +2582,7 @@
       const over = priorQty > totalQty;
       return `
         <div style="border:1px solid ${over ? 'rgba(232,50,28,0.5)' : 'var(--border)'};border-radius:var(--radius);padding:10px 12px">
-          <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')}
+          <div style="font-weight:600;font-size:0.88rem">${escapeHtml(c.title || '')} ${restrictionBadge(c.order_requirement)}
             <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.75rem"> ${escapeHtml(c.item_code || '')}</span>
           </div>
           <div style="font-size:0.75rem;color:var(--text-muted);margin:4px 0">Prior: ${priorLines}</div>
@@ -2649,7 +2661,7 @@
       if (!entries.length) return '';
       const grouped = groupByExportCode(entries);
       const items = grouped.map(({ catalog: c, qty }) =>
-        `<li>${escapeHtml(c.title || '')} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('');
+        `<li>${escapeHtml(c.title || '')} ${restrictionBadge(c.order_requirement)} — ${formatDate(c.foc_date)} · qty ${qty}</li>`).join('');
       const list = `<ul style="margin:0;padding-left:18px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6">${items}</ul>`;
       const heading = `${label} (${grouped.length})`;
       return opts.collapsed
@@ -2755,6 +2767,7 @@
           Distributor: c.distributor, ItemCode: c.item_code, UPC: c.upc, ISBN: c.isbn,
           Title: c.title, Series: c.series_name, Publisher: c.publisher, Format: c.format,
           IssueNumber: c.issue_number, VariantType: c.variant_type,
+          OrderRequirement: c.order_requirement,
           TotalQty: ov.qty, UnitPrice: c.price_usd,
           TotalValue: ((parseFloat(c.price_usd) || 0) * ov.qty).toFixed(2),
           FOCDate: c.foc_date, OnSaleDate: c.on_sale_date,
@@ -2804,6 +2817,23 @@
           `Use "Record submitted order" when you're back from the supplier.`);
   });
 
+  // F144 — a restricted-variant ratio (catalog.order_requirement, e.g.
+  // PRH '1:25') predicts a rejection; badge it wherever the operator
+  // decides what to order. Deliberately its OWN scoped markup, not app.js's
+  // customer-facing .restriction-badge class — that one is absolutely
+  // positioned and sized for a catalog cover, and style.css is shared
+  // across every page, so restyling it here risks the customer-facing
+  // element. Read the column; DO NOT parse the title — the import already
+  // resolves ratios (PRH especially) that appear nowhere in the title
+  // string (§ 13 F144's own trap).
+  function restrictionBadge(orderRequirement) {
+    if (!orderRequirement) return '';
+    return `<span class="ob-restriction-badge" title="Distributor allocation ratio ${escapeHtml(orderRequirement)} — may be reduced or rejected."
+      style="display:inline-block;font-size:0.62rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
+             padding:1px 6px;border-radius:2px;background:rgba(245,158,11,0.16);color:var(--warning);
+             white-space:nowrap;cursor:help">⚠ ${escapeHtml(orderRequirement)}</span>`;
+  }
+
   // ── Step 2 — record what the supplier actually accepted ────────────────
   // Built from buildExportRows(), the SAME function that produced the file, so
   // the list you tick and the file you submitted cannot drift apart. Nothing
@@ -2829,6 +2859,47 @@
       return;
     }
 
+    // F144 — restricted titles (a distributor allocation ratio, e.g. PRH
+    // '1:25') are the ones most likely to come back rejected, so they are
+    // grouped first in this list rather than left scattered alphabetically
+    // by item code (Rick, 2026-08-26). Ordering-first is the v1 shape the
+    // plan calls out as acceptable — a collapsible group fights the
+    // recordSelections keying for no real gain here, since every row in
+    // both groups still needs its own checkbox/qty control.
+    const restrictedRows = rows.filter(r => r.OrderRequirement);
+    const normalRows     = rows.filter(r => !r.OrderRequirement);
+
+    const recRowHtml = (r) => {
+      const code = exportCodeForRow(r, distributor);
+      const sel  = recordSelections[code];
+      return `
+      <div class="ob-rec-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+           border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <input type="checkbox" class="ob-rec-cb" data-code="${escapeHtml(code)}"
+               ${sel.include ? 'checked' : ''} aria-label="Ordered: ${escapeHtml(r.Title || code)}">
+        <span style="flex:1;min-width:180px;font-size:0.85rem">${escapeHtml(r.Title || '—')} ${restrictionBadge(r.OrderRequirement)}</span>
+        <span style="font-family:monospace;font-size:0.72rem;color:var(--text-muted)">${escapeHtml(code)}</span>
+        <input type="number" min="0" class="ob-rec-qty" data-code="${escapeHtml(code)}"
+               value="${sel.qty}" ${sel.include ? '' : 'disabled'}
+               aria-label="Quantity ordered: ${escapeHtml(r.Title || code)}"
+               style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
+                      color:var(--text-primary);padding:4px 6px;border-radius:var(--radius);font-size:0.82rem">
+      </div>`;
+    };
+
+    // Honesty asymmetry (§ 13 F144): PRH rejections are knowable at THIS
+    // step, so the copy invites an action. Lunar's are only known after
+    // processing, from the order invoice the weekly import never sees — a
+    // badge there is a candidate for suspicion, never an outcome, and the
+    // copy must not imply otherwise (Lunar's two-phase rule is unchanged:
+    // record the full submitted order, untick nothing here).
+    const restrictedNote = distributor === 'PRH'
+      ? `${restrictedRows.length} title${restrictedRows.length===1?'':'s'} carr${restrictedRows.length===1?'ies':'y'} a distributor
+         allocation ratio — the ones most likely to come back rejected. Check these first.`
+      : `${restrictedRows.length} title${restrictedRows.length===1?'':'s'} carr${restrictedRows.length===1?'ies':'y'} a distributor
+         allocation ratio. Advisory only — Lunar rejections are only known after processing, so
+         record the full order as submitted; untick nothing here on the strength of this badge alone.`;
+
     obStepRec.innerHTML = `
       <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 6px;line-height:1.5">
         These are the ${rows.length} title${rows.length===1?'':'s'} in the file you submitted to
@@ -2838,25 +2909,16 @@
       <p style="color:var(--text-muted);font-size:0.76rem;margin:0 0 16px;line-height:1.5">
         Adjust a quantity if they filled less than you asked for.
       </p>
-      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
-        ${rows.map(r => {
-          const code = exportCodeForRow(r, distributor);
-          const sel  = recordSelections[code];
-          return `
-          <div class="ob-rec-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;
-               border-bottom:1px solid var(--border);flex-wrap:wrap">
-            <input type="checkbox" class="ob-rec-cb" data-code="${escapeHtml(code)}"
-                   ${sel.include ? 'checked' : ''} aria-label="Ordered: ${escapeHtml(r.Title || code)}">
-            <span style="flex:1;min-width:180px;font-size:0.85rem">${escapeHtml(r.Title || '—')}</span>
-            <span style="font-family:monospace;font-size:0.72rem;color:var(--text-muted)">${escapeHtml(code)}</span>
-            <input type="number" min="0" class="ob-rec-qty" data-code="${escapeHtml(code)}"
-                   value="${sel.qty}" ${sel.include ? '' : 'disabled'}
-                   aria-label="Quantity ordered: ${escapeHtml(r.Title || code)}"
-                   style="width:64px;background:var(--bg-elevated);border:1px solid var(--border);
-                          color:var(--text-primary);padding:4px 6px;border-radius:var(--radius);font-size:0.82rem">
-          </div>`;
-        }).join('')}
-      </div>`;
+      ${restrictedRows.length ? `
+        <div style="font-size:0.78rem;color:var(--warning);margin:0 0 6px;line-height:1.5">⚠ ${restrictedNote}</div>
+        <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:${normalRows.length ? '12' : '16'}px">
+          ${restrictedRows.map(recRowHtml).join('')}
+        </div>` : ''}
+      ${normalRows.length ? `
+        ${restrictedRows.length ? `<div style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px">Other titles</div>` : ''}
+        <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          ${normalRows.map(recRowHtml).join('')}
+        </div>` : ''}`;
 
     obStepRec.querySelectorAll('.ob-rec-cb').forEach(cb => {
       cb.addEventListener('change', () => {
