@@ -3999,12 +3999,18 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   (re-measured fresh, not the stale 28/23), all set to `unknown`, zero `not_arrived`, ids captured
   before the write for exact revertibility. Full detail and evidence:
   `docs/f115-arrival-truth-persistence.md` § status note (2026-08-28) and § 5 gates table.
-  **Production has still not run its September import** (`catalog_month` there remains `2026-08`
-  as of this writing) — F115 stays **OPEN overall** until production's S1/S5/S6 land. One real
-  finding surfaced by this run, filed separately: **F146** — at least one of the 16 F110 marks
-  (0826AB0593) was confirmed still live on the distributor's site, a same-month CSV-lag false
-  positive that will not self-correct on any same-month refresh. Worth a decision before
-  production's own September import, since the same shape will likely recur there.
+  **Production ran its real September import later the same session** (`node import.js`,
+  `catalog_month` 2026-08 → 2026-09). The write half is confirmed live there too — post-import,
+  production shows `arrived=212, unknown=6, not_arrived=0` (V2's never-`not_arrived` invariant
+  holds on real production data). **F115 stays OPEN overall** because production's S6 backfill is
+  still owed: **859 pre-existing orphaned rows** (`fulfilled=true, arrival_outcome IS NULL`,
+  predating this code), measured but not yet written. Two real findings surfaced by these two
+  imports, both filed and fixed same day: **F146** (16 staging false positives, e.g. 0826AB0593,
+  from same-month CSV lag — fixed by decoupling the clear from the new-month gate) and **F147**
+  (519 of production's 1,571 open reservations — 33% — wrongly marked withdrawn because the mark
+  logic never checked whether the title's FOC had actually passed; fixed, data corrected on
+  production, independently verified). See § 13 F146 and F147 for full detail — this entry does
+  not restate them.
 - **Severity:** **Medium.** No data-integrity or security exposure, and the measured rate is low — but it is the only state in the whole order pipeline where a customer is told something untrue, and it was structurally unobservable.
 - **Diagnosis — three mechanisms stacked:**
   1. `auto_fulfill_past_on_sale()` (`docs/sql/auto_fulfill_past_on_sale.sql`) sets `fulfilled = true` for every preorder with `c.on_sale_date < CURRENT_DATE`, **with no arrival check whatsoever**.

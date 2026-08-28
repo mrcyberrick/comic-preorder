@@ -1,6 +1,6 @@
 # F115 — persist the reservation arrival outcome (Option B), bundled with the September import pre-flight
 
-**STATUS:** staging FULLY RESOLVED 2026-08-28 (S1–S7 all done, V1–V7 all green — see § 7) | prod=migration APPLIED 2026-08-20 (S2 only; S1/S5/S6 + import write still owed — Sept files not yet run on prod) | findings=F115,F110,F122,F123. **F115 stays OPEN overall** (§ 13) until production's copy of S1/S5/S6 lands — this line describes staging only.
+**STATUS:** staging FULLY RESOLVED 2026-08-28 (S1–S7 all done, V1–V7 all green — see § 7) | prod: real September import RAN 2026-08-28 (S5 happened; write code confirmed live — `arrived=212, unknown=6, not_arrived=0` post-import, V2's invariant holds on real data) but **S6 backfill of the 859 PRE-EXISTING orphaned rows (fulfilled=true, arrival_outcome IS NULL, predating this code) is NOT done**, and V1/V4 were not formally exercised against production the way they were against staging (attention that day went to **F147**, found during this same import) | findings=F115,F110,F122,F123. **F115 stays OPEN overall** (§ 13) until production's S6 backfill lands.
 **Prod migration pulled forward to 2026-08-20**, out of the S5/S6 window and ahead of the import, at Rick's call. It is additive/nullable and no production code reads the column, so it is inert — but it **clears the promotion block** (`admin.html` on staging selects `arrival_outcome`; without the column any staging→main merge would 400 the entire admin gather — `/promote-prod` step 0b) and removes a dependency from the September session. Verified live on production with the file's own four checks; the 23514 DETAIL carried the production founding tenant_id, confirming the right project. **S5/S6 are unchanged and still owed — on production.**
 **Session note (2026-08-18):** September catalog files not yet present (entry condition (b) —
 see session prompt). This pass did S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
@@ -193,7 +193,7 @@ gate (~17 min, 126 tests baseline). **Gate V6.**
 | **V6** | ~~`mylist.html` byte-unchanged~~ **— SUPERSEDED 2026-08-21 by F134, do not re-apply** | § 3.4's deliberate no-change, provable rather than asserted | ✅ 2026-08-18 |
 | **V7** | Full suite green; counts recorded | Standard | ✅ 2026-08-18, 127/127 (1 confirmed-flaky retry) |
 
-**All seven gates are green on staging as of 2026-08-28.** Production has none of V1/V4/V5 run yet — its September import (S1/S5/S6) has not happened (prod is still on `catalog_month = 2026-08`).
+**All seven gates are green on staging as of 2026-08-28.** Production ran its real September import the same day (`catalog_month` now `2026-09`); V4's substance is confirmed live there too (`arrived=212, unknown=6, not_arrived=0`), though V1 was not formally exercised (attention went to F147, found during that run). **The one piece still open, production-side, is S6** — 859 pre-existing orphaned rows measured, not yet backfilled.
 
 ---
 
@@ -238,20 +238,28 @@ import window.
       not_arrived=0` post-write
 - [x] `mylist.html` unchanged, verified by diff
 - [x] **V1, V4, V5 green — DONE 2026-08-28, staging.** See § status note and § 5 gates table.
-      **Staging halves of S1/S5/S6 are complete.** Production has not run its September import —
-      F115 stays **OPEN** overall until it does.
-- [x] This doc's STATUS token flipped — see line 3 (staging: RESOLVED; overall: still open, prod pending)
-- [x] `/wrap-up` produced (2026-08-18 session); this 2026-08-28 update is a status/verification pass,
-      not a new build session
+      **Staging halves of S1/S5/S6 are complete.**
+- [x] **Production's real September import RAN 2026-08-28, later the same session** (`node
+      import.js`, `catalog_month` 2026-08 → 2026-09). This surfaced **F147** (F110's mark logic
+      flagging 519/1,571 open reservations, found and fixed same day — see technical-reference.md
+      § 13) — attention went there instead of a formal V1/V4 pass against production, so those two
+      gates were not explicitly exercised there the way they were on staging. **V4's substance is
+      still true on production**, confirmed directly: `arrived=212, unknown=6, not_arrived=0`
+      post-import — the never-`not_arrived` invariant (V2) holds live, not just in unit tests.
+- [ ] **Production S6 backfill — measured, NOT yet applied.** `fulfilled=true AND arrival_outcome
+      IS NULL` on production, re-measured 2026-08-28: **859 rows** (do not reuse this figure either
+      without re-checking — re-measure again at execution time, per this doc's own § 3.5 rule).
+      Materially larger than staging's 32, as expected for a much larger real dataset.
+- [x] This doc's STATUS token flipped — see line 3 (staging: RESOLVED; overall: still open — prod
+      S6 backfill is the one remaining piece)
+- [x] `/wrap-up` produced this session, twice (2026-08-18 build session; this 2026-08-28 session
+      covering the real Sept imports on both environments plus F146/F147)
 
-**Remaining:** production's S1/S5/S6 — the real September import against `IMPORT_SERVICE_KEY_PROD`,
-followed by production's own backfill re-measurement (do not assume it matches staging's 32/30;
-production's dataset is materially larger). Production's copy of
-`docs/sql/f115-arrival-outcome.sql` is still queued (migration already applied 2026-08-20, ahead of
-the code — see line 4). Rick's call on timing; **F146** (staging's 16 F110 marks include at least
-one confirmed false positive) is worth resolving or at least deciding how to handle *before*
-production's run, since the same false-positive shape will very likely recur there and at
-production's data volume is likely to affect more titles.
+**Remaining:** production's S6 backfill only — set `arrival_outcome = 'unknown'` on the 859
+pre-existing orphaned rows (re-measure first, per above). No code change needed; this is a one-time
+data correction, same shape as staging's 32/30 backfill earlier this session. Production's copy of
+`docs/sql/f115-arrival-outcome.sql` is still queued as a doc artifact (the migration itself was
+already applied 2026-08-20 — see line 4). Rick's call on timing.
 
 **Gate scheduled (2026-08-18), now moot:** the S1/S5/S6 wait-for-September-files gate had no
 elapsed-time condition, only an event condition (catalog files landing) — files arrived
