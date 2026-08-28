@@ -15,13 +15,18 @@ spike.
 **Next scheduled work:** none pending. **Sequencing reminder still live:** whatever lands next on
 admin ordering surfaces must land and promote **before** F115's ~Sept 7–10 import window opens, or
 wait until after it closes — two sessions must not touch admin ordering surfaces across an import.
-**Last completed work:** **F143 + F144 — ordering-side rejection handling** — RESOLVED on staging
-2026-08-27 (`admin.html` `fff78f2` F144, `54126c8` F143; plan
-`docs/f143-f144-ordering-side-rejections.md`, STATUS: COMPLETE staging-only). **Not promoted to
-production** — staging only, pending Rick's explicit request. One Sonnet CLI session, `admin.html`
-only, no schema change. Built F144 (read-only) first, verified V1-V3 green against deployed
-staging, **before** F143 (writes `order_submissions`) landed on top — two separate `--ff-only`
-merges to `staging`, each pushed and tested independently.
+**Last completed work:** **F143 + F144 — ordering-side rejection handling** — fully RESOLVED both
+environments 2026-08-27 (staging `admin.html` `fff78f2` F144 / `54126c8` F143; production **PR #141**
+`a1e8a8d`, same day, Rick's explicit `/promote-prod` request; plan
+`docs/f143-f144-ordering-side-rejections.md`, STATUS: COMPLETE both environments). One Sonnet CLI
+session end to end. `admin.html` only, no schema change. Built F144 (read-only) first, verified
+V1-V3 green against deployed staging, **before** F143 (writes `order_submissions`) landed on top —
+two separate `--ff-only` merges to `staging`, each pushed and tested independently. Promotion gates
+(`/preflight`, F59 merge-result hash check, F125 tree-integrity assertions) all green; PR file list
+re-verified on GitHub matching intent exactly, `config.js` confirmed absent from the diff; production
+bytes confirmed serving the new code directly off `pulllist.app` post-deploy. **Post-deploy
+write-smoke deliberately skipped, Rick's explicit call** — this promotion is `admin.html` only and
+never touches the customer reserve path the write-smoke exercises.
 
 **F144** plumbs `catalog.order_requirement` — previously absent from `admin.html` entirely — into
 the Order Builder: `fetchAllPreorders()`'s select, both row-object literals
@@ -340,9 +345,10 @@ returns NXDOMAIN, and `rjbookstop`/`comicstore` resolve only because each is an 
 provisioned Cloudflare Pages custom hostname. Two docs said otherwise. The print CTA now puts one
 of those hostnames on customer paper; Phase 6's S0 wildcard gate is confirmed **still closed** —
 see table below and `docs/technical-reference.md` § 13). **F144 filed 2026-08-26 and RESOLVED on
-staging 2026-08-27** (restriction ratios reach the Order Builder — see § Current Migration Phase
-above and `docs/technical-reference.md` § 13). **F143 filed 2026-08-26 and RESOLVED on staging
-2026-08-27** (Order Follow-Up's resolve control gains a fourth "Rejected by supplier" option —
+staging 2026-08-27 and promoted to production the same day (PR #141)** (restriction ratios reach
+the Order Builder — see § Current Migration Phase above and `docs/technical-reference.md` § 13).
+**F143 filed 2026-08-26, RESOLVED on staging 2026-08-27 and promoted to production the same day
+(PR #141)** (Order Follow-Up's resolve control gains a fourth "Rejected by supplier" option —
 order-invoice compare-and-report considered and **declined** at filing, not re-proposed — see
 § Current Migration Phase above and `docs/technical-reference.md` § 13). **F142 filed 2026-08-24 and fully
 RESOLVED on both environments 2026-08-26** (Order Builder's own Held Back
@@ -1053,7 +1059,7 @@ detail lives only in `docs/technical-reference.md` § 13. **F92 closed 2026-08-1
 | Phase 5 — second-tenant onboarding (all sub-deploys) | `phase-5-second-tenant-onboarding.md` | F105 |
 | Test-infrastructure maintenance | `test-infra-maintenance-f91-f95-f103.md` | F91, F95, F103, F107 |
 | Catalog-month integrity — stale-date detection + duplicate-row cleanup (S1-S3) | `f136-catalog-month-integrity.md` | F136, F137 |
-| Ordering-side rejection handling (staging only — not yet promoted) | `f143-f144-ordering-side-rejections.md` | F143, F144 |
+| Ordering-side rejection handling | `f143-f144-ordering-side-rejections.md` | F143, F144 |
 | `import.js` maintenance (key rotation, historical dedup, cross-month fix) | `import-js-maintenance-f75-f78-f85.md` | F75, F78, F85 |
 | F86 prod legacy API key retirement | `f86-anon-key-migration.md` | F86, F88 |
 | Mobile thumb-reach tab bar + live-review follow-up | `mobile-nav-tab-bar.md` | — |
