@@ -3989,6 +3989,22 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   already-fulfilled rows (gate V3 green via Playwright, `mylist.html` unchanged per gate V6). Full
   suite 127/127 with one confirmed-flaky retry, scripts suite 186/186 (gate V7). Production has
   **not** run the migration. Detail: `docs/f115-arrival-truth-persistence.md` § 7.
+
+  **✅ STAGING FULLY RESOLVED, 2026-08-28 — ~10 days ahead of the ~Sept 7–10 estimate.** The
+  September catalog files arrived early; Rick ran `import-staging.js` for real. S1/S5/S6 all
+  completed and V1/V4/V5 all confirmed green **against the live run**, not a separate dry run —
+  the console output was cross-checked line-by-line against the database rather than trusted at
+  face value (CSV row counts vs. DB counts, the 16 F110 marks vs. the printed list, the 1
+  auto-fulfilled row vs. a real `weekly_shipment` match). S6 backfill: 32 reservations / 30 titles
+  (re-measured fresh, not the stale 28/23), all set to `unknown`, zero `not_arrived`, ids captured
+  before the write for exact revertibility. Full detail and evidence:
+  `docs/f115-arrival-truth-persistence.md` § status note (2026-08-28) and § 5 gates table.
+  **Production has still not run its September import** (`catalog_month` there remains `2026-08`
+  as of this writing) — F115 stays **OPEN overall** until production's S1/S5/S6 land. One real
+  finding surfaced by this run, filed separately: **F146** — at least one of the 16 F110 marks
+  (0826AB0593) was confirmed still live on the distributor's site, a same-month CSV-lag false
+  positive that will not self-correct on any same-month refresh. Worth a decision before
+  production's own September import, since the same shape will likely recur there.
 - **Severity:** **Medium.** No data-integrity or security exposure, and the measured rate is low — but it is the only state in the whole order pipeline where a customer is told something untrue, and it was structurally unobservable.
 - **Diagnosis — three mechanisms stacked:**
   1. `auto_fulfill_past_on_sale()` (`docs/sql/auto_fulfill_past_on_sale.sql`) sets `fulfilled = true` for every preorder with `c.on_sale_date < CURRENT_DATE`, **with no arrival check whatsoever**.

@@ -1,13 +1,45 @@
 # F115 — persist the reservation arrival outcome (Option B), bundled with the September import pre-flight
 
-**STATUS:** IN PROGRESS | staging=S2/S3/S4/S7 DONE 2026-08-18 (migration applied+verified, import write shipped, admin surface live, Playwright V3/V6/V7 green — see § 7) | prod=migration APPLIED 2026-08-20 (S2 only; import write + backfill still owed) | findings=F115,F110,F122,F123
-**Prod migration pulled forward to 2026-08-20**, out of the S5/S6 window and ahead of the import, at Rick's call. It is additive/nullable and no production code reads the column, so it is inert — but it **clears the promotion block** (`admin.html` on staging selects `arrival_outcome`; without the column any staging→main merge would 400 the entire admin gather — `/promote-prod` step 0b) and removes a dependency from the September session. Verified live on production with the file's own four checks; the 23514 DETAIL carried the production founding tenant_id, confirming the right project. **S5/S6 are unchanged and still owed.**
+**STATUS:** staging FULLY RESOLVED 2026-08-28 (S1–S7 all done, V1–V7 all green — see § 7) | prod=migration APPLIED 2026-08-20 (S2 only; S1/S5/S6 + import write still owed — Sept files not yet run on prod) | findings=F115,F110,F122,F123. **F115 stays OPEN overall** (§ 13) until production's copy of S1/S5/S6 lands — this line describes staging only.
+**Prod migration pulled forward to 2026-08-20**, out of the S5/S6 window and ahead of the import, at Rick's call. It is additive/nullable and no production code reads the column, so it is inert — but it **clears the promotion block** (`admin.html` on staging selects `arrival_outcome`; without the column any staging→main merge would 400 the entire admin gather — `/promote-prod` step 0b) and removes a dependency from the September session. Verified live on production with the file's own four checks; the 23514 DETAIL carried the production founding tenant_id, confirming the right project. **S5/S6 are unchanged and still owed — on production.**
 **Session note (2026-08-18):** September catalog files not yet present (entry condition (b) —
 see session prompt). This pass did S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
 live run, and backfill) are held for the ~Sept 7–10 import window. F115 is NOT resolved yet —
 see § 7 for exactly what ran and what didn't. A TDZ bug in the S4 admin.html change was
 introduced, caught, and fixed within this same session (staging `3dcf521` → `f61487a`) by the
 full Playwright run against deployed staging — see git log for detail.
+**Session note (2026-08-28) — S1/S5/S6 completed on staging, ~10 days ahead of the ~Sept 7–10
+estimate.** Rick ran `import-staging.js` for real against the September files (no separate
+`--no-write` dry run — the live run's own console output serves as S1's evidence instead, cross-
+checked line-by-line against the database rather than trusted at face value):
+- **V1 — all three preconditions confirmed clean.** F123: console-reported row counts (Lunar 1377,
+  PRH 911) match both the source CSV line counts and the post-import DB counts exactly, and
+  `Upserted 2288/2288` with zero failures. F110: `detectWithdrawals()` fired on `isNewMonth` and
+  marked 16 titles, every one satisfying the narrowing rule (`on_sale_date >= today`, an
+  unfulfilled reservation); DB state matches the console list exactly, 16-for-16. F122: console
+  printed `📅 No in-store-date changes on reserved titles` — the drift classifier ran and found no
+  case to separate this cycle (a clean run, not a skipped check).
+- **V4 — the persisted write matches the printed report.** Only 1 reservation crossed its on-sale
+  date this run (staging's dataset is small): CONAN THE BARBARIAN #34, console-reported
+  "1 preorder(s) about to be auto-fulfilled; 0 with no shipment record", DB shows
+  `arrival_outcome='arrived'` on exactly that row — independently cross-checked against a real
+  matching `weekly_shipment` row (same `item_code`/`upc`/`catalog_id`), not just trusted.
+- **V5 — backfill done and re-measured, not reusing the 2026-08-04 numbers.** Fresh count:
+  **32 reservations / 30 distinct titles** with `fulfilled=true AND arrival_outcome IS NULL`
+  (comparable magnitude to the original 28/23, within the doc's own "stop and ask if <15 or >45"
+  bound). All 32 ids captured before writing (exact revert set, scratchpad-local, not committed).
+  PATCHed to `arrival_outcome='unknown'`, verified post-write: `arrived=3, unknown=32,
+  not_arrived=0`, zero `fulfilled=true` rows remain with a NULL outcome.
+- **New, unrelated to F115 directly — filed as F146.** Of the 16 F110 marks, at least one
+  (0826AB0593, DAREDEVIL MY MIGHTY MARVEL FIRST BOOK HC) was confirmed still live on the
+  distributor's own site at the moment it was marked withdrawn — a same-month CSV-lag false
+  positive, not a real withdrawal. `detectWithdrawals()`'s clear-on-reappearance half is gated
+  behind `isNewMonth` alongside the mark half and doesn't need to be, so these 16 will NOT
+  self-correct on any same-month refresh. See `docs/technical-reference.md` § 13 F146 — does not
+  block this entry's gates, which describe the F110 *mark* mechanism working exactly as designed.
+- **Residual, not yet done:** `order_deadline` was cleared for the new cycle (expected new-month
+  behavior) and has not been re-set — Step 7 of `docs/monthly-catalog-refresh.md` is still owed on
+  staging. Maintenance Mode is already back off (confirmed live, `false`).
 
 **Decision record.** Decided 2026-08-18 in `docs/f92-policy-audit-and-f115-arrival-truth.md`
 Part B, then scoped 2026-08-18 with Rick's four implementation answers:
@@ -151,15 +183,17 @@ gate (~17 min, 126 tests baseline). **Gate V6.**
 
 ## 5. Verification gates
 
-| Gate | Assertion | Why this one |
-|---|---|---|
-| **V1** | Sept dry run clean on all three of F110 / F122 / F123 | The bundle's precondition. A red here means F115 does not ship this cycle |
-| **V2** | The judgement function returns `arrived` **only** on a three-key shipment match, and `unknown` otherwise — **never `not_arrived`** | The single most important assertion here: it is the guard against persisting an untrue statement |
-| **V3** | A seeded `unknown` row renders the staff "Never arrived" state; an `arrived` row does not | The surface actually reads the column |
-| **V4** | After the real import, spot-check ≥ 3 rows against the printed report — the column agrees with what the operator was shown | Report and record must not diverge; two sources of truth is how F115 started |
-| **V5** | Backfilled set is **re-measured**, count stated, all set to `unknown`, zero set to `not_arrived` | § 3.5 |
-| **V6** | ~~`mylist.html` byte-unchanged~~ **— SUPERSEDED 2026-08-21 by F134, do not re-apply** | § 3.4's deliberate no-change, provable rather than asserted |
-| **V7** | Full suite green; counts recorded | Standard |
+| Gate | Assertion | Why this one | Status |
+|---|---|---|---|
+| **V1** | Sept dry run clean on all three of F110 / F122 / F123 | The bundle's precondition. A red here means F115 does not ship this cycle | ✅ **Staging 2026-08-28** — no separate dry run; verified against the real run's console + DB cross-check instead (§ status note above). All three clean |
+| **V2** | The judgement function returns `arrived` **only** on a three-key shipment match, and `unknown` otherwise — **never `not_arrived`** | The single most important assertion here: it is the guard against persisting an untrue statement | ✅ 2026-08-18, scripts-repo unit suite |
+| **V3** | A seeded `unknown` row renders the staff "Never arrived" state; an `arrived` row does not | The surface actually reads the column | ✅ 2026-08-18, Playwright |
+| **V4** | After the real import, spot-check ≥ 3 rows against the printed report — the column agrees with what the operator was shown | Report and record must not diverge; two sources of truth is how F115 started | ✅ **Staging 2026-08-28** — only 1 row crossed on-sale this run (small dataset); spot-checked and independently confirmed against real `weekly_shipment` evidence, not just the printed report |
+| **V5** | Backfilled set is **re-measured**, count stated, all set to `unknown`, zero set to `not_arrived` | § 3.5 | ✅ **Staging 2026-08-28** — 32/30, re-measured fresh, 0 `not_arrived` |
+| **V6** | ~~`mylist.html` byte-unchanged~~ **— SUPERSEDED 2026-08-21 by F134, do not re-apply** | § 3.4's deliberate no-change, provable rather than asserted | ✅ 2026-08-18 |
+| **V7** | Full suite green; counts recorded | Standard | ✅ 2026-08-18, 127/127 (1 confirmed-flaky retry) |
+
+**All seven gates are green on staging as of 2026-08-28.** Production has none of V1/V4/V5 run yet — its September import (S1/S5/S6) has not happened (prod is still on `catalog_month = 2026-08`).
 
 ---
 
@@ -181,11 +215,10 @@ one-time backfill · Playwright coverage · the September import pre-flight (F11
 ## 7. Completion criteria
 
 **2026-08-18 session — entry condition (b): September catalog files not yet present.** Covered
-S2/S3/S4/S7 only, per the session's own timing gate. S1/S5/S6 remain, held for the ~Sept 7–10
-import window. Do not read the ticks below as F115 being done — it is not; V1/V4/V5 have not run.
+S2/S3/S4/S7 only, per the session's own timing gate. S1/S5/S6 remained, held for the ~Sept 7–10
+import window.
 
-- [x] V2, V3, V6, V7 green, each with recorded output (this session) — V1/V4/V5 **not run** (need
-      the real September files / real import; S1/S5/S6 held)
+- [x] V2, V3, V6, V7 green, each with recorded output (2026-08-18 session)
   - V2: 186/186 scripts-repo unit tests green, incl. the explicit "never produces `not_arrived`"
     assertion (scripts repo `b629cda`)
   - V3: Playwright — a seeded `fulfilled=true, arrival_outcome='unknown'` row reads "Never arrived"
@@ -197,29 +230,35 @@ import window. Do not read the ticks below as F115 being done — it is not; V1/
     search — timed out at 60s, passed in 5.1s on an isolated re-run; unrelated to this session's
     changes, `mylist.html` untouched) — scripts unit suite 186/186
 - [x] Migration applied to **staging**, `-- STATUS:` line filled in (`docs/sql/f115-arrival-outcome.sql`,
-      staging `9eeee0d`) — **production not yet run**, deferred alongside S1/S5/S6
+      staging `9eeee0d`) — **production not yet run**
 - [x] Both import scripts updated, committed **and pushed** to the scripts repo — verified via
       `git log origin/main` (`b629cda`)
-- [ ] Backfill count re-measured and stated; zero rows set to `not_arrived` — **not this session**
-      (S6, held for the September import window)
+- [x] Backfill count re-measured and stated; zero rows set to `not_arrived` — **DONE 2026-08-28,
+      staging**: 32/30, re-measured fresh (not reusing the 28/23 figure), `arrived=3, unknown=32,
+      not_arrived=0` post-write
 - [x] `mylist.html` unchanged, verified by diff
-- [ ] § 13 F115 flipped to RESOLVED — **not yet**; F115 stays open (Mitigated) until S1/S5/S6 land.
-      CLAUDE.md's open-findings row updated to reflect this session's progress, not removed.
-- [x] This doc's STATUS token flipped — see line 3
-- [x] `/wrap-up` produced (this session's closeout)
+- [x] **V1, V4, V5 green — DONE 2026-08-28, staging.** See § status note and § 5 gates table.
+      **Staging halves of S1/S5/S6 are complete.** Production has not run its September import —
+      F115 stays **OPEN** overall until it does.
+- [x] This doc's STATUS token flipped — see line 3 (staging: RESOLVED; overall: still open, prod pending)
+- [x] `/wrap-up` produced (2026-08-18 session); this 2026-08-28 update is a status/verification pass,
+      not a new build session
 
-**Next session:** when September catalog files are present, resume at S1 (dry-run pre-flight of
-F110/F122/F123, no new code — the F115 write already ships in this commit, so this becomes "does
-S1 stay clean AND does the persisted write behave correctly on a real run"), then S5 (real import),
-S6 (re-measure + backfill, staging then Rick-gated production), and only then close out § 13 F115
-and this doc's STATUS token as RESOLVED. Production's copy of `docs/sql/f115-arrival-outcome.sql`
-is also still queued — Rick's call, likely bundled with that same session.
+**Remaining:** production's S1/S5/S6 — the real September import against `IMPORT_SERVICE_KEY_PROD`,
+followed by production's own backfill re-measurement (do not assume it matches staging's 32/30;
+production's dataset is materially larger). Production's copy of
+`docs/sql/f115-arrival-outcome.sql` is still queued (migration already applied 2026-08-20, ahead of
+the code — see line 4). Rick's call on timing; **F146** (staging's 16 F110 marks include at least
+one confirmed false positive) is worth resolving or at least deciding how to handle *before*
+production's run, since the same false-positive shape will very likely recur there and at
+production's data volume is likely to affect more titles.
 
-**Gate scheduled (2026-08-18):** the S1/S5/S6 wait-for-September-files gate has no elapsed-time
-condition, only an event condition (catalog files landing) — earliest plausible date ~Sept 7 per
-historical cadence. Reminder: one-time cloud routine `trig_01QwSJJf65mYTy2mNkTYsSKk`, fires
-2026-09-07 12:00 UTC (8:00 AM ET), checks in and prompts to resume S1 if files are present.
-https://claude.ai/code/routines/trig_01QwSJJf65mYTy2mNkTYsSKk
+**Gate scheduled (2026-08-18), now moot:** the S1/S5/S6 wait-for-September-files gate had no
+elapsed-time condition, only an event condition (catalog files landing) — files arrived
+2026-08-28, ~10 days ahead of the ~Sept 7 estimate, and staging's S1/S5/S6 ran the same day. The
+one-time cloud routine `trig_01QwSJJf65mYTy2mNkTYsSKk` (was set to fire 2026-09-07) is now
+superseded by this update; no action needed on it, it will simply find the work already done when
+it fires.
 
 ---
 

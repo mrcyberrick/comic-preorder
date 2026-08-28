@@ -12,10 +12,34 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Next scheduled work:** none pending. **Sequencing reminder still live:** whatever lands next on
-admin ordering surfaces must land and promote **before** F115's ~Sept 7–10 import window opens, or
-wait until after it closes — two sessions must not touch admin ordering surfaces across an import.
-**Last completed work:** **F143 + F144 — ordering-side rejection handling** — fully RESOLVED both
+**Next scheduled work:** none pending. **Sequencing reminder — updated 2026-08-28, window now
+open:** staging's September catalog import already ran (F115's S1/S5/S6, ~10 days ahead of the
+~Sept 7–10 estimate — see "Last completed work" below). **Production has NOT yet run its September
+import** (`catalog_month` there is still `2026-08`) — that transition is still ahead. Whatever
+lands next on admin ordering surfaces must land and promote **before** production's September
+import runs, or wait until after it closes — two sessions must not touch admin ordering surfaces
+across that import.
+**Last completed work:** **F115 staging completion + F146 filed** — 2026-08-28. September catalog
+files arrived early; Rick ran `import-staging.js` for real (staging `catalog_month` 2026-08 →
+2026-09). F115's S1/S5/S6 runbook steps and V1/V4/V5 gates all confirmed green **against the live
+run** — cross-checked line-by-line against the database (CSV row counts vs. DB counts, the 16 F110
+marks vs. the printed list, the 1 auto-fulfilled row vs. a real `weekly_shipment` match), not just
+trusted from the console. S6 backfill (32 reservations / 30 titles, re-measured fresh, not the
+stale 28/23 figure) applied and verified: `arrived=3, unknown=32, not_arrived=0`, zero stragglers.
+Full detail: `docs/f115-arrival-truth-persistence.md` § status note (2026-08-28) and
+`docs/technical-reference.md` § 13 F115. **F115 is RESOLVED on staging; still OPEN overall** —
+production's own September import (S1/S5/S6) hasn't happened yet.
+One real gap surfaced by the run and filed separately as **F146**: same-month catalog refreshes
+never re-run F110's withdrawal detection, so a title dropped mid-month from the distributor's
+export (but still live on their site) stays incorrectly marked "Withdrawn — cannot be ordered"
+until the next new-month import, if then. 16 titles marked on staging's run; at least one
+(0826AB0593, confirmed live on the distributor's site by Rick) is a genuine false positive. Worth a
+decision **before** production's own September import — production's larger catalog makes the same
+shape likely to recur, and the false flag lets a customer irreversibly self-cancel a title the
+store is still getting (`isWithdrawn` overrides both the FOC lock and the ordered lock on My List).
+See `docs/technical-reference.md` § 13 F146.
+
+**Prior work (2026-08-27):** **F143 + F144 — ordering-side rejection handling** — fully RESOLVED both
 environments 2026-08-27 (staging `admin.html` `fff78f2` F144 / `54126c8` F143; production **PR #141**
 `a1e8a8d`, same day, Rick's explicit `/promote-prod` request; plan
 `docs/f143-f144-ordering-side-rejections.md`, STATUS: COMPLETE both environments). One Sonnet CLI
@@ -399,7 +423,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F146 | **Medium–High** — same-month catalog refreshes never re-run withdrawal detection (`detectWithdrawals()` is gated behind `isNewMonth` in `import.js`, both the mark **and** the clear half), so a title dropped mid-month from the distributor's export but still live on their site stays incorrectly marked "Withdrawn — cannot be ordered." **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site). The false flag lets a customer **irreversibly** self-cancel via the same override that legitimately unlocks cancellation on a real withdrawal | open, no plan doc. **Interim, no code:** confirm against the distributor's site, then a scoped `UPDATE catalog SET withdrawn_at = NULL, withdrawn_last_seen_month = NULL` for that row. **Proposed fix:** split the clear-on-reappearance half out from the new-month gate so it runs on every import; leave the mark half new-month-gated as-is. See § 13 F146 |
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
-| F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. Persistence built on staging (S2-S4/S7) but **not yet exercised by a real import**; prod has the column (2026-08-20) but not the write or the backfill | Owner: `docs/f115-arrival-truth-persistence.md` (IN PROGRESS — staging built+tested 2026-08-18; **prod migration APPLIED 2026-08-20**, pulled forward to clear the promotion block; **S1/S5/S6 held for the ~Sept 7-10 catalog import**, then prod backfill, Rick-gated) |
+| F115 | **Medium** — a never-arrived title is auto-fulfilled on schedule, so My List tells the customer "✓ Order placed" for a book that never came. **RESOLVED on staging 2026-08-28** (S1/S5/S6 all ran for real, V1/V4/V5 all green, backfill 32/30 applied) — **still open because production hasn't run its September import yet** (prod remains on `catalog_month = 2026-08`) | Owner: `docs/f115-arrival-truth-persistence.md`. **Staging: DONE.** Production: migration APPLIED 2026-08-20; S1/S5/S6 + backfill still owed, no date set, Rick-gated. See § 13 |
 | F135 | **Medium** — the pull-feed publish is welded to shipment import and fires unconditionally, so an **ad-hoc** shipment import republishes a *past* newsletter week, purges the current week's thumbnails, and the next Brevo cron mails the stale issue — the measured 2026-08-11 incident, reproduced deliberately | Owner: `docs/f135-decouple-feed-publish.md`. Direction settled: **decouple**, move the build into the weekly send workflow (DB-resolved week), delete `resolveFeedWeek()`. **Interim, no code:** comment out `GITHUB_TOKEN_PULL_FEED` in `.env` for ad-hoc runs |
 | F131 | **Medium scaling / High continuity** — catalog import is a single-operator dependency: no self-service path exists (service-role key makes the script undistributable), and **every tenant's catalog is sourced from one person's Lunar/PRH portal access**, so losing that access stales every tenant at once. Not a defect — a structural SPOF no test can surface | open, no plan doc. Blocks nothing today; becomes load-bearing the moment the Founding Partner cohort onboards. **Interim, no code:** document the runbook for a second operator + make `.env`/portal access recoverable. Fix shape = authed upload → EF → tenant-scoped write (volume, not architecture, is the open question) |
 | F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
