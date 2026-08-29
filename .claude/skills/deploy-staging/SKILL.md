@@ -30,15 +30,16 @@ gates; **any failed gate is a halt-and-report, never an improvise.**
 5. **Pre-push baseline** — *not* a gate on the code you are about to push
    ```powershell
    cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
-   .\run-smoke.ps1
+   .\run-smoke.ps1 -SkipPlaywright
    ```
    Stage **[1/2] `npm test`** runs against **local files** — a real pre-push gate
-   when `import.js` / `import-staging.js` changed; halt on failure there.
-   Stage **[2/2] Playwright** uses `baseURL = https://staging.pulllist.pages.dev/`
-   and tests the **deployed** site, so for `app.js` / `*.html` / `style.css` it
-   exercises the *previous* build and can say nothing about your change. Treat it
-   as a baseline (staging was already green ⇒ later failures are attributable),
-   never as evidence about the pending push.
+   when `import.js` / `import-staging.js` changed; halt on failure there (~3s).
+   `-SkipPlaywright` skips stage [2/2] deliberately: it uses
+   `baseURL = https://staging.pulllist.pages.dev/` and tests the **deployed**
+   site, so for `app.js` / `*.html` / `style.css` it would exercise the
+   *previous* build and prove nothing about the pending push — running it here
+   only cost ~16 minutes for a result with no evidentiary value. The full suite
+   (no flag) still runs unconditionally at step 7, which is the real gate.
 
 6. **Push**
    ```powershell
