@@ -889,11 +889,12 @@ git checkout staging
 git pull origin staging
 git merge --ff-only feature/<description>
 
-# Optional pre-push baseline — see "Smoke-test ordering" below for why this
-# does NOT test your change. Its value is confirming staging was already green,
-# plus stage [1/2], which does run against local files.
+# Optional pre-push baseline — see "Smoke-test ordering" below for why full
+# Playwright here does NOT test your change. -SkipPlaywright (added 2026-08-29)
+# runs just stage [1/2] (npm test, against local files, ~3s) and skips the
+# ~16min Playwright stage, which would only exercise the OLD deployed build.
 cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
-.\run-smoke.ps1
+.\run-smoke.ps1 -SkipPlaywright
 
 git push origin staging
 # CF Pages auto-deploys the staging preview at https://staging.pulllist.pages.dev/
@@ -960,7 +961,11 @@ for app changes: a green pre-push result says nothing about the code being pushe
 
 Push first, confirm the new bytes are served, then run the suite. Keep the
 pre-push run if you want a baseline — knowing staging was already green makes a
-post-push failure attributable — but it is a baseline, not a gate.
+post-push failure attributable — but it is a baseline, not a gate. Use
+`run-smoke.ps1 -SkipPlaywright` for it (added 2026-08-29): stage [2/2] there
+would only exercise the old deployed build anyway, so running it pre-push cost
+~16 minutes for zero evidentiary value. `-SkipPlaywright` keeps stage [1/2]'s
+real signal (~3s) and drops the part that couldn't tell you anything yet.
 
 **This is the second time this was found.** `docs/subscription-promotion.md`
 § "Deploy sequencing note (2026-07-17)" records the same discovery and Rick
@@ -1243,7 +1248,8 @@ The `<script>` load order must be the same on every page: Supabase UMD bundle
 
 ```powershell
 cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts\playwright
-.\run-smoke.ps1                              # full suite
+.\run-smoke.ps1                              # full suite (the real gate — run once, post-push)
+.\run-smoke.ps1 -SkipPlaywright               # unit suite only, ~3s — pre-push baseline (added 2026-08-29)
 .\run-smoke.ps1 -Headed                       # browser visible
 npx playwright test 04-arrivals-this-week     # single spec
 ```
