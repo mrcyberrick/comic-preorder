@@ -1,6 +1,6 @@
 # F143 + F144 — ordering-side rejection handling
 
-**STATUS:** COMPLETE (staging only) | staging=2026-08-27 (`fff78f2` F144, `54126c8` F143) | prod=— | findings=F143,F144
+**STATUS:** COMPLETE (both environments) | staging=2026-08-27 (`fff78f2` F144, `54126c8` F143) | prod=2026-08-27 (PR #141, merge `a1e8a8d`) | findings=F143,F144
 
 **Type:** Feature build against two filed proposals. **No schema change. No migration. No Edge
 Function change. `admin.html` only** (plus the local Playwright suite, which is never committed).
@@ -288,8 +288,14 @@ at lines 1832-1834.
       removed from the open-findings table.
 - [x] Merged to `staging` with `--ff-only` (twice — F144 alone first per the build-order
       constraint, verified green, then F143 on top).
-- [ ] Production promotion **only** on Rick's explicit request, via `/promote-prod` — **not
-      requested this session; staging only.**
+- [x] Production promotion — Rick's explicit request via `/promote-prod`, 2026-08-27. `/preflight`
+      gates, F59 merge-result hash check, and F125 tree-integrity assertions all green; PR #141
+      (`a1e8a8d`), file list re-verified on GitHub matching intent exactly, `config.js` confirmed
+      not in the diff. Production bytes confirmed serving the new code (`restrictionBadge`,
+      `wireArrivalRejectActions`, "Rejected by supplier" all present; `config.js` still carries the
+      prod Supabase ref) directly off `pulllist.app`. **Post-deploy write-smoke deliberately
+      skipped, Rick's explicit call** — this promotion is `admin.html` only and never touches the
+      customer reserve path the write-smoke exercises.
 
 ---
 
