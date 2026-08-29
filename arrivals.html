@@ -1045,7 +1045,8 @@
           .select(`
             id, distributor, upc, item_code, title, price_usd, quantity, cover_url, on_sale_date,
             catalog:catalog_id (
-              id, title, series_name, publisher, cover_url, price_usd, distributor, variant_type
+              id, title, series_name, publisher, cover_url, price_usd, distributor, variant_type,
+              order_requirement
             )
           `)
           .gte('on_sale_date', start)
@@ -1272,6 +1273,17 @@
   }
 
   // Simple shipment card for the store-manager grid — no reserved/qty styling.
+  //
+  // Restriction-ratio badge (F132's catalog.order_requirement, e.g. '1:10'),
+  // added per Rick to surface the same signal here that the Order Builder
+  // already shows: a title the distributor allocates by ratio is the one
+  // most likely to have shipped short of what was reserved, which is exactly
+  // what an admin scanning this week's actual shipment wants to know. Reuses
+  // app.js's own .restriction-badge — this grid is staff-only (admin's own
+  // view, not impersonating), but it's a plain cover-card grid like
+  // catalog.html's, not an internal list like Order Builder's, so the
+  // existing customer-facing badge class (bottom-left, positioned for a
+  // cover) fits without needing a second bespoke style.
   function makeStoreCard(row) {
     const c        = row.catalog || {};
     const title    = c.title || row.title;
@@ -1282,10 +1294,14 @@
       ? `<img src="${escapeHtml(coverSrc)}" alt="${escapeHtml(title)}" loading="lazy"
              onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;this.classList.add('loaded');">`
       : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
+    const restrictionBadge = c.order_requirement
+      ? `<div class="restriction-badge" title="Distributor allocation ratio ${escapeHtml(c.order_requirement)} — this shipment may be short of what was reserved.">Restricted</div>`
+      : '';
     return `
       <div class="arrival-card not-reserved">
         <div class="arrival-cover">
           <span class="arrival-dist-badge badge-${(dist||'').toLowerCase()}">${escapeHtml(dist||'')}</span>
+          ${restrictionBadge}
           ${cover}
         </div>
         <div class="arrival-info">
