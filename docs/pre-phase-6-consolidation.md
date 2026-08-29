@@ -1,6 +1,6 @@
 # Pre-Phase-6 Consolidation — September 2026
 
-**STATUS:** PROPOSED — **substantially overtaken by events 2026-08-28; C1 is ~90% done** | staging=— | prod=— | findings=F115,F135,F130,F133,F145,F146,F72,F99,F131
+**STATUS:** PROPOSED — **substantially overtaken by events 2026-08-28; C1 is fully DONE (2026-08-28/29)** | staging=— | prod=— | findings=F115,F135,F130,F133,F145,F146,F72,F99,F131
 
 **Status:** **Proposed, not approved.** Written 2026-08-28 by a planning pass. This is a plan for a
 *workstream*, not a phase sub-deploy and not Phase 6. It needs Rick's sign-off on § 5 before an
@@ -447,9 +447,14 @@ ledger rejection and the arrival judgement are separate statements.
 (b). If any of those 32 had shipment evidence, staging's data carries the same overstatement. Test
 data, so low stakes — worth a check when C5 is in that environment anyway, not a separate task.
 
-**Remaining C1 work is now small:** one hand-run, Rick-gated production UPDATE over a re-measured id
-set (captured before writing, per § 8 Rollback), plus the doc closeout. **Size: Small** — down from
-Large.
+**✅ DONE 2026-08-28/29 — C1 fully CLOSED.** Rick ran the Rick-gated production write via
+`f115-s6-backfill-unknown.js` (same pattern as `clear-f147-withdrawn.js`): re-measured live
+immediately before writing (859 orphans → 771 shipment-evidenced / 49 net-positive ledger / 2
+recorded rejections, all left NULL → **26 reservations / 23 titles**, the genuinely-unproven set,
+written to `'unknown'`), ids captured before the write, independently re-verified after with fresh
+queries — orphan count 859→833 (exactly -26), `not_arrived` still 0 tenant-wide, 3 ids spot-checked.
+**F115 is now RESOLVED on both environments.** Full detail: `docs/f115-arrival-truth-persistence.md`
+§ 7 and `docs/technical-reference.md` § 13 F115.
 
 #### C2 — F135: decouple the pull-feed publish from shipment import
 
@@ -630,7 +635,7 @@ freeze is unblocked, including **C2's S4** and **C5**. Revised ordering:
 
 ```
 NOW
- ├── C1 remnant — production S6 backfill (decide § 5 Q11 first; Rick-gated UPDATE)
+ ├── C1 — DONE 2026-08-28/29 (§ 5 Q11 decided: option (a) narrowed to 26; Rick ran the write)
  ├── F146 close-out — fresh Lunar CSV re-pull + re-import to verify the clear fires
  │      (NEW, not in the original eight; owner § 13 F146)
  ├── C5  test-infra — now unblocked, and order_deadline was just reset by the import,
@@ -678,9 +683,11 @@ land until C1 is fully closed out, or an import failure has two candidate causes
 
 ### 3.5 Completion criteria
 
-- [ ] **C1:** § 13 F115 status reads **RESOLVED**, both environments; V1/V4/V5 green;
-      `docs/f115-arrival-truth-persistence.md` STATUS token → COMPLETE with dates; production
-      backfill run against a **freshly re-measured** set, with Rick's explicit approval recorded.
+- [x] **C1 — DONE 2026-08-28/29.** § 13 F115 status reads **RESOLVED**, both environments; V1/V4/V5
+      green; `docs/f115-arrival-truth-persistence.md` STATUS token → COMPLETE with dates; production
+      backfill run against a **freshly re-measured** set (26 reservations / 23 titles, narrowed from
+      859 orphans per the DECISION above), with Rick's explicit approval recorded (he ran the write
+      himself, `y/n` confirmation in the script's own transcript).
 - [ ] **C2:** F135 V1–V5 green, including **one unattended Tuesday cycle** read from the
       **campaign's observed status**, not from a green Actions run; `resolveFeedWeek()` gone from
       `import.js` and from its unit tests; exactly **one** Pages deployer remains (F100).

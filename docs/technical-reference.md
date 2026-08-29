@@ -3970,7 +3970,20 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F115 — `auto_fulfill_past_on_sale()` closes never-arrived titles on schedule, so the backorder panel's failures leave it looking identical to successes
 
-- **Status:** **OPEN — mitigated, decided, not yet built. DECIDED 2026-08-18: Option B (persist the arrival outcome), staff-only, plus a one-time correction of the 28/23. Owner: `docs/f115-arrival-truth-persistence.md`.** The decision detail is ~100 lines below under the mitigation history; this line carries it too, because a status line is where a reader stops — the **F106** lesson applied to this entry after it was corrected in F127's. Full history follows. Filed 2026-08-04 from a live triage question about a specific panel row ("Sonic the Hedgehog #88 is 36 days overdue — what does the customer see?"). **Mitigated 2026-08-04 — live on staging (client) and committed to the scripts repo (import). **since PROMOTED TO PRODUCTION** by a later staging→main merge — verified live on `pulllist.app` 2026-08-09 by serving-build markers. This previously read "production promotion is Rick's call, not yet requested" and was **stale**: no one requested it, but a subsequent promotion carried it anyway, because `git merge staging` moves everything on the branch, not only the session that prompted the merge. **The F105 mechanism** — and the reason to verify a promotion claim against the live site rather than against whether anyone remembers asking.** Not fully *resolved*: the detection is now reported, but nothing yet records or tracks the outcome — that remains **F108**'s job.
+- **Status:** **✅ RESOLVED, both environments, 2026-08-28/29.** Production's S6 backfill (the one
+  remaining piece) is done and independently verified — full detail immediately below the
+  2026-08-28 staging-resolution entry. Owner: `docs/f115-arrival-truth-persistence.md` (STATUS
+  token: COMPLETE). Original decision history retained below for context. Filed 2026-08-04 from a
+  live triage question about a specific panel row ("Sonic the Hedgehog #88 is 36 days overdue —
+  what does the customer see?"). **Mitigated 2026-08-04 — live on staging (client) and committed to
+  the scripts repo (import). **since PROMOTED TO PRODUCTION** by a later staging→main merge —
+  verified live on `pulllist.app` 2026-08-09 by serving-build markers. This previously read
+  "production promotion is Rick's call, not yet requested" and was **stale**: no one requested it,
+  but a subsequent promotion carried it anyway, because `git merge staging` moves everything on the
+  branch, not only the session that prompted the merge. **The F105 mechanism** — and the reason to
+  verify a promotion claim against the live site rather than against whether anyone remembers
+  asking.** Not fully *resolved* at that point: the detection was reported, but nothing yet recorded
+  or tracked the outcome — that gap is what the rest of this entry closes.
   **⚠️ OWNERSHIP GAP, found 2026-08-18 — this residual was OPEN and unowned for one day.** F108 closed 2026-08-11 (Session C § 4.6, PR #117) **without absorbing it**: what shipped was the customer-facing *"Order placed — arriving [date]"* chip, not a record of whether a title actually arrived. So the delegation above pointed at a closed finding, and for a week F115 was invisible on every open-work surface — it was missed by this file's own §13 sweep *and* by the 2026-08-18 doc-status truth pass, because **"Mitigated" does not read as "open"** to a grep or to a human skimming statuses.
   **✅ DECIDED, same day — 2026-08-18, `docs/f92-policy-audit-and-f115-arrival-truth.md` Part B.** Rick's direct answers to the three scoping questions:
   1. **Option B — persist the outcome.** Not Option A (an arrival check inside `auto_fulfill_past_on_sale()` — rejected because a missing `weekly_shipment` row is not proof of non-arrival, so this would trade a visible wrong "arrived" for an invisible stuck "still coming"). Not Option C (customer-copy-only, no schema touch).
@@ -4011,6 +4024,40 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   logic never checked whether the title's FOC had actually passed; fixed, data corrected on
   production, independently verified). See § 13 F146 and F147 for full detail — this entry does
   not restate them.
+
+  **✅ PRODUCTION S6 BACKFILL DONE, 2026-08-28/29 — F115 NOW FULLY RESOLVED, BOTH ENVIRONMENTS.**
+  A execution session picked up the one remaining piece: the 859 pre-existing orphaned rows
+  (`fulfilled=true, arrival_outcome IS NULL`) measured the prior session. **The predicate had
+  drifted between design and staging's execution, and on production the difference is material**
+  (`docs/pre-phase-6-consolidation.md` § 3.3 C1 caught this and recorded the decision): § 3.5 as
+  designed scoped the backfill to the *never-arrived subset* (~28 rows), but staging's V5 actually
+  set *every* orphan to `'unknown'` (32/32, the whole population) because on staging's small test
+  dataset the two were nearly the same set. On production they are not — production carries 975
+  real `weekly_shipment` rows and 1,404 real `order_submissions` rows, so most of the 859 orphans
+  are provably fine. Re-measured live immediately before writing (fresh queries, not the prior
+  session's 859 figure): **771 have real shipment evidence** (they arrived — writing `'unknown'`
+  over that would itself be a false statement, the same defect pointed the other way), **49 have a
+  net-positive ledger row** (ordered — F116's case), **2 have a ledger row netting to ≤0** (a
+  recorded rejection — F143's principle that the ledger rejection and the arrival judgement are
+  separate statements, so writing `'unknown'` over a decided rejection says less than what is
+  already recorded). All 822 of those **deliberately stay NULL** — "not yet judged" is honest for
+  rows that were never actually judged, and NULL is inert (nothing reads it). The remaining **26
+  reservations across 23 titles** have no shipment evidence and no ledger row at all — genuinely
+  unproven, and the only rows the backfill actually wrote. Ids captured to a local file *before*
+  the write for exact revertibility (§ 8 of the owner doc). Rick ran the write via a local one-off
+  script (`f115-s6-backfill-unknown.js`, same pattern as `clear-f147-withdrawn.js` — re-derives the
+  predicate live, refuses to proceed if the fresh count falls outside 15–45, requires an explicit
+  `y/n`). **Independently re-verified afterward with fresh queries, not the write script's own
+  printed output:** orphan count dropped by exactly 26 (859 → 833); `arrival_outcome = 'not_arrived'`
+  confirmed still **0** tenant-wide (the V2 invariant — nothing has ever auto-written this value);
+  3 individual ids spot-checked fresh (`fulfilled=true, arrival_outcome='unknown'` on each);
+  production's full tri-state distribution sums correctly to its 2,648 total preorders (arrived 212,
+  unknown 32 — 6 from the live import + 26 from this backfill, not_arrived 0, damaged 0, NULL 2,404).
+  **One real consequence worth recording, not a defect:** writing `'unknown'` on these 26 makes all
+  23 titles surface in `admin.html`'s Ordering ▸ Never Arrived panel (checked directly against
+  `neverArrivedFromFulfilled()`'s actual filter — all 23 catalog rows carry a `foc_date` and none
+  are withdrawn, so all 23 clear that gate) — that is the intended effect of the fix, staff-only,
+  My List unaffected, but it is real triage work landing on the dashboard, not a silent write.
 - **Severity:** **Medium.** No data-integrity or security exposure, and the measured rate is low — but it is the only state in the whole order pipeline where a customer is told something untrue, and it was structurally unobservable.
 - **Diagnosis — three mechanisms stacked:**
   1. `auto_fulfill_past_on_sale()` (`docs/sql/auto_fulfill_past_on_sale.sql`) sets `fulfilled = true` for every preorder with `c.on_sale_date < CURRENT_DATE`, **with no arrival check whatsoever**.
@@ -4021,7 +4068,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Mitigation shipped (two halves, two repos):**
   - **Detection, at the point of destruction** — `reportUnverifiedFulfillments()` runs immediately *before* the RPC in Step 9 of both `import.js` and `import-staging.js`. Step 6 already loaded the week's shipments, so everything needed is in hand. It prints the titles about to be marked fulfilled with no shipment evidence, collapsed one line per title with copy and customer counts. **Reports, never blocks** — gating fulfillment on absent evidence would trade a silent miss for a silent stall. Read-only, so it prints under `--no-write`, and wrapped so a failed diagnostic can never fail an import. Pure helper `findUnverifiedFulfillments()` is exported and unit-tested (16 new tests across both scripts, 101/101 green). **Gate:** verified against real staging data with a seeded past-on-sale unfulfilled fixture — reported when no shipment row existed, correctly cleared once one was added, torn down and reverified by SELECT returning zero rows.
   - **Surfacing, in the client** — the panel gained a distinct **"Never arrived"** state (on-sale passed, no ledger row, no shipment evidence), visually escalated above Backordered, because ordering can no longer help. See **F116** for the sibling clearing rule shipped with it.
-- **Still owed (this is why the status is "mitigated", not "resolved"):** the report is console output on a monthly/weekly manual job. Nothing persists it, nothing tracks resolution, and nothing tells the affected customer. ~~Persisting the outcome is F108's scope~~ — **void, see the OWNERSHIP GAP note above.** Owner is now `docs/f115-arrival-truth-persistence.md`, and this entry's measurement (23 titles) is the audit list that document's one-time production correction starts from.
+- ~~Still owed (this is why the status is "mitigated", not "resolved")~~ — **nothing owed as of 2026-08-28/29.** The report now persists (`arrival_outcome`, written by both import scripts on every new-month run) and the one-time production correction is done — see the RESOLVED entry above. This entry's original 2026-08-04 measurement (23 titles) was the audit list production's backfill ultimately started from, though the executed set (26 rows across a different, freshly-re-measured 23 titles) is not the same list — see the backfill entry above for why.
 - **Where:** `docs/sql/auto_fulfill_past_on_sale.sql`; `import.js` / `import-staging.js` Step 9 + `findUnverifiedFulfillments()` / `reportUnverifiedFulfillments()`; `admin.html` `computeBackorderRisk()`; `mylist.html` `isOrdered` rendering.
 - **Related:** `docs/f115-arrival-truth-persistence.md` — **the current owner of this finding's residual**, decided 2026-08-18. **F108** — the reconciliation this was wrongly delegated to; that entry's "a rejected title and an unshipped one produce identical evidence" is this same blindness one step earlier, but its own scope never covered persisting this outcome. **F116** — shipped in the same pass, the other half of the same triage. **F101**/**F102** — the panel and ledger this corrects. **F84** — why absent shipment data is not proof of non-arrival.
 

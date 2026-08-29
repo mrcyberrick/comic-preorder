@@ -1,7 +1,7 @@
 # F115 — persist the reservation arrival outcome (Option B), bundled with the September import pre-flight
 
-**STATUS:** staging FULLY RESOLVED 2026-08-28 (S1–S7 all done, V1–V7 all green — see § 7) | prod: real September import RAN 2026-08-28 (S5 happened; write code confirmed live — `arrived=212, unknown=6, not_arrived=0` post-import, V2's invariant holds on real data) but **S6 backfill of the 859 PRE-EXISTING orphaned rows (fulfilled=true, arrival_outcome IS NULL, predating this code) is NOT done**, and V1/V4 were not formally exercised against production the way they were against staging (attention that day went to **F147**, found during this same import) | findings=F115,F110,F122,F123. **F115 stays OPEN overall** (§ 13) until production's S6 backfill lands.
-**Prod migration pulled forward to 2026-08-20**, out of the S5/S6 window and ahead of the import, at Rick's call. It is additive/nullable and no production code reads the column, so it is inert — but it **clears the promotion block** (`admin.html` on staging selects `arrival_outcome`; without the column any staging→main merge would 400 the entire admin gather — `/promote-prod` step 0b) and removes a dependency from the September session. Verified live on production with the file's own four checks; the 23514 DETAIL carried the production founding tenant_id, confirming the right project. **S5/S6 are unchanged and still owed — on production.**
+**STATUS:** COMPLETE, both environments | staging=2026-08-28 (S1–S7 all done, V1–V7 all green — see § 7) | prod=2026-08-28 (S5, real September import, write confirmed live) + 2026-08-28/29 (S6 backfill: 26 reservations / 23 titles, freshly re-measured against live production — not the stale 28/23 or 859 figures — ids captured before the write, independently verified after: orphan count dropped by exactly 26, `not_arrived` still exactly 0 tenant-wide, 3 ids spot-checked fresh) | findings=F115,F110,F122,F123. **F115 is RESOLVED, both environments** (§ 13). V1/V4 were not formally exercised against production as a separate pass (attention that day went to **F147**, found during the same import) but their substance is confirmed live either way — see § 5.
+**Prod migration pulled forward to 2026-08-20**, out of the S5/S6 window and ahead of the import, at Rick's call. It is additive/nullable and no production code reads the column, so it is inert — but it **clears the promotion block** (`admin.html` on staging selects `arrival_outcome`; without the column any staging→main merge would 400 the entire admin gather — `/promote-prod` step 0b) and removes a dependency from the September session. Verified live on production with the file's own four checks; the 23514 DETAIL carried the production founding tenant_id, confirming the right project. **S5 ran 2026-08-28 (real import); S6 ran 2026-08-28/29 (backfill) — both now DONE on production, see § 7.**
 **Session note (2026-08-18):** September catalog files not yet present (entry condition (b) —
 see session prompt). This pass did S2/S3/S4/S7 only; S1/S5/S6 (the real import pre-flight,
 live run, and backfill) are held for the ~Sept 7–10 import window. F115 is NOT resolved yet —
@@ -193,7 +193,7 @@ gate (~17 min, 126 tests baseline). **Gate V6.**
 | **V6** | ~~`mylist.html` byte-unchanged~~ **— SUPERSEDED 2026-08-21 by F134, do not re-apply** | § 3.4's deliberate no-change, provable rather than asserted | ✅ 2026-08-18 |
 | **V7** | Full suite green; counts recorded | Standard | ✅ 2026-08-18, 127/127 (1 confirmed-flaky retry) |
 
-**All seven gates are green on staging as of 2026-08-28.** Production ran its real September import the same day (`catalog_month` now `2026-09`); V4's substance is confirmed live there too (`arrived=212, unknown=6, not_arrived=0`), though V1 was not formally exercised (attention went to F147, found during that run). **The one piece still open, production-side, is S6** — 859 pre-existing orphaned rows measured, not yet backfilled.
+**All seven gates are green on staging as of 2026-08-28.** Production ran its real September import the same day (`catalog_month` now `2026-09`); V4's substance is confirmed live there too (`arrived=212, unknown=6, not_arrived=0`), though V1 was not formally exercised as a separate pass (attention went to F147, found during that run). **V5 is now also green on production, 2026-08-28/29**: the 859 pre-existing orphaned rows were re-measured (not reused from any prior figure), narrowed to the 26 genuinely-unproven rows per the C1 DECISION in `docs/pre-phase-6-consolidation.md` § 3.3 (771 with shipment evidence, 49 net-positive ledger, 2 recorded rejections all deliberately left NULL — see that doc for the full reasoning), backfilled to `'unknown'`, and independently re-verified: orphan count dropped by exactly 26 (859→833), `not_arrived` still exactly 0 tenant-wide, 3 ids spot-checked fresh. **F115 is now fully RESOLVED on both environments.**
 
 ---
 
@@ -246,20 +246,30 @@ import window.
       gates were not explicitly exercised there the way they were on staging. **V4's substance is
       still true on production**, confirmed directly: `arrived=212, unknown=6, not_arrived=0`
       post-import — the never-`not_arrived` invariant (V2) holds live, not just in unit tests.
-- [ ] **Production S6 backfill — measured, NOT yet applied.** `fulfilled=true AND arrival_outcome
-      IS NULL` on production, re-measured 2026-08-28: **859 rows** (do not reuse this figure either
-      without re-checking — re-measure again at execution time, per this doc's own § 3.5 rule).
-      Materially larger than staging's 32, as expected for a much larger real dataset.
-- [x] This doc's STATUS token flipped — see line 3 (staging: RESOLVED; overall: still open — prod
-      S6 backfill is the one remaining piece)
-- [x] `/wrap-up` produced this session, twice (2026-08-18 build session; this 2026-08-28 session
-      covering the real Sept imports on both environments plus F146/F147)
+- [x] **Production S6 backfill — DONE 2026-08-28/29.** § 3.3 C1 of
+      `docs/pre-phase-6-consolidation.md` found the predicate had drifted between design (the
+      never-arrived subset, ~28 rows) and staging's executed version (the whole orphan population,
+      859 rows) — on production those are not the same thing, because production carries 975 real
+      `weekly_shipment` rows against staging's near-empty history. **DECISION (Rick, via the
+      consolidation plan): narrow to the genuinely-unproven rows only.** Re-measured live
+      immediately before the write (not reusing the 859 figure, the 28/23 figure, or any prior
+      snapshot): of the 859 orphans, 771 have real shipment evidence and 51 have an order-ledger
+      row (49 net-positive/ordered, 2 recorded rejections) — all 822 correctly **stay NULL**. The
+      remaining **26 reservations across 23 titles** have no shipment evidence and no ledger row
+      at all — these were set to `arrival_outcome = 'unknown'`. Ids captured to a local file
+      *before* the write (exact revert set, per § 8). Independently re-verified afterward with
+      fresh queries (not the write script's own printed output): orphan count 859 → 833 (exactly
+      -26), `arrival_outcome = 'not_arrived'` still **0** tenant-wide, 3 individual ids spot-checked
+      fresh. **F115's own tri-state distribution on production, post-backfill:** arrived 212,
+      unknown 32 (6 from the live import + 26 from this backfill), not_arrived 0, damaged 0,
+      NULL 2,404 (the 771 shipment-evidenced + 51 ledgered + rows not yet past on-sale) — sums to
+      the tenant's full 2,648 preorders.
+- [x] This doc's STATUS token flipped — see line 3 (**COMPLETE, both environments**)
+- [x] `/wrap-up` produced this session, three times (2026-08-18 build session; 2026-08-28 session
+      covering the real Sept imports on both environments plus F146/F147; this 2026-08-28/29
+      session closing production's S6 backfill)
 
-**Remaining:** production's S6 backfill only — set `arrival_outcome = 'unknown'` on the 859
-pre-existing orphaned rows (re-measure first, per above). No code change needed; this is a one-time
-data correction, same shape as staging's 32/30 backfill earlier this session. Production's copy of
-`docs/sql/f115-arrival-outcome.sql` is still queued as a doc artifact (the migration itself was
-already applied 2026-08-20 — see line 4). Rick's call on timing.
+**Nothing remaining.** F115 is fully resolved on both environments.
 
 **Gate scheduled (2026-08-18), now moot:** the S1/S5/S6 wait-for-September-files gate had no
 elapsed-time condition, only an event condition (catalog files landing) — files arrived
