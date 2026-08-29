@@ -3703,21 +3703,15 @@
         const total    = available.reduce((s, p) => s + ((parseFloat(p.catalog?.price_usd)||0) * (p.quantity||1)), 0);
         const totalQty = available.reduce((s, p) => s + (p.quantity||1), 0);
 
-        const rows = items.map(p => {
+        // Unavailable (F117/F108 § 4.5, revised 2026-08-29 per Rick) — no
+        // longer interleaved into the pick list as a struck-through row.
+        // Still surfaced, never silently dropped, but tucked into its own
+        // "Not arriving" note below the items so the main list a staffer
+        // works off of only ever contains books to actually bag.
+        const unavailableItems = items.filter(p => p.isUnavailable);
+
+        const rows = available.map(p => {
           const c    = p.catalog || {};
-          // Unavailable (F117/F108 § 4.5) — flagged, not dropped: no
-          // checkbox (nothing to pick up), struck through, reason shown so
-          // the person bagging knows why it's not in the box and can follow
-          // up with the customer, rather than searching for a book that
-          // will never arrive.
-          if (p.isUnavailable) {
-            return `
-              <li class="bagging-row bagging-row-unavailable" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.92rem;opacity:0.6">
-                <span style="width:16px;text-align:center;flex-shrink:0" title="${escapeHtml(p.unavailableReason)} — will not arrive">⚠</span>
-                <span style="flex:1;text-decoration:line-through">${escapeHtml(c.title || '—')}</span>
-                <span style="font-size:0.72rem;color:var(--warning,#eab308);white-space:nowrap">${escapeHtml(p.unavailableReason)}</span>
-              </li>`;
-          }
           const qty  = p.quantity || 1;
           const unit = parseFloat(c.price_usd) || 0;
           const line = unit * qty;
@@ -3733,6 +3727,22 @@
               <span style="font-weight:600;color:var(--text-secondary);white-space:nowrap">$${unit.toFixed(2)}</span>
             </li>`;
         }).join('');
+
+        // Compact, always-visible (not an interactive toggle — this list
+        // also has to work on paper) note below the pick list. Kept plain
+        // rather than a <details>/<summary> disclosure like the Order
+        // Builder's collapsed sections use elsewhere: a closed <details> on
+        // the printed sheet would hide exactly the info a staffer needs
+        // when a customer calls asking where a title is.
+        const notArrivingHtml = unavailableItems.length ? `
+          <div class="bagging-not-arriving" style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--border);font-size:0.78rem;color:var(--text-muted)">
+            <div style="font-weight:600;color:var(--warning,#eab308);margin-bottom:2px">
+              ⚠ Not arriving this week (${unavailableItems.length})
+            </div>
+            <ul style="list-style:none;padding:0;margin:0">
+              ${unavailableItems.map(p => `<li>${escapeHtml(p.catalog?.title || '—')} — ${escapeHtml(p.unavailableReason)}</li>`).join('')}
+            </ul>
+          </div>` : '';
 
         return `
           <div class="customer-group bagging-customer-card" data-user-id="${group.user_id}">
@@ -3761,6 +3771,7 @@
               <div style="display:flex;justify-content:flex-end;padding:8px 0 0;margin-top:8px;border-top:1px solid var(--border);font-weight:700">
                 TOTAL:&nbsp;<span style="color:var(--accent);min-width:80px;text-align:right">$${total.toFixed(2)}</span>
               </div>
+              ${notArrivingHtml}
             </div>
           </div>`;
       }).join('');
