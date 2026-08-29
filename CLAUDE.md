@@ -12,8 +12,7 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
 spike.
 **Active sub-deploy:** none.
-**Next scheduled work:** F146's verification, pending Rick's sign-off — see next paragraph.
-**Sequencing reminder — window CLOSED 2026-08-28:**
+**Next scheduled work:** none pending. **Sequencing reminder — window CLOSED 2026-08-28:**
 production ran its real September import this session (`catalog_month` 2026-08 → 2026-09) — the
 transition this reminder existed to protect has already happened, both environments. The
 constraint is dormant until October's import opens the next one; no admin-ordering-surface work is
@@ -21,20 +20,18 @@ currently blocked. **Residual, not yet done:** production's Maintenance Mode is 
 `order_deadline` is still cleared (Step 7/8 of `docs/monthly-catalog-refresh.md`) — both need
 action before the store reopens to customers.
 
-**F146 verification session (2026-08-29) — HALTED, needs a decision, not more code.** A fresh
-September Lunar + PRH CSV pair was confirmed on disk (2026-08-29, after the 2026-08-28 import) and
-the `--no-write` dry run ran clean, but the result proved unreadable as either success or failure
-under the runbook's own three-branch logic: **none of staging's 16 withdrawn marks can ever clear
-via a September re-pull, at any freshness** — Lunar's item codes are permanently scoped to their
-solicitation month (0 of 1,377 September rows carry an `0826` prefix, confirmed across three
-monthly files) and PRH's are issue-scoped, so the "fresh re-pull of the new month" method itself
-cannot exercise the fix for these 16 titles. The real (write) run was withheld rather than spent on
-a proven no-op. **A corrected path was identified but not run:** all 16 codes are confirmed present
-in the existing (2026-08-21) August files, so re-importing them as an older-month backfill
-(`--skip-autoreserve`) — the same code path per `monthly-catalog-refresh.md` § Step 3's Revision
-Sweep — would very likely clear all 16 in one pass. **Needs Rick's go-ahead before running**, since
-it's a different file set and month than the session was scoped for. Full detail:
-`docs/technical-reference.md` § 13 F146 (2026-08-29 note).
+**F146 fully RESOLVED on staging, 2026-08-29.** A first verification attempt (fresh September
+Lunar + PRH CSV pair, confirmed on disk 2026-08-29) ran clean but proved the "fresh re-pull of the
+new month" method itself can never clear any of the 16 marks: Lunar's item codes are permanently
+scoped to their solicitation month (0 of 1,377 September rows carry an `0826` prefix, confirmed
+across three monthly files) and PRH's are issue-scoped. The real (write) run was withheld rather
+than spent on a proven no-op. **Corrected re-test, same session:** Rick re-pulled the August files
+fresh; all 16 codes confirmed present by direct grep; re-imported them as an older-month backfill
+(`--skip-autoreserve`) per `monthly-catalog-refresh.md` § Step 3's Revision Sweep. Dry run and real
+run both reported all 16 reappeared and cleared; independently re-verified against the live DB
+(`withdrawn_at NOT NULL` count 16→0, `0826AB0593` and two others spot-checked individually).
+**Production still holds 0 withdrawn marks** — its first real exercise of this path is October's
+import. Full detail: `docs/technical-reference.md` § 13 F146.
 **Last completed work:** **F115 fully RESOLVED, both environments — production S6 backfill closed,
 2026-08-28 (later session).** The one remaining piece of F115 (see prior-work entry below) was the
 production backfill of 859 pre-existing orphaned rows (`fulfilled=true, arrival_outcome IS NULL`).
@@ -497,7 +494,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | ID | One line | Next step |
 |---|---|---|
 | F147 | **High, fully RESOLVED 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. **Production data corrected and independently re-verified** — Rick ran `clear-f147-withdrawn.js`, 519/519 cleared, confirmed via a fresh live query afterward (count 0, BATMAN #14 spot-checked). **Maintenance Mode was ON throughout — no customer ever saw it.** See § 13 F147 |
-| F146 | **Medium–High, fix shipped 2026-08-28, verification HALTED 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **2026-08-29: a fresh-September-CSV verification was attempted and halted before the real run** — Lunar item codes are permanently scoped to their solicitation month (proven: 0/1,377 September rows carry an `0826` prefix) and PRH's are issue-scoped, so **none of the 16 marks can ever clear via a September re-pull, at any freshness** — confirmed both by direct CSV inspection and the script's own `--no-write` dry-run report ("16 currently-withdrawn title(s) on record; none reappear"). **Still open, 16/16 uncleared. Corrected path identified, not yet run:** re-import August's own files as an older-month backfill (`--skip-autoreserve`) — all 16 codes confirmed present there — per `monthly-catalog-refresh.md` § Step 3's existing Revision Sweep guidance; needs sign-off before running. Production still holds 0 withdrawn marks (October's import is its first real opportunity). See § 13 F146 |
+| F146 | **Medium–High, fix shipped 2026-08-28, fully RESOLVED on staging 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **A first verification attempt (fresh September re-pull) was correctly halted**: Lunar item codes are permanently scoped to their solicitation month and PRH's are issue-scoped, so none of the 16 marks could ever clear that way, at any freshness. **Corrected re-test, same day: re-imported August's own files (fresh re-pull) as an older-month backfill (`--skip-autoreserve`)** — dry run and real run both reported all 16 reappeared and cleared; independently re-verified against the live DB (`withdrawn_at NOT NULL` count 16→0, 3 titles spot-checked including `0826AB0593`). **Staging: RESOLVED, 16/16 cleared.** Production still holds 0 withdrawn marks; its first real exercise of this path is October's import. See § 13 F146 |
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. Same shape is plausible on `mylist.html`/`arrivals.html`, **unmeasured** |
 | F115 | **Medium, fully RESOLVED, both environments, 2026-08-28.** A never-arrived title used to auto-fulfil on schedule, so My List told the customer "✓ Order placed" for a book that never came — now `arrival_outcome` persists what actually happened. Staging: S1/S5/S6 ran for real, V1/V4/V5 all green, 32/30 backfilled. Production: real Sept import ran (`arrived=212, unknown=6, not_arrived=0`), then **S6 backfill closed 2026-08-28** — 859 orphans re-measured, narrowed to 26 genuinely-unproven rows (771 shipment-evidenced + 51 ledgered correctly left NULL), written and independently re-verified (859→833, `not_arrived` still 0) | Owner: `docs/f115-arrival-truth-persistence.md` (STATUS: COMPLETE). **Not open work.** One residual, not a defect: writing `'unknown'` surfaced all 23 backfilled titles in `admin.html`'s Never Arrived panel — real triage, staff-only, expected. See § 13 |
