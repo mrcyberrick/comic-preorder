@@ -641,7 +641,10 @@
 
   <!-- List Table -->
   <div id="list-container">
-    <div class="empty-state">
+    <!-- .loading-reserve holds a viewport of space at first paint so the table
+         landing here does not shove the page down (F141 follow-up). It vanishes
+         with the placeholder when real content is written. -->
+    <div class="empty-state loading-reserve">
       <p style="color:var(--text-muted)">Loading your list…</p>
     </div>
   </div>

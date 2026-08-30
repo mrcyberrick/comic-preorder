@@ -1253,6 +1253,30 @@ button { cursor: pointer; font-family: var(--font-body); }
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
 }
+/* ── Loading height reservation (F141 follow-up) ─────────────
+   Applied to the LOADING PLACEHOLDER, in static CSS, so the space exists at
+   FIRST PAINT. That placement is the entire fix and it is not interchangeable
+   with setting min-height from JS.
+
+   Why JS cannot do this. CLS sums an impact fraction PER SHIFT. A reservation
+   applied after first paint turns one shift (small -> full) into two (small ->
+   reserved, reserved -> full) and each is scored separately, so the total can
+   go UP. Measured 2026-08-30, and it did: reserving 620px scored 0.347 while
+   reserving a full viewport scored 0.578 — reserving MORE was WORSE, which is
+   backwards until you count shifts rather than pixels. That attempt was
+   reverted (979eb7d).
+
+   Why it is on the placeholder rather than the container: when real content
+   replaces the placeholder the reservation disappears with it. Nothing has to
+   remember to release a floor — which is the other bug the reverted attempt
+   had, since mylist's empty-state branch returns early and never reached its
+   release call.
+
+   A viewport is the right unit because CLS only counts shifts the user can
+   SEE. If the loading state already fills the screen, the footer and anything
+   below start off-screen and their movement is not scored. */
+.loading-reserve { min-height: 100vh; }
+
 /* ── Loading skeletons (F141) ───────────────────────────────
    The skeleton is a .comic-card with shimmer blocks inside, NOT a parallel
    layout. It therefore inherits the real card's padding, gap, aspect-ratio
