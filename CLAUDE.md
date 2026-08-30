@@ -27,6 +27,14 @@ the ambient value F133's date-dependent specs trip over. **Check the value befor
 surface** — `app_settings` is not anon-readable, so it needs a service-role read or the admin
 Settings screen.
 
+**⏰ GATE SCHEDULED: October catalog import — target Fri 2026-09-25 (Rick, 2026-08-30).** One-time
+cloud reminder armed for 12:00 UTC / 8:00 AM ET that day (`trig_01FQesEHRh9XdRXgwASFJoh7`,
+`run_once_at` verified set, enabled). The date sits one day after September's `order_deadline`
+(Thu 2026-09-24), so September's orders close first; it is a Friday, clear of the Tue/Wed
+shipment-and-bagging window. **The stale September reminder was disarmed the same day**
+(`trig_01QwSJJf65mYTy2mNkTYsSKk`) — it was still armed for 2026-09-07 to prompt work that
+actually completed on 2026-08-28, and would have sent Rick to redo a finished import.
+
 **October's import is an attended-session gate, not a formality.** Two fixes get their first-ever
 live production exercise there: **F147**'s corrected FOC check (its mark half could not be
 re-exercised this cycle — flipping `catalog_month` to `2026-09` closed the new-month window the
