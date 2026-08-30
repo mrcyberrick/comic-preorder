@@ -22,6 +22,66 @@
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Admin mobile layout ── */
+    /* Order Follow-Up, collapsed by default (Rick's Option 2, 2026-08-30).
+       The panel measured 1,796px — revealed from display:none ABOVE the tab
+       content, which pushed a visible page down and was the whole of admin's
+       0.90 CLS. Collapsed, the reveal is a header plus one summary line.
+
+       NEVER ARRIVED ROWS ARE NOT IN HERE — Rick's choice, 2026-08-30, after the
+       first attempt collapsed everything and turned three specs red. Those rows
+       carry the resolve controls (Damaged / Didn't arrive / Rejected by
+       supplier, F134 + F143): they are the actionable third of the panel and
+       staff reach for them daily, so putting them behind a click was a real
+       cost on a daily triage surface. The suite refusing to pass was the signal.
+       Backordered and At Risk are informational, so only those collapse.
+
+       The COUNTS also stay in the panel header, outside this <details>, so the
+       full alert state is legible without expanding.
+
+       Not persisted across loads on purpose. Remembering an expanded state
+       would put the 1,796px reveal back for anyone who had opened it once,
+       which is the defect this is fixing. */
+    /* Never Arrived is BOUNDED BY SCROLL, not by hiding rows (Rick's option 2,
+       2026-08-30, implemented this way deliberately).
+
+       Hiding all but the first N would have reintroduced the problem option (b)
+       had just fixed. These rows sort by on-sale date and staging carries ~32 of
+       them from the F115 backfill, so a spec's seeded title lands outside the
+       first N unpredictably — 21-arrival-resolution and 22-f143-f144 would go
+       flaky rather than cleanly red. A capped scroll region bounds the height
+       the same way while every row keeps a real bounding box: Playwright scrolls
+       to act on it, and so does a person.
+
+       It also suits the actual workflow better. Triage resolves the top row, it
+       drops out of the panel, the next moves up — with a collapse you would be
+       re-expanding after every single resolution.
+
+       ~3 rows at the measured 93px each. */
+    .ofu-never-scroll {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .ofu-details > summary {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent);
+      padding: 2px 0;
+      list-style: none;
+    }
+    .ofu-details > summary::-webkit-details-marker { display: none; }
+    .ofu-details > summary::before { content: 'B8'; font-size: 0.7rem; }
+    .ofu-details[open] > summary::before { content: 'BE'; }
+    .ofu-details > summary:hover { text-decoration: underline; }
+
     @media (max-width: 640px) {
 
       /* Page header: stack title and controls vertically */
@@ -90,7 +150,8 @@
       #order-builder-summary { flex: 1 1 100%; order: -1; margin-bottom: 4px; }
 
       /* Backorder-risk panel rows: allow title to wrap instead of clipping */
-      .backorder-risk-row { flex-wrap: wrap; }
+  
+    .backorder-risk-row { flex-wrap: wrap; }
       .backorder-risk-row > div:first-child { white-space: normal !important; }
     }
   </style>
@@ -1822,12 +1883,24 @@
       </div>
       ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin-bottom:6px">
         Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
-      </div>` : ''}
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${rowHtml(neverArrived, 'neverArrived')}
-        ${rowHtml(backordered, 'backordered')}
-        ${rowHtml(atRisk, 'atRisk')}
       </div>
+      <div class="ofu-never-scroll">
+        ${rowHtml(neverArrived, 'neverArrived')}
+      </div>
+      ${neverArrived.length > 3 ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">
+        ${neverArrived.length} titles — scroll the list to reach the rest.
+      </div>` : ''}` : ''}
+      ${(backordered.length || atRisk.length) ? `
+      <details id="ofu-details" class="ofu-details" style="margin-top:${neverArrived.length ? '10px' : '0'}">
+        <summary class="ofu-summary">Show ${[
+          backordered.length ? `${backordered.length} backordered` : '',
+          atRisk.length      ? `${atRisk.length} at risk`          : '',
+        ].filter(Boolean).join(' · ')}</summary>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          ${rowHtml(backordered, 'backordered')}
+          ${rowHtml(atRisk, 'atRisk')}
+        </div>
+      </details>` : ''}
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
         Titles already ordered, or with a shipment record, are cleared automatically.
       </div>
