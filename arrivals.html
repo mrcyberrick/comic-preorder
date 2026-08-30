@@ -569,6 +569,12 @@
   const weekDisplay = `${monDisplay} – ${sunDisplay}`;
 
   const container = document.getElementById('arrivals-container');
+  // F141 follow-up: reserve this container's last-known height BEFORE the
+  // one-line "Loading…" state paints. Arrivals was the worse of the two
+  // pages — 0.966 desktop CLS, worse than the catalog defect F141 fixed —
+  // because a full cover grid lands where one line of text was. Fallback is
+  // deliberately taller than My List's: this renders cards, not table rows.
+  LoadingHeight.reserve(container, 'arrivals', 900);
   const targetUserId = AdminContext.resolveUserId(user.id);
 
   if (AdminContext.isActive()) {
@@ -819,6 +825,7 @@
     }
 
     container.innerHTML = html;
+    LoadingHeight.remember(container, 'arrivals');
 
     // Fade in images
     container.querySelectorAll('img').forEach(img => {
@@ -996,6 +1003,10 @@
           `<div class="arrivals-empty"><h2>No shipment for this week</h2>` +
           `<p>Nothing has been imported for this week yet. Use the week controls above to check another week.</p></div>`;
       }
+
+      // One release covering all three branches above — the store view swaps
+      // this container on every week-nav click, so the floor must not persist.
+      LoadingHeight.remember(container, 'arrivals');
     }
 
     const searchEl = document.getElementById('search');

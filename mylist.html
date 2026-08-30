@@ -892,6 +892,10 @@ function confirmDialog(message, okLabel = 'Remove') {
   const searchEl   = document.getElementById('search');
   const distEl     = document.getElementById('filter-distributor');
   const container  = document.getElementById('list-container');
+  // F141 follow-up: reserve this container's last-known height BEFORE the
+  // one-line "Loading…" state paints, or the table landing under it shoves
+  // the whole page down (measured 0.613 desktop CLS). Fallback ~8 rows.
+  LoadingHeight.reserve(container, 'mylist', 620);
 
   async function loadList() {
     const targetUserId = AdminContext.resolveUserId(user.id);
@@ -907,6 +911,7 @@ function confirmDialog(message, okLabel = 'Remove') {
     ]);
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
+      LoadingHeight.remember(container, 'mylist');
       return;
     }
     // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now
@@ -1258,6 +1263,12 @@ function confirmDialog(message, okLabel = 'Remove') {
         }
       });
     });
+
+    // Real content is in the DOM — drop the reserved floor and record what
+    // it actually needed, so the next visit reserves the right height.
+    // Placed at the very end of renderList so it covers every exit above,
+    // including the empty-state branch.
+    LoadingHeight.remember(container, 'mylist');
   }
 
   // ── Print ─────────────────────────────────────────────────
