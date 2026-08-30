@@ -4873,6 +4873,17 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F141 — the catalog grid renders after first paint with no reserved space, producing a 0.636 desktop CLS
 
+- **⚠️ RESIDUAL MEASURED 2026-08-30 — it is real on BOTH pages, and `arrivals.html` is WORSE than `catalog.html` ever was.** This entry previously said the same shape was “plausible on `mylist.html` / `arrivals.html`, **unmeasured**.” Measured now, against **authenticated staging** via `playwright/lighthouse-auth.mjs` (a signed-out run scores the marketing page — the 2026-08-24 blind alley):
+
+  | Page | Desktop CLS | Desktop score | Mobile CLS | Mobile score |
+  |---|---|---|---|---|
+  | `catalog.html` (fixed) | 0.02 | 98 | 0.008 | 93 |
+  | `mylist.html` | **0.613** | **78** | 0.016 | 100 |
+  | `arrivals.html` | **0.966** | **75** | 0.076 | 96 |
+
+  For scale, the CLS this finding fixed on `catalog.html` was **0.636**, and “good” is **< 0.1**. So `arrivals.html` is **worse than the original defect**, and `mylist.html` is within noise of it. Lighthouse attributes 3 and 4 layout shifts respectively, with `cls-culprits-insight` scoring 0 on both. **Desktop only** — mobile is fine on both pages (0.076 / 0.016), the same asymmetry `catalog.html` showed.
+- **Not fixed — this was a measurement task, and the numbers turn it into a real work item.** CLS is **25% of the Performance score**, so this is most of the gap between 75–78 and a passing grade on two pages customers actually use. The `catalog.html` fix shape (reserve the grid's real height before it fills — skeleton count matched to page size, skeleton height matched to a real card) is the obvious starting point, but **neither page's shift culprits have been read from the JSON yet**; do that before assuming the same fix transfers.
+- **Harness note — `lighthouse-auth.mjs` had a latent bug that hid this.** It waited for the requested `--path` to appear in the URL, but consuming a magic link lands on the app's own post-auth page (`/catalog`), so **every path except the default timed out** — which is why this residual sat unmeasured for six days behind a script that looked available. Fixed 2026-08-30: wait for the session, then navigate to the target, and throw if the target bounces back through `requireAuth()` rather than silently scoring the wrong page. Both runs' teardowns confirmed clean (`204/200 = deleted`), so no F130 orphans were added.
 - **Status:** filed **and fully RESOLVED 2026-08-24, both environments**, same
   day (staging `a2a2583`; production via **PR #133**, merged 18:44 UTC).
   Production verified post-deploy: `renderSkeletons(PAGE_SIZE)`,

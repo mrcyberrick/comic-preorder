@@ -876,7 +876,32 @@ covering sender-identity consolidation and per-tenant email branding **together*
 
 ---
 
-### W11 — Opportunistic: measure F141's unmeasured residual
+### W11 ✅ **DONE 2026-08-30** — F141's residual measured, and it is worse than expected
+
+| Page | Desktop CLS | Desktop score |
+|---|---|---|
+| `catalog.html` (fixed by F141) | 0.02 | 98 |
+| `mylist.html` | **0.613** | **78** |
+| `arrivals.html` | **0.966** | **75** |
+
+The defect F141 fixed on `catalog.html` was **0.636**. **`arrivals.html` is worse than the original
+defect.** Good is < 0.1. Desktop only — mobile is fine on both (0.076 / 0.016). CLS is **25% of the
+Performance score**, so this is most of the gap to a passing grade on two pages customers use daily.
+
+**Not fixed — this item was scoped as a measurement, and the numbers turn it into a real work item.
+Rick's call.** Read each page's shift culprits from the Lighthouse JSON before assuming catalog's
+fix shape transfers.
+
+**Why this sat unmeasured for six days:** `lighthouse-auth.mjs` waited for the requested `--path` to
+appear in the URL, but consuming a magic link lands on `/catalog`, so **every path except the
+default timed out.** The tool looked available and wasn't. Fixed: wait for the session, navigate to
+the target, and **throw** if it bounces back through `requireAuth()` rather than silently scoring
+the wrong page — which is the exact mistake the script was written to prevent. Both runs' teardowns
+confirmed clean, so no F130 orphans added.
+
+*Original item retained below.*
+
+#### (original) W11 — Opportunistic: measure F141's unmeasured residual
 
 **Delivers:** a number instead of a guess for whether `mylist.html` and `arrivals.html` carry the same
 CLS shape F141 fixed on `catalog.html` (desktop 75 → 98, CLS 0.636 → 0.02).
@@ -910,7 +935,7 @@ NEXT — nothing here is blocked, and nothing here is time-critical
 
 
 OPPORTUNISTIC
- └── W11 measure F141's residual on mylist/arrivals
+ └── W11 ✅ DONE 2026-08-30 — measured; both pages affected, arrivals worst
 
 DEFERRED — recorded, not lost
  ├── W3  F135 decoupling      (Q7 — .env mitigation stands)
