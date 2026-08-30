@@ -496,7 +496,7 @@ their own seeded rows, and a **classified** — not bulk-deleted — auth-user o
 
 ---
 
-### W5 ✅ **DONE 2026-08-30** — MailerLite webhook path removed (native-signup S5)
+### W5 ✅ **DONE + DEPLOYED 2026-08-30** — MailerLite webhook path removed (native-signup S5)
 
 **Code:** `?secret=` branch, tenant lookup and payload parser deleted from
 `supabase/functions/register-customer/index.ts` (−4,087 bytes, 18,253→14,166). Header rewritten
@@ -525,10 +525,32 @@ COMPLETE token and its checkboxes finally agree — the § 1.6(a) conflict is go
   are now dead config — nothing reads either, so the value is no longer live anywhere. Unsetting
   them in both projects is optional tidying, not a security step.
 
-**⚠️ Not deployed yet — this is the one thing outstanding.** Edge Functions deploy outside the
-branch flow, on **both** Supabase projects, and per `CLAUDE.md` the agent never touches prod deploy
-credentials. **Rick deploys.** Until then production still runs the old code, which is harmless (the
-webhook path simply still exists) but means W5 is code-complete, not live.
+**✅ DEPLOYED AND VERIFIED, both environments, 2026-08-30.** Rick deployed via the Supabase
+dashboard's Edge Functions editor (no CLI needed). Staging first, production second, each verified
+before moving on. **Four behavioural checks, identical results on both projects:**
+
+| Check | Result | What it proves |
+|---|---|---|
+| `?secret=bogus` + `{}` | 400 `email, name, and slug are required` | webhook branch gone |
+| **without `?secret=`** | **identical response** | `?secret=` is genuinely **inert** — same result with and without |
+| malformed JSON | 400 `Invalid request body` | native path's own error handling intact |
+| honeypot filled | 200 `{"success":true}`, no account | native signup alive, abuse gate working |
+
+**The second row is the one that carries the argument.** A removed branch and a branch that merely
+fails differently both return an error; only *identical behaviour with and without the parameter*
+shows the code path no longer exists. Checks 3 and 4 covered the real risk — the removal touched the
+same request handler as live customer signup — and `rjbookstop.pulllist.app` still serves its 2
+`register-customer` references, so the branded login still posts where it should.
+
+**A verification trap worth keeping:** the pre-deploy probe returned **401**, and *two different
+failures* would also return 401 — old code still deployed (`{"error":"Unauthorized"}`) and Verify-JWT
+accidentally switched on (a gateway-shaped message). Status code alone cannot separate them and they
+need opposite fixes. **Read the body.** Both were called out before deploying; neither occurred.
+
+**Residual:** the new source is on `staging` only, so `main` still holds the old file while
+production runs the new one — the standing consequence of Edge Functions deploying out-of-band.
+A normal `/promote-prod` PR closes it. Nothing breaks meanwhile; the risk is a future reader
+trusting `main`.
 
 **F99's trigger fired.** Its recorded condition was “MailerLite retirement (not a date).” § 13 F99
 and the `CLAUDE.md` findings table now read **unblocked but unscheduled** — with an added warning
@@ -929,7 +951,7 @@ NEXT — nothing here is blocked, and nothing here is time-critical
  ├── W2  record the three 2026-08-29 promotions   (small, doc-only) ◀ do first
  ├── W6  ✅ DONE 2026-08-30 — inventory recorded, F145 item 3 ticked
  ├── W4  test-infra F133 → F130                   (read order_deadline live first)
- ├── W5  ✅ CODE DONE 2026-08-30 — ⚠️ awaiting Rick's Edge Function deploy (both projects)
+ ├── W5  ✅ DONE 2026-08-30 — deployed + verified both environments
  ├── W7  ✅ DONE 2026-08-30 — all 6 items, both preflight flags cleared
  └── W9  ✅ DONE 2026-08-30 — all three pieces
 

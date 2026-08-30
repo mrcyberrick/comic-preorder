@@ -2285,7 +2285,11 @@ which that tenant's admin declines; the approval state machine is the access
 gate, not signup.
 **The MailerLite webhook path (`?secret=`) was REMOVED 2026-08-30** —
 native-signup § S5, Rick's decision 2026-08-29 to remove rather than leave
-present-but-dead. **Platform-wide**: the mechanism was per-tenant, so no
+present-but-dead. **Deployed and verified on BOTH projects 2026-08-30**: a
+request carrying `?secret=` now returns exactly what the same request without
+it returns (400 `email, name, and slug are required`), which is the check that
+distinguishes a removed path from one that merely fails differently. Pre-deploy
+both returned 401. **Platform-wide**: the mechanism was per-tenant, so no
 tenant has it. `?secret=` on the URL is now inert (falls through to the native
 path). `tenants.settings->>'mailerlite_webhook_secret'` and the
 `MAILERLITE_WEBHOOK_SECRET` Edge secret are both dead config. Recovery, if it

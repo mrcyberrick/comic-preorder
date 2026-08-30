@@ -1,6 +1,6 @@
 # Native In-App Customer Self-Registration (PLAN)
 
-**STATUS:** COMPLETE | staging=2026-07-23 | prod=2026-07-24 (PR #95) | S5 closed 2026-08-30 | findings=F94
+**STATUS:** COMPLETE | staging=2026-07-23 | prod=2026-07-24 (PR #95) | S5 closed + EF deployed both envs 2026-08-30 | findings=F94
 
 **Status:** **COMPLETE — live in production 2026-07-24.** Promoted via PR #95, merge `3bc3319`.
 *(Corrected 2026-08-18 — this line previously read "In progress," stale since the 2026-07-24
@@ -286,7 +286,12 @@ F72). Founding-first sidesteps it.
 - [x] **Docs updated 2026-08-30:** `register-customer` contract rewritten in `technical-reference.md`
       § 11 (inventory row, secrets table, and the prose contract), `CLAUDE.md` § Edge Functions,
       `docs/tenant-onboarding-runbook.md` **Step 4 tombstoned** + its Step 7 checklist line + the
-      rollback note. **F72 disposition re-confirmed and unchanged: still open**, still the real gate on
+      rollback note. **Edge Function DEPLOYED to staging and production 2026-08-30** (Supabase
+      dashboard editor, staging verified before prod). Four behavioural checks identical on both:
+      `?secret=` → 400 `email, name, and slug are required`; **without `?secret=` → the same
+      response**, proving the parameter is inert rather than merely failing differently; malformed
+      JSON → 400 `Invalid request body`; honeypot → 200 with no account. Pre-deploy both projects
+      returned 401, so the transition is measured, not assumed. **F72 disposition re-confirmed and unchanged: still open**, still the real gate on
       a second tenant taking real customers — the confirmation email remains founding-branded for every
       tenant, which is precisely why `comicstore` has stayed pilot/seeded.
 - [x] **This plan's status → COMPLETE (2026-08-30), and now the token and the boxes agree.**
