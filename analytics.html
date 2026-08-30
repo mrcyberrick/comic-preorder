@@ -239,13 +239,7 @@
     .win-actions .hint { font-size: 0.72rem; color: var(--text-muted); }
 
     .no-data { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 24px; }
-    /* F141 follow-up. Analytics does not have ONE container that grows; it has
-       seven panels that each fill independently, so a single viewport-sized
-       reservation would be wrong here. Each loader instead holds roughly a
-       panel's worth of space, so the dashboard's overall height is close to
-       final at first paint and panels settle into reserved slots rather than
-       pushing each other down. Measured 0.49 on a real account before this. */
-    .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; min-height: 140px; box-sizing: border-box; }
+    .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; }
 
     /* ── Cycle overlay chart ("This Cycle vs Last") ──────────────── */
     .trend-wrap { position: relative; }
