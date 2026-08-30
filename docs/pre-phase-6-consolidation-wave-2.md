@@ -1,8 +1,10 @@
 # Pre-Phase-6 Consolidation — Wave 2 (post-September-import)
 
-**STATUS:** PROPOSED | staging=— | prod=— | findings=F135,F133,F130,F145,F131,F72,F99,F141
+**STATUS:** APPROVED (scope trimmed) 2026-08-29 | staging=— | prod=— | findings=F133,F130,F145,F131,F72,F99,F141
 
-**Status:** **Proposed, not approved.** Written 2026-08-29 by a planning pass. Successor to
+**Status:** **Approved with a trimmed scope, 2026-08-29.** Rick answered all eight § 5 questions the
+same day; see **§ 0** — the direction changed materially and **§ 2.6's recommendation is
+superseded.** Written 2026-08-29 by a planning pass. Successor to
 `docs/pre-phase-6-consolidation.md` (PROPOSED 2026-08-28, never formally approved, **C1 and the
 F146 close-out both now DONE**). This document re-derives the remaining work against live repo and
 branch state, not against that plan's narrative, and re-sequences it around the two things that
@@ -16,6 +18,27 @@ input (W8) but does not make the call.
 **Branch base:** `staging` throughout. Production promotions per `CLAUDE.md` § Standard Deployment
 Workflow only where an item explicitly says so.
 **Next free finding ID:** **F148.**
+
+---
+
+## 0. Decisions — Rick, 2026-08-29
+
+All eight § 5 questions answered the same day the plan was written. **These override § 2.6.**
+
+| # | Question | Rick's answer | Effect on this plan |
+|---|---|---|---|
+| Q1 | MailerLite webhook path — remove or leave dead? | **Remove it** | **W5 unblocked**, full removal (not present-but-dead). Removes it for `comicstore` and every future tenant → onboarding-runbook Step 4 and its Step 7 checklist line must go too |
+| Q2 | Is production open to customers? | **Yes, prod is serving customers** | **W1 collapses to a doc correction** (done 2026-08-29). One sub-item survives: whether **Step 7** (`order_deadline`) was run is still unconfirmed — see W1 |
+| Q3 | Phase 6, Founding Partner, or keep shipping small features? | **Small features for now** | **The big one. Shape D is chosen.** W8 (Phase 6 S0 spike) and W10 (F72+F99 scoping) are **deferred** — their whole justification was informing this decision, and it is made. **W2 and W4 are promoted**, because a continuous small-feature cadence is exactly the mode that depends on a doc record and on trustworthy targeted spec runs |
+| Q4 | Canonical front door? | **The apex is the landing page for all tenants** (`rjbookstop.pulllist.app` is the founding tenant's own door) | The *premium-tier lever* framing in `apex-landing-tenant-subdomains.md` is **dead** — per-tenant subdomains are convenience/branding, not a paid tier. Recorded in W6 |
+| Q5 | `weekly-pipeline-consolidation-plan.md` still live? | **"Done for now"** | **Closed 2026-08-29** with items 1–3 marked shipped and 4–5 explicitly dispositioned. Folded into W7 |
+| Q6 | Cloudflare hostname inventory? | **"To be explored (please advise)"** | **W6 stays 🔴** but now carries a concrete how-to — see W6 § "How to gather it" |
+| Q7 | F135 — build the decoupling, or keep the `.env` mitigation? | **Keep the mitigation** | **W3 is DEFERRED.** It was this plan's #1 recommendation and its 48-hour clock is stood down. `docs/f135-decouple-feed-publish.md` re-tokened **DEFERRED** with the accepted residual risk stated |
+| Q8 | Legacy GitHub Pages surface — retire or keep warm? | **Keep warm if free, otherwise close** | **Measured: it is free → keep warm.** `mrcyberrick/comic-preorder` is a **public** repo, so GitHub Pages hosting costs nothing; `mrcyberrick.us` is a pre-existing registration independent of this. **But see the caveat in W7** — what is being kept warm is not quite what the docs describe |
+
+**Net effect on the workstream:** W1 done, W3/W8/W10 deferred, W5 unblocked, W2/W4 promoted to the
+front, W6 unblocked-with-guidance, W7 grew two items. **The active list is W2, W4, W5, W6, W7, W9,
+W11.**
 
 ---
 
@@ -212,6 +235,14 @@ no plan doc for most of them — and, as § 1.2 shows, increasingly no doc recor
 
 ### 2.6 Recommendation — my opinion, and the reasoning behind it
 
+> **⚠️ SUPERSEDED by § 0 (Rick, 2026-08-29).** Rick chose **Shape D** (Q3: "small features for now")
+> and **declined W3** (Q7: keep the `.env` mitigation). So the recommendation below — Shape B with
+> W3 started inside 48 hours — did **not** carry, and its two load-bearing arguments are both
+> stood down. **Point 2 survives the change and gets stronger, not weaker:** a continuous
+> small-feature cadence depends *more* on trustworthy targeted spec runs than a phase cadence
+> does, which is why W4 moved to the front rather than off the list. Retained below as the record
+> of what was argued and on what evidence.
+
 **Take Shape B again, but re-ordered around elapsed time rather than around a deadline — and start
 W3 (F135) within 48 hours, because it is the only item where waiting costs a week.**
 
@@ -264,7 +295,21 @@ calendar time.
 
 ---
 
-### W1 🔴 — Confirm production is open to customers, and close Steps 7/8 if not
+### W1 ✅ **DONE 2026-08-29** — Confirm production is open to customers
+
+**Answered by Rick (§ 0 Q2): production is serving customers.** Step 8 (Maintenance Mode OFF) is
+done. The stale "Residual, not yet done" paragraph was removed from `CLAUDE.md` § Current Migration
+Phase the same day, with the correction noted in place rather than silently overwritten.
+
+**One sub-item survives and is NOT closed:** whether **Step 7** (set `order_deadline`) was run is
+still unconfirmed. A live store with a cleared deadline is not broken, but per F108's
+order-deadline-supersedes rule it changes what the At-Risk / Backorder panels classify, and it is
+the ambient value **F133**'s date-dependent specs trip over — so **W4 must read the live value
+rather than assume either state.** `app_settings` is not anon-readable on either environment
+(§ 4.6), so this needs a service-role read or a look at the admin Settings screen. **One query;
+do it before W4.**
+
+*Original item retained below for the record.*
 
 **Delivers:** certainty about whether the production store is currently serving customers.
 
@@ -305,15 +350,47 @@ behavioural change among them has a recorded disposition.
      (feature build, not a defect)"). **Do not leave it unstated.**
   3. If #143/#144 extend F132's surface, add a line to § 13 F132 noting the arrivals-side reach
      (F144 already covers the Order Builder half).
-- **Touches:** `CLAUDE.md`; possibly `docs/technical-reference.md` § 13.
+- **⬆️ PROMOTED by § 0 Q3 — and it should grow one step.** "Small features for now" means this
+  record gap is not a one-off to patch; it is a **weekly** gap that will keep reopening. The
+  three-promotion write-up closes today's instance. **The step that stops it recurring:** add a
+  required step to the `/promote-prod` skill — *after* the PR merges, write the `CLAUDE.md`
+  § Current Migration Phase entry (PR number, staging commit, what was verified post-deploy, and an
+  explicit finding-ID yes/no) before the skill reports success. The project already encodes its
+  promotion gates as skill steps (`/preflight`, the F59 merge-result check, the F125 tree-integrity
+  assertions); this is the same move applied to the one gate that is currently a habit rather than
+  a step. **Cheap, and it is the difference between fixing this once and fixing it every week.**
+- **Touches:** `CLAUDE.md`; possibly `docs/technical-reference.md` § 13; the `/promote-prod` skill
+  definition.
 - **Gating:** none. Doc-only, commit direct to `staging`.
 - **Size:** **Small.**
-- **Done when:** every production promotion in the last 7 days has a `CLAUDE.md` record, and the
-  finding-ID question for #142 is answered in writing.
+- **Done when:** every production promotion in the last 7 days has a `CLAUDE.md` record; the
+  finding-ID question for #142 is answered in writing; and `/promote-prod` will not report success
+  without the record.
 
 ---
 
-### W3 — F135: decouple the pull-feed publish from shipment import ⏱ **start within 48 hours**
+### W3 ⛔ **DEFERRED 2026-08-29** — F135: decouple the pull-feed publish from shipment import
+
+**Rick's decision (§ 0 Q7): keep the `.env` interim mitigation; do not build the decoupling.** The
+48-hour clock below is stood down and the Sep 1 / Sep 8 Tuesday windows are not being used.
+`docs/f135-decouple-feed-publish.md` has been re-tokened **DEFERRED** with the accepted residual
+risk written into its status block, so a future session does not re-propose it as new work.
+
+**The residual risk, stated once so it is not lost:** the mitigation is *"comment out
+`GITHUB_TOKEN_PULL_FEED` in the scripts `.env`, run the ad-hoc import, restore it."* It depends on
+a human remembering, **every time**, and F134's one-off shipment path made ad-hoc imports routine.
+Forgetting it republishes a past newsletter week, purges the current week's thumbnails, and lets
+the next Brevo cron mail the stale issue — the measured 2026-08-11 incident, reproduced by
+accident.
+
+**Cheap hardening that stays inside Rick's decision** (no decoupling, no code): make the pre-step
+impossible to miss where an operator actually looks — a bold pre-flight line in
+`docs/monthly-catalog-refresh.md` and wherever the F134 one-off shipment path is documented, not
+only inside F135's own plan doc, which nobody opens before an ad-hoc import. **Fold into W9**,
+which is already editing that runbook.
+
+*Original item retained below — the runbook is complete and correct, and should be executed
+unchanged if this is ever picked up.*
 
 **Delivers:** `import.js` stops publishing the newsletter; the weekly send workflow builds the feed
 from the database immediately before sending, so an ad-hoc shipment import can never mail a stale
@@ -392,19 +469,31 @@ their own seeded rows, and a **classified** — not bulk-deleted — auth-user o
 
 ---
 
-### W5 🔴 — Retire the MailerLite webhook path for founding (native-signup S5)
+### W5 ✅ **UNBLOCKED 2026-08-29** — Retire the MailerLite webhook path (native-signup S5)
 
 **Delivers:** the dead `?secret=` webhook branch removed or explicitly disabled, the exposed webhook
 secret rotated to dead config, every doc surface corrected — and **F99's stated trigger fired**,
 which is what unblocks W10 and Shape C.
 
 - **Owner doc:** `docs/native-customer-signup.md` § S5 and its four unticked Completion Criteria.
-- **🔴 Blocking question first — § 5 Q1:** **remove the path entirely, or leave it present-but-dead?**
-  The plan doc says "removed/dead"; the function's own header comment says "retained harmlessly until
-  MailerLite is retired for the founding tenant." **The mechanism is per-tenant, not
-  founding-specific** — removing it removes it for `comicstore` and every future tenant, and
-  `docs/tenant-onboarding-runbook.md` **Step 4** still instructs an operator to configure it. That is
-  a scope decision, not an executor judgement call.
+- **✅ UNBLOCKED — § 0 Q1 answered 2026-08-29: REMOVE IT ENTIRELY.** Not present-but-dead. Delete
+  the branch, do not comment it out. **This removes the mechanism platform-wide**, not just for the
+  founding tenant — `comicstore` and every future tenant lose it too, which is the intended
+  consequence and is why it needed Rick rather than an executor.
+- **Because removal is platform-wide, the surface is wider than the Edge Function.** Sweep all of
+  these, and do not stop at the first one:
+  1. `supabase/functions/register-customer/index.ts` — the `?secret=` branch **and** the header
+     comment block that documents "two entry paths" (it becomes wrong the moment the branch goes).
+  2. `docs/tenant-onboarding-runbook.md` **Step 4** ("Configure MailerLite webhook") — **delete the
+     step**, do not just annotate it; an operator following a runbook does what it says.
+  3. The same runbook's **Step 7 go-live checklist**, which carries a `- [ ] MailerLite webhook
+     configured (Step 4)` line. A checklist item pointing at a deleted step is worse than either.
+  4. `tenants.settings->>'mailerlite_webhook_secret'` — the column stays (it is a jsonb key, not a
+     schema object), but the secret is now dead config. **Rotate or clear it** and say which was
+     done.
+  5. `register-tenant` (Phase 5.4 S3) **issues** that per-tenant secret. Check whether it still
+     should. If it keeps minting a secret nothing consumes, say so explicitly rather than leaving
+     the next reader to work it out.
 - **Touches:** `supabase/functions/register-customer/index.ts` (header comment ~lines 4–14, the
   `secret` read ~line 199, the `?secret=` branch ~line 204, the tenant lookup ~line 210 — **re-read
   from disk**); `docs/technical-reference.md` § 11 Edge Function inventory and § 13 F34/F72 notes;
@@ -437,15 +526,47 @@ provisioned Cloudflare Pages custom hostnames, with an explicit note that the fi
 - **Touches:** `docs/tenant-onboarding-runbook.md` — Step 3 already documents *how* to provision one;
   what is missing is an **inventory of which exist**. Plus § 13 F145 (tick item 3). Optionally
   `docs/apex-landing-tenant-subdomains.md` § Strategic direction, **only if** Rick answers § 5 Q4.
-- **🔴 Gating:** needs **Rick's Cloudflare-side inventory** — which hostnames exist on the
-  `pulllist.app` Pages project, and (if the audit log still holds it) when `rjbookstop.pulllist.app`
-  was provisioned. F145 deliberately declined to infer infrastructure state from two `curl` results
-  and that reasoning still holds.
-- **Size:** **Small** (doc-only, one commit to `staging`).
+- **🔴 Gating:** still needs **Rick's Cloudflare-side inventory**. F145 deliberately declined to
+  infer infrastructure state from two `curl` results and that reasoning still holds — an NXDOMAIN
+  tells you a name does not resolve, not what the account is configured to serve.
+
+**How to gather it — § 0 Q6, "to be explored (please advise)."** Three places, ~5 minutes, all
+read-only. **Change nothing while you are in there.**
+
+1. **The authoritative list — Pages project → Custom domains.**
+   Cloudflare dashboard → **Workers & Pages** → the Pages project serving `pulllist.app` → the
+   **Custom domains** tab. This is the list W6 needs: every custom hostname attached to the
+   project, each with a status (Active / Pending / Error). **Capture the whole list verbatim, not
+   just the two we know about** — the entire point is finding out whether there are others.
+2. **The DNS side — the `pulllist.app` zone.**
+   Cloudflare → **Websites** → `pulllist.app` → **DNS** → **Records**. Confirm the records backing
+   `rjbookstop` and `comicstore`, and — the one that matters for Phase 6 — confirm **no `*`
+   wildcard record exists**. F145 inferred its absence from NXDOMAIN; this confirms it from the
+   configuration side, which is a different and better kind of evidence.
+3. **The provisioning date — Audit Log (best effort).**
+   Cloudflare → **Manage Account** → **Audit Log**, filtered to the Pages/zone resource, looking
+   for the `rjbookstop.pulllist.app` add event. **Retention is limited and this may simply not be
+   there.** If it is not, record *"provisioning date unrecovered"* — F145 already says exactly
+   that, and a guessed date in an infrastructure record is worse than an honest gap.
+
+**What to write down for each hostname:** the hostname, its status, which Pages project (and
+branch/environment) it maps to, and whether it is a Pages custom domain or a plain zone DNS record.
+Then W6 is a ten-minute doc edit.
+
+**Two things to note while you are there, both from § 0:**
+- **Q4 changed the positioning.** The apex is the landing page for all tenants; a per-tenant
+  subdomain is convenience and branding, **not a premium tier**. `apex-landing-tenant-subdomains.md`
+  § Strategic direction still frames the branded subdomain as the premium-tier lever — correct that
+  while W6 is open.
+- **`rjbookstop.pulllist.app` is on printed paper** (the View Online CTA, PR #140). Whatever the
+  inventory turns up, that hostname does not get retired without a reprint. That caveat is the
+  single most important line W6 adds to the runbook.
+
+- **Size:** **Small** (doc-only, one commit to `staging`) once the inventory is in hand.
 
 ---
 
-### W7 — Doc-status hygiene: three tokens that will otherwise surface in every sweep
+### W7 — Doc-status hygiene (3 of 4 done 2026-08-29) + the Q8 legacy-surface record
 
 **Delivers:** `/preflight`'s STATUS-token sweep stops reporting known-stale docs as open work.
 
@@ -459,14 +580,62 @@ provisioned Cloudflare Pages custom hostnames, with an explicit note that the fi
      close-out are DONE** and that C2–C8 have moved to this document. **Do not delete it** — it holds
      the reasoning trail for the S6 predicate decision, which is the most carefully-argued call in
      the project's recent history.
-  3. **This document's** token, once Rick approves or rejects it.
-- **Touches:** the three docs above.
+  3. **This document's** token — ✅ done 2026-08-29 (APPROVED, scope trimmed).
+  4. ✅ **Done 2026-08-29** — `docs/weekly-pipeline-consolidation-plan.md` **CLOSED** per § 0 Q5,
+     with § 6 items 1–3 recorded as shipped and items 4–5 explicitly dispositioned rather than left
+     implying unfinished work.
+  5. ✅ **Done 2026-08-29** — `docs/f135-decouple-feed-publish.md` re-tokened **DEFERRED** per § 0
+     Q7, with the accepted residual risk written into the status block.
+  6. **Still to do — record the Q8 decision on the legacy GitHub Pages surface, and the caveat that
+     came with it.** See below; this is the only remaining piece of W7.
+
+**Q8's answer, and the measurement behind it (2026-08-29).** Rick: *"keep warm if there is no cost
+otherwise close."*
+
+- **There is no cost → keep it warm.** `mrcyberrick/comic-preorder` is a **public** repo, so GitHub
+  Pages hosting is free with no bandwidth billing; `mrcyberrick.us` is a pre-existing domain
+  registration independent of this decision. Both surfaces are live: `mrcyberrick.github.io/…`
+  **301**s to `mrcyberrick.us/comic-preorder/`, which returns **200**.
+- **⚠️ But what is being kept warm is not what the docs describe, and this is new information.**
+  Measured, not assumed: the legacy surface is **not a frozen snapshot** — it auto-deploys from
+  `main` and is currently serving the **2026-08-24 Lighthouse-sweep build** with the **production**
+  `config.js` (prod Supabase ref `plgegklqtdjxeglvyjte`, prod founding-tenant UUID). And because
+  `tenantSlugFromHostname()` finds no tenant slug in `mrcyberrick.us`, the pre-paint script sets
+  `data-front-door="apex"` — so the legacy URL renders the **platform marketing page**, not Ray &
+  Judy's branded sign-in.
+- **Why that is a caveat rather than a defect:** the apex carries universal login, and the script's
+  `token_hash`/`access_token` handling still opens the sign-in panel — so a magic link landing
+  there **does** work. Nothing is broken and no customer is pointed at it (the print CTA points at
+  `rjbookstop.pulllist.app`). What is lost in a rollback scenario is the *branded* first
+  impression, not access.
+- **What to record:** in whichever doc claims the surface is "kept warm as a rollback surface," add
+  that it is a **live auto-deploying mirror of production on the apex front door**, not a
+  point-in-time rollback target, and that a real rollback would land customers on the marketing
+  page. **No finding filed** — nothing is broken and nobody is routed there; this is a
+  documentation accuracy fix. Raise it if Rick wants it treated otherwise.
+
+- **Touches:** `docs/interim-deployment-work-instructions.md`,
+  `docs/phase-5-second-tenant-onboarding.md` (its completion criteria flag the missing retirement
+  disposition), `CLAUDE.md` § Project Overview (the "Legacy prod URL" line).
 - **Gating:** none.
 - **Size:** **Small.**
 
 ---
 
-### W8 — Phase 6 S0: the wildcard DNS + TLS serving-model spike
+### W8 ⛔ **DEFERRED 2026-08-29** — Phase 6 S0: the wildcard DNS + TLS serving-model spike
+
+**Rick chose “small features for now” (§ 0 Q3), so the decision this spike existed to inform is
+made.** Its entire justification in § 2.6 was *“put the Phase 6 cost model in your hands before you
+answer Q3”* — answered. Deferring it is the honest consequence, not an oversight.
+
+**It stays recorded as Phase 6's entry gate**, unchanged and still closed (F145). When Phase 6 is
+next considered, this is step one and the item below is ready to run as written — half a day, no
+approvals, no code. *Do not run it speculatively in the meantime; a measurement nobody is going to
+act on is just a doc that will go stale.*
+
+*Original item retained below.*
+
+#### (original) W8 — Phase 6 S0: the wildcard DNS + TLS serving-model spike
 
 **Delivers:** a written, measured answer to the question gating all of Phase 6 — can a freshly-claimed
 slug serve at `<slug>.pulllist.app` instantly with zero per-tenant DNS work, and what does each
@@ -518,12 +687,33 @@ person, documented and recoverable."
   backfill with `--skip-autoreserve`, which is what § Step 3's Revision Sweep already prescribes for
   a different reason. PRH codes are issue-scoped, which fails the same way for a related reason.
 - **Touches:** `docs/monthly-catalog-refresh.md`, `docs/technical-reference.md` § 13 F131.
+- **Fold in the deferred-W3 hardening (§ 0 Q7).** Rick kept the F135 `.env` mitigation, so the
+  pre-step *“comment out `GITHUB_TOKEN_PULL_FEED` before an ad-hoc shipment import”* is now a
+  standing operational requirement rather than a temporary note — and it currently lives only
+  inside F135's plan doc, which nobody opens before running an import. **Put it where the operator
+  actually looks:** a bold pre-flight line in `docs/monthly-catalog-refresh.md` and alongside the
+  F134 one-off shipment path. Comment the line out; do not export an empty shell variable (dotenvx
+  override behaviour is version-dependent). This is the single highest-value line in W9.
 - **Gating:** none for (a)/(c); (b) is Rick's.
 - **Size:** **Small.**
 
 ---
 
-### W10 🔴 — F72 + F99 joint scoping interview → plan doc
+### W10 ⛔ **DEFERRED 2026-08-29** — F72 + F99 joint scoping interview → plan doc
+
+**Deferred with W8, and for the same reason:** it is the first step of the Founding Partner
+go-to-market track (Shape C), which § 0 Q3 did not select.
+
+**One thing still happens, and it is worth knowing:** **W5 fires F99's trigger anyway.** F99's
+recorded condition for publishing `p=quarantine` is “MailerLite retirement (not a date)” — which
+is W5, which is going ahead. So after W5, **F99 is unblocked but unscheduled**, which is a
+legitimate state as long as § 13 says so rather than continuing to describe it as gated. **Update
+F99's entry when W5 lands** — that is a one-line edit inside W5's own doc sweep, not a revival of
+this item.
+
+*Original item retained below.*
+
+#### (original) W10 — F72 + F99 joint scoping interview → plan doc
 
 **Delivers:** `docs/email-sender-consolidation-f72-f99.md` — a scoped plan Rick can approve or reject,
 covering sender-identity consolidation and per-tenant email branding **together**.
@@ -560,34 +750,44 @@ CLS shape F141 fixed on `catalog.html` (desktop 75 → 98, CLS 0.636 → 0.02).
 
 ---
 
-### Recommended sequence
+### Recommended sequence — REVISED 2026-08-29 after § 0
 
 ```
-IMMEDIATELY (this weekend)
- ├── W1  🔴 Rick — is the store open? Steps 7/8 if not
- └── W3  S1 + S2 — must land by Mon 2026-08-31 to catch the Sep 1 Tuesday
+DONE 2026-08-29
+ ├── W1  ✅ prod confirmed serving customers; CLAUDE.md residual line corrected
+ └── W7  ✅ 3 of 4 tokens: this doc, weekly-pipeline (closed), F135 (deferred)
 
-WHILE W3's Tuesday clock runs (Sep 1 → Sep 8)
- ├── W2  record today's three promotions        (small, doc-only)
- ├── W4  test-infra F133 → F130                 (after W1 resets order_deadline)
- ├── W5  🔴 needs Q1 first; unblocks W10
- ├── W7  doc-status hygiene                     (small, doc-only)
- ├── W8  Phase 6 S0 spike                       (read-only probes, no approvals needed)
- └── W9  F131 interim + the F146 Lunar-code lesson
+NEXT — nothing here is blocked, and nothing here is time-critical
+ ├── W2  record the three 2026-08-29 promotions   (small, doc-only) ◀ do first
+ ├── W4  test-infra F133 → F130                   (read order_deadline live first)
+ ├── W5  ✅ unblocked — remove the MailerLite path, platform-wide
+ ├── W7  finish — the Q8 legacy-surface record + its caveat
+ └── W9  F131 second-operator preamble + the F146 Lunar-code lesson
+          + the W3 hardening (make the .env pre-step unmissable)
 
-AFTER
- ├── W3  S4 → S5, closes ~Sep 9
- ├── W6  🔴 needs Rick's Cloudflare inventory
- ├── W10 🔴 after W5, needs Rick's interview
- └── W11 opportunistic
+WHEN RICK HAS THE INVENTORY
+ └── W6  🔴 Cloudflare hostnames → runbook (how-to is written, see W6)
+
+OPPORTUNISTIC
+ └── W11 measure F141's residual on mylist/arrivals
+
+DEFERRED — recorded, not lost
+ ├── W3  F135 decoupling      (Q7 — .env mitigation stands)
+ ├── W8  Phase 6 S0 spike     (Q3 — Phase 6 not next)
+ └── W10 F72+F99 scoping      (Q3 — Founding Partner not next)
 
 WATCH — schedule it, do not rely on memory
  └── October's catalog import: F147's FOC fix and F146's clear half each get their
      FIRST real production exercise. Attended session. Use /schedule-gate.
 ```
 
-**The one ordering rule that does not move:** W3's **S3 before S4**. Removing the old publish path
-before the new one is observed working converts a loud failure into a silent one.
+**Two ordering rules, revised after § 0:**
+
+- ~~W3's S3 before S4.~~ **Moot** — W3 is deferred. It still governs if W3 is ever picked up, and it
+  is recorded in the item and in F135's own plan doc.
+- **Live now: read `order_deadline` before starting W4.** § 0 Q2 confirmed the store is open but
+  **not** whether Step 7 ran, and F133 variant (a) is defined against whatever that value currently
+  is. Starting W4 on an assumption about it is how F133 was created in the first place.
 
 ---
 
@@ -700,6 +900,10 @@ against the environment you actually mean, immediately before any write.
 
 ## 5. Questions for Rick
 
+> **✅ ALL EIGHT ANSWERED 2026-08-29 — see § 0 for the answers and their effect on the plan.**
+> Retained below as written, because the *reasoning* behind each question is what a future session
+> needs in order to know whether a decision still applies or its premises have moved.
+
 Each of these can change the plan. **[BLOCKING]** marks the ones where an executor cannot start that
 item without an answer.
 
@@ -749,28 +953,28 @@ item without an answer.
 
 ---
 
-## 6. Suggested Next Steps
+## 6. Suggested Next Steps — REVISED 2026-08-29 after § 0
 
-None of these need an answer to § 5 first.
+Nothing here is blocked and nothing is time-critical. Rough order of value:
 
-1. **Check whether production is in Maintenance Mode** (W1) — a service-role read of `app_settings`,
-   or just look at the admin toggle. One query, and the only item here that could be costing the store
-   money right now.
-2. **Land W3's S1 + S2 before Monday 2026-08-31.** The only time-sensitive engineering work in the
-   plan; missing Monday costs a full week per gate. Read `docs/f135-decouple-feed-publish.md` § 5 and
-   follow it as written.
-3. **Before Tuesday, read the `pull-feed-generated:` stamp** in `weekly-pull-feed`'s committed
-   `newsletter-email.html`. If it is more than 6 days old, Tuesday's send fail-closes and S3 observes
-   an abort rather than a build — know which you are looking at *before* you look.
-4. **Write W2** — the three-promotion doc record, including an explicit yes/no on whether PR #142
-   owes finding **F148**. Doc-only, direct to `staging`, ten minutes.
-5. **Run W8's probes** — read-only, need nobody's approval, and they turn Phase 6's gating question
-   into a written answer. **Probe a hostname nobody provisioned.**
-6. **Reproduce F133 variant (b)** — run `21-arrival-resolution` targeted, then in the full suite, and
-   confirm the pass/fail disagreement still holds. That disagreement is the finding, and confirming it
-   is step one of W4.
-7. **Schedule October's import** as an attended session with F147's mark half and F146's clear half
-   named as the two things to watch (`/schedule-gate`).
+1. **Write W2** — the three-promotion doc record, with an explicit yes/no on whether PR #142 owes
+   finding **F148**. Then add the `CLAUDE.md`-entry step to `/promote-prod` so the gap stops
+   reopening every week. Doc-only, direct to `staging`.
+2. **Read `order_deadline` live** (service-role, or the admin Settings screen). § 0 Q2 confirmed the
+   store is open but not whether Step 7 ran, and W4 is defined against that value.
+3. **Reproduce F133 variant (b)** — run `21-arrival-resolution` targeted, then in the full suite,
+   and confirm the pass/fail disagreement still holds. That disagreement *is* the finding, and
+   confirming it is step one of W4.
+4. **Draft W5** against `supabase/functions/register-customer/index.ts` (read from disk, not from
+   this doc's line numbers) plus the four other surfaces the item lists. Q1 is answered, so this is
+   executor work now, not a decision.
+5. **Gather the Cloudflare inventory** (W6's three-step how-to) whenever Rick has ten minutes in the
+   dashboard — read-only, changes nothing.
+6. **Schedule October's import** as an attended session with F147's mark half and F146's clear half
+   named as the two things to watch (`/schedule-gate`). This is the one genuinely dated item left in
+   the whole plan.
+
+*(Steps 2, 3, 5 and 7 of the original list are superseded: W1 is done, W3 and W8 are deferred.)*
 
 ---
 
@@ -794,6 +998,9 @@ None of these need an answer to § 5 first.
 
 ---
 
-**Last updated:** 2026-08-29 — written as a planning pass. Re-derived from live repo and branch state
-rather than from the predecessor's narrative; three undocumented production promotions and a diverged
-local `main` were found in the process.
+**Last updated:** 2026-08-29 — written as a planning pass, then revised the same day after Rick
+answered all eight § 5 questions (§ 0). Re-derived from live repo and branch state rather than from
+the predecessor's narrative; three undocumented production promotions and a diverged local `main`
+were found in the process. **Direction as of this revision: Shape D — small features for the
+founding tenant — with W2/W4/W5/W6/W7/W9/W11 as the supporting cleanup and W3/W8/W10 deferred but
+recorded.**

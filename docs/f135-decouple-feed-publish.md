@@ -1,8 +1,20 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=F135,F134
-**Status:** **PLANNED — not started.** Written 2026-08-21. Direction settled with Rick the same
-day: **decouple**, do not add an ad-hoc mode.
+**STATUS:** DEFERRED 2026-08-29 (Rick) — interim mitigation stands | staging=— | prod=— | findings=F135,F134
+**Status:** **DEFERRED — do not re-propose without asking.** Written 2026-08-21; direction settled
+with Rick the same day (**decouple**, do not add an ad-hoc mode). **Rick's decision 2026-08-29:
+keep the § 3 `.env` mitigation instead of building the decoupling.** The runbook below is complete
+and correct and should be executed unchanged if this is ever picked up — it is deferred, not
+withdrawn, and the design is not the reason.
+**The residual risk Rick has accepted, stated plainly:** the mitigation depends on a human
+remembering to comment out `GITHUB_TOKEN_PULL_FEED` in the scripts `.env` **before every ad-hoc
+shipment import**, and F134's one-off shipment path made ad-hoc imports routine. Forgetting it
+republishes a past newsletter week, purges the current week's thumbnails, and lets the next Brevo
+cron mail the stale issue — the measured 2026-08-11 incident. **Weight the pre-step accordingly
+wherever ad-hoc imports are documented.**
+*(Reasoning for the deferral: the decoupling's S3 and S5 gates each require one observed unattended
+Tuesday cycle, so the item spans ~2 calendar weeks of elapsed time for a failure mode the
+mitigation already blocks. See `docs/pre-phase-6-consolidation-wave-2.md` § 0 Q7.)*
 **Target:** two repos — `catalogs/scripts` (private scripts repo) and
 `mrcyberrick/weekly-pull-feed`. **No `comic-preorder` app change.**
 **Interim mitigation is live and needs no code** — see § 3. Ad-hoc shipment imports are safe today

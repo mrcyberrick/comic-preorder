@@ -16,9 +16,24 @@ spike.
 production ran its real September import this session (`catalog_month` 2026-08 → 2026-09) — the
 transition this reminder existed to protect has already happened, both environments. The
 constraint is dormant until October's import opens the next one; no admin-ordering-surface work is
-currently blocked. **Residual, not yet done:** production's Maintenance Mode is still **ON** and
-`order_deadline` is still cleared (Step 7/8 of `docs/monthly-catalog-refresh.md`) — both need
-action before the store reopens to customers.
+currently blocked. ***Residual CLEARED 2026-08-29 — Rick confirms production is serving customers,
+so Step 8 (Maintenance Mode OFF) is done.*** *(This paragraph previously read "Residual, not yet
+done: production's Maintenance Mode is still ON…" — written 2026-08-28 and left standing for a day
+after it stopped being true, which is the same stale-claim pattern as F132/F138/F139/F145.)*
+**One sub-item is still unconfirmed, and it is small but not cosmetic:** whether **Step 7** (set
+`order_deadline`) was run. A live store with a cleared deadline is not broken, but per F108's
+order-deadline-supersedes rule it changes what the At-Risk / Backorder panels classify, and it is
+the ambient value F133's date-dependent specs trip over. **Check the value before trusting either
+surface** — `app_settings` is not anon-readable, so it needs a service-role read or the admin
+Settings screen.
+
+**October's import is an attended-session gate, not a formality.** Two fixes get their first-ever
+live production exercise there: **F147**'s corrected FOC check (its mark half could not be
+re-exercised this cycle — flipping `catalog_month` to `2026-09` closed the new-month window the
+moment the run finished) and **F146**'s unconditional clear half (production holds 0 withdrawn
+marks today, so there is nothing for it to act on until marking runs again). Both findings have
+only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
+freeze for that window.
 
 **F146 fully RESOLVED on staging, 2026-08-29.** A first verification attempt (fresh September
 Lunar + PRH CSV pair, confirmed on disk 2026-08-29) ran clean but proved the "fresh re-pull of the

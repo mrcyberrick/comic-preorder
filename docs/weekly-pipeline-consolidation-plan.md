@@ -1,8 +1,24 @@
 # Weekly Pipeline Consolidation — Plan
 
-**STATUS:** NOT STARTED | staging=— | prod=N/A | findings=—
+**STATUS:** CLOSED 2026-08-29 (Rick) — "done for now"; items 1–3 shipped, 4–5 dispositioned | staging=2026-07-09 | prod=2026-07-09 (PR #77) | findings=F96,F98,F100
 
-**Status:** Scoping — Apps Script main source received 2026-07-09 (§ 1.5);
+**Status:** **CLOSED — "I would call this as done for now" (Rick, 2026-08-29).** Not abandoned and
+not fully executed as written: the § 6 build checklist's **items 1–3 all shipped** — the Node
+producer `build-pull-feed.js` (scripts repo `31fd4f7`), its auto-publish wiring in `import.js`, and
+the admin "Print Store Report" on `arrivals.html` (staging `f900247`, production PR #77, both
+2026-07-09). **Items 4–5 (the 2–4-week parallel run and the formal Apps Script retirement) are
+deliberately not being run.** The parallel run's purpose — byte-level trust in the new producer —
+was satisfied up front instead by diffing `--local` output against the live Apps-Script artifacts
+(§ 3: `rss.xml` zero non-date differences), and the Apps Script path is dormant in practice rather
+than ceremonially retired.
+**Do not re-open this doc as active work without asking.** If the Apps Script / Sheet / Drive
+surface is ever formally decommissioned, record it here and re-token.
+*(Related: **F135** proposed moving the producer's trigger out of `import.js` entirely and into the
+weekly send workflow. That is **DEFERRED** as of 2026-08-29 in favour of its `.env` interim
+mitigation — see `docs/f135-decouple-feed-publish.md`. So the producer keeps firing from
+`import.js`, which is the shape this plan built.)*
+
+**Original status line, retained:** Scoping — Apps Script main source received 2026-07-09 (§ 1.5);
 three artifacts still outstanding (§ 5). Written 2026-07-08 from the
 2026-07-07 architecture review (workflow finding: shipment data is processed
 twice, by hand, into two disconnected systems).
