@@ -734,7 +734,20 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
       return;
     }
 
+    // Rick, 2026-08-30: the suggestions block above carries a header AND an
+    // explanatory note, while this table — the thing the page is actually about,
+    // and what the user scrolls PAST the suggestions to reach — had neither, just
+    // bare column headers. Same header treatment as the block above, so the two
+    // sections read as siblings and arriving at this one is obvious.
+    //
+    // Rendered here rather than in static HTML deliberately: when a customer has
+    // no subscriptions but does have suggestions, this container renders empty
+    // (see the branch above), and a static heading would then label nothing.
     container.innerHTML = `
+      <div class="popular-series-header" style="margin-bottom:6px">⭐ Your subscriptions</div>
+      <p class="popular-series-note">${AdminContext.isActive()
+        ? "Subscribed series are auto-reserved for this customer when each new catalog loads."
+        : "These are auto-reserved for you when each new catalog loads — nothing else to do."}</p>
       <table class="sub-table">
         <thead>
           <tr>
