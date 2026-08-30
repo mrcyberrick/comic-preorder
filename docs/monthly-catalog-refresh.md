@@ -44,6 +44,39 @@ the upsert runs ("mid-month refresh") — safe to re-run any time.
 
 ---
 
+## 🚨 Pre-flight: running an AD-HOC shipment import (not the monthly refresh)
+
+**Read this before importing a one-off shipment invoice.** It is not part of the monthly sequence
+below, but it is the step most likely to be forgotten and it has already caused one live incident.
+
+> **Comment out `GITHUB_TOKEN_PULL_FEED` in the scripts `.env` before the run. Restore it after.**
+
+**Why.** The weekly pull-feed publish is welded inside the shipment-import block and fires
+**unconditionally** (**F135**). It aims at whatever week `resolveFeedWeek()` infers *from the rows
+just imported* — and an ad-hoc file holds a handful of books that **already went on sale**, which is
+why they are being chased. So its dominant `on_sale_date` is a **past** week. The publish then
+republishes that past issue, the orphan purge deletes the current week's thumbnails, and the next
+Brevo cron mails the stale issue.
+
+**This is measured, not hypothetical.** Production, 2026-08-11: *"the feed republished 19
+already-shipped titles, purged the 50 correct thumbnails as orphans, and the Tue 08-11 Brevo send
+mailed that stale issue. The 08-12 week was never previewed at all."*
+
+- **Comment the line out — do not export an empty shell variable.** The `.env` loads through dotenvx
+  and whether it overrides an already-present empty key is version-dependent. Commenting is
+  unambiguous.
+- `upsertShipment()` runs **before** the publish block, so the shipment still lands; the publish is
+  skipped with a printed warning. **Confirm you see that warning** — it is how you know the
+  mitigation took.
+- **F134's one-off shipment path makes ad-hoc imports routine**, which is exactly why this pre-step
+  now lives here, in the runbook an operator actually opens, rather than only inside
+  `docs/f135-decouple-feed-publish.md`.
+- **This is a standing requirement, not a temporary workaround.** The permanent fix (move the
+  trigger into the weekly send workflow, delete `resolveFeedWeek()`) is planned and **deferred** —
+  Rick's call, 2026-08-29. Until it is built, this manual step *is* the control.
+
+---
+
 ## Monthly Refresh Steps
 
 ### Step 1 — Lock the Site (Maintenance Mode)
@@ -98,7 +131,72 @@ documented recurring one, feeding S1's widened drift report (F136 Part C(1)
    re-downloaded; PRH's export omits withdrawn titles rather than revising
    dates in place (see F110), so this step matters most for Lunar.
 
+**5. This same step is also how you clear a false withdrawal flag (F146) — and it is the *only*
+way, for a Lunar-coded one.** A title wrongly marked "Withdrawn — cannot be ordered" clears when it
+**reappears in an imported file**. The instinct is to re-pull the *new* month fresher and re-run.
+**For a Lunar code that can never work, at any freshness, ever:**
+
+- **Lunar mints its item codes from the solicitation month.** An August title is `0826…`, a
+  September one `0926…` — measured across three consecutive monthly files, 100% self-prefixing, with
+  **zero** `0826`-prefixed rows in the September file's 1,377 records. A title marked withdrawn was
+  marked *because it was absent from the new month's file*, so it necessarily carries the **prior**
+  month's permanent code — which cannot appear in any subsequent month's file by construction.
+- **PRH codes are issue-scoped**, which fails the same way for a related reason: the next issue
+  appears under a *different* code.
+- **So: re-pull the mark's OWN month and re-import it as an older-month backfill**, exactly as
+  steps 1–2 above describe. That is what cleared all 16 staging marks on 2026-08-29 after a fresh
+  September pull had been correctly diagnosed as a guaranteed no-op and the write run withheld.
+- **Reading the result — this is the part that matters.** `clearReappearedWithdrawals()` prints
+  either `✅ N previously-withdrawn title(s) reappeared — clearing:` with every title named, or
+  `N currently-withdrawn title(s) on record; none reappear in this import`. **Do not read the second
+  as success.** It has three possible causes and only one is good news: the file genuinely lacks the
+  reappearance (wait and re-pull), the fix is broken, or — the one that cost a session — you supplied
+  a month whose codes *structurally cannot* match. Check which branch you are in before concluding
+  anything. Always `--no-write` first.
+
 Then continue with Step 4 using the **new** month's files.
+
+---
+
+## What a second operator needs (F131)
+
+**This runbook assumes the person running it already holds credentials and portal access. That
+assumption is the single-operator risk, not the steps below.** Today the catalog import is one
+person, on one machine, with a service-role key that cannot be distributed — invisible at one paying
+tenant, load-bearing the moment there are several. This section exists so the *knowledge* half is
+recoverable even though the *access* half is not yet.
+
+**What a second operator would need, in order:**
+
+1. **The scripts working tree** — `catalogs/scripts`, the working tree of the private repo
+   `github.com/mrcyberrick/comic-preorder-scripts`. Tracked: `import.js`, `import-staging.js`, the
+   unit suite. **Not tracked, and not recoverable from any repo:** `.env`, the Playwright suite, and
+   the scratch files.
+2. **The `.env` variables, by name** (values are local-only and must never be committed):
+   `IMPORT_SERVICE_KEY`, `IMPORT_TENANT_ID`, `SUPABASE_URL` for staging, and
+   `IMPORT_SERVICE_KEY_PROD`, `IMPORT_TENANT_ID_PROD`, `SUPABASE_URL_PROD` for production, plus
+   `GITHUB_TOKEN_PULL_FEED` for the weekly feed publish. `.env.example` in the scripts repo lists
+   the shape. Each script hard-fails on a missing var or a URL pointing at the wrong project.
+3. **Distributor portal access** — a **Lunar Distribution** retailer login and a **PRH** retailer
+   login, to download the two monthly CSVs. **This is the irreplaceable one.** Every tenant's
+   catalog is sourced from one shop's distributor accounts; losing that access stales every tenant
+   at once, and no amount of documentation substitutes for it.
+4. **Where files go** — the two CSVs land in `catalogs/` (the parent of `scripts/`), named
+   `Lunar_Product_Data_MMYY.csv` and `YYYY_MM_PRH_metadata_full_active.csv`. Shipment invoices land
+   in the same folder.
+5. **Admin access to the app** — Steps 1, 7 and 8 (Maintenance Mode, Order Deadline) are UI actions
+   requiring an admin account on the tenant.
+
+**Still owed, and only Rick can do it (F131 interim mitigation (b)):** making the `.env` contents
+and the two portal logins recoverable by someone other than the current operator. An agent cannot do
+this and should not pretend to. Until it is done, items 2 and 3 above are a documented list of
+things exactly one person has.
+
+**One open question, flagged and deliberately not researched:** whether populating other retailers'
+systems from one retailer account's catalog download is permitted by the distributors' terms. It has
+never been checked. Do not treat its absence from this doc as clearance.
+
+---
 
 ### Step 4 — Drop the New CSV Files
 

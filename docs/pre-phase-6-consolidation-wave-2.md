@@ -712,7 +712,32 @@ serving model cost under abuse?
 
 ---
 
-### W9 — F131 interim mitigations (no code)
+### W9 ✅ **DONE 2026-08-30** — F131 interim mitigations + two folded-in lessons
+
+Delivered in `docs/monthly-catalog-refresh.md`, all three pieces:
+
+1. **“What a second operator needs”** — (a) closed. The runbook was already end-to-end; the gap was
+   that it silently assumed the reader held credentials and portal access. Now lists the scripts
+   tree and what is *not* recoverable from any repo, the `.env` variable **names** (never values),
+   the two distributor logins, where CSVs land, and the admin-UI access Steps 1/7/8 need. **(b)
+   remains Rick-only and is the half that actually carries the risk** — (a) documents the
+   knowledge; only (b) makes the access survivable. (c) waits for the Founding Partner offer to
+   exist. § 13 F131 updated with all three dispositions.
+2. **The ad-hoc-import pre-flight (deferred-W3 hardening)** — a `🚨` block at the *top* of the
+   runbook, before Step 1, carrying the F135 `.env` mitigation with the measured 2026-08-11
+   incident quoted as the reason, the comment-don't-empty-string caveat, and the instruction to
+   confirm the skip warning actually printed. **Placement was the point:** it previously lived only
+   in F135's own plan doc, which nobody opens before running an import.
+3. **The F146 Lunar-code lesson** — folded into Step 3, where the corrective action already lives.
+   States that re-pulling the *new* month can never clear a Lunar-coded withdrawal mark at any
+   freshness (codes are permanently solicitation-month-scoped; PRH's are issue-scoped), that the
+   fix is to re-import the mark's **own** month as an older-month backfill, and — the part that cost
+   a session — that `none reappear in this import` has **three** possible causes and only one is
+   good news. Always `--no-write` first.
+
+*Original item retained below.*
+
+#### (original) W9 — F131 interim mitigations (no code)
 
 **Delivers:** the catalog-import continuity risk moved from "one person, undocumented" to "one
 person, documented and recoverable."
@@ -812,8 +837,7 @@ NEXT — nothing here is blocked, and nothing here is time-critical
  ├── W4  test-infra F133 → F130                   (read order_deadline live first)
  ├── W5  ✅ unblocked — remove the MailerLite path, platform-wide
  ├── W7  ✅ DONE 2026-08-30 — all 6 items, both preflight flags cleared
- └── W9  F131 second-operator preamble + the F146 Lunar-code lesson
-          + the W3 hardening (make the .env pre-step unmissable)
+ └── W9  ✅ DONE 2026-08-30 — all three pieces
 
 
 OPPORTUNISTIC
