@@ -22,6 +22,35 @@
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Admin mobile layout ── */
+    /* Order Follow-Up, collapsed by default (Rick's Option 2, 2026-08-30).
+       The panel measured 1,796px — revealed from display:none ABOVE the tab
+       content, which pushed a visible page down and was the whole of admin's
+       0.90 CLS. Collapsed, the reveal is a header plus one summary line.
+
+       The COUNTS stay in the panel header, outside this <details>, so the
+       alert state is legible without expanding — staff see "12 never arrived ·
+       8 backordered" and only open it when they are going to act. That is the
+       point: bound the height without hiding the signal.
+
+       Not persisted across loads on purpose. Remembering an expanded state
+       would put the 1,796px reveal back for anyone who had opened it once,
+       which is the defect this is fixing. */
+    .ofu-details > summary {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent);
+      padding: 2px 0;
+      list-style: none;
+    }
+    .ofu-details > summary::-webkit-details-marker { display: none; }
+    .ofu-details > summary::before { content: 'B8'; font-size: 0.7rem; }
+    .ofu-details[open] > summary::before { content: 'BE'; }
+    .ofu-details > summary:hover { text-decoration: underline; }
+
     @media (max-width: 640px) {
 
       /* Page header: stack title and controls vertically */
@@ -90,7 +119,8 @@
       #order-builder-summary { flex: 1 1 100%; order: -1; margin-bottom: 4px; }
 
       /* Backorder-risk panel rows: allow title to wrap instead of clipping */
-      .backorder-risk-row { flex-wrap: wrap; }
+  
+    .backorder-risk-row { flex-wrap: wrap; }
       .backorder-risk-row > div:first-child { white-space: normal !important; }
     }
   </style>
@@ -1820,17 +1850,20 @@
         </h3>
         <span style="font-size:0.75rem;color:var(--text-muted)">${counts}</span>
       </div>
-      ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin-bottom:6px">
-        Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
-      </div>` : ''}
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${rowHtml(neverArrived, 'neverArrived')}
-        ${rowHtml(backordered, 'backordered')}
-        ${rowHtml(atRisk, 'atRisk')}
-      </div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
-        Titles already ordered, or with a shipment record, are cleared automatically.
-      </div>
+      <details id="ofu-details" class="ofu-details">
+        <summary class="ofu-summary">Show details</summary>
+        ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin:8px 0 6px">
+          Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
+        </div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${rowHtml(neverArrived, 'neverArrived')}
+          ${rowHtml(backordered, 'backordered')}
+          ${rowHtml(atRisk, 'atRisk')}
+        </div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
+          Titles already ordered, or with a shipment record, are cleared automatically.
+        </div>
+      </details>
     `;
 
     wireArrivalResolveActions(panel);
