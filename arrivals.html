@@ -441,7 +441,10 @@
   <div class="recon-panel" id="recon-panel" style="display:none"></div>
 
   <div id="arrivals-container">
-    <div class="empty-state">
+    <!-- See mylist.html — same first-paint reservation. Arrivals measured worse
+         (0.81 on a real account vs My List's 0.53) because the store-shipment
+         grid is taller, so more of the page moves when it lands. -->
+    <div class="empty-state loading-reserve">
       <p style="color:var(--text-muted)">Loading…</p>
     </div>
   </div>
@@ -1033,7 +1036,9 @@
       const [wy, wm, wd] = start.split('-').map(Number);
       selectedMonday = new Date(wy, wm - 1, wd);
 
-      container.innerHTML = '<div class="empty-state"><p style="color:var(--text-muted)">Loading…</p></div>';
+      // Week-nav re-render: reserve here too, or switching weeks collapses the
+      // container to one line and then re-expands — two shifts, not zero.
+      container.innerHTML = '<div class="empty-state loading-reserve"><p style="color:var(--text-muted)">Loading…</p></div>';
 
       // Shipment (what physically arrived) and reservations (what was
       // expected) are fetched together so the reconciliation below always

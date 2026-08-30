@@ -641,7 +641,10 @@
 
   <!-- List Table -->
   <div id="list-container">
-    <div class="empty-state">
+    <!-- .loading-reserve holds a viewport of space at first paint so the table
+         landing here does not shove the page down (F141 follow-up). It vanishes
+         with the placeholder when real content is written. -->
+    <div class="empty-state loading-reserve">
       <p style="color:var(--text-muted)">Loading your list…</p>
     </div>
   </div>
@@ -959,8 +962,17 @@ function confirmDialog(message, okLabel = 'Remove') {
 
     if (!filtered.length) {
       const isEmptyList = !allItems.length;
+      // .loading-reserve is KEPT here, not released. An empty list is
+      // genuinely short, and letting it collapse from the reserved viewport
+      // produces a shrink shift — then loadFirstIssues() below lands a
+      // discovery grid asynchronously and grows it again. Two shifts where
+      // there was one: measured 0.613 -> 1.048 on an empty account when this
+      // branch dropped the class. Holding a screen means nothing shrinks, and
+      // the grid lands BELOW the fold where its arrival is not visible and so
+      // is not scored. An empty state occupying a viewport is also just
+      // ordinary design, not dead space.
       container.innerHTML = `
-        <div class="empty-state">
+        <div class="empty-state loading-reserve">
           <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
           </svg>

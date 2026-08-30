@@ -199,5 +199,36 @@ check at https://staging.pulllist.pages.dev/). If either is unconfirmed, stop.
    - Remind: if a hard-refresh shows stale behavior, remember F79 (asset cache skew) —
      `app.js`/`config.js` are `no-cache` via `_headers`, but verify the deploy hash.
 
-6. **Close out** — update any plan-status cells and CLAUDE.md pointers that this
-   promotion completes, as separate doc-only commits to staging.
+6. **Close out — REQUIRED. Do not report the promotion as done without it.**
+
+   **This step is a gate, not a reminder.** It read "update any plan-status cells
+   and CLAUDE.md pointers that this promotion completes" until 2026-08-29, which
+   was soft enough to skip — and it *was* skipped, three times in one day (PRs
+   #142, #143, #144 all reached production with **no** record in `CLAUDE.md` and
+   none in `technical-reference.md` § 13). The project has consumed four finding
+   IDs on stale-status drift (F132, F138, F139, F145); this is the same failure
+   one step earlier, where no status gets written at all.
+
+   Write a **"Last completed work"** entry in `CLAUDE.md` § Current Migration
+   Phase before reporting success. It must state, explicitly:
+
+   - **What shipped**, in one or two sentences a future session can act on.
+   - **Both commits**: the staging commit SHA and the production **PR number**.
+   - **What was verified post-deploy** — and *how*. "Verified" alone is not a
+     record; name the marker string you grepped from the served bytes, the
+     write-smoke result, or the real-browser check. If the write-smoke was
+     deliberately skipped, say so and say why (an `admin.html`-only change that
+     never touches the customer reserve path is a legitimate reason — PR #141
+     records exactly that).
+   - **An explicit finding-ID disposition, in words.** Either the finding ID
+     this closes, or the literal phrase **"No finding ID consumed (feature
+     build, not a defect)"**. The distinction: a change is a **defect fix** if
+     the old behaviour was *wrong* — miscalculated, hidden, or misleading — and
+     a **feature build** if the old behaviour was correct and you simply want
+     different behaviour. Do not leave this unstated; an unrecorded judgement is
+     the thing that costs a later session an hour of diff-reading.
+   - If it closes or extends a finding, also update that entry in
+     `docs/technical-reference.md` § 13 and the `CLAUDE.md` open-findings table.
+
+   Commit doc-only, direct to `staging` (never bundled into the promotion
+   branch). **Then** report the promotion complete.
