@@ -589,7 +589,33 @@ Then W6 is a ten-minute doc edit.
 
 ---
 
-### W7 — Doc-status hygiene (3 of 4 done 2026-08-29) + the Q8 legacy-surface record
+### W7 ✅ **DONE 2026-08-30** — Doc-status hygiene + the Q8 legacy-surface record
+
+All items closed:
+1. ✅ `interim-deployment-work-instructions.md` → **SUPERSEDED** by `CLAUDE.md` § Standard Deployment
+   Workflow. Not just late — **two of its premises are now known wrong**: GitHub Pages was never torn
+   down (§ 0 Q8 makes that permanent, not merely delayed), and the deployment workflow has since
+   absorbed the smoke-test ordering correction, `-SkipPlaywright`, the plain-URL cache-key check and
+   the F59/F125 assertions, none of which are in it. Kept for its 5.1 hosting-migration context.
+2. ✅ `pre-phase-6-consolidation.md` → **SUPERSEDED** by this document, with an explicit note that
+   § 3.3 C1's S6-predicate reasoning trail is why it is kept rather than deleted.
+3. ✅ This document's own token.
+4. ✅ `weekly-pipeline-consolidation-plan.md` → **CLOSED** (§ 0 Q5).
+5. ✅ `f135-decouple-feed-publish.md` → **DEFERRED** (§ 0 Q7).
+6. ✅ **Q8 legacy-surface record** — `CLAUDE.md` § Project Overview now carries the keep-warm decision,
+   the cost measurement behind it, and the caveat that it is a live auto-deploying mirror rendering
+   as the apex page rather than a frozen rollback target. **Phase 5's completion criteria also
+   updated** — that plan explicitly flagged the missing retirement disposition as an open item for
+   Rick, and it had stayed open since 2026-07-15. It is now closed there too.
+
+**Both `/preflight` doc-status flags from this session's opening sweep are cleared** — items 1 and 2
+were exactly those two flags, and item 2 was caught by the *findings cross-check* clause (state
+`PROPOSED` while F115/F146 had gone RESOLVED), which is the doc-only-session blind spot that rule
+exists for. It worked.
+
+*Original item retained below.*
+
+#### (original) W7 — Doc-status hygiene
 
 **Delivers:** `/preflight`'s STATUS-token sweep stops reporting known-stale docs as open work.
 
@@ -785,7 +811,7 @@ NEXT — nothing here is blocked, and nothing here is time-critical
  ├── W6  ✅ DONE 2026-08-30 — inventory recorded, F145 item 3 ticked
  ├── W4  test-infra F133 → F130                   (read order_deadline live first)
  ├── W5  ✅ unblocked — remove the MailerLite path, platform-wide
- ├── W7  finish — the Q8 legacy-surface record + its caveat
+ ├── W7  ✅ DONE 2026-08-30 — all 6 items, both preflight flags cleared
  └── W9  F131 second-operator preamble + the F146 Lunar-code lesson
           + the W3 hardening (make the .env pre-step unmissable)
 

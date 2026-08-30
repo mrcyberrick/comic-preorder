@@ -807,7 +807,9 @@ At the end of each session:
 **Location:** Rockaway, NJ
 **Production URL:** https://pulllist.app/
 **Staging URL:** https://staging.pulllist.pages.dev/
-**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ (GitHub Pages — kept warm as a rollback surface past the original "until 5.5 closes" gate; Rick's call 2026-07-15 at 5.5 S6 was to keep it warm and revisit retirement in a future session, not tied to any phase boundary; redirects to `/` via `_redirects`)
+**Legacy prod URL:** https://mrcyberrick.us/comic-preorder/ — **kept warm, decision closed 2026-08-29 (Rick): "keep warm if there is no cost, otherwise close." Measured: it is free**, because `mrcyberrick/comic-preorder` is a **public** repo (GitHub Pages hosting and bandwidth cost nothing there), and `mrcyberrick.us` is a pre-existing registration independent of this. `mrcyberrick.github.io/comic-preorder/` **301**s here; here returns **200**. This closes the retirement question left open at 5.5 S6 (2026-07-15) and again in Phase 5's completion criteria.
+> **⚠️ What is kept warm is NOT a frozen rollback snapshot — measured 2026-08-29, not assumed.** It **auto-deploys from `main`** and currently serves the 2026-08-24 Lighthouse-sweep build with the **production** `config.js` (prod Supabase ref `plgegklqtdjxeglvyjte`, prod founding-tenant UUID). And because `tenantSlugFromHostname()` finds no tenant slug in `mrcyberrick.us`, the pre-paint script sets `data-front-door="apex"` — so this URL renders the **platform marketing page**, not Ray & Judy's branded sign-in.
+> **Why that is a caveat and not a defect:** the apex carries universal login, and the same script's `token_hash`/`access_token` handling still opens the sign-in panel, so **a magic link landing here works**. Nothing is broken and no customer is routed here — the print CTA points at `rjbookstop.pulllist.app`. What a rollback would cost is the *branded* first impression, not access. **No finding filed.** Treat this as a live auto-deploying mirror of production on the apex front door, not as a point-in-time rollback target — and if a genuine frozen rollback is ever wanted, that is different work.
 
 ---
 

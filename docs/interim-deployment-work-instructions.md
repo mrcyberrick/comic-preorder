@@ -1,9 +1,30 @@
 # Interim Work Instructions — Deploying PULLLIST on Cloudflare Pages
 
-**STATUS:** IN PROGRESS | staging=2026-06-11 | prod=N/A | findings=—
+**STATUS:** SUPERSEDED 2026-08-30 by `CLAUDE.md` § Standard Deployment Workflow | staging=2026-06-11 | prod=N/A | findings=—
 
-**Status:** Interim — written 2026-06-11, immediately after the Phase 5.1 hosting
-migration. These instructions bridge the gap until the Cloudflare Pages setup has
+**Status:** **SUPERSEDED — historical reference only. Do not follow these steps; follow
+`CLAUDE.md` § Standard Deployment Workflow.** This doc described itself as a bridge "until
+post-5.5, when GitHub Pages is torn down." **5.5 closed 2026-07-15**, so its own stated end
+condition passed six weeks before this re-token. It then sat at `IN PROGRESS` and surfaced in
+every `/preflight` doc-status sweep as open work that nobody intended to do.
+
+Two of its premises are now known to be wrong, which is the real reason it should not be followed:
+
+- **GitHub Pages was never torn down.** Rick's call, 2026-08-29: keep it warm — it costs nothing
+  (`mrcyberrick/comic-preorder` is a public repo). So the condition this doc waits for is not
+  merely late; it is not going to happen. See `CLAUDE.md` § Project Overview for what that surface
+  actually is today.
+- **The deployment workflow moved on without it.** `CLAUDE.md` § Standard Deployment Workflow has
+  since absorbed the smoke-test ordering correction (push first, *then* run the suite — the suite
+  tests the deployed site), the `-SkipPlaywright` pre-push baseline, the plain-URL cache-key check,
+  and the F59/F125 promotion assertions. None of that is here.
+
+Its own escape hatch was already correct and is retained below: `CLAUDE.md` wins on any
+disagreement. Re-tokened rather than deleted because the 5.1 hosting-migration context is a useful
+record of *why* the Cloudflare Pages setup looks the way it does.
+
+**Original status line, retained:** Interim — written 2026-06-11, immediately after the Phase 5.1
+hosting migration. These instructions bridge the gap until the Cloudflare Pages setup has
 matured (post-5.5, when GitHub Pages is torn down) and a permanent SOP is written.
 **Canonical command sequence:** `CLAUDE.md` § Standard Deployment Workflow. If this
 document and `CLAUDE.md` ever disagree, `CLAUDE.md` wins — file the contradiction as

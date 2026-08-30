@@ -1,6 +1,24 @@
 # Pre-Phase-6 Consolidation — September 2026
 
-**STATUS:** PROPOSED — **substantially overtaken by events 2026-08-28; C1 is fully DONE (2026-08-28/29)** | staging=— | prod=— | findings=F115,F135,F130,F133,F145,F146,F72,F99,F131
+**STATUS:** SUPERSEDED 2026-08-30 by `docs/pre-phase-6-consolidation-wave-2.md` | staging=— | prod=— | findings=F115,F135,F130,F133,F145,F146,F72,F99,F131
+
+> **⚠️ SUPERSEDED — read `docs/pre-phase-6-consolidation-wave-2.md` for the live plan.** This document
+> was never formally approved and has been overtaken twice. **C1 (F115's S6 production backfill) is
+> DONE** (2026-08-28/29) and the **F146 close-out is DONE on staging** (2026-08-29); items C2–C8
+> carried forward into Wave 2, where Rick answered all eight open questions on 2026-08-29 and
+> trimmed the scope — **C2/F135 is now DEFERRED**, C6 and C7 are deferred, and the direction is
+> “small features for now,” not Phase 6 and not the Founding Partner launch.
+>
+> **Kept, not deleted, for one reason worth naming:** § 3.3 C1 holds the full reasoning trail for
+> the S6 predicate decision — how the definition drifted between design and staging's execution,
+> why that was 28 rows on staging and 859 on production, why the broader “classify retroactively”
+> option was recommended and then **withdrawn**, and the five reasons behind the final call. That is
+> the most carefully-argued decision in the project's recent history and re-deriving it would cost
+> a session.
+>
+> *(Its token read `PROPOSED` while two of its listed findings had gone RESOLVED. `/preflight`'s
+> findings cross-check flagged it correctly on 2026-08-30 — the doc-only-session blind spot that
+> rule was written for, working as intended.)*
 
 **Status:** **Proposed, not approved.** Written 2026-08-28 by a planning pass. This is a plan for a
 *workstream*, not a phase sub-deploy and not Phase 6. It needs Rick's sign-off on § 5 before an
