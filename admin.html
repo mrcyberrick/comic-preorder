@@ -41,6 +41,31 @@
        Not persisted across loads on purpose. Remembering an expanded state
        would put the 1,796px reveal back for anyone who had opened it once,
        which is the defect this is fixing. */
+    /* Never Arrived is BOUNDED BY SCROLL, not by hiding rows (Rick's option 2,
+       2026-08-30, implemented this way deliberately).
+
+       Hiding all but the first N would have reintroduced the problem option (b)
+       had just fixed. These rows sort by on-sale date and staging carries ~32 of
+       them from the F115 backfill, so a spec's seeded title lands outside the
+       first N unpredictably — 21-arrival-resolution and 22-f143-f144 would go
+       flaky rather than cleanly red. A capped scroll region bounds the height
+       the same way while every row keeps a real bounding box: Playwright scrolls
+       to act on it, and so does a person.
+
+       It also suits the actual workflow better. Triage resolves the top row, it
+       drops out of the panel, the next moves up — with a collapse you would be
+       re-expanding after every single resolution.
+
+       ~3 rows at the measured 93px each. */
+    .ofu-never-scroll {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
     .ofu-details > summary {
       cursor: pointer;
       display: inline-flex;
@@ -1859,9 +1884,12 @@
       ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin-bottom:6px">
         Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="ofu-never-scroll">
         ${rowHtml(neverArrived, 'neverArrived')}
-      </div>` : ''}
+      </div>
+      ${neverArrived.length > 3 ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">
+        ${neverArrived.length} titles — scroll the list to reach the rest.
+      </div>` : ''}` : ''}
       ${(backordered.length || atRisk.length) ? `
       <details id="ofu-details" class="ofu-details" style="margin-top:${neverArrived.length ? '10px' : '0'}">
         <summary class="ofu-summary">Show ${[
