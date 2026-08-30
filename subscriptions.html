@@ -448,7 +448,13 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   }
 
   let allSubs = [];
-  let suggestions = [];   // unsubscribed series from the customer's own reservations
+  let suggestions = [];   // unsubscribed series: the customer's own reservations, or store-popular
+  let suggestionsMode = 'personal';   // 'personal' | 'popular' — drives the header copy
+  let reservedKeys = new Set();       // every series the customer HAS reserved (any cover)
+  // Rick, 2026-08-30: cap the block. It rendered ONE ROW PER RESERVED SERIES, measured
+  // at 1,760px for a 25-series customer — nearly two viewports of suggestions sitting
+  // above the subscriptions the page is actually for. Five is the useful number.
+  const MAX_SUGGESTIONS = 5;
   const suggestEl = document.getElementById('reserved-suggestions');
 
   // Standard-cover gate — same eligibility rule as the catalog subscribe button.
@@ -479,6 +485,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
     allSubs = items;
     await buildSuggestions(); // always-on: unsubscribed reserved series (V5 amendment)
+    // No qualifying reservations (new customer, or everything already subscribed) —
+    // fall back to what the store is actually reserving this month (Rick, 2026-08-30).
+    if (!suggestions.length) await buildPopularFallback();
     renderSuggestions();
     renderSubs();
   }
@@ -497,9 +506,15 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     if (error) return; // non-fatal — page just renders without suggestions
     const subKeys = new Set(allSubs.map(s => `${s.series_name}||${s.distributor}`));
     const seen = new Map();
+    reservedKeys = new Set();   // every reserved series, including ones this list filters out
     for (const item of items) {
       const c = item.catalog;
-      if (!c || !c.series_name || !isStandardCover(c)) continue;
+      if (!c || !c.series_name) continue;
+      // Recorded BEFORE the standard-cover and already-subscribed filters, so the
+      // popular fallback can exclude everything the customer has reserved — even
+      // the variant-only series this list deliberately drops.
+      reservedKeys.add(`${c.series_name}||${c.distributor}`);
+      if (!isStandardCover(c)) continue;
       const key = `${c.series_name}||${c.distributor}`;
       if (subKeys.has(key)) continue; // already subscribed
       const existing = seen.get(key);
@@ -523,7 +538,71 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
         if (!existing.cover_url && c.cover_url) existing.cover_url = c.cover_url;
       }
     }
-    suggestions = [...seen.values()];
+    // Rank by how many issues of the series the customer reserved, most first —
+    // that is the strongest signal that they want it standing. Array.prototype.sort
+    // is stable, so equal counts keep the recency order the Map already gave us.
+    suggestions = [...seen.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, MAX_SUGGESTIONS);
+    suggestionsMode = 'personal';
+  }
+
+  // Fallback when the customer has no qualifying reservations: the store's most-reserved
+  // series this month, via get_popular_series() — tenant-scoped since F20 and callable
+  // with the anon key (SECURITY DEFINER), so it exposes aggregate counts without RLS
+  // leaking anyone's individual rows.
+  //
+  // Deliberately EXCLUDES series the customer has already reserved. Two reasons: a
+  // reserved series belongs in the personal list or was filtered out of it on purpose
+  // (variant-only covers cannot be subscribed), and it keeps this section hidden in
+  // exactly the cases 11-reserved-suggestions.spec.ts asserts it hidden.
+  async function buildPopularFallback() {
+    const month = await Catalog.getLatestMonth();
+    if (!month) return;
+    const { data, error } = await db.rpc('get_popular_series', { p_catalog_month: month });
+    if (error || !data || !data.length) return;
+
+    const subKeys = new Set(allSubs.map(s => `${s.series_name}||${s.distributor}`));
+    const wanted = data
+      .filter(r => r.series_name)
+      .filter(r => !subKeys.has(`${r.series_name}||${r.distributor}`))
+      .filter(r => !reservedKeys.has(`${r.series_name}||${r.distributor}`))
+      .slice(0, MAX_SUGGESTIONS);
+    if (!wanted.length) return;
+
+    // One catalog row per series for cover art, publisher and format. Standard covers
+    // only — the same qualifying rule the personal list uses, since a variant cannot be
+    // subscribed to.
+    const { data: rows } = await db
+      .from('catalog')
+      .select('series_name, distributor, cover_url, publisher, format, variant_type')
+      .eq('catalog_month', month)
+      .in('series_name', wanted.map(w => w.series_name));
+
+    const art = new Map();
+    for (const c of (rows || [])) {
+      const key = `${c.series_name}||${c.distributor}`;
+      if (art.has(key)) continue;
+      if (!isStandardCover(c)) continue;
+      art.set(key, c);
+    }
+
+    suggestions = wanted.map(w => {
+      const key = `${w.series_name}||${w.distributor}`;
+      const c = art.get(key) || {};
+      return {
+        key,
+        series_name: w.series_name,
+        distributor: w.distributor,
+        format:      c.format || null,
+        publisher:   c.publisher || '',
+        cover_url:   c.cover_url || null,
+        count:       0,          // not the customer's own count — never shown in this mode
+        subscribed:  false,
+      };
+    }).filter(s => art.has(s.key));   // no standard cover this month → cannot subscribe
+
+    if (suggestions.length) suggestionsMode = 'popular';
   }
 
   function renderSuggestions() {
@@ -535,14 +614,24 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     suggestEl.style.display = 'block';
     suggestEl.innerHTML = `
       <div class="reserved-suggestions-section">
-        <div class="popular-series-header">📚 Series you're already reading</div>
-        <p class="popular-series-note">${AdminContext.isActive()
-          ? "Series this customer has reserved — subscribe on their behalf and it's auto-reserved every month."
-          : isBlocked
-            ? (isPaused
-                ? "Series you've reserved — subscribing is paused while your account is on hold."
-                : "Series you've reserved — subscribing will be available once your account is approved.")
-            : "You've reserved these — subscribe and your copy is auto-reserved every month, no action needed."}</p>
+        <div class="popular-series-header">${suggestionsMode === 'popular'
+          ? '📚 Popular with other customers'
+          : "📚 Series you're already reading"}</div>
+        <p class="popular-series-note">${suggestionsMode === 'popular'
+          ? (AdminContext.isActive()
+              ? "This customer has no reservations yet — these are the store's most-reserved series this month."
+              : isBlocked
+                ? (isPaused
+                    ? "The store's most-reserved series this month — subscribing is paused while your account is on hold."
+                    : "The store's most-reserved series this month — subscribing will be available once your account is approved.")
+                : "The store's most-reserved series this month. Subscribe and your copy is auto-reserved every month, no action needed.")
+          : AdminContext.isActive()
+            ? "Series this customer has reserved — subscribe on their behalf and it's auto-reserved every month."
+            : isBlocked
+              ? (isPaused
+                  ? "Series you've reserved — subscribing is paused while your account is on hold."
+                  : "Series you've reserved — subscribing will be available once your account is approved.")
+              : "You've reserved these — subscribe and your copy is auto-reserved every month, no action needed."}</p>
         <div class="popular-series-list">
           ${suggestions.map(s => {
             const cover = s.cover_url
@@ -556,7 +645,8 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
                 <div class="reserved-suggestion-cover">${cover}</div>
                 <div class="popular-series-name">
                   ${escapeHtml(s.series_name)}
-                  ${s.count > 1 ? `<div class="reserved-suggestion-count">${s.count} issues reserved</div>` : ''}
+                  ${suggestionsMode !== 'popular' && s.count > 1
+                    ? `<div class="reserved-suggestion-count">${s.count} issues reserved</div>` : ''}
                 </div>
                 <div class="popular-series-publisher">${escapeHtml(s.publisher)}</div>
                 <div class="popular-series-actions">
@@ -586,7 +676,8 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
         // land on the customer's row, not the admin's.
         const targetUserId = AdminContext.resolveUserId(user.id);
         const { error } = await Subscriptions.subscribe(
-          targetUserId, s.series_name, s.distributor, s.format || null, 'reserved_suggestion'
+          targetUserId, s.series_name, s.distributor, s.format || null,
+          suggestionsMode === 'popular' ? 'popular_suggestion' : 'reserved_suggestion'
         );
         if (error) {
           toast('Failed to subscribe', 'error');
