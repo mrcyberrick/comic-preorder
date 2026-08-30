@@ -429,7 +429,34 @@ week again.
 
 ---
 
-### W4 — Test-infrastructure session: F133 then F130, in that order
+### W4 ◑ **F133 (a) DONE 2026-08-30; F133 (b) re-dispositioned; F130 classified, not yet fixed**
+
+**F133 variant (a) — fixed and proven.** `ensureDeadlineCovers()`/`restoreDeadline()` added to
+`fixtures/catalog.ts`; wired into specs 15 and 06. The block that depends on the At-risk
+classification now owns `order_deadline` rather than hoping the ambient value cooperates.
+**Reproduced deterministically first** — the entry called it intermittent; forcing a past deadline
+makes it fail every time at `06:148`. Then negative-controlled: guard removed → 1 failed; restored
+→ 9 passed. Staging's `order_deadline` captured, used, and restored to `""`, re-read fresh to
+confirm. Runs: 06 **3/3**, 15 **36/36**, 21 **6/6**.
+
+**F133 variant (b) — does not reproduce, and its recorded diagnosis appears wrong.** Spec 21 passes
+targeted 6/6. Its assertions all target unique stamped titles that no real row can collide with,
+and `#backorder-risk-panel` has no row cap — so “assumes the panel holds only its fixture” is not
+what they do. **The knock-on claim that targeted runs are untrustworthy is not currently
+demonstrable.** Needs a real captured failure before anyone fixes it. Recorded, not papered over.
+
+**F130 — classified (the thing the finding actually asked for), not yet fixed.** **893** fixture auth
+users, not 197 — the old figure looks like an unpaginated read, the same class as F82/F113/F139/F140.
+5 prefixes hold 737. **Mechanism found by counting call sites:** specs 10 and 11 each call
+`createUser` 9× against `deleteUser` 2× — users created *inside* tests are never torn down (383
+orphans). `pw-iso` (207) is balanced and is a **different, undiagnosed** cause. `pw-pending` (70)
+must not be bulk-deleted — intended survivors (F64 item 5 Option A). **Read-only; nothing deleted.**
+
+**Remaining in W4:** fix the two teardowns, diagnose `pw-iso`, then delete only what is left.
+
+*Original item retained below.*
+
+#### (original) W4 — Test-infrastructure session: F133 then F130, in that order
 
 **Delivers:** date-dependent specs that no longer flip on the calendar, panel assertions scoped to
 their own seeded rows, and a **classified** — not bulk-deleted — auth-user orphan set.
