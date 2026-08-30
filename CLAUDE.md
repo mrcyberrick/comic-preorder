@@ -564,7 +564,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F130 | **Low** — 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
 | F133 | **Low** — date-dependent specs flip red with zero code involved, via the live `order_deadline` (2026-08-21). **Two variants, not one:** (a) a fixture FOC crossing *past* the deadline (2026-08-20, three specs); (b) **the deadline having LAPSED** re-admits *real* catalog rows into `#backorder-risk-panel`, breaking any spec that assumes the panel holds only its fixture — **recurred 2026-08-24 in a fourth spec** (`21-arrival-resolution:136`) — **but only in a TARGETED run; it passes in the full suite**, because spec 15 runs first and leaves the state it needs. Test-infra only | deferred — no plan doc. **The entry's prediction that a lapse would end this was wrong — a lapse started variant (b).** Also exposes an **undeclared spec-order dependency**: spec 21 is green by ordering luck, so **targeted runs of these specs are not trustworthy**. Fix: deadline-aware helper closes (a) only; (b) needs panel assertions scoped to the seeded row. See § 13 F133 |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
-| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **DMARC gate READ 2026-08-20 — inventory complete, 13 msgs / 100% pass / 3 senders, all known.** `p=quarantine` **held**, trigger = MailerLite retirement (not a date). Scoping now unblocked — design together with F72, and **sequence with MailerLite retirement** (`native-customer-signup.md` § S5) |
+| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **DMARC gate READ 2026-08-20** (13 msgs / 100% pass / 3 senders, all known). **TRIGGER FIRED 2026-08-30 — the app half of MailerLite retirement is done** (`register-customer`'s webhook path removed platform-wide, native-signup § S5). **F99 is UNBLOCKED but UNSCHEDULED** — not gated any more; simply not next, per Rick's 2026-08-29 “small features for now.” **Before any `p=quarantine` publish, verify the DNS half separately:** `litesrv._domainkey` gone from `mrcyberrick.us` and MailerSend its sole sender. Design together with F72 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
@@ -1195,8 +1195,14 @@ Tenant-aware as of Phase 2 + 4.1 hardening:
 - `notify-customers` — in-body admin auth (F47); recipient list scoped to caller's tenant
 - `create-paper-customer` — in-body auth; JWT-off platform setting (post-4.1 C13)
 - `invite-customer` — in-body auth; explicit `tenant_id` + inline HTML template
-- `register-customer` — explicit `tenant_id` (intentionally pinned to founding;
-  Phase 5 will revisit for self-service signup)
+- `register-customer` — **public by design**; `tenant_id` resolved from the posted
+  `slug` (F34 residual closed 5.4 S2 — no longer founding-pinned). Abuse gate:
+  honeypot + server-verified Turnstile + `already_exists` dedup. **The MailerLite
+  `?secret=` webhook path was removed 2026-08-30** (native-signup § S5) —
+  platform-wide, so no tenant has it; `?secret=` is now inert and
+  `tenants.settings->>'mailerlite_webhook_secret'` is dead config. **F72 is still
+  open**: its confirmation email stays founding-branded for every tenant, which is
+  the real gate on a second tenant taking real customers
 - `send-my-list` — in-body auth + caller identity check (F51, F54); tenant-scoped queries
 - `claim-paper-customer` — in-body auth; PATCHes tenant-scoped (F50)
 - `approve-customer` — PATCH-only on existing rows; tenant inherited from row

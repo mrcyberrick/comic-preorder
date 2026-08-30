@@ -469,7 +469,49 @@ their own seeded rows, and a **classified** — not bulk-deleted — auth-user o
 
 ---
 
-### W5 ✅ **UNBLOCKED 2026-08-29** — Retire the MailerLite webhook path (native-signup S5)
+### W5 ✅ **DONE 2026-08-30** — MailerLite webhook path removed (native-signup S5)
+
+**Code:** `?secret=` branch, tenant lookup and payload parser deleted from
+`supabase/functions/register-customer/index.ts` (−4,087 bytes, 18,253→14,166). Header rewritten
+from “two entry paths” to one, recording what was removed, that it was **platform-wide**, and that
+recovery is via git history rather than a flag. A stray `?secret=` is now inert.
+**Syntax-gated, and the gate was negative-controlled:** esbuild parses the file clean (exit 0); a
+deliberately broken copy fails (exit 1, `Unexpected end of file`). Also confirmed `url` has no
+remaining references after its declaration was removed, braces/parens/brackets balance, and the
+native path's `provisionPendingCustomer` / `verifyTurnstile` / `nativeBody` chain is intact.
+
+**Docs — all five surfaces the item listed:** § 11 inventory row, secrets table and prose contract;
+`CLAUDE.md` § Edge Functions; onboarding-runbook **Step 4 tombstoned** (kept, not deleted, so an
+operator on an older copy is told it is gone rather than finding a numbering gap) plus its Step 7
+checklist line and the rollback note; `native-customer-signup.md`'s **four boxes closed**, so its
+COMPLETE token and its checkboxes finally agree — the § 1.6(a) conflict is gone.
+
+**Two judgement calls worth surfacing:**
+
+- **The prod write-smoke box was dispositioned, not re-run.** Nothing recorded the 24-hour soak
+  closing. But the path has been live in production five weeks with real self-registrations — far
+  more evidence than a fresh 24-hour soak would produce. **What is genuinely unknown is whether the
+  smoke was performed at the time, and that is unrecoverable**; it is recorded as unknown rather
+  than quietly assumed green.
+- **The “rotate the exposed secret” half is satisfied by removal, not rotation.**
+  `tenants.settings->>'mailerlite_webhook_secret'` and the `MAILERLITE_WEBHOOK_SECRET` Edge secret
+  are now dead config — nothing reads either, so the value is no longer live anywhere. Unsetting
+  them in both projects is optional tidying, not a security step.
+
+**⚠️ Not deployed yet — this is the one thing outstanding.** Edge Functions deploy outside the
+branch flow, on **both** Supabase projects, and per `CLAUDE.md` the agent never touches prod deploy
+credentials. **Rick deploys.** Until then production still runs the old code, which is harmless (the
+webhook path simply still exists) but means W5 is code-complete, not live.
+
+**F99's trigger fired.** Its recorded condition was “MailerLite retirement (not a date).” § 13 F99
+and the `CLAUDE.md` findings table now read **unblocked but unscheduled** — with an added warning
+not to conflate the halves: this retired the path PULLLIST *receives* on, which says nothing about
+whether MailerLite still *sends* as `mrcyberrick.us`. **Verify `litesrv._domainkey` is gone from
+that zone before any `p=quarantine` publish.**
+
+*Original item retained below.*
+
+#### (original) W5 — Retire the MailerLite webhook path (native-signup S5)
 
 **Delivers:** the dead `?secret=` webhook branch removed or explicitly disabled, the exposed webhook
 secret rotated to dead config, every doc surface corrected — and **F99's stated trigger fired**,
@@ -835,7 +877,7 @@ NEXT — nothing here is blocked, and nothing here is time-critical
  ├── W2  record the three 2026-08-29 promotions   (small, doc-only) ◀ do first
  ├── W6  ✅ DONE 2026-08-30 — inventory recorded, F145 item 3 ticked
  ├── W4  test-infra F133 → F130                   (read order_deadline live first)
- ├── W5  ✅ unblocked — remove the MailerLite path, platform-wide
+ ├── W5  ✅ CODE DONE 2026-08-30 — ⚠️ awaiting Rick's Edge Function deploy (both projects)
  ├── W7  ✅ DONE 2026-08-30 — all 6 items, both preflight flags cleared
  └── W9  ✅ DONE 2026-08-30 — all three pieces
 

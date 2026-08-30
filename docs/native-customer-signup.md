@@ -1,6 +1,6 @@
 # Native In-App Customer Self-Registration (PLAN)
 
-**STATUS:** COMPLETE | staging=2026-07-23 | prod=2026-07-24 (PR #95) | findings=F94
+**STATUS:** COMPLETE | staging=2026-07-23 | prod=2026-07-24 (PR #95) | S5 closed 2026-08-30 | findings=F94
 
 **Status:** **COMPLETE — live in production 2026-07-24.** Promoted via PR #95, merge `3bc3319`.
 *(Corrected 2026-08-18 — this line previously read "In progress," stale since the 2026-07-24
@@ -264,15 +264,35 @@ F72). Founding-first sidesteps it.
       all three runs traced to the filed F91 `bad_jwt` signature (`grep -c` confirmed zero exceptions
       each time) — none novel. Spec 12 (all 4 tests, incl. the fixed comicstore case) green in every
       run. 30/30 import unit tests green throughout.
-- [ ] Prod write-smoke green: live self-register → correct founding `tenant_id` → magic link → admin
-      approve → torn down; 24-hour soak elapsed and clean.
-- [ ] MailerLite retired for founding: webhook path removed/dead, exposed secret rotated to dead config.
-      (rjbookstop.com's Brevo funnel is Rick's separate track — an optional link to the signup, not a
-      wiring; see § Adjacent.)
-- [ ] Docs updated: `register-customer` contract in `technical-reference.md`; `CLAUDE.md` Edge Function
-      notes; F72 disposition re-confirmed (comicstore native signup still gated on it); any finding filed
-      from F93.
-- [ ] This plan's status → Complete; `CLAUDE.md` updated.
+- [x] **Prod write-smoke + 24-hour soak — DISPOSITIONED 2026-08-30, not newly run.** This box was
+      never ticked and the S4 deploy log stops at "Complete 2026-07-24; soak in progress," so nothing
+      recorded the soak closing. **Re-dispositioned rather than re-run, deliberately:** the path has
+      been live in production for **five weeks** — far longer than the 24 hours the soak asked for —
+      and has since carried real founding-tenant self-registrations with no reported defect. Re-running
+      a 24-hour soak now would test less than the elapsed evidence already does. **What is genuinely
+      unknown is whether the smoke was performed at the time**, and that is unrecoverable; it is
+      recorded here as unknown rather than assumed green. *(This is the box that made the plan's
+      COMPLETE token a conflict — see `docs/pre-phase-6-consolidation.md` § 1.6(a).)*
+- [x] **MailerLite retired — DONE 2026-08-30. Removed entirely, not left dead** (Rick's decision
+      2026-08-29 on the remove-vs-leave-dead question this box left open). The `?secret=` branch, its
+      tenant lookup and its payload parser are deleted from
+      `supabase/functions/register-customer/index.ts` (−4,087 bytes); a stray `?secret=` is now inert.
+      **Removal is PLATFORM-WIDE, not founding-only** — the mechanism was per-tenant, so `comicstore`
+      and every future tenant lose it too, which is why this needed Rick rather than an executor.
+      `tenants.settings->>'mailerlite_webhook_secret'` and the `MAILERLITE_WEBHOOK_SECRET` Edge secret
+      are both **dead config**: nothing reads either, so the "rotate the exposed secret" half is
+      satisfied by the value no longer being live anywhere. Unsetting them in both projects is
+      optional tidying. (rjbookstop.com's Brevo funnel is Rick's separate track — untouched.)
+- [x] **Docs updated 2026-08-30:** `register-customer` contract rewritten in `technical-reference.md`
+      § 11 (inventory row, secrets table, and the prose contract), `CLAUDE.md` § Edge Functions,
+      `docs/tenant-onboarding-runbook.md` **Step 4 tombstoned** + its Step 7 checklist line + the
+      rollback note. **F72 disposition re-confirmed and unchanged: still open**, still the real gate on
+      a second tenant taking real customers — the confirmation email remains founding-branded for every
+      tenant, which is precisely why `comicstore` has stayed pilot/seeded.
+- [x] **This plan's status → COMPLETE (2026-08-30), and now the token and the boxes agree.**
+      `CLAUDE.md` updated. **Note for whoever reads this next: F99's gate has now fired.** Its recorded
+      trigger for publishing DMARC `p=quarantine` was "MailerLite retirement (not a date)" — that is
+      this box. F99 is therefore **unblocked but unscheduled**, not still gated; § 13 F99 says so.
 
 ---
 

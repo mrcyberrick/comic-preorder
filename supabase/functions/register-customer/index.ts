@@ -1,42 +1,36 @@
 /**
  * register-customer — Public Edge Function
  *
- * Two entry paths, detected by whether the request carries a `?secret=` query param:
+ * ONE entry path: native direct-POST signup, called by the app's own "Create account" UI on a
+ * tenant's branded login (native-customer-signup, S2/S3). Body:
+ *   { email, name, slug, turnstileToken, honeypot }
+ * Tenant is resolved from the posted `slug` (the client knows it via TenantContext.current().slug,
+ * resolved unauthenticated from the host). A caller can post any slug; worst case is a pending row
+ * in the wrong tenant, which that tenant's admin declines — the approval state machine is the real
+ * access gate, not signup itself. Abuse gate: honeypot (silent no-op) + Cloudflare Turnstile
+ * (server-verified) + the existing already_exists dedup below.
  *
- * 1. MailerLite webhook path (`?secret=<tenant's webhook secret>`) — called by a tenant's
- *    MailerLite webhook when a new subscriber is confirmed. Legacy path, retained harmlessly
- *    until MailerLite is retired for the founding tenant (see native-customer-signup plan § S5).
- *    Webhook URL to configure in MailerLite (per tenant — each tenant has its own generated
- *    secret, issued by register-tenant and stored in tenants.settings):
- *      https://<project>.supabase.co/functions/v1/register-customer?secret=<tenant's webhook secret>
- *    MailerLite webhook event: subscriber.created (or subscriber.updated)
- *
- * 2. Native direct-POST path (no `?secret=`) — called by the app's own "Create account" UI
- *    on a tenant's branded login (native-customer-signup, S2/S3). Body:
- *      { email, name, slug, turnstileToken, honeypot }
- *    Tenant is resolved from the posted `slug` (client already knows it via
- *    TenantContext.current().slug — resolved unauthenticated from the host). A caller can post
- *    any slug; worst case is a pending row in the wrong tenant, which that tenant's admin
- *    declines — the approval state machine is the real access gate, not signup itself. Abuse
- *    gate: honeypot (silent no-op) + Cloudflare Turnstile (server-verified) + the existing
- *    already_exists dedup below. No rate-limit table for v1 (added later only if needed).
- *
- * Both paths share the same account-create / profile-insert / magic-link / MailerSend tail
- * (provisionPendingCustomer below) — verbatim reuse, no behavior drift between paths.
+ * MailerLite webhook path REMOVED 2026-08-30 (native-customer-signup § S5, Rick's decision
+ * 2026-08-29: remove entirely rather than leave present-but-dead). It accepted
+ * `?secret=<tenant's webhook secret>`, resolved the tenant by looking that secret up against
+ * tenants.settings->>'mailerlite_webhook_secret', and parsed a MailerLite subscriber payload.
+ * Removal is PLATFORM-WIDE, not founding-only — the mechanism was per-tenant, so no tenant can use
+ * it now. `?secret=` is simply ignored today: a request carrying it falls through to the native
+ * path and is judged on its JSON body like any other.
+ * Two consequences worth knowing before reinstating anything:
+ *   - `tenants.settings->>'mailerlite_webhook_secret'` is now DEAD CONFIG. Nothing reads it.
+ *   - Recovering the path means git history (this file, pre-2026-08-30), not a feature flag.
  *
  * Required env vars (set in Supabase → Edge Functions → Secrets):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
  *   MAILERSEND_API_KEY
- *   FOUNDING_TENANT_ID          ← retained for diagnostics; no longer the tenant source (see F34 note)
- *   TURNSTILE_SECRET_KEY        ← native path only; server-side Turnstile token verification
+ *   FOUNDING_TENANT_ID          ← retained for diagnostics; not the tenant source (see F34 note)
+ *   TURNSTILE_SECRET_KEY        ← server-side Turnstile token verification
  *
- * F34 note (resolved 5.4 S2, 2026-06-16): the webhook path's tenant_id is resolved from the
- * incoming `?secret=` query param via a service-role lookup against
- * tenants.settings->>'mailerlite_webhook_secret' — the secret both authenticates the caller and
- * selects the tenant. Email branding (below) remains founding-branded for all tenants — tracked
- * separately as F72 (multi-tenant email branding is out of scope for Phase 5). The native path
- * is founding-only for the same reason (native-customer-signup plan § F72 disposition).
+ * F34 note (resolved 5.4 S2, 2026-06-16): this function is no longer pinned to the founding
+ * tenant. With the webhook path gone, the sole tenant source is the posted `slug`. Email branding
+ * remains founding-branded for all tenants — tracked separately as F72, still open.
  */
 
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
@@ -195,87 +189,12 @@ Deno.serve(async (req) => {
       console.warn('register-customer: FOUNDING_TENANT_ID secret not set')
     }
 
-    const url    = new URL(req.url)
-    const secret = url.searchParams.get('secret')
+    // The MailerLite webhook path (`?secret=`) was removed 2026-08-30 — see the header.
+    // A stray `?secret=` on the URL is now inert: the request falls through to the
+    // native path below and is judged on its JSON body like any other.
 
     // ════════════════════════════════════════════════════════════════════
-    // Path 1 — MailerLite webhook (?secret=<tenant webhook secret>)
-    // ════════════════════════════════════════════════════════════════════
-    if (secret) {
-      // ── Resolve tenant from per-tenant webhook secret ────────────
-      // F34 residual (resolved 5.4 S2): the incoming `?secret=` both authenticates
-      // the request and selects the tenant. A caller can only create a pending
-      // customer in the tenant whose secret they hold — no cross-tenant injection.
-      const tenantLookupRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.${encodeURIComponent(secret)}&select=id,slug,display_name`,
-        {
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE}`,
-            'apikey':        SUPABASE_SERVICE,
-            'Accept':        'application/json',
-          },
-        }
-      )
-      const matchedTenants = await tenantLookupRes.json()
-      const tenantId = Array.isArray(matchedTenants) ? matchedTenants[0]?.id as string | undefined : undefined
-
-      if (!tenantLookupRes.ok || !tenantId) {
-        console.warn('register-customer: no tenant matched the provided webhook secret')
-        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
-      }
-
-      // ── Parse MailerLite webhook body ───────────────────────────
-      let body: Record<string, unknown>
-      try {
-        body = await req.json()
-      } catch {
-        return Response.json({ error: 'Invalid JSON body' }, { status: 400, headers: corsHeaders })
-      }
-
-      // ── Group filter ────────────────────────────────────────────
-      // Only process subscribers added to the PULLLIST onboarding group.
-      // All other MailerLite groups (newsletters, other landing pages) are ignored.
-      const REQUIRED_GROUP = 'Monthly Comics'
-
-      // subscriber.added_to_group payload shape:
-      //   body.data.subscriber  — the subscriber object
-      //   body.data.group       — the group object { id, name, ... }
-      const data      = body?.data as Record<string, unknown> | undefined
-      const group     = data?.group as Record<string, unknown> | undefined
-      const groupName = (group?.name as string | undefined)?.trim() || ''
-
-      if (groupName && groupName !== REQUIRED_GROUP) {
-        console.log(`register-customer: ignoring group "${groupName}" — not "${REQUIRED_GROUP}"`)
-        return Response.json({ success: true, note: 'ignored_group' }, { headers: corsHeaders })
-      }
-
-      // ── Parse subscriber ─────────────────────────────────────
-      const subscriber: Record<string, unknown> =
-        data?.subscriber as Record<string, unknown>
-        || body?.subscriber as Record<string, unknown>
-        || body
-
-      const email     = (subscriber?.email as string | undefined)?.trim()
-      const fields     = subscriber?.fields as Record<string, unknown> | undefined
-      const firstName  = ((fields?.name ?? subscriber?.name) as string | undefined)?.trim() || ''
-      const lastName   = ((fields?.last_name ?? subscriber?.last_name) as string | undefined)?.trim() || ''
-      const fullName   = [firstName, lastName].filter(Boolean).join(' ') || email?.split('@')[0] || 'Customer'
-
-      if (!email || !email.includes('@')) {
-        console.error('register-customer: no valid email in payload', JSON.stringify(body))
-        return Response.json({ error: 'No valid email in payload' }, { status: 400, headers: corsHeaders })
-      }
-
-      console.log(`register-customer: processing ${fullName} <${email}> from group "${groupName}")`)
-
-      return await provisionPendingCustomer({
-        SUPABASE_URL, SUPABASE_SERVICE, MAILERSEND_API_KEY,
-        tenantId, fullName, email,
-      })
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    // Path 2 — Native direct-POST signup (no ?secret=)
+    // Native direct-POST signup
     // { email, name, slug, turnstileToken, honeypot }
     // ════════════════════════════════════════════════════════════════════
     let nativeBody: Record<string, unknown>

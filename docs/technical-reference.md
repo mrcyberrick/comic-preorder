@@ -87,7 +87,7 @@ Browser (Cloudflare Pages — prod: pulllist.app / staging: staging.pulllist.pag
         ├── notify-customers      ← monthly catalog notification
         ├── send-my-list          ← per-customer pull-list confirmation
         ├── invite-customer       ← admin-invited new account + email
-        ├── register-customer     ← MailerLite webhook → pending account
+        ├── register-customer     ← native self-registration → pending account
         ├── approve-customer      ← admin approves pending → active
         ├── create-paper-customer ← admin creates walk-in placeholder
         ├── claim-paper-customer  ← merge paper account into real account
@@ -2213,7 +2213,7 @@ for privileged operations, and all that send email use MailerSend with the
 | `notify-customers` | import script (post-import prompt) | none (admin context implied by service-role caller) | yes (filters by `FOUNDING_TENANT_ID`) |
 | `send-my-list` | mylist.html | session token required (but does not match user_id — F36) | yes (catalog month filter) |
 | `invite-customer` | admin.html | admin check | yes — `tenant_id` resolved from the caller's own profile (fixed 2026-05-10; falls back to FOUNDING_TENANT_ID only if the lookup fails) |
-| `register-customer` | MailerLite webhook | per-tenant webhook secret in URL (5.4 S2) | yes — `tenant_id` resolved from the matching tenant's `settings->>'mailerlite_webhook_secret'` |
+| `register-customer` | native self-registration (app "Create account" UI) | Turnstile (server-verified) + honeypot + `already_exists` dedup | yes — `tenant_id` resolved from the posted `slug`. **The MailerLite `?secret=` webhook path was REMOVED 2026-08-30** (native-signup § S5) — platform-wide, not founding-only; `?secret=` is now inert |
 | `approve-customer` | admin.html | admin check (no tenant component) | no |
 | `create-paper-customer` | admin.html | admin check | yes — `tenant_id` resolved from the caller's own profile (fixed 2026-05-10; falls back to FOUNDING_TENANT_ID only if the lookup fails) |
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
@@ -2242,7 +2242,7 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
 | `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
-| `MAILERLITE_WEBHOOK_SECRET` | register-customer — retained for diagnostics only (5.4 S2); no longer the auth/tenant-source check (replaced by the per-tenant `tenants.settings->>'mailerlite_webhook_secret'` lookup) |
+| ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
 | `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
 
@@ -2276,11 +2276,20 @@ MailerSend, and inserts a `user_profiles` row with
 from the calling admin's own profile (`callerTenantId`, fixed 2026-05-10;
 F34) — falls back to `FOUNDING_TENANT_ID` only if that lookup fails.
 
-**`register-customer`**: called by MailerLite webhook when a subscriber is
-added to the "Monthly Comics" group. URL parameter `secret` is looked up
-against `tenants.settings->>'mailerlite_webhook_secret'` (service-role) —
-the matching tenant's id is used for the insert (5.4 S2; see § 13 F34 and
-the per-tenant-secret contract note). No match or missing `secret` → 401.
+**`register-customer`**: called by the app's own "Create account" UI on a
+tenant's branded login. Body `{ email, name, slug, turnstileToken, honeypot }`;
+`tenant_id` resolves from the posted `slug`. Abuse gate: honeypot (silent
+no-op) + server-verified Cloudflare Turnstile + `already_exists` dedup. A
+caller can post any slug — worst case is a pending row in the wrong tenant,
+which that tenant's admin declines; the approval state machine is the access
+gate, not signup.
+**The MailerLite webhook path (`?secret=`) was REMOVED 2026-08-30** —
+native-signup § S5, Rick's decision 2026-08-29 to remove rather than leave
+present-but-dead. **Platform-wide**: the mechanism was per-tenant, so no
+tenant has it. `?secret=` on the URL is now inert (falls through to the native
+path). `tenants.settings->>'mailerlite_webhook_secret'` and the
+`MAILERLITE_WEBHOOK_SECRET` Edge secret are both dead config. Recovery, if it
+were ever wanted, is via git history — not a flag.
 Creates an auth user (no password), inserts a `user_profiles` row with
 `status = 'pending'` and the resolved `tenant_id`, and sends a "browse
 while we review" email containing a magic link. Email branding is still
@@ -3667,6 +3676,8 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - **`sp=` is the real control on `pulllist.app`, not `p=`.** Every record's `header_from` is the **subdomain** `rjbookstop.pulllist.app`; the published policy carries an explicit `sp=none`. `sp` inherits from `p` when unset, so any future tightening must set `sp=` deliberately rather than let the newsletter path be quarantined as a side effect.
   - **Decision: hold `p=none` on both domains. The trigger for revisiting is MailerLite retirement, not elapsed time.** Retiring MailerLite means DNS surgery (removing `litesrv._domainkey`) on a domain that currently has a live DKIM-only sender — exactly the change that breaks alignment. Doing that while the domain is under enforcement turns a reporting event into customers' mail landing in spam. **Correct order: retire MailerLite (already planned) → confirm MailerSend is the sole `mrcyberrick.us` sender → then tighten**, at which point the risk is low precisely because MailerSend aligns on both mechanisms. If a staged step is wanted first, `p=quarantine; sp=none; pct=25` is the conservative shape.
   - **Volume reality, recorded so a future session does not wait for a sample that will never arrive:** ~8 messages/day on `pulllist.app`, ~4 on `mrcyberrick.us`. Four more weeks would add hundreds, not thousands. The bar was always going to be qualitative — *every sender known and aligned* — and that bar is now met.
+  - **⚠️ TRIGGER FIRED 2026-08-30 — the app-side half of MailerLite retirement is DONE.** `register-customer`'s `?secret=` webhook path was removed entirely (native-signup § S5), platform-wide. **F99 is now unblocked but UNSCHEDULED — it is no longer gated, and § 13 should not be read as saying it is.** *(Scheduling is a separate matter: Rick's 2026-08-29 direction is “small features for now,” so the Founding Partner / email-identity track is deliberately not next.)*
+  - **What fired is the APP half, not the DNS half — do not conflate them before tightening DMARC.** PULLLIST no longer *receives* MailerLite webhooks, but that says nothing about whether MailerLite still *sends* as `mrcyberrick.us`. The condition this decision actually waits on is **`litesrv._domainkey` being removed from the `mrcyberrick.us` zone and MailerSend confirmed as its sole sender.** **Verify that in the zone before publishing `p=quarantine`** — tightening while a live DKIM-only sender remains is precisely the failure this entry was written to prevent. *(Separately measured 2026-08-30 on the other domain: `_dmarc.pulllist.app` is `p=none`, and the apex SPF authorizes only Namecheap's forwarder — `include:spf.efwd.registrar-servers.com` — **not** MailerSend. Any move to send transactional mail from `@pulllist.app` needs that SPF extended first.)*
   - **Consequence for F99's own design:** consolidation is not merely rewriting six Edge Function `from:` addresses. There is an independent sender on the transactional domain whose content PULLLIST does not control and which is already scheduled to leave. **F99 should sequence with or after MailerLite retirement**, not design around a sender that is being removed.
 - **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional), Brevo (marketing).
 - **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design.
