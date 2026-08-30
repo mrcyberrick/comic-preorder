@@ -114,6 +114,55 @@ curl.exe -s -o /dev/null -w "%{http_code}" https://pulllist.app/
 
 **Do not route traffic to the new subdomain until TLS is issued.** If the cert does not issue within ~15 minutes, check the DNS record and Cloudflare zone settings before announcing.
 
+### Step 3a — Live hostname inventory (F145 item 3)
+
+**Read this before touching anything in the `pulllist.app` zone.** These hostnames are durable
+infrastructure with dependencies outside this repo. **There is no wildcard DNS on `pulllist.app`** —
+every tenant subdomain is an individually provisioned Cloudflare Pages custom domain, which is why
+onboarding tenant N+1 requires Step 3 at all and why Phase 6's S0 gate is still closed.
+
+**Cloudflare account:** `Pulllist@mrcyberrick.us's Account` (`f7fec5a26d14edbb47009a0d7d78002a`).
+**Pages project:** `pulllist` (`pulllist.pages.dev`). **Zone DNS:** Cloudflare
+(`morgan`/`tia.ns.cloudflare.com`). **Registrar:** Namecheap (the apex MX records point at
+`eforward*.registrar-servers.com`).
+
+Verified against the Pages project's Custom domains tab **and** a full zone export, 2026-08-30:
+
+| Hostname | Record | Proxied | Serves | Retire freely? |
+|---|---|---|---|---|
+| `pulllist.app` (apex) | CNAME → `pulllist.pages.dev` | yes | apex marketing + universal login; **the landing page for all tenants** (Rick, 2026-08-29) | **No** — platform front door |
+| `rjbookstop.pulllist.app` | CNAME → `pulllist.pages.dev` | yes | founding tenant front door | **No — see the two dependencies below** |
+| `comicstore.pulllist.app` | CNAME → `pulllist.pages.dev` | yes | pilot/seeded second tenant | Only with the pilot |
+
+**Exactly three custom domains exist. There is no `*` wildcard record** — confirmed two independent
+ways: an NXDOMAIN probe of an unprovisioned name (F145, 2026-08-27) and the zone export above
+(2026-08-30). All three CNAME to the *same* Pages project.
+
+**⚠️ `rjbookstop.pulllist.app` carries two dependencies that a hostname change would break, and
+neither is recoverable by redeploying:**
+
+1. **It is printed on customer paper.** The "View Online" CTA (PR #140, 2026-08-27) puts it on the
+   Print Catalog page-1 header, that report's `@page` footer margin box on **every** page, and the
+   Print Bagging List per-customer header. **Paper cannot be redeployed.** Do not retire or rename
+   this hostname without reprinting.
+2. **It is a mail-authentication domain, not just a web host.** The zone carries, on this subdomain
+   specifically: `brevo1._domainkey` and `brevo2._domainkey` CNAMEs (Brevo DKIM), an SPF record
+   (`v=spf1 include:spf.brevo.com ~all`), and a `brevo-code:` verification TXT. **The weekly
+   newsletter authenticates as this hostname.** Removing it breaks DKIM/SPF for customer marketing
+   mail — a failure that shows up as deliverability decay, not as an error anyone sees.
+
+**Provisioning date: unrecovered.** The 2026-06-11 audit-log entry found while looking is
+`Create Subdomain` on `/accounts/…/workers/subdomain` (`{"subdomain": "pulllist"}`) — that is the
+account's **workers.dev** subdomain, *not* this Pages custom domain. To try again, filter the audit
+log for `product: pages` / a URI containing `/pages/projects/pulllist/domains`; Cloudflare's
+retention is limited, so if it is not there, leave this as unrecovered rather than estimate.
+
+**Two zone facts worth knowing before any email work** (F72/F99 territory, not actionable here):
+`_dmarc.pulllist.app` is `p=none` today — matching F99's "quarantine held" record — and the **apex**
+SPF authorizes only Namecheap's forwarder (`include:spf.efwd.registrar-servers.com`), **not**
+MailerSend. Any future move to send transactional mail from `@pulllist.app` needs that SPF extended
+first.
+
 ---
 
 ## Step 4 — Configure MailerLite webhook (only if the tenant will use webhook-based registration)

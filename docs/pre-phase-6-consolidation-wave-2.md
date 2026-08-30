@@ -515,7 +515,30 @@ which is what unblocks W10 and Shape C.
 
 ---
 
-### W6 🔴 — F145 item 3: record the tenant hostnames as durable infrastructure
+### W6 ✅ **DONE 2026-08-30** — F145 item 3: record the tenant hostnames as durable infrastructure
+
+**Rick supplied the inventory 2026-08-30** (Pages Custom-domains list + a full `pulllist.app` zone
+export + an audit-log entry). Delivered: `docs/tenant-onboarding-runbook.md` **Step 3a**, § 13 F145
+item 3 ticked, and `apex-landing-tenant-subdomains.md`'s premium-tier framing superseded per § 0 Q4.
+
+**Three things the inventory changed that the item did not anticipate:**
+
+1. **`rjbookstop.pulllist.app` has a second, heavier dependency than the printed paper.** It is a
+   **mail-authentication domain** — the zone carries `brevo1`/`brevo2._domainkey` CNAMEs, an SPF
+   record (`include:spf.brevo.com`), and a `brevo-code:` verification TXT, all scoped to that
+   subdomain. The weekly newsletter authenticates as it. Retiring or renaming it breaks DKIM/SPF
+   for customer marketing mail — and that failure appears as deliverability decay, not as an error.
+2. **The wildcard's absence is now confirmed configuration-side**, not just by NXDOMAIN: the zone
+   export has no `*` record, and all three custom domains CNAME to the same Pages project. This is
+   the better kind of evidence and it makes W8's gate finding firmer, not weaker.
+3. **The audit-log entry does not date the hostname.** It is `Create Subdomain` on
+   `/accounts/…/workers/subdomain` — the account's **workers.dev** subdomain (2026-06-11), not a
+   Pages custom domain. **Provisioning date stays unrecovered**, per F145's own instruction not to
+   infer one.
+
+*Original item retained below, including the how-to, which worked.*
+
+#### (original) W6 — F145 item 3: record the tenant hostnames as durable infrastructure
 
 **Delivers:** `rjbookstop.pulllist.app` and `comicstore.pulllist.app` recorded as individually
 provisioned Cloudflare Pages custom hostnames, with an explicit note that the first appears on
@@ -759,14 +782,13 @@ DONE 2026-08-29
 
 NEXT — nothing here is blocked, and nothing here is time-critical
  ├── W2  record the three 2026-08-29 promotions   (small, doc-only) ◀ do first
+ ├── W6  ✅ DONE 2026-08-30 — inventory recorded, F145 item 3 ticked
  ├── W4  test-infra F133 → F130                   (read order_deadline live first)
  ├── W5  ✅ unblocked — remove the MailerLite path, platform-wide
  ├── W7  finish — the Q8 legacy-surface record + its caveat
  └── W9  F131 second-operator preamble + the F146 Lunar-code lesson
           + the W3 hardening (make the .env pre-step unmissable)
 
-WHEN RICK HAS THE INVENTORY
- └── W6  🔴 Cloudflare hostnames → runbook (how-to is written, see W6)
 
 OPPORTUNISTIC
  └── W11 measure F141's residual on mylist/arrivals
