@@ -311,7 +311,10 @@
   <!-- Reserved-series suggestions — rendered when the customer has no
        subscriptions but has qualifying reservations; lives outside
        #subs-container so it survives renderSubs() re-renders -->
-  <div id="reserved-suggestions" style="display:none"></div>
+  <!-- Reserves its own height at first paint (see .suggestions-reserve). NOT
+       display:none, or the space would not exist to reserve. renderSuggestions()
+       drops the class in both branches. -->
+  <div id="reserved-suggestions" class="suggestions-reserve"></div>
 
   <!-- Subscriptions list -->
   <div id="subs-container">
@@ -606,6 +609,9 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   }
 
   function renderSuggestions() {
+    // Release the first-paint reservation in BOTH branches — leaving it on an
+    // empty section would hold 451px of white space above the list forever.
+    suggestEl.classList.remove('suggestions-reserve');
     if (!suggestions.length) {
       suggestEl.style.display = 'none';
       suggestEl.innerHTML = '';

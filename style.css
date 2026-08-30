@@ -1253,6 +1253,20 @@ button { cursor: pointer; font-family: var(--font-body); }
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
 }
+/* Suggestions-block reservation (subscriptions.html).
+   Sibling of .loading-reserve below, and viable only BECAUSE the block is now
+   capped at 5 rows (Rick, 2026-08-30). Before the cap it rendered one row per
+   reserved series and measured 1,760px for a 25-series customer — you cannot
+   reserve a slot for something unbounded. Capped, it is header 29 + note 20 +
+   5 rows x 77 = ~451px, which is a number you can hold.
+
+   It reserves rather than hiding, because #reserved-suggestions sits ABOVE the
+   subscriptions list: revealing it from display:none pushed a 1,134px visible
+   list down the page, which measured as the whole of the residual shift.
+   Removed by renderSuggestions() in both branches — content defines the height
+   from then on. */
+.suggestions-reserve { min-height: 451px; }
+
 /* ── Loading height reservation (F141 follow-up) ─────────────
    Applied to the LOADING PLACEHOLDER, in static CSS, so the space exists at
    FIRST PAINT. That placement is the entire fix and it is not interchangeable
