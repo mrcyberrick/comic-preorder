@@ -1836,6 +1836,21 @@ const LoadingHeight = {
   _key(key) { return `pl:lh:${key}`; },
 
   // Call BEFORE the first paint of the loading state.
+  //
+  // The floor is never smaller than the VIEWPORT, and that is the load-bearing
+  // part rather than a safety margin. CLS scores only shifts the user can
+  // actually SEE. If the container already fills the viewport while loading,
+  // everything below it — footer, later sections — is already off-screen, so
+  // when real content lands and pushes those down, nothing visible moves and
+  // the shift scores ~0 regardless of how long the list turns out to be.
+  //
+  // This is also what makes the first visit good, not just repeat visits. A
+  // fixed pixel fallback cannot be right for both a 3-item and a 300-item
+  // list; a viewport is right for both, because past one screen the difference
+  // stops being visible. Measured: a 620px fallback on My List left desktop
+  // CLS at 0.347 (down from 0.613 but nowhere near the < 0.1 target) purely
+  // because Lighthouse always runs a cold profile and never sees a stored
+  // height — the same cold path a real first-time visitor gets.
   reserve(el, key, fallbackPx) {
     if (!el) return;
     let px = 0;
@@ -1843,6 +1858,9 @@ const LoadingHeight = {
     // Guard against a stored value from a wildly different viewport or a
     // corrupted entry — an absurd reservation is worse than none.
     if (!px || px < 0 || px > 20000) px = fallbackPx;
+    // Never reserve less than a screen. `innerHeight` can read 0 in some
+    // embedded/headless contexts, so fall back rather than reserve nothing.
+    px = Math.max(px, window.innerHeight || fallbackPx);
     el.style.minHeight = `${px}px`;
   },
 
