@@ -1449,6 +1449,36 @@ the operator pasted the same meaningless output three times while the gate was
 still open. **Before asking anyone to run a check, ask what its output looks
 like when the thing has FAILED.** If that is the same, it is decoration.
 
+### ⚠️ Do not run `run-smoke.ps1` through an agent's PowerShell tool (2026-08-30)
+
+**Run Playwright directly, capturing output yourself:**
+
+```bash
+npx playwright test --reporter=line > /tmp/pw.log 2>&1; echo "EXIT=$?" >> /tmp/pw.log
+```
+
+**Why.** `npx` writes a `NO_COLOR`/`FORCE_COLOR` warning to **stderr**. PowerShell 5.1 wraps any
+native command's stderr line as a `NativeCommandError`, and under an agent tool that surfaces as
+**exit 1 with 15 lines of output and not a single test result** — no pass count, no failure list,
+nothing attributable. The script's own logic is fine: line 62 uses `$LASTEXITCODE`, not `$?`. The
+failure is in the wrapper, not the runner, and it is indistinguishable from a real red suite
+unless you notice the output is too short to contain any tests.
+
+**This is the third time this script has produced an untrustworthy result, and it has now failed
+in both directions:**
+
+| Date | Symptom | Verdict it gave |
+|---|---|---|
+| 2026-07-16 | BOM stripped by an agent edit → PowerShell swallowed later code into a string literal, Playwright stage never ran | **exit 0** — false GREEN |
+| 2026-08-30 | stderr warning wrapped as `NativeCommandError` | **exit 1** — false RED |
+
+**So: a `run-smoke.ps1` result is only trustworthy if the output actually contains a test count.**
+Check for `N passed` before believing either colour. A green with no test lines is the 2026-07-16
+shape; a red with no test lines is this one.
+
+**Rick's call, 2026-08-30: doc note, not a finding — F148 stays free.** It is agent-environment
+friction rather than a product defect; running it from a normal terminal is unaffected.
+
 **Rules:**
 - Local-only. Never committed. Never runs against production.
 - `SUPABASE_URL` in `.env` must be staging; runner aborts if it's prod
