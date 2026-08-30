@@ -69,6 +69,27 @@ End state (**Hybrid** — chosen 2026-07-20; see § Strategic direction):
 
 ## Strategic direction — subdomain as a premium tier (Rick, 2026-07-20)
 
+> **⚠️ SUPERSEDED 2026-08-29 (Rick): "the apex acts as the landing page for all tenants."** The
+> tiering model below — free tenants on the apex, a branded `<slug>.pulllist.app` as the paid
+> upsell — **is no longer the product position.** The apex is the landing page for *every* tenant,
+> and a per-tenant subdomain is convenience and branding, **not a paid tier**.
+>
+> **What actually happened in between, and why this section read as stale:** `rjbookstop.pulllist.app`
+> was provisioned (date unrecovered, F145), native customer signup shipped on it, and the print
+> "View Online" CTA put it on paper handed to customers — so the founding tenant has been sitting on
+> what this section calls the premium front door for weeks, while the section still described it as
+> deferred. F145 corrected the *deferred* claim at filing 2026-08-27; this note corrects the
+> *tiering* claim, which nothing had revisited.
+>
+> **What survives unchanged:** the Hybrid *layout* (apex marketing + universal login; a subdomain
+> renders the tenant's branded front door via the client-side `data-front-door` split), and the
+> operational fact that each subdomain is an individually provisioned Pages custom domain with no
+> wildcard behind it — see `docs/tenant-onboarding-runbook.md` **Step 3a** for the live inventory.
+> **What does not survive:** subdomain-as-price-lever. If tiering is revisited, the lever has to be
+> something else.
+>
+> *Retained below as the record of the 2026-07-20 reasoning.*
+
 The Hybrid is chosen deliberately as a **product tiering model**, not just a layout:
 - **Free tier → apex.** Free tenants have no subdomain; their customers use the apex universal
   login (platform-branded pre-login; the tenant's own branding still applies *in-app* post-login

@@ -114,19 +114,84 @@ curl.exe -s -o /dev/null -w "%{http_code}" https://pulllist.app/
 
 **Do not route traffic to the new subdomain until TLS is issued.** If the cert does not issue within ~15 minutes, check the DNS record and Cloudflare zone settings before announcing.
 
+### Step 3a — Live hostname inventory (F145 item 3)
+
+**Read this before touching anything in the `pulllist.app` zone.** These hostnames are durable
+infrastructure with dependencies outside this repo. **There is no wildcard DNS on `pulllist.app`** —
+every tenant subdomain is an individually provisioned Cloudflare Pages custom domain, which is why
+onboarding tenant N+1 requires Step 3 at all and why Phase 6's S0 gate is still closed.
+
+**Cloudflare account:** `Pulllist@mrcyberrick.us's Account` (`f7fec5a26d14edbb47009a0d7d78002a`).
+**Pages project:** `pulllist` (`pulllist.pages.dev`). **Zone DNS:** Cloudflare
+(`morgan`/`tia.ns.cloudflare.com`). **Registrar:** Namecheap (the apex MX records point at
+`eforward*.registrar-servers.com`).
+
+Verified against the Pages project's Custom domains tab **and** a full zone export, 2026-08-30:
+
+| Hostname | Record | Proxied | Serves | Retire freely? |
+|---|---|---|---|---|
+| `pulllist.app` (apex) | CNAME → `pulllist.pages.dev` | yes | apex marketing + universal login; **the landing page for all tenants** (Rick, 2026-08-29) | **No** — platform front door |
+| `rjbookstop.pulllist.app` | CNAME → `pulllist.pages.dev` | yes | founding tenant front door | **No — see the two dependencies below** |
+| `comicstore.pulllist.app` | CNAME → `pulllist.pages.dev` | yes | pilot/seeded second tenant | Only with the pilot |
+
+**Exactly three custom domains exist. There is no `*` wildcard record** — confirmed two independent
+ways: an NXDOMAIN probe of an unprovisioned name (F145, 2026-08-27) and the zone export above
+(2026-08-30). All three CNAME to the *same* Pages project.
+
+**⚠️ `rjbookstop.pulllist.app` carries two dependencies that a hostname change would break, and
+neither is recoverable by redeploying:**
+
+1. **It is printed on customer paper.** The "View Online" CTA (PR #140, 2026-08-27) puts it on the
+   Print Catalog page-1 header, that report's `@page` footer margin box on **every** page, and the
+   Print Bagging List per-customer header. **Paper cannot be redeployed.** Do not retire or rename
+   this hostname without reprinting.
+2. **It is a mail-authentication domain, not just a web host.** The zone carries, on this subdomain
+   specifically: `brevo1._domainkey` and `brevo2._domainkey` CNAMEs (Brevo DKIM), an SPF record
+   (`v=spf1 include:spf.brevo.com ~all`), and a `brevo-code:` verification TXT. **The weekly
+   newsletter authenticates as this hostname.** Removing it breaks DKIM/SPF for customer marketing
+   mail — a failure that shows up as deliverability decay, not as an error anyone sees.
+
+**Provisioning date: unrecovered.** The 2026-06-11 audit-log entry found while looking is
+`Create Subdomain` on `/accounts/…/workers/subdomain` (`{"subdomain": "pulllist"}`) — that is the
+account's **workers.dev** subdomain, *not* this Pages custom domain. To try again, filter the audit
+log for `product: pages` / a URI containing `/pages/projects/pulllist/domains`; Cloudflare's
+retention is limited, so if it is not there, leave this as unrecovered rather than estimate.
+
+**Two zone facts worth knowing before any email work** (F72/F99 territory, not actionable here):
+`_dmarc.pulllist.app` is `p=none` today — matching F99's "quarantine held" record — and the **apex**
+SPF authorizes only Namecheap's forwarder (`include:spf.efwd.registrar-servers.com`), **not**
+MailerSend. Any future move to send transactional mail from `@pulllist.app` needs that SPF extended
+first.
+
 ---
 
-## Step 4 — Configure MailerLite webhook (only if the tenant will use webhook-based registration)
+## Step 4 — ~~Configure MailerLite webhook~~ — **REMOVED 2026-08-30. Do not perform this step.**
 
-The `register-tenant` response's `webhook_secret` is the query parameter for the `register-customer` Edge Function URL:
+**There is no MailerLite webhook path any more.** The `?secret=` branch was deleted from
+`register-customer` on 2026-08-30 (native-customer-signup § S5; Rick's decision 2026-08-29 to
+remove it entirely rather than leave it present-but-dead). The removal is **platform-wide** — the
+mechanism was per-tenant, so it is gone for every tenant, existing and future, not just the founding
+one. A URL carrying `?secret=` is now inert: the request falls through to the native signup path and
+is judged on its JSON body.
 
-```
-https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/register-customer?secret=<webhook_secret>
-```
+**`register-tenant` may still return a `webhook_secret`, and `tenants.settings` may still carry
+`mailerlite_webhook_secret`. Both are DEAD CONFIG. Nothing reads either one.** Do not configure a
+webhook with it, and do not treat its presence as a step you have missed.
 
-In MailerLite: **Automations → Webhook → URL** → paste the URL above.
+**How a new tenant's customers actually get accounts — the two live paths:**
 
-If the tenant will not use MailerLite during the pilot period, **defer this step and note it**. Pilot customers can be added via direct service-role INSERT into `user_profiles` (see § Operational note below). Deferring does not block any other step.
+1. **Admin-initiated** — the tenant's admin uses **Invite Customer** (`invite-customer`) or **Add
+   Paper Customer** (`create-paper-customer`) from their own dashboard. Both resolve `tenant_id`
+   from the calling admin's profile, so both are safe from any tenant (see the note below).
+2. **Customer-initiated** — native self-registration on the tenant's branded login, which posts to
+   `register-customer` with the tenant `slug`. Live for the founding tenant since 2026-07-24
+   (PR #95). **Before enabling it for a new tenant, read F72:** the confirmation email is still
+   founding-branded for every tenant, which is a real customer-visible problem and is why
+   `comicstore` has deliberately stayed pilot/seeded. See Step 7's go-live checklist.
+
+*This step is kept as a tombstone rather than deleted, because an operator following an older copy
+of this runbook — or a printed one — will look for a Step 4 and needs to be told it is gone rather
+than find a gap in the numbering.*
 
 **Note (corrected 2026-07-15, 5.5 S6):** an earlier version of this note warned that `create-paper-customer` and `invite-customer` write to `FOUNDING_TENANT_ID` regardless of the calling admin's tenant. That described pre-2026-05-10 behavior — the F34 fix (`docs/technical-reference.md` § 13) resolves `tenant_id` from the caller's own profile and was live on both envs before this runbook was first written. **Both EFs are safe to use from any tenant's admin dashboard**; no manual SQL workaround is needed for pilot customers.
 
@@ -179,7 +244,7 @@ If any count is unexpected, investigate before announcing the new tenant. File a
 
   If the result does **not** contain `tenant_id`, F9 has regressed: **do not run a shipment import for this tenant.** (**Prod and staging state as of 2026-07-28: fixed** — `weekly_shipment_tenant_unique` on `(tenant_id, distributor, upc, on_sale_date)`, with the old `weekly_shipment_unique` constraint dropped on both. The check is kept as a standing guard, not because it is currently failing.) See `docs/technical-reference.md` § 13 F9.
 - [ ] **F72 email-branding decision:** `register-customer` sends founding-branded confirmation emails regardless of tenant. Confirm this is acceptable for the tenant's launch, OR wait for a dedicated multi-tenant email branding sub-deploy (Phase 6 / follow-on). Surfacing this to the tenant admin before go-live is required.
-- [ ] **MailerLite webhook configured** (Step 4) if the tenant uses webhook-based customer registration.
+- [x] ~~**MailerLite webhook configured** (Step 4)~~ — **N/A since 2026-08-30.** The webhook path was removed from `register-customer` platform-wide; there is nothing to configure. Customers arrive via admin **Invite Customer** / **Add Paper Customer**, or via native self-registration — and native signup is gated on **F72** (founding-branded confirmation email), which is the item that actually matters before a real-customer go-live.
 - [ ] **Isolation spot-check green** (Step 6) against the pilot/seeded data.
 - [ ] **`<slug>.pulllist.app` TLS Active** and the admin has confirmed sign-in.
 - [ ] **Rollback acknowledged:** once real customers are onboarded, forward-fix only. The tenant row + its customer data cannot be cleanly removed via the §4.1 teardown.
@@ -214,7 +279,7 @@ SELECT COUNT(*) AS tenant_rows FROM tenants WHERE id = '<tenant_id>'::uuid;
 -- Expected: 0
 ```
 
-Also remove the Cloudflare custom domain from the Pages project and unset the MailerLite webhook URL if configured.
+Also remove the Cloudflare custom domain from the Pages project (see Step 3a for the live inventory — do **not** remove `rjbookstop.pulllist.app` or the apex). No MailerLite webhook needs unsetting: that path was removed 2026-08-30.
 
 After real customer writes: no clean teardown exists. Forward-fix only.
 
