@@ -35,6 +35,52 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
+**Last completed work: three admin-surface promotions, all live on production 2026-08-29 (PRs #142,
+#143, #144).** *(Recorded 2026-08-30, a day late — all three reached production with no `CLAUDE.md`
+or § 13 record at all, which is the same drift class as F132/F138/F139/F145 one step earlier, where
+no status gets written rather than a written one going stale. `/promote-prod` step 6 was rewritten
+the same day from a soft reminder into a required gate so this cannot recur silently.)*
+
+- **PR #142** (staging `56fafc5`) — **This Week bagging list: rejected/withdrawn titles move to a
+  separate "Not arriving this week" note.** Previously they were interleaved into the pick list as
+  struck-through rows (F117/F108 § 4.5). Now the main list a staffer bags off of contains only books
+  to actually bag, with the unavailable ones in an always-visible note below the totals. Deliberately
+  **not** a `<details>` disclosure — a closed disclosure would hide, on the printed sheet, exactly
+  what a staffer needs when a customer calls. **No finding ID consumed (feature build, not a
+  defect):** the old behaviour was correct — the titles were surfaced, never dropped, and the totals
+  already computed off `available`, not `items` — so nothing was miscalculated or hidden. This is a
+  workflow preference, not a fix, notwithstanding the commit's `fix:` prefix. **F148 remains free.**
+- **PR #143** (staging `a60469b`) — **F132's restriction-ratio badge on the admin store shipment
+  grid** (`arrivals.html`, Store Manager view). A ratio-allocated title is the one most likely to
+  have shipped short of what was reserved, which is the signal an admin scanning the actual shipment
+  wants. Reuses `app.js`'s existing `.restriction-badge` class (already styled and positioned for a
+  cover-card grid).
+- **PR #144** (staging `bcbbfb3`) — **the same badge in the reconciliation exceptions list.** #143
+  did not cover the recon panel's "Not in shipment" rows, and those are where the signal matters
+  most: a restricted title appearing there is a likely *explanation* for the shortfall, not a
+  coincidence. Found by Rick screenshotting the live exceptions list. Uses an inline ratio pill
+  matching `admin.html`'s `restrictionBadge()` — the absolutely-positioned `.restriction-badge`
+  class does not fit a flex text row.
+
+**Verified 2026-08-30 against the bytes production actually serves** (not inferred from the merge):
+`pulllist.app/admin.html` returns `bagging-not-arriving` ×1 and `Not arriving this week` ×1, with
+`bagging-row-unavailable` at **×0** confirming the old struck-through row is genuinely gone;
+`pulllist.app/arrivals.html` returns `order_requirement` ×8 and `restriction-badge` ×2. *(Fetch with
+`curl -L` — `/admin.html` 302s to `/admin`, and without `-L` the empty body reads as a stale build.
+That trap is documented in § Standard Deployment Workflow and it still caught a session on
+2026-08-30.)* **Spec coverage checked, not assumed:** #142 removed the `.bagging-row-unavailable`
+class, and per the "sweep the suite before deleting a classed element" rule
+`06-admin-this-week-bagging.spec.ts:206-223` was confirmed already rewritten to assert
+`.bagging-not-arriving` instead. No post-deploy write-smoke was run for any of the three — all are
+admin-surface reads that never touch the customer reserve path, the same disposition PR #141
+records.
+
+**Production's Order Deadline is `2026-09-24`** (Rick, 2026-08-30 — Step 7 of
+`docs/monthly-catalog-refresh.md`, confirmed set, closing the last open sub-item of the September
+refresh). Worth recording rather than leaving to be re-derived: per F108's
+order-deadline-supersedes rule this value decides what the At-Risk / Backorder panels classify, and
+it is the ambient value **F133**'s date-dependent Playwright fixtures are measured against.
+
 **F146 fully RESOLVED on staging, 2026-08-29.** A first verification attempt (fresh September
 Lunar + PRH CSV pair, confirmed on disk 2026-08-29) ran clean but proved the "fresh re-pull of the
 new month" method itself can never clear any of the 16 marks: Lunar's item codes are permanently
