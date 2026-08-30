@@ -27,10 +27,16 @@
        content, which pushed a visible page down and was the whole of admin's
        0.90 CLS. Collapsed, the reveal is a header plus one summary line.
 
-       The COUNTS stay in the panel header, outside this <details>, so the
-       alert state is legible without expanding — staff see "12 never arrived ·
-       8 backordered" and only open it when they are going to act. That is the
-       point: bound the height without hiding the signal.
+       NEVER ARRIVED ROWS ARE NOT IN HERE — Rick's choice, 2026-08-30, after the
+       first attempt collapsed everything and turned three specs red. Those rows
+       carry the resolve controls (Damaged / Didn't arrive / Rejected by
+       supplier, F134 + F143): they are the actionable third of the panel and
+       staff reach for them daily, so putting them behind a click was a real
+       cost on a daily triage surface. The suite refusing to pass was the signal.
+       Backordered and At Risk are informational, so only those collapse.
+
+       The COUNTS also stay in the panel header, outside this <details>, so the
+       full alert state is legible without expanding.
 
        Not persisted across loads on purpose. Remembering an expanded state
        would put the 1,796px reveal back for anyone who had opened it once,
@@ -1850,20 +1856,26 @@
         </h3>
         <span style="font-size:0.75rem;color:var(--text-muted)">${counts}</span>
       </div>
-      <details id="ofu-details" class="ofu-details">
-        <summary class="ofu-summary">Show details</summary>
-        ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin:8px 0 6px">
-          Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
-        </div>` : ''}
-        <div style="display:flex;flex-direction:column;gap:6px">
-          ${rowHtml(neverArrived, 'neverArrived')}
+      ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin-bottom:6px">
+        Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${rowHtml(neverArrived, 'neverArrived')}
+      </div>` : ''}
+      ${(backordered.length || atRisk.length) ? `
+      <details id="ofu-details" class="ofu-details" style="margin-top:${neverArrived.length ? '10px' : '0'}">
+        <summary class="ofu-summary">Show ${[
+          backordered.length ? `${backordered.length} backordered` : '',
+          atRisk.length      ? `${atRisk.length} at risk`          : '',
+        ].filter(Boolean).join(' · ')}</summary>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
           ${rowHtml(backordered, 'backordered')}
           ${rowHtml(atRisk, 'atRisk')}
         </div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
-          Titles already ordered, or with a shipment record, are cleared automatically.
-        </div>
-      </details>
+      </details>` : ''}
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
+        Titles already ordered, or with a shipment record, are cleared automatically.
+      </div>
     `;
 
     wireArrivalResolveActions(panel);
