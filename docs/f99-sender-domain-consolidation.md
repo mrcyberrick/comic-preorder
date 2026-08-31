@@ -389,7 +389,7 @@ monthly cycle.**
 5. ~~**Is there a live email-forwarding address on `pulllist.app`?**~~ — ✅ **ANSWERED 2026-08-31:
    none configured yet, but Rick intends to set one up, and MX records are already provisioned.
    The Namecheap SPF include therefore STAYS in the S2 merge.** See § 4 S2.
-6. **Should S1 also set `Reply-To` from `tenants.contact_email`?** — **OPEN, Rick's call.** No
+6. ~~**Should S1 also set `Reply-To` from `tenants.contact_email`?**~~ — ⛔ **DECLINED 2026-08-31 (Rick): stay with no-reply. Do not re-propose.** A monitored reply address is an ongoing operational commitment, and under multi-tenancy it would hand every future tenant a support inbox they never asked for. Nothing is misleading today: no live email invites a reply, and customers have the shop phone number and the app itself. **S1 sets `from` only.** Original reasoning retained: No
    function sets `reply_to` today and no live email invites a reply, so nothing is broken. But
    MailerSend defaults `Reply-To` to the `From` address, so a customer who hits Reply reaches an
    unmonitored `noreply@`. S1 already edits that exact block and `tenants.contact_email` already
@@ -411,7 +411,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
