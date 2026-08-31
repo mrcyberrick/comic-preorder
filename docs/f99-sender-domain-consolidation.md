@@ -1,10 +1,12 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — S0 gate OPEN, no work started | staging=— | prod=— | findings=F99,F72,F148,F145
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; S1 next, not started | staging=— | prod=— | findings=F99,F72,F148,F145
 
-**Status:** **Planned, not started. S0 is a blocking question, not a task** — its answer selects
-between two materially different architectures, and no other step can be sized until it is answered.
-Written 2026-08-31 during a multi-tenant onboarding spec review.
+**Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
+`noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
+subdomain direction is viable on the free tier — no paid tier required, nothing to tear out later.
+**S1 is the next step and has not started.** Written 2026-08-31 during a multi-tenant onboarding
+spec review.
 
 > **This is not a new plan. It is F99's own recorded fix direction, steps (3)–(5).** Steps (1) and (2)
 > are already **done**: the DMARC reporting-authorization record was published 2026-07-25, and the
@@ -47,13 +49,58 @@ identity anyway. *"A flat apex sender would have to be torn out and redone when 
 | Activity retention | 1 day | Cannot investigate a delivery complaint older than 24h. |
 | User seats | 1 | No tenant admin can ever hold their own login — an F131-shaped single-operator dependency. |
 
-**The tension this creates with F99's recommendation.** One verified domain and a per-tenant
-subdomain scheme are in direct conflict at tenant #2: if the single slot is spent on
-`rjbookstop.pulllist.app`, a second tenant has **no sending identity at all**.
+**The tension this created with F99's recommendation — ✅ RESOLVED by S0, 2026-08-31.** The concern
+was that one verified domain and a per-tenant subdomain scheme conflict at tenant #2. They do **not**,
+because a verified *parent* domain covers its subdomains and signs with the parent (§ 2). **Verify the
+apex `pulllist.app`; every `<slug>.pulllist.app` is then covered by that one slot.** The conflict only
+existed under the assumption that each subdomain needed its own verification — which was measured
+false.
 
 ---
 
-## 2. S0 — the blocking question (a dashboard check, not a build)
+## 2. S0 — the blocking question — ✅ **ANSWERED 2026-08-31: YES, subdomains are covered**
+
+> ### ✅ S0 RESULT — measured, not inferred
+>
+> **MailerSend accepts a subdomain `From` under a verified parent domain, signs it with the PARENT
+> domain, and it authenticates on both mechanisms.** Probe sent as
+> `noreply@probe.mrcyberrick.us` under the verified `mrcyberrick.us`; delivered to Gmail; headers read
+> directly:
+>
+> ```
+> Authentication-Results: mx.google.com;
+>   dkim=pass  header.i=@mrcyberrick.us   header.s=mlsend2;
+>   dkim=pass  header.i=@mailersend.net   header.s=ms1;
+>   spf=pass   smtp.mailfrom=bounce-…@mta.mrcyberrick.us;
+>   dmarc=pass (p=NONE sp=NONE dis=NONE)  header.from=mrcyberrick.us
+> ```
+>
+> **The decisive detail:** the actual `From:` was `noreply@probe.mrcyberrick.us`, yet Google reports
+> `header.from=mrcyberrick.us` and `sp=NONE` — it found no DMARC record on the subdomain, walked up to
+> the **organizational domain**, and applied its subdomain policy. Both mechanisms then aligned under
+> relaxed matching:
+>
+> | | Signed / envelope domain | `From:` domain | Aligned? |
+> |---|---|---|---|
+> | DKIM | `d=mrcyberrick.us` (**parent**) | `probe.mrcyberrick.us` | ✅ org domain matches |
+> | SPF | `mta.mrcyberrick.us` | `probe.mrcyberrick.us` | ✅ org domain matches |
+>
+> **Therefore:** one verified `pulllist.app` will sign for `rjbookstop.pulllist.app` and every future
+> `<slug>.pulllist.app`, on the single free-tier slot. **F99's per-tenant direction is viable on the
+> free tier.** § 8 Q2 (accept a flat sender, or pay?) is **moot**.
+>
+> **`p=quarantine` (S4) will not break this** — `adkim`/`aspf` are absent, so alignment is relaxed, and
+> policy *strength* does not change alignment *mode*.
+>
+> **It also retroactively confirms skipping S-1 was right:** MailerSend actively signed with
+> `mlsend2`, the very selector flagged as deprecated. It works.
+>
+> ⚠️ **One trap this probe hit, worth carrying:** the first attempt returned **422** and looked like a
+> "not covered" answer. It was the placeholder recipient (`to.0.email`) left unreplaced — a *different*
+> 422. **The status code alone could not distinguish the two; only the response body and then the
+> delivered headers could.** A 422 was nearly recorded as an architectural finding.
+
+*Original question and decision tree retained below for the reasoning trail.*
 
 > **Does MailerSend's single verified domain authorize *subdomains* as `From` addresses?**
 
@@ -326,9 +373,9 @@ monthly cycle.**
 
 ## 8. Open questions for Rick
 
-1. **S0's answer** — the whole shape depends on it.
-2. If subdomains are **not** covered: accept flat `noreply@pulllist.app` with per-tenant display
-   names on free tier, or price the paid tier now?
+1. ~~**S0's answer**~~ — ✅ **ANSWERED 2026-08-31: subdomains ARE covered.** See § 2.
+2. ~~If subdomains are not covered: flat sender, or price the paid tier?~~ — **MOOT.** The covered
+   answer means the free tier carries the per-tenant design.
 3. Cutover window preference, given it must clear 2026-09-25.
 4. `p=quarantine` — publish at S4, or hold until after a second tenant is live?
 5. **Is there a live email-forwarding address on `pulllist.app`?** The apex SPF authorizes
@@ -347,7 +394,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — **fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
