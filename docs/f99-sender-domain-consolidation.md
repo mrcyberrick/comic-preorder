@@ -263,8 +263,68 @@ Replace the six hardcoded `from:` literals with values read from Edge Function s
 | `reset-password/index.ts` | 72 |
 | `send-my-list/index.ts` | 243 |
 
-Deploy to staging, verify a real delivered message is unchanged, then production. **Fully reversible
-and independently useful** — it stands on its own even if S2/S3 never run.
+**Target shape** — module-level constants, defaulting to today's literals so an unset secret changes
+nothing:
+
+```ts
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+// ...
+from: { email: MAIL_FROM_EMAIL, name: MAIL_FROM_NAME },
+```
+
+**The fallback is deliberate and it is what makes S1 safe:** deploy first, set secrets later, and an
+unset secret is byte-identical to today. At **S3** the secret must be set — if it is forgotten there,
+MailerSend 422s on an unverified sender, which fails **loudly**, not silently. **No `reply_to`** (§ 8
+Q6, declined).
+
+#### Deployment — NOT the Cloudflare Pages flow
+
+Edge Functions deploy to Supabase separately from the static site; `git push origin staging` does
+**not** deploy them. **Staging project ref: `puoaiyezsreowpwxzxhj`.**
+
+> ⚠️ **F93 discipline — pass BOTH flags explicitly, every time.** A stray Supabase CLI workdir in
+> the user's home directory was once linked to **production** and silently deployed stale code to
+> staging. It was unlinked 2026-08-10 so the production hazard is defused, **but F93's own entry says
+> the `--workdir` discipline "is still good practice and should be kept."** This repo's `supabase/`
+> has no `config.toml`, so the CLI will look elsewhere for a workdir if not told.
+>
+> ```
+> supabase functions deploy <name> --project-ref puoaiyezsreowpwxzxhj --workdir "<repo path>"
+> ```
+>
+> **Watch the CLI's own "Using workdir ..." line** — it is the tell, and it is easy to miss.
+
+> ⚠️ **Preserve each function's `verify_jwt` setting — do not assume it.** Per `CLAUDE.md`
+> § Supabase platform facts, these functions run **JWT-off at the platform level plus in-body auth**;
+> that is the intended design, not a misconfiguration. With no `config.toml` in the repo, a deploy can
+> reset it. **Record each of the six functions' current setting in the dashboard BEFORE deploying,
+> deploy with the flag that preserves it (`--no-verify-jwt` where it is currently off), and re-check
+> after.** Silently re-enabling JWT verification would break all six at once.
+
+Secrets are set per project, never pasted into chat or any committed file:
+
+```
+supabase secrets set MAIL_FROM_EMAIL=<value> MAIL_FROM_NAME=<value> --project-ref puoaiyezsreowpwxzxhj
+```
+
+**STAGING ONLY.** Production deploy is a **separate, explicitly-requested step** per `CLAUDE.md`
+§ Staging Only, and follows the `phase-4.6` **PAUSE → Rick runs → paste result** pattern: Claude
+prepares the exact command text, Rick executes anything touching `plgegklqtdjxeglvyjte`.
+
+#### Doc updates this step owes
+
+- **§ 11.2 required-secrets table** — add `MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` (names only).
+- **§ 11 intro** — currently reads "all that send email use MailerSend with the
+  `noreply@mrcyberrick.us` sender." After S1 the sender is secret-driven.
+- **⚠️ § 11.3 carries a stale claim, found 2026-08-31 and NOT yet corrected:** it says
+  `notify-customers`' catalog link is *"hardcoded to production
+  (`https://mrcyberrick.us/comic-preorder/catalog.html`)"*. The code actually reads
+  ``Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'``. **Verify against the file and correct
+  it** — doc-only, zero risk, and it sits in the section S1 is already editing. `APP_BASE_URL` is
+  also absent from § 11.2's table.
+
+**Fully reversible and independently useful** — it stands on its own even if S2/S3 never run.
 
 ### S2 — Pre-publish DNS in Cloudflare (no MailerSend change)
 
@@ -411,7 +471,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — eighth pass (S1 execution detail added ahead of CLI handoff: deploy mechanics, F93 workdir discipline, verify_jwt preservation, owed doc updates). Seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
