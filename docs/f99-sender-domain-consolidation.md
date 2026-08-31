@@ -403,7 +403,8 @@ gone from `mrcyberrick.us`, MailerSend its sole sender there.
 | **V0b** | The merged SPF record resolves within **10 DNS lookups**, and there is exactly **one** SPF TXT on the name | An SPF lookup-counter, before publishing — see § 4 S2 |
 | **V1** | S0 answered from **delivered headers**, not an API status | Send to a real mailbox; read `Authentication-Results` |
 | **V2** | S1 changes nothing observable | Deliver a staging `reset-password`; `From` byte-identical to pre-change |
-| **V3** | All six functions read the secret; **zero** `mrcyberrick.us` literals remain in `supabase/functions/` | `grep -rn "mrcyberrick" supabase/functions/` returns 0 |
+| **V3a** (S1) | All six `from:` lines read `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME`. The literal survives **only** as a `??` fallback — **6 occurrences expected, not 0** | `grep -n "from:" supabase/functions/*/index.ts` — six hits, none containing a literal address |
+| **V3b** (S3, **not S1**) | Once the secrets are set and verified, the fallback literals may be removed | `grep -rn "mrcyberrick" supabase/functions/` returns 0 |
 | **V4** | New domain verified in MailerSend before any secret flip | Dashboard state + a test send |
 | **V5** | `dkim=pass` **and** `spf=pass` **and** `dmarc=pass` on the new domain | Received headers, Gmail + one Microsoft mailbox |
 | **V6** | Brevo's existing `rjbookstop.pulllist.app` signing still passes | Trigger/inspect one newsletter send; **F98 thumbnails unaffected** |
@@ -471,7 +472,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — eighth pass (S1 execution detail added ahead of CLI handoff: deploy mechanics, F93 workdir discipline, verify_jwt preservation, owed doc updates). Seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — ninth pass (V3 split into V3a/V3b — the old wording was unpassable at S1 by design). Eighth pass (S1 execution detail added ahead of CLI handoff: deploy mechanics, F93 workdir discipline, verify_jwt preservation, owed doc updates). Seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
