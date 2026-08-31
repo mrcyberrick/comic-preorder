@@ -5267,6 +5267,28 @@ reasoning — only the disposition changed, not the diagnosis.
   The failed count **is** shown — this is not a silent failure. But it sits behind a green check and the word "sent," so a run that quietly half-delivered reads as success at a glance during a long import log. Compare the **F105** "a check that cannot fail is not a check" lesson: this one *can* fail, it just doesn't announce it.
 - **Multi-tenant is where it turns from theoretical to scheduled.** The quotas are per **account**, not per tenant or per domain, and every tenant's monthly import lands in the same distributor solicitation window. Three tenants of ~40 customers each = 120 requests in one day = over the cap, with the last tenant's customers silently receiving nothing.
 - **Candidate fix shape (direction only, not sized, NOT started).** MailerSend exposes a bulk endpoint that accepts many messages in a single request, which would collapse N requests to 1 and remove this ceiling entirely — the 500/month email cap would then become the real (and much later) limit. **Explicitly unverified: whether that endpoint is available on the free tier.** Confirm against the live account before designing around it. A second, cheaper mitigation regardless of endpoint: have `import.js` treat a non-zero `failed` count as a **prompt**, not a log line, so a partial send stops the operator rather than scrolling past.
+- **UPDATE 2026-08-31, same day — the quota is OBSERVABLE, which changes the fix from reactive to
+  preventive.** Found incidentally while running F99's S0 probe: **MailerSend returns the remaining
+  daily quota on every API response.** Measured headers:
+
+  ```
+  x-apiquota-remaining: 96          <- of 100; confirms the daily cap independently
+  x-apiquota-reset:     2026-09-01T00:00:00Z
+  x-ratelimit-limit:    120         <- a SECOND, faster limit, separate from the daily quota
+  x-ratelimit-remaining: 119
+  ```
+
+  This is better than the mitigation first proposed below (prompt on a non-zero `failed` count), which
+  only reacts **after** a blast has already half-failed. Reading `x-apiquota-remaining` lets
+  `notify-customers` **refuse to start a run it cannot finish**, and lets `import.js` Step 7 report
+  real headroom rather than a bare count. It also confirms the 100/day figure from the account itself
+  rather than from the pricing page.
+  - **A scheduling trap this exposes:** the quota resets at **UTC midnight, which is 8pm ET**. A
+    monthly import run in the evening Eastern could straddle the reset mid-blast — harmless if the
+    run fits either side, confusing to debug if it does not.
+  - **There are two ceilings, not one.** `x-ratelimit-limit: 120` is a separate short-window limit. The
+    existing 100ms inter-send delay in the loop is presumably what keeps the current code under it; a
+    bulk or chunked redesign must respect both.
 - **Where:** `supabase/functions/notify-customers/index.ts:179-203` (this repo) · `scripts/import.js:2260-2273` Step 7 (private scripts repo, local working tree). No schema change, no client change.
 - **Related:** **F131** (the same class — a structural single-operator/single-account dependency that works perfectly until tenant count moves, and that no test can reach). **F99** (sender-identity consolidation onto `pulllist.app` — same MailerSend account, and any domain work should be aware of these quotas). **F72** (per-tenant email branding — the other half of what makes transactional mail multi-tenant-ready). **F135** (the other side effect welded into the import script's run). **F105** (the "verification that doesn't announce failure" pattern this echoes).
 
