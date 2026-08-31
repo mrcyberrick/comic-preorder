@@ -96,9 +96,27 @@ problem this plan originally assumed simply does not arise.**
 - This is the one place a raw API status *is* evidence — MailerSend's API returns real errors. The
   "success proves nothing" trap applies to **our** `reset-password` function, which swallows them by
   design. Confirm authentication separately in the delivered `Authentication-Results` header.
-- Also check `_dmarc.pulllist.app` for `adkim=`/`aspf=`. **Absent means relaxed**, which is what makes
-  parent-domain DKIM (`d=pulllist.app`) align with a subdomain `From`. A strict (`s`) value would
-  require a per-subdomain DMARC record and changes the covered-case design.
+- ✅ **DMARC alignment is RELAXED — measured live 2026-08-31, one risk retired before the probe.**
+  `_dmarc.pulllist.app` reads `v=DMARC1; p=none; rua=mailto:hello@mrcyberrick.us` — **no `adkim=`,
+  no `aspf=`, no `sp=`**, so alignment defaults to relaxed and subdomains inherit `p=none`. That is
+  precisely what lets parent-domain DKIM (`d=pulllist.app`) align with a subdomain `From`
+  (`rjbookstop.pulllist.app`). **The covered case is therefore viable on the DNS side** — the only
+  remaining unknown is whether MailerSend *accepts* the send. A strict (`s`) value would have forced a
+  per-subdomain DMARC record; it does not apply.
+
+### DNS providers — verified live 2026-08-31, because the registrar misleads
+
+| Domain | Registrar | **Authoritative DNS (where records go)** |
+|---|---|---|
+| `pulllist.app` | **Namecheap** | **Cloudflare** — `morgan`/`tia.ns.cloudflare.com` |
+| `mrcyberrick.us` | — | **GoDaddy** — `ns77`/`ns78.domaincontrol.com` |
+
+**Registrar ≠ DNS host.** `pulllist.app` is *bought* at Namecheap but *served* by Cloudflare, so every
+record in S2 goes in **Cloudflare**, not Namecheap. F99 recorded this in 2026-07-25 and it is
+unchanged. (The apex SPF's `spf.efwd.registrar-servers.com` include is a Namecheap **forwarding**
+service referenced from the Cloudflare-hosted zone — a service pointer, not evidence of where DNS
+lives. See S2's open question.) S-1's DKIM CNAMEs are for `mrcyberrick.us` and **do** belong in
+GoDaddy.
 
 ---
 
@@ -184,17 +202,29 @@ verification is near-instant when the slot frees.
 > the old selector and is now a stale template for this step. **MailerSend displays the exact records
 > when a domain is added — use those, expect the ms1/ms2 CNAME shape.**
 
-> 🚩 **The SPF collision, and it is the sharpest trap in this plan.** A domain may have **exactly one**
-> SPF TXT record. Publishing a second does not append — it produces a PermError that fails SPF for
-> *every* sender on that name. **`pulllist.app` already carries Brevo SPF** (F99:
-> `include:spf.brevo.com`, on `rjbookstop.pulllist.app`). So MailerSend's includes must be **merged
-> into the existing record**, never added alongside it.
+> 🚩 **The SPF merge, and it is the sharpest trap in this plan.** A domain may have **exactly one**
+> SPF TXT record *per name*. Publishing a second does not append — it produces a PermError that fails
+> SPF for *every* sender on that name.
 >
-> **Then re-count DNS lookups.** SPF hard-fails past **10**. `mrcyberrick.us`'s current record already
-> carries four includes — `_spf.mailersend.net` plus three `dc-*._spfm.<domain>` entries — and each
-> may nest further. Adding Brevo's on top puts the merged record within reach of the ceiling.
-> **Count the resolved lookups before publishing, not after** — a PermError takes down authentication
-> for transactional *and* newsletter mail simultaneously.
+> **Measured live 2026-08-31** (an earlier draft of this block named the wrong collision — SPF is
+> per-name, so Brevo's subdomain record and an apex record coexist fine):
+>
+> | Name | Current TXT | Whose |
+> |---|---|---|
+> | `pulllist.app` | `v=spf1 include:spf.efwd.registrar-servers.com ~all` | **Namecheap email forwarding** |
+> | `rjbookstop.pulllist.app` | `v=spf1 include:spf.brevo.com ~all` + `brevo-code:…` | Brevo — **untouched by this work** |
+>
+> **The apex already has an SPF record**, so whatever MailerSend asks for there must be **merged into
+> that line**, never added as a second TXT.
+>
+> ❓ **Open question before editing it (Rick):** is there a **live email-forwarding address on
+> `pulllist.app`**? If yes, `include:spf.efwd.registrar-servers.com` must survive the merge or that
+> address stops receiving mail. If vestigial, dropping it simplifies the record and buys back a DNS
+> lookup.
+>
+> **Then count DNS lookups.** SPF hard-fails past **10**. `mrcyberrick.us`'s record already runs four
+> includes — `_spf.mailersend.net` plus three `dc-*._spfm.<domain>` entries — each of which may nest
+> further. **Count the resolved lookups before publishing, not after.**
 
 > ⚠️ **The zone trap, from F99 and worth repeating because it already cost a session.** The DMARC
 > reporting-authorization record lives at `pulllist.app._report._dmarc.mrcyberrick.us` — its parent
@@ -272,6 +302,9 @@ monthly cycle.**
    names on free tier, or price the paid tier now?
 3. Cutover window preference, given it must clear 2026-09-25.
 4. `p=quarantine` — publish at S4, or hold until after a second tenant is live?
+5. **Is there a live email-forwarding address on `pulllist.app`?** The apex SPF authorizes
+   Namecheap forwarding (`spf.efwd.registrar-servers.com`). It must survive the S2 merge if that
+   address is real, and can be dropped if it is vestigial.
 
 ---
 
@@ -285,7 +318,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
