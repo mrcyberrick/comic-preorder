@@ -293,10 +293,18 @@ verification is near-instant when the slot frees.
 > **The apex already has an SPF record**, so whatever MailerSend asks for there must be **merged into
 > that line**, never added as a second TXT.
 >
-> ❓ **Open question before editing it (Rick):** is there a **live email-forwarding address on
-> `pulllist.app`**? If yes, `include:spf.efwd.registrar-servers.com` must survive the merge or that
-> address stops receiving mail. If vestigial, dropping it simplifies the record and buys back a DNS
-> lookup.
+> ✅ **ANSWERED 2026-08-31 (Rick) — KEEP the Namecheap include.** There is **no forwarding rule
+> configured today**, but the infrastructure is provisioned and Rick intends to set one up (an
+> `@mrcyberrick.us` mailbox is the likely destination). Measured live: `pulllist.app` carries
+> **MX records** at `eforward1-4.registrar-servers.com` alongside the SPF include.
+>
+> So `include:spf.efwd.registrar-servers.com` is **inert today but not vestigial** — dropping it would
+> silently break forwarding the moment a rule is created. **It stays in the merged record.** Cost: one
+> DNS lookup of the ten available, spent deliberately.
+>
+> *(Note the distinction: the MX records handle **inbound**; the SPF include authorizes Namecheap to
+> **re-send** forwarded mail as `pulllist.app`. With no rule configured, nothing is being re-sent —
+> which is why the include is currently doing nothing.)*
 >
 > **Then count DNS lookups.** SPF hard-fails past **10**. `mrcyberrick.us`'s record already runs four
 > includes — `_spf.mailersend.net` plus three `dc-*._spfm.<domain>` entries — each of which may nest
@@ -378,9 +386,18 @@ monthly cycle.**
    answer means the free tier carries the per-tenant design.
 3. Cutover window preference, given it must clear 2026-09-25.
 4. `p=quarantine` — publish at S4, or hold until after a second tenant is live?
-5. **Is there a live email-forwarding address on `pulllist.app`?** The apex SPF authorizes
-   Namecheap forwarding (`spf.efwd.registrar-servers.com`). It must survive the S2 merge if that
-   address is real, and can be dropped if it is vestigial.
+5. ~~**Is there a live email-forwarding address on `pulllist.app`?**~~ — ✅ **ANSWERED 2026-08-31:
+   none configured yet, but Rick intends to set one up, and MX records are already provisioned.
+   The Namecheap SPF include therefore STAYS in the S2 merge.** See § 4 S2.
+6. **Should S1 also set `Reply-To` from `tenants.contact_email`?** — **OPEN, Rick's call.** No
+   function sets `reply_to` today and no live email invites a reply, so nothing is broken. But
+   MailerSend defaults `Reply-To` to the `From` address, so a customer who hits Reply reaches an
+   unmonitored `noreply@`. S1 already edits that exact block and `tenants.contact_email` already
+   exists, making this nearly free — and per-tenant correct. **Scope creep on an otherwise tight
+   plan; not folded in unasked.**
+   *(Related: the MailerSend hosted template deleted 2026-08-31 carried the copy "Questions? Reply to
+   this email or call the shop directly." It was never wired to any function, so no customer ever
+   received it — but it would have black-holed if anyone had connected it.)*
 
 ---
 
@@ -394,7 +411,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — **fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
