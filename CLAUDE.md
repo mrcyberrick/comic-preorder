@@ -43,6 +43,53 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
+**Last completed work: subscriptions top-5 + store-popular fallback, and admin's Order Follow-Up
+bounded — live on production 2026-08-31 (PR #146, `7dae9fc`; staging `6a2f677`→`0a031da`).** The
+second half of the F141 CLS work, plus a product change Rick asked for on its own merits.
+
+**`subscriptions.html`.** The reserved-suggestions block rendered **one row per reserved series** —
+**1,760px** for a 25-series customer, nearly two viewports of suggestions above the subscriptions
+the page is actually for. Now capped at the **top 5**, ranked by issues reserved (stable sort, so
+ties keep recency); block is ~451px. New **store-popular fallback** for a customer with no
+qualifying reservations, via `get_popular_series()` — tenant-scoped since F20 and anon-callable
+(SECURITY DEFINER), so it shows aggregate counts without RLS leaking anyone's rows; copy switches,
+the per-series count is suppressed, and the usage event records `popular_suggestion`. It
+deliberately excludes every series the customer has reserved, **which also keeps the section hidden
+in exactly the two cases `11-reserved-suggestions` asserts it hidden** — no test was weakened to
+fit the feature. The subscriptions table also gained its own heading and note (Rick: the
+suggestions block is something you scroll *past*, and the destination had no title at all).
+
+**`admin.html`.** Order Follow-Up measured **1,796px**, revealed from `display:none` **above** the
+tab content. **Never Arrived** now renders in a capped scroll region (300px); **Backordered + At
+Risk** collapse behind a summary naming what is inside. Never Arrived stays open and scrollable
+rather than hidden **on purpose**: it carries the resolve controls (F134 + F143) staff use for
+daily arrival triage. A first attempt collapsed the whole panel and turned **3 specs red** on
+`toBeVisible()` — those were a real workflow cost, not stale tests. Hiding all but the first N was
+also rejected: these rows sort by on-sale date and staging carries ~32, so a seeded title would
+land outside the visible N unpredictably and specs 21/22 would go **flaky rather than cleanly red**.
+
+**Verified on Rick's own signed-in account** (a synthetic probe diverged from his real readings
+three times, so his DevTools number is the acceptance test): **subscriptions 0.80 → 0.32** with the
+page read approved, **admin 0.90 → 0.17**. **Post-deploy, against the bytes `pulllist.app` serves:**
+`subscriptions.html` carries `MAX_SUGGESTIONS` ×3, `buildPopularFallback` ×2, "Popular with other
+customers" ×1 and the "Your subscriptions" heading ×1; `admin.html` carries `ofu-never-scroll` ×2
+and `ofu-details` ×6. **Negative assertions all 0** — `suggestions-reserve` absent from both files
+and `LoadingHeight` absent from `app.js` (both reverted attempts stayed reverted), `config.js` still
+carrying only the prod ref. **Gate: 143 Playwright passed, 0 failures, exit 0**, and **specs 21/22
+pass UNMODIFIED** — no assertion was edited to fit this code.
+
+**Write-smoke deliberately skipped, with Rick's agreement:** neither file touches the customer
+reserve path — `subscriptions.html` writes only to `subscriptions`, `admin.html` is staff-only —
+the same disposition PR #141 records.
+
+**No new finding ID consumed — this closes F141's Pattern B work.** (A defect fix: the pages were
+visibly shifting, which is wrong behaviour, and F141 already owns it.) **F148 remains free.**
+
+**Two residuals, both deliberate.** `analytics.html` (Pattern C, 0.49) is untouched — seven
+independently-filling panels need a different design, and it is staff-only. Admin's remaining
+height is a **data backlog, not code**: ~17 Never Arrived titles from the F115 S6 backfill await a
+Received/Didn't-arrive/Damaged decision, and clearing them shrinks the panel at source.
+
 **Last completed work: CLS first-paint height reservation — live on production 2026-08-30 (PR #145,
 `f21cc56`; staging `6a2f677` + the two revert/refine commits on top).** `style.css` gains
 `.loading-reserve { min-height: 100vh; }` and three loading placeholders gain the class —
