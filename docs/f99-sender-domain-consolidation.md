@@ -145,7 +145,35 @@ place to start: with the secret set to today's values, the founding tenant's ema
 
 ## 4. Work breakdown
 
-### S-1 — Update `mrcyberrick.us`'s DKIM to the current selectors (do this FIRST)
+### S-1 — Update `mrcyberrick.us`'s DKIM to the current selectors — ⛔ **SKIP (Rick, 2026-08-31)**
+
+> ⛔ **DO NOT DO THIS unless the migration is shelved for a quarter or more.** It was originally
+> written "do this FIRST"; **Rick correctly challenged why we would fix DNS on a domain S3 removes**,
+> and the risk math does not support it. Kept here, demoted, so the reasoning is not re-derived.
+>
+> **The measurements that decide it (live, 2026-08-31):**
+> - `mlsend2._domainkey.mrcyberrick.us` is a **live CNAME** to `mlsend2._domainkey.mailersend.net` and
+>   is signing today. DKIM is **not broken** — the dashboard's orange icon means "migrate to the new
+>   selectors," not "you have no DKIM."
+> - **`_dmarc.mrcyberrick.us` is `p=none`.** Receivers take no action even on a total DMARC failure.
+> - SPF and Return-Path are green and aligned via `mta.mrcyberrick.us`, so **if `mlsend2` vanished
+>   tomorrow, DMARC would still pass on SPF alone.**
+>
+> So skipping it costs *redundancy* on a domain being removed from MailerSend, under a policy that
+> enforces nothing. **It is also NOT a prerequisite for the S0 probe** — the probe asks whether
+> MailerSend accepts a subdomain `From`, which is independent of selector state, and the domain is
+> verified and sending production mail regardless.
+>
+> **It would only matter if** this work is shelved long enough that `mrcyberrick.us` stays the live
+> sender for months, *and* MailerSend retires `mlsend2` in that window, *and* SPF alignment also
+> breaks. Compound and unlikely.
+>
+> *(A factual correction carried from the first draft: `mlsend2` is a **CNAME**, not a legacy TXT
+> selector. MailerSend is moving from one selector to two — presumably for key rotation — not changing
+> record type. The `ms1`/`ms2` shape below is still what a newly-added domain will be asked for, which
+> is the part that matters for S2.)*
+
+**Original item retained below.**
 
 **Discovered in the dashboard 2026-08-31 and unrelated to this migration — it is a live issue on the
 domain carrying every transactional email today.** SPF and Return-Path show green; **DKIM does not**:
@@ -169,6 +197,7 @@ the existing record stays. **Do this before the S0 probe** so the probe measures
 
 ### S0 — Serving-model gate (no writes, no code)
 
+**This is now the FIRST step** — S-1 was skipped (see above), and it was never a prerequisite.
 Answer § 2's question against the live MailerSend account, via the zero-risk probe in § 2. **HALT and
 re-plan if subdomains are not covered** — the domain to verify is `pulllist.app` either way, but the
 addressing scheme and everything F72 builds on top of it changes.
@@ -255,7 +284,7 @@ gone from `mrcyberrick.us`, MailerSend its sole sender there.
 
 | Gate | Assertion | How |
 |---|---|---|
-| **V0** | S-1 done: `mrcyberrick.us` DKIM panel reads **green**, and a delivered message still shows `dkim=pass` | MailerSend Domains page + `Authentication-Results` on a real send |
+| ~~**V0**~~ | ~~S-1 DKIM green~~ — **withdrawn 2026-08-31 with S-1.** `mrcyberrick.us` is `p=none` and SPF-aligned, so the gate guarded nothing enforceable on a domain S3 removes | — |
 | **V0b** | The merged SPF record resolves within **10 DNS lookups**, and there is exactly **one** SPF TXT on the name | An SPF lookup-counter, before publishing — see § 4 S2 |
 | **V1** | S0 answered from **delivered headers**, not an API status | Send to a real mailbox; read `Authentication-Results` |
 | **V2** | S1 changes nothing observable | Deliver a staging `reset-password`; `From` byte-identical to pre-change |
@@ -318,7 +347,7 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
