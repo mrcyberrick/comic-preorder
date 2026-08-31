@@ -5241,7 +5241,36 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Where:** `scripts/import.js` / `import-staging.js` — `narrowWithdrawalCandidates()`, the `priorMonthRows` `select` in `detectWithdrawals()` (private scripts repo, `main` `e4f968d`). No schema or `admin.html` change.
 - **Related:** **F110** (created the detection this corrects — its original motivating case, MIDNIGHT X-MEN #2, is now the positive-control unit test), **F146** (found and fixed the same session, same code path, different narrower defect — CSV-lag false positives that don't self-clear), **F108**/**F117**/**F120** (the irreversible-cancel exposure this rode on), **F115** (the other half of "this was F110's/F115's first-ever real run" — both were watched closely for exactly this reason).
 
-Next free finding ID: **F148**.
+#### F148 — `notify-customers` sends one MailerSend API request per recipient, so the monthly blast is bounded by the account's **daily API request** quota, not its monthly email quota
+
+- **Status:** filed 2026-08-31 during a multi-tenant catalog/onboarding spec review, while establishing what could honestly be offered to a second tenant. **Open — no plan doc, not started.** **This is not a defect** — the code works exactly as designed and is well within quota today. It is a structural scaling limit, which is why no test, smoke run, or green suite can surface it. Same category as **F131**.
+- **Severity:** **Low today** (production is ~3× under the binding cap). **Medium** the moment one tenant's customer list passes ~100. **High at two or more tenants**, because monthly imports cluster into the same few days and share one account-level budget.
+- **The mechanism, measured not inferred.** `supabase/functions/notify-customers/index.ts:179-203` sends serially, one HTTP request per recipient:
+
+  ```js
+  for (const recipient of recipients) {
+    const mailRes = await fetch('https://api.mailersend.com/v1/email', { ... })
+    ...
+    await new Promise(resolve => setTimeout(resolve, 100))   // rate-limit spacing
+  }
+  ```
+
+  So the monthly "the pull list is live" notification costs **N API requests for N customers**.
+- **Why the daily API cap binds before the monthly email cap.** MailerSend's free tier (confirmed against the account 2026-08-31) allows **500 emails/month**, **100 daily API requests**, and — critically — **no extra usage**: there is no overage billing, so the quota is a hard stop rather than a cost. Because each recipient is one request, a single blast to 100+ customers exhausts the **daily** quota in one operation while using only a fifth of the monthly email allowance. **The commonly-quoted 500/month figure is therefore the wrong number to plan against.**
+- **Current headroom.** Production carried **30 `user_profiles` rows** at the 2026-08-26 phone-column migration post-check, so today's blast costs ~30 of 100 daily requests. Comfortable, and it has been comfortable for the entire life of the system, which is why this has never been visible.
+- **The failure mode is legible but easy to skim past — worth knowing before it matters.** The function counts successes and failures but returns success unconditionally (`Response.json({ success: true, sent, failed })`), and its **only caller** is `import.js` Step 7 (verified by grep: no `notify-customers` caller exists anywhere in `app.js` or any `*.html`). `import.js:2267` prints:
+
+  ```
+  ✅ Notifications sent: ${result.sent}  Failed: ${result.failed}
+  ```
+
+  The failed count **is** shown — this is not a silent failure. But it sits behind a green check and the word "sent," so a run that quietly half-delivered reads as success at a glance during a long import log. Compare the **F105** "a check that cannot fail is not a check" lesson: this one *can* fail, it just doesn't announce it.
+- **Multi-tenant is where it turns from theoretical to scheduled.** The quotas are per **account**, not per tenant or per domain, and every tenant's monthly import lands in the same distributor solicitation window. Three tenants of ~40 customers each = 120 requests in one day = over the cap, with the last tenant's customers silently receiving nothing.
+- **Candidate fix shape (direction only, not sized, NOT started).** MailerSend exposes a bulk endpoint that accepts many messages in a single request, which would collapse N requests to 1 and remove this ceiling entirely — the 500/month email cap would then become the real (and much later) limit. **Explicitly unverified: whether that endpoint is available on the free tier.** Confirm against the live account before designing around it. A second, cheaper mitigation regardless of endpoint: have `import.js` treat a non-zero `failed` count as a **prompt**, not a log line, so a partial send stops the operator rather than scrolling past.
+- **Where:** `supabase/functions/notify-customers/index.ts:179-203` (this repo) · `scripts/import.js:2260-2273` Step 7 (private scripts repo, local working tree). No schema change, no client change.
+- **Related:** **F131** (the same class — a structural single-operator/single-account dependency that works perfectly until tenant count moves, and that no test can reach). **F99** (sender-identity consolidation onto `pulllist.app` — same MailerSend account, and any domain work should be aware of these quotas). **F72** (per-tenant email branding — the other half of what makes transactional mail multi-tenant-ready). **F135** (the other side effect welded into the import script's run). **F105** (the "verification that doesn't announce failure" pattern this echoes).
+
+Next free finding ID: **F149**.
 
 ---
 
