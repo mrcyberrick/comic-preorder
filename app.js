@@ -850,6 +850,29 @@ const Settings = {
     return await this.set('maintenance_mode', on ? 'true' : 'false');
   },
 
+  // Anon-safe maintenance check (F149) — for the two submit paths an
+  // anonymous, not-yet-authenticated visitor can reach: index.html's
+  // registration and forgot-password.html's reset request. isMaintenanceMode()
+  // above cannot be reused there: app_settings' only SELECT policy is
+  // `TO authenticated` with zero anon grant (confirmed live — an anon read
+  // returns 42501 permission denied, not an empty row), so it would silently
+  // always return false under an anon session regardless of the real value.
+  // This calls a narrow SECURITY DEFINER RPC that returns only the boolean
+  // (docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql) — same
+  // minimal-projection pattern as resolve_tenant_by_slug / get_popular_series.
+  // Fails OPEN (returns false) on any RPC error — a missed maintenance
+  // banner is much cheaper than blocking real signups/resets on a hiccup.
+  async isMaintenanceModePublic(tenantId) {
+    try {
+      const { data, error } = await db.rpc('is_maintenance_mode', { p_tenant_id: tenantId });
+      if (error) { console.warn('is_maintenance_mode RPC failed', error); return false; }
+      return data === true;
+    } catch (err) {
+      console.warn('is_maintenance_mode RPC threw', err);
+      return false;
+    }
+  },
+
   // Order deadline — admin-set date string ('YYYY-MM-DD') or null if unset.
   // The catalog banner reads this and hides itself once the date has passed.
   async getOrderDeadline() {
