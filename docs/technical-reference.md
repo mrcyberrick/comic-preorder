@@ -2203,8 +2203,16 @@ existing row's tenant_id.
 
 Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
 added 5.4 S3). All are written in TypeScript, all use Supabase service-role
-for privileged operations, and all that send email use MailerSend with the
-`noreply@mrcyberrick.us` sender.
+for privileged operations, and all that send email use MailerSend.
+**Post-F99-S1 (2026-08-31, staging only):** the sender is no longer
+hardcoded. The six email-sending functions (§ 11.2) read `MAIL_FROM_EMAIL` /
+`MAIL_FROM_NAME` from Edge Function secrets, each with a `??` fallback to
+today's literal (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop") so an
+unset secret changes nothing. Staging has both secrets set to those same
+values — verified byte-identical via a live `reset-password` send read
+against a real inbox, 2026-08-31. Production is untouched (separate,
+explicitly-requested step). See `docs/f99-sender-domain-consolidation.md`
+§ 4 S1.
 
 ### 11.1 Function inventory
 
@@ -2242,6 +2250,9 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
 | `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
+| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **set on staging** to that same value, confirmed present via `supabase secrets list`; not set on production) |
+| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value; not set on production) |
+| `APP_BASE_URL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password (pre-existing, not new to F99 S1 — `??` fallback to `https://pulllist.app`; was missing from this table until 2026-08-31. **Confirmed present in staging's secret store** via `supabase secrets list`; actual value not readable from the CLI (digest only) and not independently verified here — production status unchecked) |
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
 | `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
@@ -2256,12 +2267,17 @@ read it from this secret.
 **`notify-customers`**: monthly catalog notification email. Reads the
 deadline from `app_settings.order_deadline` (filtered by tenant) and
 the recipient list from `user_profiles WHERE is_admin = false` (filtered
-by tenant), excluding `@paper.pulllist.local` placeholder addresses. The
-catalog link in the email body is hardcoded to **production**
-(`https://mrcyberrick.us/comic-preorder/catalog.html`), not staging — this
-is intentional for staging since the function is invoked by the import
-script's post-import prompt and links should send recipients to the live
-site.
+by tenant), excluding `@paper.pulllist.local` placeholder addresses.
+**Corrected 2026-08-31 (found during F99 S1) — the previous claim here was
+stale/wrong.** The catalog link does **not** hardcode `mrcyberrick.us`; the
+code reads ``Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'``
+(verified directly against `supabase/functions/notify-customers/index.ts`).
+`APP_BASE_URL` is confirmed present in staging's secret store (§ 11.2); its
+actual value was not read (CLI shows digests, not values) and production's
+status is unchecked — so whether this link currently points at
+`mrcyberrick.us`, `pulllist.app`, or something else on either project is
+not established by this correction, only that it is **not** a literal in
+the code.
 
 **`send-my-list`**: per-customer pull-list confirmation email. The
 session-token check at the top of the function verifies that *some*
@@ -3648,7 +3664,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F99 — transactional and marketing mail are split across two sender domains on two DNS providers; consolidate the sending identity onto `pulllist.app`
 
-- **Status:** filed 2026-07-25 at the close of the F97 fix, while the complete sender-domain picture was verified in front of us. **Open — deferred to a dedicated session; not started.** Direction only, no plan doc yet. **Must be designed together with F72, not sequenced ahead of it.**
+- **Status:** filed 2026-07-25 at the close of the F97 fix, while the complete sender-domain picture was verified in front of us. **Open — PLAN DOC WRITTEN 2026-08-31: `docs/f99-sender-domain-consolidation.md` (STATUS: PLANNED, S0 gate open). Not started.** *(This line previously read "Direction only, no plan doc yet" — true until 2026-08-31.)* The plan executes **this finding's own steps (3)–(5)**; steps (1)–(2) are already done (reporting-authorization record 2026-07-25; the 4-week report read 2026-08-20). **Must be designed together with F72, not sequenced ahead of it.** **A constraint this entry did not have, measured 2026-08-31: MailerSend's free tier allows exactly ONE verified domain** (plus 100 daily API requests — see **F148** — 500 emails/month, and no overage). That is in direct tension with this entry's per-tenant-subdomain recommendation: one slot spent on `rjbookstop.pulllist.app` leaves a second tenant with no sending identity at all. **The plan's S0 is the blocking question — whether one verified domain authorizes its subdomains as `From` addresses — and it must be answered from delivered message headers, not an API status.** Also newly measured: **no Edge Function uses a MailerSend template**; all six POST inline HTML, so the free tier's 1-template limit is moot (the single hosted template was unused, had drifted from production, and was deleted 2026-08-31).
 - **Severity:** Low as a defect — nothing is broken, nothing is blocked, no data or security exposure. Medium as a **decision**: the split is customer-visible (a customer receives marketing mail from `rjbookstop.pulllist.app` and magic-link logins from `mrcyberrick.us`, a domain carrying no PULLLIST branding), it spreads email authentication across two DNS providers, and deferring it past F72 means provisioning sender domains **twice**.
 - **Current state (verified against public DNS 2026-07-25):**
 
@@ -5241,7 +5257,195 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Where:** `scripts/import.js` / `import-staging.js` — `narrowWithdrawalCandidates()`, the `priorMonthRows` `select` in `detectWithdrawals()` (private scripts repo, `main` `e4f968d`). No schema or `admin.html` change.
 - **Related:** **F110** (created the detection this corrects — its original motivating case, MIDNIGHT X-MEN #2, is now the positive-control unit test), **F146** (found and fixed the same session, same code path, different narrower defect — CSV-lag false positives that don't self-clear), **F108**/**F117**/**F120** (the irreversible-cancel exposure this rode on), **F115** (the other half of "this was F110's/F115's first-ever real run" — both were watched closely for exactly this reason).
 
-Next free finding ID: **F148**.
+#### F148 — `notify-customers` sends one MailerSend API request per recipient, so the monthly blast is bounded by the account's **daily API request** quota, not its monthly email quota
+
+- **Status:** filed 2026-08-31 during a multi-tenant catalog/onboarding spec review, while establishing what could honestly be offered to a second tenant. **Open — no plan doc, not started.** **This is not a defect** — the code works exactly as designed and is well within quota today. It is a structural scaling limit, which is why no test, smoke run, or green suite can surface it. Same category as **F131**.
+- **Severity:** **Low today** (production is ~3× under the binding cap). **Medium** the moment one tenant's customer list passes ~100. **High at two or more tenants**, because monthly imports cluster into the same few days and share one account-level budget.
+- **The mechanism, measured not inferred.** `supabase/functions/notify-customers/index.ts:179-203` sends serially, one HTTP request per recipient:
+
+  ```js
+  for (const recipient of recipients) {
+    const mailRes = await fetch('https://api.mailersend.com/v1/email', { ... })
+    ...
+    await new Promise(resolve => setTimeout(resolve, 100))   // rate-limit spacing
+  }
+  ```
+
+  So the monthly "the pull list is live" notification costs **N API requests for N customers**.
+- **Why the daily API cap binds before the monthly email cap.** MailerSend's free tier (confirmed against the account 2026-08-31) allows **500 emails/month**, **100 daily API requests**, and — critically — **no extra usage**: there is no overage billing, so the quota is a hard stop rather than a cost. Because each recipient is one request, a single blast to 100+ customers exhausts the **daily** quota in one operation while using only a fifth of the monthly email allowance. **The commonly-quoted 500/month figure is therefore the wrong number to plan against.**
+- **Current headroom.** Production carried **30 `user_profiles` rows** at the 2026-08-26 phone-column migration post-check, so today's blast costs ~30 of 100 daily requests. Comfortable, and it has been comfortable for the entire life of the system, which is why this has never been visible.
+- **The failure mode is legible but easy to skim past — worth knowing before it matters.** The function counts successes and failures but returns success unconditionally (`Response.json({ success: true, sent, failed })`), and its **only caller** is `import.js` Step 7 (verified by grep: no `notify-customers` caller exists anywhere in `app.js` or any `*.html`). `import.js:2267` prints:
+
+  ```
+  ✅ Notifications sent: ${result.sent}  Failed: ${result.failed}
+  ```
+
+  The failed count **is** shown — this is not a silent failure. But it sits behind a green check and the word "sent," so a run that quietly half-delivered reads as success at a glance during a long import log. Compare the **F105** "a check that cannot fail is not a check" lesson: this one *can* fail, it just doesn't announce it.
+- **Multi-tenant is where it turns from theoretical to scheduled.** The quotas are per **account**, not per tenant or per domain, and every tenant's monthly import lands in the same distributor solicitation window. Three tenants of ~40 customers each = 120 requests in one day = over the cap, with the last tenant's customers silently receiving nothing.
+- **Candidate fix shape (direction only, not sized, NOT started).** MailerSend exposes a bulk endpoint that accepts many messages in a single request, which would collapse N requests to 1 and remove this ceiling entirely — the 500/month email cap would then become the real (and much later) limit. **Explicitly unverified: whether that endpoint is available on the free tier.** Confirm against the live account before designing around it. A second, cheaper mitigation regardless of endpoint: have `import.js` treat a non-zero `failed` count as a **prompt**, not a log line, so a partial send stops the operator rather than scrolling past.
+- **UPDATE 2026-08-31, same day — the quota is OBSERVABLE, which changes the fix from reactive to
+  preventive.** Found incidentally while running F99's S0 probe: **MailerSend returns the remaining
+  daily quota on every API response.** Measured headers:
+
+  ```
+  x-apiquota-remaining: 96          <- of 100; confirms the daily cap independently
+  x-apiquota-reset:     2026-09-01T00:00:00Z
+  x-ratelimit-limit:    120         <- a SECOND, faster limit, separate from the daily quota
+  x-ratelimit-remaining: 119
+  ```
+
+  This is better than the mitigation first proposed below (prompt on a non-zero `failed` count), which
+  only reacts **after** a blast has already half-failed. Reading `x-apiquota-remaining` lets
+  `notify-customers` **refuse to start a run it cannot finish**, and lets `import.js` Step 7 report
+  real headroom rather than a bare count. It also confirms the 100/day figure from the account itself
+  rather than from the pricing page.
+  - **A scheduling trap this exposes:** the quota resets at **UTC midnight, which is 8pm ET**. A
+    monthly import run in the evening Eastern could straddle the reset mid-blast — harmless if the
+    run fits either side, confusing to debug if it does not.
+  - **There are two ceilings, not one.** `x-ratelimit-limit: 120` is a separate short-window limit. The
+    existing 100ms inter-send delay in the loop is presumably what keeps the current code under it; a
+    bulk or chunked redesign must respect both.
+- **Where:** `supabase/functions/notify-customers/index.ts:179-203` (this repo) · `scripts/import.js:2260-2273` Step 7 (private scripts repo, local working tree). No schema change, no client change.
+- **Related:** **F131** (the same class — a structural single-operator/single-account dependency that works perfectly until tenant count moves, and that no test can reach). **F99** (sender-identity consolidation onto `pulllist.app` — same MailerSend account, and any domain work should be aware of these quotas). **F72** (per-tenant email branding — the other half of what makes transactional mail multi-tenant-ready). **F135** (the other side effect welded into the import script's run). **F105** (the "verification that doesn't announce failure" pattern this echoes).
+
+#### F149 — Maintenance Mode doesn't cover `index.html`'s sign-up flow or `forgot-password.html`, the two paths F99 S3's outage window exposes most
+
+- **Status: RESOLVED on staging, 2026-08-31** (`feature/f149-maintenance-mode-anon-paths`
+  `ca8c481`, merged `--ff-only` to `staging`). Filed the same day, found while planning F99 S3's
+  cutover risk (the "no parallel run" window where the old MailerSend sender is removed before the
+  new one is verified — see `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling
+  Maintenance Mode during that window as a risk control; checked against the actual code before
+  writing that into the plan, and the coverage had a real gap. Production untouched — staging only,
+  per CLAUDE.md § Staging Only.
+- **A second, more fundamental gap surfaced while implementing, not while planning: the naive fix
+  (call the existing `Settings.isMaintenanceMode()` from either anonymous page) cannot work at all.**
+  `app_settings`'s only SELECT policy is `TO authenticated` — confirmed live, not inferred: an anon-key
+  read returns a hard `42501 permission denied`, not an empty row. Neither `index.html`'s registration
+  submit nor `forgot-password.html`'s reset submit carries an authenticated session, so calling the
+  existing method from either page would have silently always returned `false`, regardless of the
+  real value — a fix that looks like it works and doesn't. This is why the eventual fix needed a small
+  schema change (below) that the original filing didn't anticipate.
+- **Severity:** **Low today** (nobody currently relies on Maintenance Mode for this purpose). Becomes
+  directly relevant at **F99 S3** specifically — that is the one known scenario where "all
+  transactional mail is down" for a real window and an anonymous visitor could hit the exact two
+  unguarded paths.
+- **The mechanism, verified by grep, not assumed (unchanged by this fix).** `checkMaintenanceMode(isAdmin)`
+  (`app.js`) is still called from exactly the same four files: `catalog.html`, `mylist.html`,
+  `arrivals.html`, `subscriptions.html` — all four already-authenticated, all four untouched by this
+  work. `index.html` and `forgot-password.html` are gated by a separate, new mechanism (below), not by
+  `checkMaintenanceMode()` — that function's full-page-block behavior was confirmed wrong for either
+  page at filing time and nothing changed that conclusion.
+- **Two other paths remain unaffected by the toggle regardless of this fix, unchanged from the
+  original filing.** Admin-triggered functions (`invite-customer`, `approve-customer`,
+  `create-paper-customer`) can't be gated by Maintenance Mode at all — admins "always get through" by
+  design — so the only control there is operational: don't take admin actions during the cutover
+  window. `notify-customers` is triggered by the import script, never by the web app; already covered
+  separately by the plan's own "don't schedule S3 inside an import window" rule.
+- **Fix as built.** Three pieces, one commit:
+  1. **`docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`** (staging only — production not
+     run) — a new `public.is_maintenance_mode(p_tenant_id uuid) RETURNS boolean` function:
+     `SECURITY DEFINER`, `STABLE`, `SET search_path = public, pg_temp`, minimal projection (the
+     boolean only — never the raw `app_settings` row, never any other key such as `order_deadline`).
+     `REVOKE ALL ... FROM PUBLIC` then explicit `GRANT EXECUTE TO anon, authenticated` — same
+     discipline as `resolve_tenant_by_slug` (`docs/phase-5.2-slug-id-routing-rpc.md` § 1.5) and
+     `get_popular_series()`, both pre-existing instances of this exact pattern (anon cannot read the
+     underlying table, so a narrow RPC is the controlled read).
+  2. **`app.js`** gains `Settings.isMaintenanceModePublic(tenantId)` — additive, calls the new RPC via
+     `db.rpc()`. Does **not** change `isMaintenanceMode()`/`setMaintenanceMode()` or
+     `checkMaintenanceMode()` in any way; the four existing gated pages are untouched. Fails **open**
+     (returns `false`) on any RPC error or thrown exception — a missed maintenance banner is far
+     cheaper than blocking real signups/resets on a transient hiccup.
+  3. Both pages gate their **submit path**, not the whole page, exactly as filed:
+     `index.html`'s `doSignup()` checks first, before name/email validation or Turnstile, so a visitor
+     isn't asked to solve a challenge just to hit a blocked message. `forgot-password.html`'s
+     `sendReset()` checks after the email-present check. Plain sign-in and magic-link completion on
+     `index.html` are untouched code paths — verified working under maintenance ON (below), not just
+     assumed unaffected. `forgot-password.html` never resolved `TenantContext` before this (reset
+     itself isn't tenant-scoped, it looks the user up by email globally) — `await TenantContext.resolve()`
+     was added, needed only to know which tenant's flag to read; falls back to the founding tenant like
+     every other unresolvable case, correct for today's single real tenant. **UX call, made and
+     recorded per the filing's own open question:** `forgot-password.html` gets the same friendly
+     inline message as `index.html`, not the harsh four-page banner — this page's request-step error
+     slot already exists and a full-page block would be disproportionate to a page whose only other
+     content is the same form.
+- **Verified, staging only, 2026-08-31 — real functional checks, not code review.** Existing
+  Playwright coverage checked first, per the filing's own instruction: **zero** existing coverage of
+  registration, `forgot-password.html`, or plain email+password sign-in (`btn-login`) in any committed
+  spec; magic-link completion is exercised indirectly but extensively — every spec using the
+  `authenticatedPage`/`authedUser`/`adminPage` fixtures drives a real `action_link` through
+  `index.html`'s real completion code, which is effectively the whole 143-test suite. A local,
+  uncommitted harness (`playwright/f149-maintenance-verify.mjs`, same convention as
+  `native-signup-verify.mjs`) drove the real deployed staging site end to end, toggling the actual
+  `admin.html` `#maint-toggle` (never a raw DB write) via a throwaway admin session, independently
+  confirming the resulting state via the anon RPC on both flips (not trusting the UI's own read):
+  **12/12 checks green** — OFF-state `reset-password` genuinely invoked (HTTP 200) and its real
+  success message shown; OFF-state signup gate does not misfire (the pre-existing Turnstile validation
+  still fires untouched); ON-state signup blocked with the friendly message and `register-customer`
+  **never** called (network-observed, not inferred); ON-state reset blocked the same way and
+  `reset-password` **never** called; **ON-state plain email+password sign-in still completes** (a
+  throwaway user created with a real password, reaches `/catalog`); **ON-state magic-link completion
+  still completes** (reaches `/catalog`) — the two checks the filing itself flagged as the highest-risk
+  regression. Maintenance mode independently confirmed OFF at both the start and the end via a direct
+  anon RPC call (not the script's own exit code). **One piece deliberately not automated, matching
+  this exact codebase's own established precedent** (`native-signup-verify.mjs`'s comment on why a
+  real Turnstile pass/fail token is untestable under headless Playwright): a genuine end-to-end
+  registration submit with a real Turnstile solve and OFF-state was not driven by this session — the
+  gate sits before Turnstile in `doSignup()`, so what *is* verified is that the gate correctly gets out
+  of the way when off, and the real completed-registration path was already unchanged code (untouched
+  by this diff) rather than new behavior needing its own proof.
+- **Full gate green:** unit suite 279/279 (unchanged, this fix touches no import-script code); full
+  Playwright suite run directly (not through an agent PowerShell tool, per CLAUDE.md's 2026-08-30
+  note) against deployed staging bytes post-push — **142 passed, 1 skipped, 0 failed**, exit 0,
+  ~21 min. The one skip is `15-order-export-ledger.spec.ts`'s own pre-existing
+  `test.skip(monthEnd <= todayStr, …)` (today, 2026-08-31, is the last day of the month) — unrelated
+  to this change, confirmed by reading the spec rather than assumed.
+- **Where:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` (new RPC, staging only),
+  `app.js` (`Settings.isMaintenanceModePublic`, additive), `index.html` (`doSignup()`),
+  `forgot-password.html` (`TenantContext.resolve()` added, `sendReset()`).
+- **Related:** **F99** (the plan step whose S3 risk surfaced this — S2/S3 themselves untouched by this
+  session).
+
+#### F150 — Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER); staging grants `anon` nothing on the same table
+
+- **Status:** filed 2026-09-01, found during F149's production promotion — its migration's own
+  pre-flight check (`docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`) queries
+  `information_schema.role_table_grants` for `app_settings` before creating anything, specifically so
+  a surprise here halts the run rather than proceeding on a false premise. It did. **Open, not
+  started** — filed per Rick's explicit call (file now, fix later), not fixed inline.
+- **Severity: Low today, confirmed by a live test, not inferred.** A direct anon-key HTTP read
+  against production (`GET .../rest/v1/app_settings?key=eq.maintenance_mode`) returned **`200, []`**
+  — the query is *permitted* (unlike staging, which hard-401s: `42501 permission denied`) but RLS
+  still filters every row out, because `app_settings`'s only SELECT policy is `TO authenticated` and
+  nothing targets `anon`. **No data is actually exposed today** — this is a thinner defense-in-depth
+  posture than staging, not an active leak.
+- **The mechanism, precisely.** GRANT and RLS are two independent gates: GRANT decides whether a role
+  may *attempt* an operation on the table at all; RLS decides which *rows* are visible/writable once
+  the GRANT passes. Staging's `anon` fails the GRANT gate outright (no privilege at all →
+  `42501`). Production's `anon` passes the GRANT gate (full DML privileges, confirmed via
+  `information_schema.role_table_grants` — `INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES,
+  TRIGGER`, all present) but then hits RLS's row-level filter, which — for a role with zero
+  applicable permissive policies — denies every row. Two different mechanisms landing at the same
+  practical place *for reads*, confirmed live; **writes were not tested against production** (an
+  anon INSERT/UPDATE probe was judged too risky to run for verification purposes) — RLS should deny
+  those the same way (no `TO anon` policy exists on any DML for this table, per
+  `docs/technical-reference.md` § 7.1's policy list), but that is inferred from the policy list, not
+  independently exercised the way the SELECT case was.
+- **What's still unconfirmed:** whether RLS is actually **enabled** (`pg_class.relrowsecurity`) on
+  production's `app_settings`, as opposed to merely having zero permissive policies for `anon` (both
+  produce the same empty-SELECT symptom observed; only the first is the actual safety mechanism the
+  severity assessment above assumes). Rick was asked to run
+  `SELECT relrowsecurity FROM pg_class WHERE relname = 'app_settings';` (expect `true`) — check
+  whoever picks this up has that result before relying further on the "RLS is covering it" read.
+- **Not yet investigated:** how this divergence arose (a manual grant at some point, a migration that
+  ran differently on the two projects, a platform default that changed between when each project was
+  provisioned), and whether any other table shares it — this finding covers `app_settings` only,
+  found incidentally; a broader sweep (`information_schema.role_table_grants` across all tables,
+  diffed staging vs prod) has not been run.
+- **Where:** production Supabase project (`plgegklqtdjxeglvyjte`) only — staging confirmed clean.
+- **Related:** **F149** (whose promotion surfaced this), **F64** (the existing prod↔staging DDL
+  divergence catalogue — this is the same class, one more instance).
+
+Next free finding ID: **F151**.
 
 ---
 
