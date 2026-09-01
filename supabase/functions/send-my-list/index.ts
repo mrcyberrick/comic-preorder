@@ -1,3 +1,6 @@
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -240,7 +243,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: { email: 'noreply@mrcyberrick.us', name: "Ray & Judy's Book Stop" },
+        from: { email: MAIL_FROM_EMAIL, name: MAIL_FROM_NAME },
         to: [{ email, name: fullName }],
         subject,
         html,

@@ -2203,8 +2203,16 @@ existing row's tenant_id.
 
 Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
 added 5.4 S3). All are written in TypeScript, all use Supabase service-role
-for privileged operations, and all that send email use MailerSend with the
-`noreply@mrcyberrick.us` sender.
+for privileged operations, and all that send email use MailerSend.
+**Post-F99-S1 (2026-08-31, staging only):** the sender is no longer
+hardcoded. The six email-sending functions (§ 11.2) read `MAIL_FROM_EMAIL` /
+`MAIL_FROM_NAME` from Edge Function secrets, each with a `??` fallback to
+today's literal (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop") so an
+unset secret changes nothing. Staging has both secrets set to those same
+values — verified byte-identical via a live `reset-password` send read
+against a real inbox, 2026-08-31. Production is untouched (separate,
+explicitly-requested step). See `docs/f99-sender-domain-consolidation.md`
+§ 4 S1.
 
 ### 11.1 Function inventory
 
@@ -2242,6 +2250,9 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
 | `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
+| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **set on staging** to that same value, confirmed present via `supabase secrets list`; not set on production) |
+| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value; not set on production) |
+| `APP_BASE_URL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password (pre-existing, not new to F99 S1 — `??` fallback to `https://pulllist.app`; was missing from this table until 2026-08-31. **Confirmed present in staging's secret store** via `supabase secrets list`; actual value not readable from the CLI (digest only) and not independently verified here — production status unchecked) |
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
 | `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
@@ -2256,12 +2267,17 @@ read it from this secret.
 **`notify-customers`**: monthly catalog notification email. Reads the
 deadline from `app_settings.order_deadline` (filtered by tenant) and
 the recipient list from `user_profiles WHERE is_admin = false` (filtered
-by tenant), excluding `@paper.pulllist.local` placeholder addresses. The
-catalog link in the email body is hardcoded to **production**
-(`https://mrcyberrick.us/comic-preorder/catalog.html`), not staging — this
-is intentional for staging since the function is invoked by the import
-script's post-import prompt and links should send recipients to the live
-site.
+by tenant), excluding `@paper.pulllist.local` placeholder addresses.
+**Corrected 2026-08-31 (found during F99 S1) — the previous claim here was
+stale/wrong.** The catalog link does **not** hardcode `mrcyberrick.us`; the
+code reads ``Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'``
+(verified directly against `supabase/functions/notify-customers/index.ts`).
+`APP_BASE_URL` is confirmed present in staging's secret store (§ 11.2); its
+actual value was not read (CLI shows digests, not values) and production's
+status is unchecked — so whether this link currently points at
+`mrcyberrick.us`, `pulllist.app`, or something else on either project is
+not established by this correction, only that it is **not** a literal in
+the code.
 
 **`send-my-list`**: per-customer pull-list confirmation email. The
 session-token check at the top of the function verifies that *some*
