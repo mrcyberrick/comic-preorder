@@ -899,6 +899,15 @@
   });
 
   async function doSignup() {
+    // F149 — gate account creation during maintenance mode. Checked first,
+    // before any other validation, so a visitor isn't asked to complete the
+    // Turnstile challenge just to hit a blocked message.
+    if (await Settings.isMaintenanceModePublic(TenantContext.current().id)) {
+      signupErrorEl.textContent   = 'Account creation is temporarily unavailable — please check back in a few minutes.';
+      signupErrorEl.style.display = 'block';
+      return;
+    }
+
     const name     = signupNameEl.value.trim();
     const email    = signupEmailEl.value.trim();
     const honeypot = signupHpEl.value;

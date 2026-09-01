@@ -43,6 +43,165 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
+**Last completed work: F149 RESOLVED on staging, 2026-08-31**
+(`feature/f149-maintenance-mode-anon-paths` `ca8c481`, merged `--ff-only`). Maintenance Mode now
+covers `index.html`'s registration submit and `forgot-password.html`'s reset submit — the two paths
+an anonymous, not-yet-authenticated visitor can reach, and exactly the ones F99 S3's future
+all-mail-down cutover window exposes. Production untouched.
+
+**A real blocker surfaced during implementation, not planning, and changed the fix's shape.** The
+naive approach — call the existing `Settings.isMaintenanceMode()` from either anonymous page —
+cannot work: `app_settings`'s only SELECT policy is `TO authenticated`, confirmed live (anon read
+returns `42501 permission denied`, not an empty row), so it would have silently always returned
+`false` under an anon session regardless of the real value. Fix needed a small anon-callable
+SECURITY DEFINER RPC — same pattern as the pre-existing `resolve_tenant_by_slug` /
+`get_popular_series()` — which the original filing didn't anticipate. Flagged to Rick before writing
+it (a DB change beyond what was scoped), approved, then built.
+
+**Three pieces.** (1) `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` — new
+`is_maintenance_mode(p_tenant_id)` function, minimal projection (boolean only), explicit
+`anon`+`authenticated` EXECUTE grant, applied to **staging only**. (2) `app.js` gains
+`Settings.isMaintenanceModePublic(tenantId)` — additive, does not touch
+`isMaintenanceMode()`/`setMaintenanceMode()`/`checkMaintenanceMode()` or the four existing gated
+pages; fails **open** (false) on any RPC error. (3) Both pages gate their **submit path**, not the
+whole page, per the filing's own fix direction: `index.html`'s `doSignup()` checks first, before
+name/email/Turnstile, so a visitor isn't asked to solve a challenge just to hit a blocked message;
+`forgot-password.html`'s `sendReset()` checks after the email-present check, and gets the same
+friendly inline message as `index.html` rather than a full-page block (the filing's own open UX
+question — resolved this session: this page's request-step already has an error slot, and a
+four-page-style banner would be disproportionate). `forgot-password.html` never resolved
+`TenantContext` before — added, needed only to know which tenant's flag to read; falls back to the
+founding tenant like every other unresolvable case.
+
+**Verified with real functional checks, not code review.** Existing Playwright coverage checked
+first: zero existing coverage of registration, `forgot-password.html`, or plain sign-in in any
+committed spec; magic-link completion is covered extensively but indirectly (nearly the whole
+143-test suite drives a real `action_link` through `index.html`'s completion code via the
+`authenticatedPage`/`authedUser`/`adminPage` fixtures). A local, uncommitted harness
+(`playwright/f149-maintenance-verify.mjs`, same convention as `native-signup-verify.mjs`) drove the
+real deployed staging site end to end — toggling the actual `admin.html` `#maint-toggle` via a
+throwaway admin session (never a raw DB write), independently re-confirming the resulting state via
+the anon RPC on both flips rather than trusting the UI. **12/12 checks green**: OFF-state
+`reset-password` genuinely invoked (HTTP 200, real success message shown); OFF-state signup gate
+does not misfire (pre-existing Turnstile validation still fires untouched); ON-state signup and
+reset both blocked with the friendly message, both underlying Edge Functions confirmed **never**
+called (network-observed); **ON-state plain email+password sign-in still completes**; **ON-state
+magic-link completion still completes** — the two regressions the filing itself flagged as
+highest-risk. Maintenance mode independently confirmed OFF at both start and end via a direct anon
+RPC call, not the script's own exit code. **One piece deliberately not automated, matching this
+codebase's own established precedent** (`native-signup-verify.mjs`'s documented reasoning that a
+real Turnstile pass/fail token is untestable under headless Playwright): a live human click-through
+of a genuinely completed registration was not driven by this session — the maintenance gate sits
+before Turnstile in `doSignup()`, so what's verified is that the gate gets out of the way correctly
+when off, and actual account creation is unchanged code this diff never touches.
+
+**Gates green.** Unit suite 279/279 (unchanged — no import-script code touched). Full Playwright
+suite run directly (not through an agent PowerShell tool, per the 2026-08-30 note below) against
+deployed staging bytes post-push: **142 passed, 1 skipped, 0 failed**, exit 0, ~21 min — the one
+skip is `15-order-export-ledger.spec.ts`'s own pre-existing `test.skip(monthEnd <= todayStr, …)`
+(today, 2026-08-31, is the last day of the month), unrelated to this change. Maintenance mode
+confirmed OFF on staging at session end.
+
+**Doc updates landed alongside.** `docs/technical-reference.md` § 13 F149 status → RESOLVED on
+staging with full fix/verification detail; this table's F149 row updated below.
+
+**Not done in this step, deliberately:** production untouched (staging only, per this repo's
+default); F99 S2/S3 untouched; a genuine live Turnstile-gated registration submit was not
+hand-verified (see above — Rick can do this in ~30 seconds if wanted, not required for the fix
+itself since Turnstile is unchanged code the gate runs ahead of). **No new finding ID consumed by
+building this fix** — F149 itself is the finding being closed. **F150 remains free.**
+
+**Prior work (2026-08-31, earlier the same day): F99 S1 — the six Edge Function sender literals are
+now secret-driven, STAGING ONLY (`eff9793`).** `approve-customer`, `invite-customer`, `notify-customers`,
+`register-customer`, `reset-password`, `send-my-list` no longer hardcode
+`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop" as the MailerSend `from:`. Each now reads
+module-level `MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` constants via `Deno.env.get()`, with a `??`
+fallback to today's literal — deliberately, per the plan's own design: this makes S1 reversible and
+lets a future domain cutover (S3) become a secret flip with no code deploy in the risk window.
+Deployed to staging (`puoaiyezsreowpwxzxhj`) one function at a time, each preserving its live
+`verify_jwt` setting.
+
+**A real surprise surfaced at the verify_jwt read, not a formality.** CLAUDE.md's own § Supabase
+platform facts claimed "all six JWT-off"; the live dashboard read (Rick) showed `approve-customer`
+and `send-my-list` actually **ON**, the other four OFF. **The deploy preserved exactly what was
+found, not what the doc claimed** — S1's whole purpose is zero behavior change, and re-deriving why
+two admin/session-gated functions run JWT-on while `invite-customer` (also admin-only) doesn't is a
+separate, unresolved question — a plausible but unconfirmed guess is recorded where the doc line was
+fixed. **§ Supabase platform facts corrected the same session** (below this entry's date) — the line
+no longer claims universal JWT-off.
+
+**Gates green.** V3a: `grep -n "from:" supabase/functions/*/index.ts` — six hits, all reading
+`MAIL_FROM_EMAIL`/`MAIL_FROM_NAME`, zero literal addresses; `mrcyberrick` still greps 6× (the
+deliberate `??` fallbacks — going to 0 is V3b, S3's gate, not S1's). Staging's two secrets were set
+to today's exact values (Rick, via `supabase secrets set`, confirmed present via `supabase secrets
+list` — names only, the CLI shows digests not values) specifically so V2 exercises the real
+`Deno.env.get()` path rather than only the fallback. **V2 green twice**: two independent live
+`reset-password` sends (`test@mrcyberrick.us`, then `rssedivec@gmail.com`), delivered `From` read
+directly from each inbox — `Ray & Judy's Book Stop <noreply@mrcyberrick.us>`, byte-identical both
+times.
+
+**Doc updates landed in the same commit.** `docs/technical-reference.md` § 11 intro now notes the
+sender is secret-driven; § 11.2 gains `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` rows, plus `APP_BASE_URL`
+(pre-existing, five functions, was simply missing from the table); § 11.3's `notify-customers` note
+**corrected** — it claimed the catalog link was "hardcoded to production
+(`https://mrcyberrick.us/comic-preorder/catalog.html`)", verified false against the actual file: the
+code reads `Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'`, no `mrcyberrick.us` literal
+anywhere in it. `docs/f99-sender-domain-consolidation.md`'s own STATUS line and § 4 S1 updated to
+DONE.
+
+**Not done in this step, deliberately:** production untouched (separate, explicitly-requested step
+per § Staging Only); no `reply_to` (§ 8 Q6, declined); no DNS (S2); `APP_BASE_URL`'s actual live
+value was not read, only that the secret exists. **No new finding ID consumed** — infrastructure
+step, not a feature or defect fix. **F149 remains free.**
+
+**Prior work (2026-08-31, earlier the same day): subscriptions top-5 + store-popular fallback, and
+admin's Order Follow-Up bounded — live on production (PR #146, `7dae9fc`; staging
+`6a2f677`→`0a031da`).** The second half of the F141 CLS work, plus a product change Rick asked for on
+its own merits.
+
+**`subscriptions.html`.** The reserved-suggestions block rendered **one row per reserved series** —
+**1,760px** for a 25-series customer, nearly two viewports of suggestions above the subscriptions
+the page is actually for. Now capped at the **top 5**, ranked by issues reserved (stable sort, so
+ties keep recency); block is ~451px. New **store-popular fallback** for a customer with no
+qualifying reservations, via `get_popular_series()` — tenant-scoped since F20 and anon-callable
+(SECURITY DEFINER), so it shows aggregate counts without RLS leaking anyone's rows; copy switches,
+the per-series count is suppressed, and the usage event records `popular_suggestion`. It
+deliberately excludes every series the customer has reserved, **which also keeps the section hidden
+in exactly the two cases `11-reserved-suggestions` asserts it hidden** — no test was weakened to
+fit the feature. The subscriptions table also gained its own heading and note (Rick: the
+suggestions block is something you scroll *past*, and the destination had no title at all).
+
+**`admin.html`.** Order Follow-Up measured **1,796px**, revealed from `display:none` **above** the
+tab content. **Never Arrived** now renders in a capped scroll region (300px); **Backordered + At
+Risk** collapse behind a summary naming what is inside. Never Arrived stays open and scrollable
+rather than hidden **on purpose**: it carries the resolve controls (F134 + F143) staff use for
+daily arrival triage. A first attempt collapsed the whole panel and turned **3 specs red** on
+`toBeVisible()` — those were a real workflow cost, not stale tests. Hiding all but the first N was
+also rejected: these rows sort by on-sale date and staging carries ~32, so a seeded title would
+land outside the visible N unpredictably and specs 21/22 would go **flaky rather than cleanly red**.
+
+**Verified on Rick's own signed-in account** (a synthetic probe diverged from his real readings
+three times, so his DevTools number is the acceptance test): **subscriptions 0.80 → 0.32** with the
+page read approved, **admin 0.90 → 0.17**. **Post-deploy, against the bytes `pulllist.app` serves:**
+`subscriptions.html` carries `MAX_SUGGESTIONS` ×3, `buildPopularFallback` ×2, "Popular with other
+customers" ×1 and the "Your subscriptions" heading ×1; `admin.html` carries `ofu-never-scroll` ×2
+and `ofu-details` ×6. **Negative assertions all 0** — `suggestions-reserve` absent from both files
+and `LoadingHeight` absent from `app.js` (both reverted attempts stayed reverted), `config.js` still
+carrying only the prod ref. **Gate: 143 Playwright passed, 0 failures, exit 0**, and **specs 21/22
+pass UNMODIFIED** — no assertion was edited to fit this code.
+
+**Write-smoke deliberately skipped, with Rick's agreement:** neither file touches the customer
+reserve path — `subscriptions.html` writes only to `subscriptions`, `admin.html` is staff-only —
+the same disposition PR #141 records.
+
+**No new finding ID consumed — this closes F141's Pattern B work.** (A defect fix: the pages were
+visibly shifting, which is wrong behaviour, and F141 already owns it.) **F148 remains free.**
+
+**Two residuals, both deliberate.** `analytics.html` (Pattern C, 0.49) is untouched — seven
+independently-filling panels need a different design, and it is staff-only. Admin's remaining
+height is a **data backlog, not code**: ~17 Never Arrived titles from the F115 S6 backfill await a
+Received/Didn't-arrive/Damaged decision, and clearing them shrinks the panel at source.
+
 **Last completed work: CLS first-paint height reservation — live on production 2026-08-30 (PR #145,
 `f21cc56`; staging `6a2f677` + the two revert/refine commits on top).** `style.css` gains
 `.loading-reserve { min-height: 100vh; }` and three loading placeholders gain the class —
@@ -526,7 +685,15 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F148**. **F147 filed AND fixed 2026-08-28** (withdrawal detection's
+**Next free finding ID:** **F151**. **F150 filed 2026-09-01** (production's `app_settings` grants
+`anon` full table-level DML — staging grants none on the same table; RLS confirmed still blocking
+real reads live, so no active exposure, but an unexplained prod/staging divergence. Found by F149's
+own migration pre-flight during its production promotion, filed per Rick's call rather than fixed
+inline. See § 13 F150). **F149 filed AND RESOLVED on staging, 2026-08-31** (Maintenance
+Mode now covers `index.html`'s registration submit and `forgot-password.html`'s reset submit —
+found while planning F99 S3's cutover risk, fixed the same session via a new anon-callable
+`is_maintenance_mode()` RPC the naive fix turned out to need. Production untouched; S2/S3 themselves
+untouched. See § 13 F149). **F148 filed 2026-08-31** (`notify-customers` sends one MailerSend API request **per recipient**, so the monthly blast is bounded by the free tier's **100 daily API requests**, not its 500/month email cap — the commonly-quoted number is the wrong one to plan against. ~30 customers today so there is real headroom, but it binds at ~100 on one tenant, and sooner across tenants since quotas are per-account and monthly imports cluster. Not a defect; a structural scaling limit no test can surface, same class as F131. See § 13 F148). **F147 filed AND fixed 2026-08-28** (withdrawal detection's
 first-ever real run, on production, marked **519 of 1,571 open reservations (33%) "Withdrawn —
 cannot be ordered"** — every single one still inside its own ordering window, `foc_date` not yet
 passed. Example: BATMAN #14, FOC two weeks out, flagged anyway. Root cause:
@@ -594,6 +761,9 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F150 | **Low today, confirmed by a live test not inferred.** Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER) — staging grants `anon` nothing on the same table (hard 401). Found by F149's own migration pre-flight, which halted exactly as designed. A live anon read against production returns `200, []` — RLS still filters every row (only SELECT policy is `TO authenticated`), so no data is actually exposed today, just a thinner defense-in-depth layer than staging | Owner: § 13 F150. **Open, not started — Rick's call: file now, fix later.** Still unconfirmed: whether RLS is actually *enabled* (`pg_class.relrowsecurity`) on this table vs. merely having zero anon-applicable policies (both give the same empty-read symptom); writes were not probed against production. Not investigated: how the divergence arose, or whether other tables share it |
+| F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED on staging, 2026-08-31.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` (staging only), `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` (commit `ca8c481`). **Verified**: 12/12 checks in a local Playwright harness against deployed staging — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON (the filing's own flagged regression risk), full suite 142 passed/1 skipped (unrelated, date-dependent)/0 failed post-push. Production untouched; not promoted |
+| F148 | **Low today, Medium at ~100 customers, High at 2+ tenants** — `notify-customers` sends **one API request per recipient** in a serial loop, so a monthly blast costs N requests for N customers. MailerSend free allows **100 daily API requests** / 500 emails-per-month / **no overage** — so the *daily* cap binds first, and quotas are **per-account**, shared across tenants whose imports all land in the same window. Not a defect; works as designed and is ~3x under cap today | Owner: § 13 F148. **Open, not started.** Fix direction: MailerSend's bulk endpoint (many messages, one request) — **free-tier availability unverified, confirm against the live account first**. Cheaper mitigation regardless: make `import.js` Step 7 *prompt* on a non-zero `failed` count instead of logging it behind a green check. Sequence with **F99**/**F72** — same MailerSend account |
 | F147 | **High, fully RESOLVED 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. **Production data corrected and independently re-verified** — Rick ran `clear-f147-withdrawn.js`, 519/519 cleared, confirmed via a fresh live query afterward (count 0, BATMAN #14 spot-checked). **Maintenance Mode was ON throughout — no customer ever saw it.** See § 13 F147 |
 | F146 | **Medium–High, fix shipped 2026-08-28, fully RESOLVED on staging 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **A first verification attempt (fresh September re-pull) was correctly halted**: Lunar item codes are permanently scoped to their solicitation month and PRH's are issue-scoped, so none of the 16 marks could ever clear that way, at any freshness. **Corrected re-test, same day: re-imported August's own files (fresh re-pull) as an older-month backfill (`--skip-autoreserve`)** — dry run and real run both reported all 16 reappeared and cleared; independently re-verified against the live DB (`withdrawn_at NOT NULL` count 16→0, 3 titles spot-checked including `0826AB0593`). **Staging: RESOLVED, 16/16 cleared.** Production still holds 0 withdrawn marks; its first real exercise of this path is October's import. See § 13 F146 |
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
@@ -604,7 +774,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F130 | **Low, but the number was wrong — re-measured 2026-08-30 as 893, not 197**, with explicit pagination (the 197 was taken by an unrecorded method; GoTrue's admin list defaults to a small page size, the same unpaginated-read class as F82/F113/F139/F140 — five times now). **Classification done**, which is what the finding asked for: 5 prefixes hold 737/893, and `10-post-reserve-prompt` + `11-reserved-suggestions` each call `createUser` 9× against `deleteUser` 2× — users made *inside* tests are never torn down (383 orphans, the fix target). `pw-iso` (207) is balanced 2×/2× and is a **different, undiagnosed** cause. `pw-pending` (70) must NOT be bulk-deleted — those survivors are intended (F64 item 5 Option A). Read-only pass; nothing deleted. Old text follows: 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
 | F133 | **Low — variant (a) RESOLVED 2026-08-30; variant (b) re-dispositioned, its diagnosis does not match the code.** (a) fixed by `ensureDeadlineCovers()`/`restoreDeadline()` in the Playwright fixtures — the describe block that depends on the At-risk classification now **owns** `order_deadline` instead of hoping the ambient value cooperates. Reproduced **deterministically** first (forced past deadline → `06:148 toContainText(atRiskTitle)` fails), then negative-control tested (guard removed → 1 failed; restored → 9 passed). (b) **does not reproduce**: spec 21 passes targeted 6/6, its assertions all target unique stamped titles, and the panel has no row cap — so “assumes the panel holds only its fixture” is not what they do. **Its claim that targeted runs are untrustworthy is not currently demonstrable.** Needs a real captured failure before anyone “fixes” it. Original entry retained — the date-dependence was real | Owner: § 13 F133. Old text follows: date-dependent specs flip red with zero code involved, via the live `order_deadline` (2026-08-21). **Two variants, not one:** (a) a fixture FOC crossing *past* the deadline (2026-08-20, three specs); (b) **the deadline having LAPSED** re-admits *real* catalog rows into `#backorder-risk-panel`, breaking any spec that assumes the panel holds only its fixture — **recurred 2026-08-24 in a fourth spec** (`21-arrival-resolution:136`) — **but only in a TARGETED run; it passes in the full suite**, because spec 15 runs first and leaves the state it needs. Test-infra only | deferred — no plan doc. **The entry's prediction that a lapse would end this was wrong — a lapse started variant (b).** Also exposes an **undeclared spec-order dependency**: spec 21 is green by ordering luck, so **targeted runs of these specs are not trustworthy**. Fix: deadline-aware helper closes (a) only; (b) needs panel assertions scoped to the seeded row. See § 13 F133 |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
-| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **DMARC gate READ 2026-08-20** (13 msgs / 100% pass / 3 senders, all known). **TRIGGER FIRED 2026-08-30 — the app half of MailerLite retirement is done** (`register-customer`'s webhook path removed platform-wide, native-signup § S5). **F99 is UNBLOCKED but UNSCHEDULED** — not gated any more; simply not next, per Rick's 2026-08-29 “small features for now.” **Before any `p=quarantine` publish, verify the DNS half separately:** `litesrv._domainkey` gone from `mrcyberrick.us` and MailerSend its sole sender. Design together with F72 |
+| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **Plan doc: `docs/f99-sender-domain-consolidation.md`. S0 ANSWERED 2026-08-31** — MailerSend signs a subdomain `From` under its one verified parent domain, so `pulllist.app` verified once covers every `<slug>.pulllist.app`; F99's per-tenant-subdomain direction is viable on the free tier. **S1 DONE on staging 2026-08-31 (`eff9793`)** — the six sender-email `from:` literals are now `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` secrets with a `??` fallback to today's values (zero behavior change); staging's secrets set to those same values and proven via two live `reset-password` sends, `From` byte-identical both times. **Surfaced during S1, code left as-is, doc corrected:** `approve-customer` and `send-my-list` actually run `verify_jwt` **ON** on staging — CLAUDE.md § Supabase platform facts claimed universal JWT-off and was wrong; the deploy preserved the live setting rather than matching the doc (S1's job is no behavior change), and the platform-facts line itself was corrected the same session (2026-08-31) to state the real, non-universal pattern. **S2 (DNS) / S3 (cutover) / S4 (alignment) not started.** Production untouched. Design together with F72 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
@@ -721,11 +891,27 @@ remain local-only and must never be committed to any repo.
   anon key in `config.js` is not a finding.
 - **Service-role key bypasses RLS.** Lives only in local scripts; never in
   client code or any committed file.
-- **Edge Functions follow off-plus-in-body-auth.** JWT verification disabled at
-  the platform level is the recommended pattern; in-body `Authorization` header
-  verification (`/auth/v1/user` → profile lookup) is the actual gate. JWT-off is
-  not a misconfiguration. The exception is `register-customer` and any other
-  intentionally-public endpoint.
+- **Edge Functions follow off-plus-in-body-auth — MOST of them.** JWT
+  verification disabled at the platform level is the recommended pattern for a
+  function that must also accept a non-user caller (a service-role key, e.g.
+  `notify-customers` invoked by the import script) or no caller at all (a public
+  endpoint like `register-customer`); in-body `Authorization` header
+  verification (`/auth/v1/user` → profile lookup, or Turnstile/honeypot for the
+  public case) is the actual gate there. JWT-off is not a misconfiguration.
+  **This is not universal, corrected 2026-08-31 (F99 S1)** — the previous
+  wording implied all Edge Functions are JWT-off; measured live against the
+  staging dashboard, `approve-customer` and `send-my-list` actually run
+  `verify_jwt = ON`. Both already forward the caller's own bearer token to
+  `/auth/v1/user` themselves (in-body check, same as the off functions), so the
+  platform-level check is additive, not their only gate — and a plausible
+  reason they can afford it is that neither ever needs to accept a
+  non-user-JWT caller the way `notify-customers` (service-role) or
+  `register-customer` (anonymous) do. **That reasoning is inference, not
+  independently confirmed** — no one has audited why these two specifically
+  differ from `invite-customer` (also admin-only, but OFF). Read each
+  function's live `verify_jwt` setting before assuming either state; do not
+  deploy any of the six without explicitly preserving whatever the dashboard
+  shows, per F93 discipline (`docs/f99-sender-domain-consolidation.md` § 4 S1).
 - **Supabase SQL Editor runs as `postgres` superuser** — it bypasses RLS. To
   test RLS isolation, simulate an authenticated user with `SET LOCAL role
   authenticated` and `SET LOCAL "request.jwt.claims"` inside a transaction.
