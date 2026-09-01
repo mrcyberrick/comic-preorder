@@ -5308,7 +5308,50 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Where:** `supabase/functions/notify-customers/index.ts:179-203` (this repo) · `scripts/import.js:2260-2273` Step 7 (private scripts repo, local working tree). No schema change, no client change.
 - **Related:** **F131** (the same class — a structural single-operator/single-account dependency that works perfectly until tenant count moves, and that no test can reach). **F99** (sender-identity consolidation onto `pulllist.app` — same MailerSend account, and any domain work should be aware of these quotas). **F72** (per-tenant email branding — the other half of what makes transactional mail multi-tenant-ready). **F135** (the other side effect welded into the import script's run). **F105** (the "verification that doesn't announce failure" pattern this echoes).
 
-Next free finding ID: **F149**.
+#### F149 — Maintenance Mode doesn't cover `index.html`'s sign-up flow or `forgot-password.html`, the two paths F99 S3's outage window exposes most
+
+- **Status:** filed 2026-08-31, found while planning F99 S3's cutover risk (the "no parallel run"
+  window where the old MailerSend sender is removed before the new one is verified — see
+  `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling Maintenance Mode during that
+  window as a risk control; checked against the actual code before writing that into the plan, and
+  the coverage has a real gap. **Open, not started. Rick's direction (2026-08-31): extend Maintenance
+  Mode to these two paths** — a scoped follow-up session, deliberately NOT bundled into F99 S2/S3.
+- **Severity:** **Low today** (nobody currently relies on Maintenance Mode for this purpose). Becomes
+  directly relevant at **F99 S3** specifically — that is the one known scenario where "all
+  transactional mail is down" for a real window and an anonymous visitor could hit the exact two
+  unguarded paths.
+- **The mechanism, verified by grep, not assumed.** `checkMaintenanceMode(isAdmin)` (`app.js`) is
+  called from exactly four files: `catalog.html`, `mylist.html`, `arrivals.html`,
+  `subscriptions.html` — all four require an already-authenticated session. `index.html` (sign-in +
+  the native "Create account" registration UI, which calls `register-customer`) and
+  `forgot-password.html` (calls `reset-password`) carry **zero** occurrences of "maintenance" —
+  confirmed by direct grep of both files, not inferred from the four-file pattern. Those are exactly
+  the two Edge Functions an anonymous, not-yet-authenticated visitor can reach.
+- **Two other paths are unaffected by the toggle regardless of this fix, worth recording so they
+  aren't mistaken for the same gap.** Admin-triggered functions (`invite-customer`,
+  `approve-customer`, `create-paper-customer`) can't be gated by Maintenance Mode at all — admins
+  "always get through" by design (`checkMaintenanceMode` returns immediately if `isAdmin`) — so the
+  only control there is operational: don't take admin actions during the cutover window.
+  `notify-customers` is triggered by the import script, never by the web app, so the toggle has no
+  bearing on it either way; already covered separately by the plan's own "don't schedule S3 inside an
+  import window" rule.
+- **Fix direction, not sized, NOT started.** Not a straight copy of the existing four-page pattern —
+  `checkMaintenanceMode` replaces the entire `document.body`, which is wrong for `index.html`: that
+  page must keep working for an existing customer's plain sign-in **and** for magic-link completion
+  (`token_hash`/`access_token` handling) even while maintenance mode is on, including on the kept-warm
+  `mrcyberrick.us` apex mirror, which depends on that exact mechanism (§ Repository Structure /
+  "Legacy prod URL" note). The gate belongs at the **registration submit path** specifically, not the
+  whole page. `forgot-password.html` has no other purpose, so either a form-level or full-page
+  treatment is defensible there — a friendlier inline message is likely nicer than the harsh
+  four-page banner, but that's a UX call, not settled here. Whoever picks this up should also check
+  for existing Playwright coverage of sign-in / magic-link / registration / forgot-password before
+  changing any of it — a regression here would be worse than the gap it closes.
+- **Where:** `index.html` (registration submit handler), `forgot-password.html` (reset submit
+  handler), `app.js` `checkMaintenanceMode()` (reference implementation — the existing four-page
+  pattern, not necessarily reusable as-is given the different UX needs above).
+- **Related:** **F99** (the plan step whose S3 risk surfaced this).
+
+Next free finding ID: **F150**.
 
 ---
 
