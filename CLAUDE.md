@@ -43,9 +43,52 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
-**Last completed work: subscriptions top-5 + store-popular fallback, and admin's Order Follow-Up
-bounded — live on production 2026-08-31 (PR #146, `7dae9fc`; staging `6a2f677`→`0a031da`).** The
-second half of the F141 CLS work, plus a product change Rick asked for on its own merits.
+**Last completed work: F99 S1 — the six Edge Function sender literals are now secret-driven,
+STAGING ONLY — 2026-08-31 (`eff9793`).** `approve-customer`, `invite-customer`, `notify-customers`,
+`register-customer`, `reset-password`, `send-my-list` no longer hardcode
+`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop" as the MailerSend `from:`. Each now reads
+module-level `MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` constants via `Deno.env.get()`, with a `??`
+fallback to today's literal — deliberately, per the plan's own design: this makes S1 reversible and
+lets a future domain cutover (S3) become a secret flip with no code deploy in the risk window.
+Deployed to staging (`puoaiyezsreowpwxzxhj`) one function at a time, each preserving its live
+`verify_jwt` setting.
+
+**A real surprise surfaced at the verify_jwt read, not a formality.** CLAUDE.md's own § Supabase
+platform facts claims "all six JWT-off"; the live dashboard read (Rick) showed `approve-customer`
+and `send-my-list` actually **ON**, the other four OFF. **Preserved exactly as found, not corrected
+to match the doc** — S1's whole purpose is zero behavior change, and re-deriving why two admin/
+session-gated functions run JWT-on while four public-ish ones don't is a separate question. Flagged
+in the § 13 F99 table row above; the platform-facts line itself is not yet corrected — Rick's call
+whether/when.
+
+**Gates green.** V3a: `grep -n "from:" supabase/functions/*/index.ts` — six hits, all reading
+`MAIL_FROM_EMAIL`/`MAIL_FROM_NAME`, zero literal addresses; `mrcyberrick` still greps 6× (the
+deliberate `??` fallbacks — going to 0 is V3b, S3's gate, not S1's). Staging's two secrets were set
+to today's exact values (Rick, via `supabase secrets set`, confirmed present via `supabase secrets
+list` — names only, the CLI shows digests not values) specifically so V2 exercises the real
+`Deno.env.get()` path rather than only the fallback. **V2 green twice**: two independent live
+`reset-password` sends (`test@mrcyberrick.us`, then `rssedivec@gmail.com`), delivered `From` read
+directly from each inbox — `Ray & Judy's Book Stop <noreply@mrcyberrick.us>`, byte-identical both
+times.
+
+**Doc updates landed in the same commit.** `docs/technical-reference.md` § 11 intro now notes the
+sender is secret-driven; § 11.2 gains `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` rows, plus `APP_BASE_URL`
+(pre-existing, five functions, was simply missing from the table); § 11.3's `notify-customers` note
+**corrected** — it claimed the catalog link was "hardcoded to production
+(`https://mrcyberrick.us/comic-preorder/catalog.html`)", verified false against the actual file: the
+code reads `Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'`, no `mrcyberrick.us` literal
+anywhere in it. `docs/f99-sender-domain-consolidation.md`'s own STATUS line and § 4 S1 updated to
+DONE.
+
+**Not done in this step, deliberately:** production untouched (separate, explicitly-requested step
+per § Staging Only); no `reply_to` (§ 8 Q6, declined); no DNS (S2); `APP_BASE_URL`'s actual live
+value was not read, only that the secret exists. **No new finding ID consumed** — infrastructure
+step, not a feature or defect fix. **F149 remains free.**
+
+**Prior work (2026-08-31, earlier the same day): subscriptions top-5 + store-popular fallback, and
+admin's Order Follow-Up bounded — live on production (PR #146, `7dae9fc`; staging
+`6a2f677`→`0a031da`).** The second half of the F141 CLS work, plus a product change Rick asked for on
+its own merits.
 
 **`subscriptions.html`.** The reserved-suggestions block rendered **one row per reserved series** —
 **1,760px** for a 25-series customer, nearly two viewports of suggestions above the subscriptions
@@ -652,7 +695,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F130 | **Low, but the number was wrong — re-measured 2026-08-30 as 893, not 197**, with explicit pagination (the 197 was taken by an unrecorded method; GoTrue's admin list defaults to a small page size, the same unpaginated-read class as F82/F113/F139/F140 — five times now). **Classification done**, which is what the finding asked for: 5 prefixes hold 737/893, and `10-post-reserve-prompt` + `11-reserved-suggestions` each call `createUser` 9× against `deleteUser` 2× — users made *inside* tests are never torn down (383 orphans, the fix target). `pw-iso` (207) is balanced 2×/2× and is a **different, undiagnosed** cause. `pw-pending` (70) must NOT be bulk-deleted — those survivors are intended (F64 item 5 Option A). Read-only pass; nothing deleted. Old text follows: 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
 | F133 | **Low — variant (a) RESOLVED 2026-08-30; variant (b) re-dispositioned, its diagnosis does not match the code.** (a) fixed by `ensureDeadlineCovers()`/`restoreDeadline()` in the Playwright fixtures — the describe block that depends on the At-risk classification now **owns** `order_deadline` instead of hoping the ambient value cooperates. Reproduced **deterministically** first (forced past deadline → `06:148 toContainText(atRiskTitle)` fails), then negative-control tested (guard removed → 1 failed; restored → 9 passed). (b) **does not reproduce**: spec 21 passes targeted 6/6, its assertions all target unique stamped titles, and the panel has no row cap — so “assumes the panel holds only its fixture” is not what they do. **Its claim that targeted runs are untrustworthy is not currently demonstrable.** Needs a real captured failure before anyone “fixes” it. Original entry retained — the date-dependence was real | Owner: § 13 F133. Old text follows: date-dependent specs flip red with zero code involved, via the live `order_deadline` (2026-08-21). **Two variants, not one:** (a) a fixture FOC crossing *past* the deadline (2026-08-20, three specs); (b) **the deadline having LAPSED** re-admits *real* catalog rows into `#backorder-risk-panel`, breaking any spec that assumes the panel holds only its fixture — **recurred 2026-08-24 in a fourth spec** (`21-arrival-resolution:136`) — **but only in a TARGETED run; it passes in the full suite**, because spec 15 runs first and leaves the state it needs. Test-infra only | deferred — no plan doc. **The entry's prediction that a lapse would end this was wrong — a lapse started variant (b).** Also exposes an **undeclared spec-order dependency**: spec 21 is green by ordering luck, so **targeted runs of these specs are not trustworthy**. Fix: deadline-aware helper closes (a) only; (b) needs panel assertions scoped to the seeded row. See § 13 F133 |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
-| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **DMARC gate READ 2026-08-20** (13 msgs / 100% pass / 3 senders, all known). **TRIGGER FIRED 2026-08-30 — the app half of MailerLite retirement is done** (`register-customer`'s webhook path removed platform-wide, native-signup § S5). **F99 is UNBLOCKED but UNSCHEDULED** — not gated any more; simply not next, per Rick's 2026-08-29 “small features for now.” **Before any `p=quarantine` publish, verify the DNS half separately:** `litesrv._domainkey` gone from `mrcyberrick.us` and MailerSend its sole sender. **Plan doc written 2026-08-31: `docs/f99-sender-domain-consolidation.md`** (S0 gate open) — executes F99 steps (3)–(5); (1)–(2) already done. **New blocking constraint: MailerSend free allows ONE verified domain**, in tension with F99's per-tenant-subdomain direction — S0 answers whether subdomains are covered. Design together with F72 |
+| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **Plan doc: `docs/f99-sender-domain-consolidation.md`. S0 ANSWERED 2026-08-31** — MailerSend signs a subdomain `From` under its one verified parent domain, so `pulllist.app` verified once covers every `<slug>.pulllist.app`; F99's per-tenant-subdomain direction is viable on the free tier. **S1 DONE on staging 2026-08-31 (`eff9793`)** — the six sender-email `from:` literals are now `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` secrets with a `??` fallback to today's values (zero behavior change); staging's secrets set to those same values and proven via two live `reset-password` sends, `From` byte-identical both times. **Surfaced, not fixed, during S1:** `approve-customer` and `send-my-list` actually run `verify_jwt` **ON** on staging, contradicting CLAUDE.md § Supabase platform facts' "all six JWT-off" claim — preserved as-is (S1's job is no behavior change), flagged here for a future correction pass. **S2 (DNS) / S3 (cutover) / S4 (alignment) not started.** Production untouched. Design together with F72 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |

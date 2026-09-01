@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; S1 next, not started | staging=— | prod=— | findings=F99,F72,F148,F145
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; **S1 DONE on staging 2026-08-31** (`eff9793`); S2/S3/S4 not started | staging=`eff9793` | prod=— | findings=F99,F72,F148,F145
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -326,6 +326,26 @@ prepares the exact command text, Rick executes anything touching `plgegklqtdjxeg
 
 **Fully reversible and independently useful** — it stands on its own even if S2/S3 never run.
 
+> ✅ **S1 EXECUTED 2026-08-31, staging only — `eff9793` on `staging`.** All six files edited to the
+> target shape exactly as specified; deployed to `puoaiyezsreowpwxzxhj` one at a time, each preserving
+> its live `verify_jwt` setting (read from the dashboard before and after — **a real surprise
+> surfaced here**: `approve-customer` and `send-my-list` are JWT **ON**, contradicting CLAUDE.md's
+> "all six JWT-off" claim; the other four are OFF as expected. Preserved exactly as found either way
+> — S1's job is zero behavior change, not conformance to the doc — and the discrepancy is flagged for
+> CLAUDE.md correction, not fixed here). **V3a green**: `grep -n "from:" supabase/functions/*/index.ts`
+> — six hits, all reading `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME`, zero literal addresses;
+> `grep -rn "mrcyberrick"` still returns 6 (the deliberate `??` fallbacks — V3b is S3's gate, not
+> S1's). **Secrets set on staging to today's exact values** (Rick, via `supabase secrets set`),
+> confirmed present via `supabase secrets list` (names only — CLI shows digests, not values). **V2
+> green**: two independent real `reset-password` sends (staging), delivered `From` read directly from
+> the inbox both times — `Ray & Judy's Book Stop <noreply@mrcyberrick.us>`, byte-identical. **Doc
+> updates landed** in the same commit: `technical-reference.md` § 11 intro, § 11.2 (`MAIL_FROM_EMAIL`
+> / `MAIL_FROM_NAME` rows added; `APP_BASE_URL` added too — pre-existing, was missing from the table),
+> and § 11.3's `notify-customers` note corrected (the catalog link was never actually hardcoded to
+> `mrcyberrick.us` — it reads `Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'`, verified
+> directly against the file). **Not done in this step, deliberately**: production untouched; no
+> `reply_to`; no DNS; `APP_BASE_URL`'s actual live value was not read (only that the secret exists).
+
 ### S2 — Pre-publish DNS in Cloudflare (no MailerSend change)
 
 Add the DKIM + Return-Path records the new domain will need, **before** touching MailerSend, so
@@ -472,7 +492,14 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — ninth pass (V3 split into V3a/V3b — the old wording was unpassable at S1 by design). Eighth pass (S1 execution detail added ahead of CLI handoff: deploy mechanics, F93 workdir discipline, verify_jwt preservation, owed doc updates). Seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2 forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED (covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
+**Last updated:** 2026-08-31 — **tenth pass: S1 EXECUTED on staging** (`eff9793`) — all six files
+parameterized and deployed, verify_jwt preserved (including the two-of-six JWT-ON surprise, flagged
+not fixed), secrets set to today's values, V3a + V2 both green, owed doc updates landed. Ninth pass
+(V3 split into V3a/V3b — the old wording was unpassable at S1 by design). Eighth pass (S1 execution
+detail added ahead of CLI handoff: deploy mechanics, F93 workdir discipline, verify_jwt preservation,
+owed doc updates). Seventh pass (Q6 DECLINED — no-reply stands; S1 sets `from` only). Sixth pass (S2
+forwarding question answered: include STAYS; new open Q6 on `Reply-To`). **Fifth pass: S0 ANSWERED
+(covered branch), architecture settled, S1 is next.** Fourth pass (**S-1 SKIPPED** on Rick's challenge; S0 is now the first step). Third pass (live DNS measured: providers confirmed, DMARC relaxed, apex SPF found). Second pass, against the live MailerSend dashboard. **1-domain limit
 confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.app` settled as the
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
