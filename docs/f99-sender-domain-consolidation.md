@@ -170,9 +170,23 @@ GoDaddy.
 ## 3. The cutover constraint — there is no parallel run
 
 With one domain slot, `mrcyberrick.us` must be **removed** from MailerSend before the replacement can
-be added. **Checked in the dashboard 2026-08-31: a second domain cannot be held even unverified**, so
-the hoped-for parallel path does not exist. Between removal and a working new sender, **all
-transactional mail is down**: magic links, invites, approvals, password resets.
+be added. **Confirmed by Rick 2026-08-31: only one domain can exist at a time** — checked in the
+dashboard the same day, a second domain cannot be held even unverified, so the hoped-for parallel
+path does not exist. Between removal and a working new sender, **all transactional mail is down**:
+magic links, invites, approvals, password resets.
+
+> **Mitigation proposed by Rick 2026-08-31: toggle Maintenance Mode ON for the duration of the
+> cutover window.** Checked against the actual code before relying on it — real, but partial.
+> `checkMaintenanceMode()` covers `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html`
+> (all four already-authenticated), but **not** `index.html`'s native registration flow
+> (`register-customer`) or `forgot-password.html` (`reset-password`) — the two paths an anonymous
+> visitor is most likely to hit during the window. Filed as **F149** (`docs/technical-reference.md`
+> § 13); Rick's direction is to close that gap as its own scoped session before S3 leans on the
+> toggle as a real safety net. Two things the toggle can't help with either way, worth remembering
+> when S3 is scheduled: admin-triggered functions (`invite-customer`, `approve-customer`,
+> `create-paper-customer`) bypass Maintenance Mode by design — the only control is not taking admin
+> actions during the window — and `notify-customers` is import-triggered, unaffected by the toggle,
+> already covered by "don't schedule inside an import window" below.
 
 **F99's step (4) as written — "update the six `from:` sites, staging first, then promote" — would put
 a code deploy inside that outage window.** This plan does not do that.
@@ -401,6 +415,12 @@ verification is near-instant when the slot frees.
 Remove `mrcyberrick.us` from MailerSend → add the new domain → confirm verified → flip the two
 secrets. No code deploy. Keep the old DNS records in place for rollback.
 
+> ✅ **Toggle Maintenance Mode ON before removing the old domain; OFF only after the new domain is
+> verified, the secrets are flipped, and V2/V5 are green.** Per § 3's mitigation note — closes real
+> exposure on the four authenticated pages, but **not** `index.html`/`forgot-password.html` until
+> **F149** is fixed. Confirm F149 is resolved (or accept the residual and say so explicitly) before
+> treating the toggle as sufficient cover for this step.
+
 > ⛔ **Do not schedule this inside a catalog import window.** `import.js` Step 7 calls
 > `notify-customers`; a migration mid-import means the monthly notification silently fails. **The next
 > import gate is Fri 2026-09-25** (October catalog, `trig_01FQesEHRh9XdRXgwASFJoh7`). Cut over well
@@ -492,7 +512,10 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — **tenth pass: S1 EXECUTED on staging** (`eff9793`) — all six files
+**Last updated:** 2026-08-31 — **eleventh pass: S3's Maintenance Mode mitigation recorded** (§ 3, § 4
+S3) — Rick confirmed the 1-domain-at-a-time constraint is real and proposed the toggle as a cutover
+safety net; checked against the actual code, found a real gap (index.html/forgot-password.html
+uncovered), filed as **F149**. Tenth pass: S1 EXECUTED on staging (`eff9793`) — all six files
 parameterized and deployed, verify_jwt preserved (including the two-of-six JWT-ON surprise, flagged
 not fixed), secrets set to today's values, V3a + V2 both green, owed doc updates landed. Ninth pass
 (V3 split into V3a/V3b — the old wording was unpassable at S1 by design). Eighth pass (S1 execution
