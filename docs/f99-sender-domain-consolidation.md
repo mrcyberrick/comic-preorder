@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; **S1 DONE on staging 2026-08-31** (`eff9793`); S2/S3/S4 not started | staging=`eff9793` | prod=— | findings=F99,F72,F148,F145
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 PARTIALLY DONE 2026-09-01 (DKIM + Return-Path published in Cloudflare, SPF merge deferred to S3 — see § 4 S2)**; S3/S4 not started | staging=`eff9793` | prod=— | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -365,6 +365,35 @@ prepares the exact command text, Rick executes anything touching `plgegklqtdjxeg
 Add the DKIM + Return-Path records the new domain will need, **before** touching MailerSend, so
 verification is near-instant when the slot frees.
 
+> ✅ **DKIM + Return-Path PUBLISHED and verified 2026-09-01 — the SPF piece is genuinely blocked
+> until S3, not merely deferred by choice.** Live DNS reconnaissance against `mrcyberrick.us`'s own
+> working records (not the dashboard, which can't be reached without adding the domain — see § 1's
+> hard 1-domain limit) showed the three record types S2 needs split into two different shapes:
+>
+> | Record | Pattern confirmed live | Portable without MailerSend? |
+> |---|---|---|
+> | DKIM CNAMEs | `<selector>._domainkey.<domain>` → `<selector>._domainkey.mailersend.net` — generic target, same for every domain | **Yes** |
+> | Return-Path | `mta.<domain>` → `mailersend.net` — same generic target | **Yes** |
+> | SPF include | `dc-<hash>._spfm.<domain>` — the domain name AND a unique hash are baked into the *hostname*, one hash per domain (`mrcyberrick.us` carries three) | **No** — cannot be known until MailerSend actually issues one for `pulllist.app`, which cannot happen before S3 removes `mrcyberrick.us` and frees the slot |
+>
+> (Also confirmed in passing: `ms1`/`ms2._domainkey.mrcyberrick.us` are genuine NXDOMAIN — S-1 really
+> was skipped, exactly as recorded above; only the legacy `mlsend2` CNAME is live there.)
+>
+> **Published in Cloudflare (`pulllist.app` zone), DNS-only/unproxied, all three externally verified
+> post-publish (`dns.google` resolver, not the Cloudflare dashboard — confirms both correctness and
+> that they're genuinely unproxied, since a proxied record would not expose the real CNAME chain to
+> an outside resolver):**
+> ```
+> ms1._domainkey.pulllist.app  CNAME  ms1._domainkey.mailersend.net   (verified live)
+> ms2._domainkey.pulllist.app  CNAME  ms2._domainkey.mailersend.net   (verified live)
+> mta.pulllist.app             CNAME  mailersend.net                  (verified live)
+> ```
+> All three were NXDOMAIN before publishing (checked first — no collision risk).
+>
+> **The SPF merge stays exactly where § "The SPF merge" below describes it, done at S3, not before** —
+> now confirmed as a hard sequencing constraint, not a scheduling preference. V0b (the 10-lookup
+> ceiling check) therefore also happens at S3, once the real include value exists to count.
+
 > ⚠️ **Do not copy `mrcyberrick.us`'s current DKIM shape — it is the legacy one.** Observed in the
 > MailerSend dashboard 2026-08-31: MailerSend has moved from the legacy **`mlsend2._domainkey` TXT**
 > selector to **two CNAMEs**, `ms1._domainkey.<domain>` → `ms1._domainkey.mailersend.net` and
@@ -512,7 +541,12 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — **eleventh pass: S3's Maintenance Mode mitigation recorded** (§ 3, § 4
+**Last updated:** 2026-09-01 — **twelfth pass: S2 partially executed** — DKIM (`ms1`/`ms2._domainkey`)
+and Return-Path (`mta`) CNAMEs published in Cloudflare and externally verified; discovered live (not
+assumed) that DKIM/Return-Path targets are generic across domains but MailerSend's SPF include is a
+per-domain hash that cannot be known before S3, so the SPF merge is a hard sequencing constraint, not
+a preference. F149 added to the findings line (heavily referenced in § 3/§ 4 S3, was missing).
+Eleventh pass: S3's Maintenance Mode mitigation recorded (§ 3, § 4
 S3) — Rick confirmed the 1-domain-at-a-time constraint is real and proposed the toggle as a cutover
 safety net; checked against the actual code, found a real gap (index.html/forgot-password.html
 uncovered), filed as **F149**. Tenth pass: S1 EXECUTED on staging (`eff9793`) — all six files
