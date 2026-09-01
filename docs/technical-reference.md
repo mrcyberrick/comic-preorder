@@ -5310,46 +5310,100 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F149 — Maintenance Mode doesn't cover `index.html`'s sign-up flow or `forgot-password.html`, the two paths F99 S3's outage window exposes most
 
-- **Status:** filed 2026-08-31, found while planning F99 S3's cutover risk (the "no parallel run"
-  window where the old MailerSend sender is removed before the new one is verified — see
-  `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling Maintenance Mode during that
-  window as a risk control; checked against the actual code before writing that into the plan, and
-  the coverage has a real gap. **Open, not started. Rick's direction (2026-08-31): extend Maintenance
-  Mode to these two paths** — a scoped follow-up session, deliberately NOT bundled into F99 S2/S3.
+- **Status: RESOLVED on staging, 2026-08-31** (`feature/f149-maintenance-mode-anon-paths`
+  `ca8c481`, merged `--ff-only` to `staging`). Filed the same day, found while planning F99 S3's
+  cutover risk (the "no parallel run" window where the old MailerSend sender is removed before the
+  new one is verified — see `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling
+  Maintenance Mode during that window as a risk control; checked against the actual code before
+  writing that into the plan, and the coverage had a real gap. Production untouched — staging only,
+  per CLAUDE.md § Staging Only.
+- **A second, more fundamental gap surfaced while implementing, not while planning: the naive fix
+  (call the existing `Settings.isMaintenanceMode()` from either anonymous page) cannot work at all.**
+  `app_settings`'s only SELECT policy is `TO authenticated` — confirmed live, not inferred: an anon-key
+  read returns a hard `42501 permission denied`, not an empty row. Neither `index.html`'s registration
+  submit nor `forgot-password.html`'s reset submit carries an authenticated session, so calling the
+  existing method from either page would have silently always returned `false`, regardless of the
+  real value — a fix that looks like it works and doesn't. This is why the eventual fix needed a small
+  schema change (below) that the original filing didn't anticipate.
 - **Severity:** **Low today** (nobody currently relies on Maintenance Mode for this purpose). Becomes
   directly relevant at **F99 S3** specifically — that is the one known scenario where "all
   transactional mail is down" for a real window and an anonymous visitor could hit the exact two
   unguarded paths.
-- **The mechanism, verified by grep, not assumed.** `checkMaintenanceMode(isAdmin)` (`app.js`) is
-  called from exactly four files: `catalog.html`, `mylist.html`, `arrivals.html`,
-  `subscriptions.html` — all four require an already-authenticated session. `index.html` (sign-in +
-  the native "Create account" registration UI, which calls `register-customer`) and
-  `forgot-password.html` (calls `reset-password`) carry **zero** occurrences of "maintenance" —
-  confirmed by direct grep of both files, not inferred from the four-file pattern. Those are exactly
-  the two Edge Functions an anonymous, not-yet-authenticated visitor can reach.
-- **Two other paths are unaffected by the toggle regardless of this fix, worth recording so they
-  aren't mistaken for the same gap.** Admin-triggered functions (`invite-customer`,
-  `approve-customer`, `create-paper-customer`) can't be gated by Maintenance Mode at all — admins
-  "always get through" by design (`checkMaintenanceMode` returns immediately if `isAdmin`) — so the
-  only control there is operational: don't take admin actions during the cutover window.
-  `notify-customers` is triggered by the import script, never by the web app, so the toggle has no
-  bearing on it either way; already covered separately by the plan's own "don't schedule S3 inside an
-  import window" rule.
-- **Fix direction, not sized, NOT started.** Not a straight copy of the existing four-page pattern —
-  `checkMaintenanceMode` replaces the entire `document.body`, which is wrong for `index.html`: that
-  page must keep working for an existing customer's plain sign-in **and** for magic-link completion
-  (`token_hash`/`access_token` handling) even while maintenance mode is on, including on the kept-warm
-  `mrcyberrick.us` apex mirror, which depends on that exact mechanism (§ Repository Structure /
-  "Legacy prod URL" note). The gate belongs at the **registration submit path** specifically, not the
-  whole page. `forgot-password.html` has no other purpose, so either a form-level or full-page
-  treatment is defensible there — a friendlier inline message is likely nicer than the harsh
-  four-page banner, but that's a UX call, not settled here. Whoever picks this up should also check
-  for existing Playwright coverage of sign-in / magic-link / registration / forgot-password before
-  changing any of it — a regression here would be worse than the gap it closes.
-- **Where:** `index.html` (registration submit handler), `forgot-password.html` (reset submit
-  handler), `app.js` `checkMaintenanceMode()` (reference implementation — the existing four-page
-  pattern, not necessarily reusable as-is given the different UX needs above).
-- **Related:** **F99** (the plan step whose S3 risk surfaced this).
+- **The mechanism, verified by grep, not assumed (unchanged by this fix).** `checkMaintenanceMode(isAdmin)`
+  (`app.js`) is still called from exactly the same four files: `catalog.html`, `mylist.html`,
+  `arrivals.html`, `subscriptions.html` — all four already-authenticated, all four untouched by this
+  work. `index.html` and `forgot-password.html` are gated by a separate, new mechanism (below), not by
+  `checkMaintenanceMode()` — that function's full-page-block behavior was confirmed wrong for either
+  page at filing time and nothing changed that conclusion.
+- **Two other paths remain unaffected by the toggle regardless of this fix, unchanged from the
+  original filing.** Admin-triggered functions (`invite-customer`, `approve-customer`,
+  `create-paper-customer`) can't be gated by Maintenance Mode at all — admins "always get through" by
+  design — so the only control there is operational: don't take admin actions during the cutover
+  window. `notify-customers` is triggered by the import script, never by the web app; already covered
+  separately by the plan's own "don't schedule S3 inside an import window" rule.
+- **Fix as built.** Three pieces, one commit:
+  1. **`docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`** (staging only — production not
+     run) — a new `public.is_maintenance_mode(p_tenant_id uuid) RETURNS boolean` function:
+     `SECURITY DEFINER`, `STABLE`, `SET search_path = public, pg_temp`, minimal projection (the
+     boolean only — never the raw `app_settings` row, never any other key such as `order_deadline`).
+     `REVOKE ALL ... FROM PUBLIC` then explicit `GRANT EXECUTE TO anon, authenticated` — same
+     discipline as `resolve_tenant_by_slug` (`docs/phase-5.2-slug-id-routing-rpc.md` § 1.5) and
+     `get_popular_series()`, both pre-existing instances of this exact pattern (anon cannot read the
+     underlying table, so a narrow RPC is the controlled read).
+  2. **`app.js`** gains `Settings.isMaintenanceModePublic(tenantId)` — additive, calls the new RPC via
+     `db.rpc()`. Does **not** change `isMaintenanceMode()`/`setMaintenanceMode()` or
+     `checkMaintenanceMode()` in any way; the four existing gated pages are untouched. Fails **open**
+     (returns `false`) on any RPC error or thrown exception — a missed maintenance banner is far
+     cheaper than blocking real signups/resets on a transient hiccup.
+  3. Both pages gate their **submit path**, not the whole page, exactly as filed:
+     `index.html`'s `doSignup()` checks first, before name/email validation or Turnstile, so a visitor
+     isn't asked to solve a challenge just to hit a blocked message. `forgot-password.html`'s
+     `sendReset()` checks after the email-present check. Plain sign-in and magic-link completion on
+     `index.html` are untouched code paths — verified working under maintenance ON (below), not just
+     assumed unaffected. `forgot-password.html` never resolved `TenantContext` before this (reset
+     itself isn't tenant-scoped, it looks the user up by email globally) — `await TenantContext.resolve()`
+     was added, needed only to know which tenant's flag to read; falls back to the founding tenant like
+     every other unresolvable case, correct for today's single real tenant. **UX call, made and
+     recorded per the filing's own open question:** `forgot-password.html` gets the same friendly
+     inline message as `index.html`, not the harsh four-page banner — this page's request-step error
+     slot already exists and a full-page block would be disproportionate to a page whose only other
+     content is the same form.
+- **Verified, staging only, 2026-08-31 — real functional checks, not code review.** Existing
+  Playwright coverage checked first, per the filing's own instruction: **zero** existing coverage of
+  registration, `forgot-password.html`, or plain email+password sign-in (`btn-login`) in any committed
+  spec; magic-link completion is exercised indirectly but extensively — every spec using the
+  `authenticatedPage`/`authedUser`/`adminPage` fixtures drives a real `action_link` through
+  `index.html`'s real completion code, which is effectively the whole 143-test suite. A local,
+  uncommitted harness (`playwright/f149-maintenance-verify.mjs`, same convention as
+  `native-signup-verify.mjs`) drove the real deployed staging site end to end, toggling the actual
+  `admin.html` `#maint-toggle` (never a raw DB write) via a throwaway admin session, independently
+  confirming the resulting state via the anon RPC on both flips (not trusting the UI's own read):
+  **12/12 checks green** — OFF-state `reset-password` genuinely invoked (HTTP 200) and its real
+  success message shown; OFF-state signup gate does not misfire (the pre-existing Turnstile validation
+  still fires untouched); ON-state signup blocked with the friendly message and `register-customer`
+  **never** called (network-observed, not inferred); ON-state reset blocked the same way and
+  `reset-password` **never** called; **ON-state plain email+password sign-in still completes** (a
+  throwaway user created with a real password, reaches `/catalog`); **ON-state magic-link completion
+  still completes** (reaches `/catalog`) — the two checks the filing itself flagged as the highest-risk
+  regression. Maintenance mode independently confirmed OFF at both the start and the end via a direct
+  anon RPC call (not the script's own exit code). **One piece deliberately not automated, matching
+  this exact codebase's own established precedent** (`native-signup-verify.mjs`'s comment on why a
+  real Turnstile pass/fail token is untestable under headless Playwright): a genuine end-to-end
+  registration submit with a real Turnstile solve and OFF-state was not driven by this session — the
+  gate sits before Turnstile in `doSignup()`, so what *is* verified is that the gate correctly gets out
+  of the way when off, and the real completed-registration path was already unchanged code (untouched
+  by this diff) rather than new behavior needing its own proof.
+- **Full gate green:** unit suite 279/279 (unchanged, this fix touches no import-script code); full
+  Playwright suite run directly (not through an agent PowerShell tool, per CLAUDE.md's 2026-08-30
+  note) against deployed staging bytes post-push — **142 passed, 1 skipped, 0 failed**, exit 0,
+  ~21 min. The one skip is `15-order-export-ledger.spec.ts`'s own pre-existing
+  `test.skip(monthEnd <= todayStr, …)` (today, 2026-08-31, is the last day of the month) — unrelated
+  to this change, confirmed by reading the spec rather than assumed.
+- **Where:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` (new RPC, staging only),
+  `app.js` (`Settings.isMaintenanceModePublic`, additive), `index.html` (`doSignup()`),
+  `forgot-password.html` (`TenantContext.resolve()` added, `sendReset()`).
+- **Related:** **F99** (the plan step whose S3 risk surfaced this — S2/S3 themselves untouched by this
+  session).
 
 Next free finding ID: **F150**.
 

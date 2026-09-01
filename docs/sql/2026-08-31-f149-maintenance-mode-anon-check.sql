@@ -1,4 +1,4 @@
--- STATUS: NOT STARTED | staging=NOT APPLIED | prod=NOT APPLIED | findings=F149
+-- STATUS: COMPLETE (staging) | staging=APPLIED 2026-08-31 | prod=NOT APPLIED | findings=F149
 
 -- F149: give the two anonymous-visitor pages (index.html's registration
 -- submit, forgot-password.html's reset submit) a way to read

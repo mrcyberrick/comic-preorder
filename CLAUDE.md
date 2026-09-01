@@ -43,8 +43,76 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
-**Last completed work: F99 S1 — the six Edge Function sender literals are now secret-driven,
-STAGING ONLY — 2026-08-31 (`eff9793`).** `approve-customer`, `invite-customer`, `notify-customers`,
+**Last completed work: F149 RESOLVED on staging, 2026-08-31**
+(`feature/f149-maintenance-mode-anon-paths` `ca8c481`, merged `--ff-only`). Maintenance Mode now
+covers `index.html`'s registration submit and `forgot-password.html`'s reset submit — the two paths
+an anonymous, not-yet-authenticated visitor can reach, and exactly the ones F99 S3's future
+all-mail-down cutover window exposes. Production untouched.
+
+**A real blocker surfaced during implementation, not planning, and changed the fix's shape.** The
+naive approach — call the existing `Settings.isMaintenanceMode()` from either anonymous page —
+cannot work: `app_settings`'s only SELECT policy is `TO authenticated`, confirmed live (anon read
+returns `42501 permission denied`, not an empty row), so it would have silently always returned
+`false` under an anon session regardless of the real value. Fix needed a small anon-callable
+SECURITY DEFINER RPC — same pattern as the pre-existing `resolve_tenant_by_slug` /
+`get_popular_series()` — which the original filing didn't anticipate. Flagged to Rick before writing
+it (a DB change beyond what was scoped), approved, then built.
+
+**Three pieces.** (1) `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` — new
+`is_maintenance_mode(p_tenant_id)` function, minimal projection (boolean only), explicit
+`anon`+`authenticated` EXECUTE grant, applied to **staging only**. (2) `app.js` gains
+`Settings.isMaintenanceModePublic(tenantId)` — additive, does not touch
+`isMaintenanceMode()`/`setMaintenanceMode()`/`checkMaintenanceMode()` or the four existing gated
+pages; fails **open** (false) on any RPC error. (3) Both pages gate their **submit path**, not the
+whole page, per the filing's own fix direction: `index.html`'s `doSignup()` checks first, before
+name/email/Turnstile, so a visitor isn't asked to solve a challenge just to hit a blocked message;
+`forgot-password.html`'s `sendReset()` checks after the email-present check, and gets the same
+friendly inline message as `index.html` rather than a full-page block (the filing's own open UX
+question — resolved this session: this page's request-step already has an error slot, and a
+four-page-style banner would be disproportionate). `forgot-password.html` never resolved
+`TenantContext` before — added, needed only to know which tenant's flag to read; falls back to the
+founding tenant like every other unresolvable case.
+
+**Verified with real functional checks, not code review.** Existing Playwright coverage checked
+first: zero existing coverage of registration, `forgot-password.html`, or plain sign-in in any
+committed spec; magic-link completion is covered extensively but indirectly (nearly the whole
+143-test suite drives a real `action_link` through `index.html`'s completion code via the
+`authenticatedPage`/`authedUser`/`adminPage` fixtures). A local, uncommitted harness
+(`playwright/f149-maintenance-verify.mjs`, same convention as `native-signup-verify.mjs`) drove the
+real deployed staging site end to end — toggling the actual `admin.html` `#maint-toggle` via a
+throwaway admin session (never a raw DB write), independently re-confirming the resulting state via
+the anon RPC on both flips rather than trusting the UI. **12/12 checks green**: OFF-state
+`reset-password` genuinely invoked (HTTP 200, real success message shown); OFF-state signup gate
+does not misfire (pre-existing Turnstile validation still fires untouched); ON-state signup and
+reset both blocked with the friendly message, both underlying Edge Functions confirmed **never**
+called (network-observed); **ON-state plain email+password sign-in still completes**; **ON-state
+magic-link completion still completes** — the two regressions the filing itself flagged as
+highest-risk. Maintenance mode independently confirmed OFF at both start and end via a direct anon
+RPC call, not the script's own exit code. **One piece deliberately not automated, matching this
+codebase's own established precedent** (`native-signup-verify.mjs`'s documented reasoning that a
+real Turnstile pass/fail token is untestable under headless Playwright): a live human click-through
+of a genuinely completed registration was not driven by this session — the maintenance gate sits
+before Turnstile in `doSignup()`, so what's verified is that the gate gets out of the way correctly
+when off, and actual account creation is unchanged code this diff never touches.
+
+**Gates green.** Unit suite 279/279 (unchanged — no import-script code touched). Full Playwright
+suite run directly (not through an agent PowerShell tool, per the 2026-08-30 note below) against
+deployed staging bytes post-push: **142 passed, 1 skipped, 0 failed**, exit 0, ~21 min — the one
+skip is `15-order-export-ledger.spec.ts`'s own pre-existing `test.skip(monthEnd <= todayStr, …)`
+(today, 2026-08-31, is the last day of the month), unrelated to this change. Maintenance mode
+confirmed OFF on staging at session end.
+
+**Doc updates landed alongside.** `docs/technical-reference.md` § 13 F149 status → RESOLVED on
+staging with full fix/verification detail; this table's F149 row updated below.
+
+**Not done in this step, deliberately:** production untouched (staging only, per this repo's
+default); F99 S2/S3 untouched; a genuine live Turnstile-gated registration submit was not
+hand-verified (see above — Rick can do this in ~30 seconds if wanted, not required for the fix
+itself since Turnstile is unchanged code the gate runs ahead of). **No new finding ID consumed by
+building this fix** — F149 itself is the finding being closed. **F150 remains free.**
+
+**Prior work (2026-08-31, earlier the same day): F99 S1 — the six Edge Function sender literals are
+now secret-driven, STAGING ONLY (`eff9793`).** `approve-customer`, `invite-customer`, `notify-customers`,
 `register-customer`, `reset-password`, `send-my-list` no longer hardcode
 `noreply@mrcyberrick.us` / "Ray & Judy's Book Stop" as the MailerSend `from:`. Each now reads
 module-level `MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` constants via `Deno.env.get()`, with a `??`
@@ -617,10 +685,11 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F150**. **F149 filed 2026-08-31** (Maintenance Mode doesn't cover
-`index.html`'s registration flow or `forgot-password.html` — found while planning F99 S3's cutover
-risk; Rick's direction is to extend it, as a scoped follow-up, not bundled into S2/S3. See § 13
-F149). **F148 filed 2026-08-31** (`notify-customers` sends one MailerSend API request **per recipient**, so the monthly blast is bounded by the free tier's **100 daily API requests**, not its 500/month email cap — the commonly-quoted number is the wrong one to plan against. ~30 customers today so there is real headroom, but it binds at ~100 on one tenant, and sooner across tenants since quotas are per-account and monthly imports cluster. Not a defect; a structural scaling limit no test can surface, same class as F131. See § 13 F148). **F147 filed AND fixed 2026-08-28** (withdrawal detection's
+**Next free finding ID:** **F150**. **F149 filed AND RESOLVED on staging, 2026-08-31** (Maintenance
+Mode now covers `index.html`'s registration submit and `forgot-password.html`'s reset submit —
+found while planning F99 S3's cutover risk, fixed the same session via a new anon-callable
+`is_maintenance_mode()` RPC the naive fix turned out to need. Production untouched; S2/S3 themselves
+untouched. See § 13 F149). **F148 filed 2026-08-31** (`notify-customers` sends one MailerSend API request **per recipient**, so the monthly blast is bounded by the free tier's **100 daily API requests**, not its 500/month email cap — the commonly-quoted number is the wrong one to plan against. ~30 customers today so there is real headroom, but it binds at ~100 on one tenant, and sooner across tenants since quotas are per-account and monthly imports cluster. Not a defect; a structural scaling limit no test can surface, same class as F131. See § 13 F148). **F147 filed AND fixed 2026-08-28** (withdrawal detection's
 first-ever real run, on production, marked **519 of 1,571 open reservations (33%) "Withdrawn —
 cannot be ordered"** — every single one still inside its own ordering window, `foc_date` not yet
 passed. Example: BATMAN #14, FOC two weeks out, flagged anyway. Root cause:
@@ -688,7 +757,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
-| F149 | **Low today, directly relevant at F99 S3.** Maintenance Mode (`checkMaintenanceMode()`) is only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated. `index.html` (native sign-up, calls `register-customer`) and `forgot-password.html` (calls `reset-password`) have **zero** maintenance awareness, confirmed by grep. Those are exactly the two paths an anonymous visitor can reach during F99 S3's "all transactional mail is down" cutover window | Owner: § 13 F149. **Open, not started. Rick's direction (2026-08-31): extend Maintenance Mode to both paths**, as a scoped follow-up session — not a full-page block like the other four (index.html must keep working for plain sign-in and magic-link completion), a submit-path gate instead. Check existing Playwright sign-in/magic-link/registration coverage before touching either file |
+| F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED on staging, 2026-08-31.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` (staging only), `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` (commit `ca8c481`). **Verified**: 12/12 checks in a local Playwright harness against deployed staging — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON (the filing's own flagged regression risk), full suite 142 passed/1 skipped (unrelated, date-dependent)/0 failed post-push. Production untouched; not promoted |
 | F148 | **Low today, Medium at ~100 customers, High at 2+ tenants** — `notify-customers` sends **one API request per recipient** in a serial loop, so a monthly blast costs N requests for N customers. MailerSend free allows **100 daily API requests** / 500 emails-per-month / **no overage** — so the *daily* cap binds first, and quotas are **per-account**, shared across tenants whose imports all land in the same window. Not a defect; works as designed and is ~3x under cap today | Owner: § 13 F148. **Open, not started.** Fix direction: MailerSend's bulk endpoint (many messages, one request) — **free-tier availability unverified, confirm against the live account first**. Cheaper mitigation regardless: make `import.js` Step 7 *prompt* on a non-zero `failed` count instead of logging it behind a green check. Sequence with **F99**/**F72** — same MailerSend account |
 | F147 | **High, fully RESOLVED 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. **Production data corrected and independently re-verified** — Rick ran `clear-f147-withdrawn.js`, 519/519 cleared, confirmed via a fresh live query afterward (count 0, BATMAN #14 spot-checked). **Maintenance Mode was ON throughout — no customer ever saw it.** See § 13 F147 |
 | F146 | **Medium–High, fix shipped 2026-08-28, fully RESOLVED on staging 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **A first verification attempt (fresh September re-pull) was correctly halted**: Lunar item codes are permanently scoped to their solicitation month and PRH's are issue-scoped, so none of the 16 marks could ever clear that way, at any freshness. **Corrected re-test, same day: re-imported August's own files (fresh re-pull) as an older-month backfill (`--skip-autoreserve`)** — dry run and real run both reported all 16 reappeared and cleared; independently re-verified against the live DB (`withdrawn_at NOT NULL` count 16→0, 3 titles spot-checked including `0826AB0593`). **Staging: RESOLVED, 16/16 cleared.** Production still holds 0 withdrawn marks; its first real exercise of this path is October's import. See § 13 F146 |
