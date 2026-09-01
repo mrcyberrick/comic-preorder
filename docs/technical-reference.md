@@ -5405,7 +5405,47 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Related:** **F99** (the plan step whose S3 risk surfaced this — S2/S3 themselves untouched by this
   session).
 
-Next free finding ID: **F150**.
+#### F150 — Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER); staging grants `anon` nothing on the same table
+
+- **Status:** filed 2026-09-01, found during F149's production promotion — its migration's own
+  pre-flight check (`docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`) queries
+  `information_schema.role_table_grants` for `app_settings` before creating anything, specifically so
+  a surprise here halts the run rather than proceeding on a false premise. It did. **Open, not
+  started** — filed per Rick's explicit call (file now, fix later), not fixed inline.
+- **Severity: Low today, confirmed by a live test, not inferred.** A direct anon-key HTTP read
+  against production (`GET .../rest/v1/app_settings?key=eq.maintenance_mode`) returned **`200, []`**
+  — the query is *permitted* (unlike staging, which hard-401s: `42501 permission denied`) but RLS
+  still filters every row out, because `app_settings`'s only SELECT policy is `TO authenticated` and
+  nothing targets `anon`. **No data is actually exposed today** — this is a thinner defense-in-depth
+  posture than staging, not an active leak.
+- **The mechanism, precisely.** GRANT and RLS are two independent gates: GRANT decides whether a role
+  may *attempt* an operation on the table at all; RLS decides which *rows* are visible/writable once
+  the GRANT passes. Staging's `anon` fails the GRANT gate outright (no privilege at all →
+  `42501`). Production's `anon` passes the GRANT gate (full DML privileges, confirmed via
+  `information_schema.role_table_grants` — `INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES,
+  TRIGGER`, all present) but then hits RLS's row-level filter, which — for a role with zero
+  applicable permissive policies — denies every row. Two different mechanisms landing at the same
+  practical place *for reads*, confirmed live; **writes were not tested against production** (an
+  anon INSERT/UPDATE probe was judged too risky to run for verification purposes) — RLS should deny
+  those the same way (no `TO anon` policy exists on any DML for this table, per
+  `docs/technical-reference.md` § 7.1's policy list), but that is inferred from the policy list, not
+  independently exercised the way the SELECT case was.
+- **What's still unconfirmed:** whether RLS is actually **enabled** (`pg_class.relrowsecurity`) on
+  production's `app_settings`, as opposed to merely having zero permissive policies for `anon` (both
+  produce the same empty-SELECT symptom observed; only the first is the actual safety mechanism the
+  severity assessment above assumes). Rick was asked to run
+  `SELECT relrowsecurity FROM pg_class WHERE relname = 'app_settings';` (expect `true`) — check
+  whoever picks this up has that result before relying further on the "RLS is covering it" read.
+- **Not yet investigated:** how this divergence arose (a manual grant at some point, a migration that
+  ran differently on the two projects, a platform default that changed between when each project was
+  provisioned), and whether any other table shares it — this finding covers `app_settings` only,
+  found incidentally; a broader sweep (`information_schema.role_table_grants` across all tables,
+  diffed staging vs prod) has not been run.
+- **Where:** production Supabase project (`plgegklqtdjxeglvyjte`) only — staging confirmed clean.
+- **Related:** **F149** (whose promotion surfaced this), **F64** (the existing prod↔staging DDL
+  divergence catalogue — this is the same class, one more instance).
+
+Next free finding ID: **F151**.
 
 ---
 
