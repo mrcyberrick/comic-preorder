@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 PARTIALLY DONE 2026-09-01 (DKIM + Return-Path published in Cloudflare, SPF merge deferred to S3 — see § 4 S2)**; S3/S4 not started | staging=`eff9793` | prod=— | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK — read § 4 S3 before retrying**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -455,6 +455,63 @@ secrets. No code deploy. Keep the old DNS records in place for rollback.
 > import gate is Fri 2026-09-25** (October catalog, `trig_01FQesEHRh9XdRXgwASFJoh7`). Cut over well
 > clear of it.
 
+> ⛔ **ATTEMPTED 2026-09-01, ROLLED BACK — read this before trying again.** Maintenance Mode ON,
+> `mrcyberrick.us` removed from MailerSend, `pulllist.app` added and **fully verified** (all four
+> dashboard checks green: domain, SPF, DKIM, Return-Path). Two real, unanticipated problems surfaced
+> — neither was foreseeable from anything in this plan or MailerSend's own docs, both confirmed
+> empirically, not guessed:
+>
+> 1. **MailerSend's API tokens are scoped to a domain ("server"), not the account.** The existing
+>    `MAILERSEND_API_KEY` died the moment `mrcyberrick.us` was removed — first symptom was
+>    `MailerSend error: {"message":"Unauthenticated."}`. Not documented anywhere obvious; discovered
+>    by reading the error and confirming in the dashboard. **Fix for next attempt:** budget time to
+>    generate a fresh token (Sending-access scope is sufficient — none of the six functions do
+>    anything but `POST /v1/email`) immediately after adding the new domain, *before* attempting any
+>    send.
+> 2. **The real blocker: MailerSend's send-time domain check did not activate for at least 15–20
+>    minutes after the dashboard showed full verification — this is the one that forced the
+>    rollback.** After fixing the token, every send attempt returned
+>    `#MS42207 — "The from.email domain must be verified in your account to send emails"` — for
+>    **both** the subdomain (`noreply@rjbookstop.pulllist.app`, which MailerSend's own docs confirm
+>    should work under a verified parent with no extra verification) **and the exact bare verified
+>    domain** (`noreply@pulllist.app`), ruling out any subdomain-specific cause. Waited 2.5 min, then
+>    10 more (~15–20 min total past verification) — error persisted unchanged both times. No
+>    "Default email address" setting was found in the account to investigate as an alternate cause
+>    (that lead came from a general web search, not confirmed to exist in this account's UI). Not
+>    something DNS, our code, or this plan's own design could have surfaced in advance — MailerSend's
+>    own docs describe verification as taking "a few minutes," and the dashboard showing "verified"
+>    turned out not to mean the send-time enforcement layer had caught up.
+>
+> **Rollback executed and independently verified, ~20 min after the domain-check symptom first
+> appeared:** `pulllist.app` removed from MailerSend, `mrcyberrick.us` re-added (its DNS was never
+> touched, so it re-verified immediately), a **third** fresh API token generated (same
+> domain-scoping issue applies on the way back), both secrets flipped back to
+> `noreply@mrcyberrick.us` / "Ray & Judy's Book Stop". **A real send was confirmed via actual
+> delivered headers** (Outlook, `View message source`), not just the API's own `{"success":true}`
+> (which the plan itself warns proves nothing): `spf=pass`, `dkim=pass` (both `d=mrcyberrick.us` and
+> `d=mailersend.net` signatures), `dmarc=pass`, `compauth=pass reason=100`, `From:` correctly reading
+> `Ray & Judy's Book Stop <noreply@mrcyberrick.us>` — byte-identical to pre-attempt production.
+> Maintenance Mode confirmed OFF afterward via the anon RPC (F149), not just the toggle's own UI
+> state. **Total outage window: Maintenance Mode ON to OFF, roughly 50–55 minutes** — every
+> transactional path was down for real customers that whole time (a deliberate, consented window,
+> not an accident, but a real one).
+>
+> **State left behind, relevant to the next attempt:** `pulllist.app`'s S2 DNS records (DKIM,
+> Return-Path, the merged SPF) are **still live in Cloudflare** — they were never MailerSend-specific
+> in a way that removing the domain from MailerSend would invalidate, so **S2 does not need
+> repeating**. The `pulllist.app`-scoped API token created during this attempt is now dead (its
+> domain was removed) — harmless to leave, safe to delete in MailerSend's dashboard whenever
+> convenient, not urgent.
+>
+> **Before attempting S3 again:** (1) budget real slack for a MailerSend activation delay of unknown
+> length past the observed 15–20 min floor — do not assume the outage window closes the moment the
+> dashboard shows verified; (2) generate the new domain-scoped API token as an explicit sub-step
+> immediately after adding the domain, not as an afterthought; (3) consider contacting MailerSend
+> support ahead of the next attempt to ask directly how long send-time activation actually takes for
+> a newly-added domain, rather than discovering the number live in a customer-facing outage window
+> again; (4) the rollback path itself worked cleanly and quickly once invoked — trust it rather than
+> waiting past a second reasonable check if the same symptom recurs.
+
 ### S4 — Verify alignment, then consider `p=quarantine`
 
 Confirm the new domain authenticates on **both** mechanisms before retiring anything. **Publish
@@ -541,7 +598,17 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-09-01 — **twelfth pass: S2 partially executed** — DKIM (`ms1`/`ms2._domainkey`)
+**Last updated:** 2026-09-01 — **thirteenth pass: S3 attempted and ROLLED BACK, same day as S2.**
+Full cutover sequence run for real (Maintenance Mode ON, domain swapped in MailerSend, SPF merged
+with the real value, secrets flipped) and got as far as a fully-verified `pulllist.app` — then hit
+two unanticipated MailerSend-side problems in sequence: API tokens are domain-scoped (the existing
+key died with the old domain, fixed by generating a new one) and, more seriously, send-time
+enforcement did not activate for 15–20+ minutes past full dashboard verification, for the verified
+domain itself, not just the subdomain. Rolled back cleanly and independently verified via real
+delivered headers (not just the API's own unconditional success response) — production is back to
+exactly its pre-attempt state, `noreply@mrcyberrick.us`. See § 4 S3 for the full record and what to
+do differently next attempt. Total real outage window: ~50–55 minutes, Maintenance Mode ON to OFF.
+Twelfth pass: S2 partially executed — DKIM (`ms1`/`ms2._domainkey`)
 and Return-Path (`mta`) CNAMEs published in Cloudflare and externally verified; discovered live (not
 assumed) that DKIM/Return-Path targets are generic across domains but MailerSend's SPF include is a
 per-domain hash that cannot be known before S3, so the SPF merge is a hard sequencing constraint, not
