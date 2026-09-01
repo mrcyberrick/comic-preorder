@@ -5310,13 +5310,37 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F149 — Maintenance Mode doesn't cover `index.html`'s sign-up flow or `forgot-password.html`, the two paths F99 S3's outage window exposes most
 
-- **Status: RESOLVED on staging, 2026-08-31** (`feature/f149-maintenance-mode-anon-paths`
-  `ca8c481`, merged `--ff-only` to `staging`). Filed the same day, found while planning F99 S3's
-  cutover risk (the "no parallel run" window where the old MailerSend sender is removed before the
-  new one is verified — see `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling
-  Maintenance Mode during that window as a risk control; checked against the actual code before
-  writing that into the plan, and the coverage had a real gap. Production untouched — staging only,
-  per CLAUDE.md § Staging Only.
+- **Status: RESOLVED, BOTH ENVIRONMENTS, 2026-09-01** — staging `feature/f149-maintenance-mode-anon-paths`
+  `ca8c481` (2026-08-31, merged `--ff-only`), **production PR #147 `36b79ff`** (2026-09-01). Filed
+  2026-08-31, found while planning F99 S3's cutover risk (the "no parallel run" window where the old
+  MailerSend sender is removed before the new one is verified — see
+  `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling Maintenance Mode during that
+  window as a risk control; checked against the actual code before writing that into the plan, and
+  the coverage had a real gap.
+- **Promotion excluded F99 S1, deliberately.** Staging was 19 commits ahead of `main` at promotion
+  time, most of it F99 S1 (staging-only per its own STATUS line). A plain merge would have carried
+  F99 S1's six `supabase/functions/*.ts` changes into `main` alongside F149 — caught before
+  committing; the six files were restored to `origin/main`'s version and confirmed byte-identical.
+  Doc files synced wholesale (normal for every promotion — inert project journal, not deployed
+  behavior).
+- **The production RPC was applied and independently verified BEFORE any client code merged**, per
+  F105's unapplied-migration gate: the client already calls `is_maintenance_mode()`, so promoting the
+  code first would have left a window where the RPC didn't exist yet (fails open — nothing would have
+  broken, but the fix would have silently no-op'd). Rick ran
+  `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` against production via SQL Editor; a
+  live anon RPC call confirmed `200, false` before the code PR was even opened, and re-confirmed
+  identically post-deploy.
+- **F150 filed during this promotion's own pre-flight, not fixed inline** — production's
+  `app_settings` grants `anon` full table-level DML that staging doesn't; RLS confirmed still
+  blocking real reads (`200, []` live). See § 13 F150 below.
+- **Post-deploy verified against the bytes `pulllist.app` actually serves:** `app.js`, `index.html`,
+  `forgot-password.html` all confirmed carrying `isMaintenanceModePublic`; `config.js` still the prod
+  ref. PR file list checked on GitHub itself (`gh pr diff --name-only`), not just local state — 7
+  files, matching intent exactly, no Edge Function files, no `config.js`. **Write-smoke deliberately
+  skipped** — this change never touches `preorders` or the customer reserve path, same disposition
+  PR #141/#145/#133 record. **A live toggle-ON test against real production traffic was deliberately
+  not run by the agent** — left to Rick's own call, since it would show the holding-page banner to
+  any real customer on the four already-gated pages during the window.
 - **A second, more fundamental gap surfaced while implementing, not while planning: the naive fix
   (call the existing `Settings.isMaintenanceMode()` from either anonymous page) cannot work at all.**
   `app_settings`'s only SELECT policy is `TO authenticated` — confirmed live, not inferred: an anon-key

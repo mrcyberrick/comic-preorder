@@ -43,11 +43,51 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
-**Last completed work: F149 RESOLVED on staging, 2026-08-31**
-(`feature/f149-maintenance-mode-anon-paths` `ca8c481`, merged `--ff-only`). Maintenance Mode now
-covers `index.html`'s registration submit and `forgot-password.html`'s reset submit — the two paths
-an anonymous, not-yet-authenticated visitor can reach, and exactly the ones F99 S3's future
-all-mail-down cutover window exposes. Production untouched.
+**Last completed work: F149 fully RESOLVED, both environments — promoted to production
+2026-09-01 (PR #147, `36b79ff`; staging `ca8c481`).** Maintenance Mode now covers `index.html`'s
+registration submit and `forgot-password.html`'s reset submit — the two paths an anonymous,
+not-yet-authenticated visitor can reach, and exactly the ones F99 S3's future all-mail-down cutover
+window exposes.
+
+**Promotion required a real decision, not a mechanical merge.** Staging was 19 commits ahead of
+`main`, and most of it was **F99 S1** — the six Edge Function sender-literal changes, which CLAUDE.md
+records as staging-only and a separate, not-yet-requested promotion. A plain `git merge origin/staging`
+would have carried F99 S1's `supabase/functions/*.ts` changes into `main`'s tree alongside F149.
+Caught before committing (nothing had landed yet); Rick's call was to exclude it — the six files were
+restored to `origin/main`'s version and confirmed byte-identical before the merge was committed. Doc
+files (`CLAUDE.md`, `technical-reference.md`, the new `f99-sender-domain-consolidation.md`) were left
+to sync wholesale, same as every promotion — they're inert project journal, not deployed behavior.
+
+**The production RPC (`is_maintenance_mode()`) landed BEFORE the client code, not after.** F105's
+unapplied-migration gate caught that the client already calls it; running the client first would have
+meant a window where `Settings.isMaintenanceModePublic()` hit a missing function (fails open — nothing
+would have broken — but the whole feature would have silently no-op'd until someone noticed). Rick ran
+the migration on production via SQL Editor first; independently verified live before any code merged
+(anon RPC call, `200/false`, matching staging's own result exactly).
+
+**A real, unrelated surprise surfaced at the migration's own pre-flight, not a formality — filed as
+F150, not fixed inline.** The file's pre-flight specifically checks `app_settings`'s grant shape
+before creating anything; production came back with `anon` holding full table-level DML
+(SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER) — staging grants `anon` nothing at all on
+the same table. Verified live before concluding anything: a real anon read against production
+returns `200, []` — RLS still filters every row (only SELECT policy is `TO authenticated`), so no
+data is actually exposed today, just a thinner defense-in-depth layer than staging. Rick's call:
+file it (F150) and keep moving on F149 rather than fix it as part of this promotion. See § 13 F150.
+
+**Post-deploy verified against the bytes `pulllist.app` actually serves, not inferred from the
+merge:** `app.js`/`index.html`/`forgot-password.html` all confirmed carrying
+`isMaintenanceModePublic`; `config.js` still carries the prod Supabase ref
+(`plgegklqtdjxeglvyjte`); the RPC re-confirmed live post-deploy (`200/false`, identical to the
+pre-merge read). **Write-smoke deliberately skipped** — same disposition PR #141/#145/#133 record:
+this change never touches `preorders` or the customer reserve path. **A live toggle-ON test against
+real production traffic was deliberately NOT run by the agent** — the code is byte-identical to what
+got 12/12 automated verification on staging (screenshots included), and flipping Maintenance Mode ON
+for real, even briefly, shows the holding-page banner to any actual customer on
+catalog/mylist/arrivals/subscriptions during that window. Left as Rick's own optional call, not
+something to do silently.
+
+**PR file list verified on GitHub itself** (`gh pr diff --name-only`), not just local state — 7
+files, `config.js` absent, none of the six Edge Function files present, matching intent exactly.
 
 **A real blocker surfaced during implementation, not planning, and changed the fix's shape.** The
 naive approach — call the existing `Settings.isMaintenanceMode()` from either anonymous page —
@@ -105,11 +145,13 @@ confirmed OFF on staging at session end.
 **Doc updates landed alongside.** `docs/technical-reference.md` § 13 F149 status → RESOLVED on
 staging with full fix/verification detail; this table's F149 row updated below.
 
-**Not done in this step, deliberately:** production untouched (staging only, per this repo's
-default); F99 S2/S3 untouched; a genuine live Turnstile-gated registration submit was not
-hand-verified (see above — Rick can do this in ~30 seconds if wanted, not required for the fix
-itself since Turnstile is unchanged code the gate runs ahead of). **No new finding ID consumed by
-building this fix** — F149 itself is the finding being closed. **F150 remains free.**
+**Not done, deliberately:** F99 S1's Edge Function changes stayed staging-only, excluded from this
+promotion (above); F99 S2/S3 untouched; a genuine live Turnstile-gated registration submit was not
+hand-verified by the agent (Rick can do this in ~30 seconds if wanted, not required for the fix
+itself since Turnstile is unchanged code the gate runs ahead of); a live toggle-ON test against real
+production traffic was left to Rick's own call rather than run by the agent (above). **F149 is the
+finding this closes. F150 was consumed during this same promotion** (the `app_settings` anon-grant
+divergence, filed not fixed — see § 13 F150). **F151 is the next free finding ID.**
 
 **Prior work (2026-08-31, earlier the same day): F99 S1 — the six Edge Function sender literals are
 now secret-driven, STAGING ONLY (`eff9793`).** `approve-customer`, `invite-customer`, `notify-customers`,
@@ -762,7 +804,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | ID | One line | Next step |
 |---|---|---|
 | F150 | **Low today, confirmed by a live test not inferred.** Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER) — staging grants `anon` nothing on the same table (hard 401). Found by F149's own migration pre-flight, which halted exactly as designed. A live anon read against production returns `200, []` — RLS still filters every row (only SELECT policy is `TO authenticated`), so no data is actually exposed today, just a thinner defense-in-depth layer than staging | Owner: § 13 F150. **Open, not started — Rick's call: file now, fix later.** Still unconfirmed: whether RLS is actually *enabled* (`pg_class.relrowsecurity`) on this table vs. merely having zero anon-applicable policies (both give the same empty-read symptom); writes were not probed against production. Not investigated: how the divergence arose, or whether other tables share it |
-| F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED on staging, 2026-08-31.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` (staging only), `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` (commit `ca8c481`). **Verified**: 12/12 checks in a local Playwright harness against deployed staging — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON (the filing's own flagged regression risk), full suite 142 passed/1 skipped (unrelated, date-dependent)/0 failed post-push. Production untouched; not promoted |
+| F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-01.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`, `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` — staging `ca8c481`, **production PR #147 `36b79ff`**. **Verified staging**: 12/12 checks in a local Playwright harness — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON, full suite 142 passed/1 skipped (unrelated)/0 failed. **Verified production post-deploy**: served bytes confirmed carrying the fix, RPC re-confirmed live (`200/false`), `config.js` still prod ref, PR file list matched intent on GitHub itself (F99 S1's Edge Function changes deliberately excluded, confirmed byte-identical to `main`). Write-smoke skipped (doesn't touch the reserve path, same disposition as PR #141/#145/#133). Surfaced **F150** during the promotion's own pre-flight (filed, not fixed) |
 | F148 | **Low today, Medium at ~100 customers, High at 2+ tenants** — `notify-customers` sends **one API request per recipient** in a serial loop, so a monthly blast costs N requests for N customers. MailerSend free allows **100 daily API requests** / 500 emails-per-month / **no overage** — so the *daily* cap binds first, and quotas are **per-account**, shared across tenants whose imports all land in the same window. Not a defect; works as designed and is ~3x under cap today | Owner: § 13 F148. **Open, not started.** Fix direction: MailerSend's bulk endpoint (many messages, one request) — **free-tier availability unverified, confirm against the live account first**. Cheaper mitigation regardless: make `import.js` Step 7 *prompt* on a non-zero `failed` count instead of logging it behind a green check. Sequence with **F99**/**F72** — same MailerSend account |
 | F147 | **High, fully RESOLVED 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. **Production data corrected and independently re-verified** — Rick ran `clear-f147-withdrawn.js`, 519/519 cleared, confirmed via a fresh live query afterward (count 0, BATMAN #14 spot-checked). **Maintenance Mode was ON throughout — no customer ever saw it.** See § 13 F147 |
 | F146 | **Medium–High, fix shipped 2026-08-28, fully RESOLVED on staging 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **A first verification attempt (fresh September re-pull) was correctly halted**: Lunar item codes are permanently scoped to their solicitation month and PRH's are issue-scoped, so none of the 16 marks could ever clear that way, at any freshness. **Corrected re-test, same day: re-imported August's own files (fresh re-pull) as an older-month backfill (`--skip-autoreserve`)** — dry run and real run both reported all 16 reappeared and cleared; independently re-verified against the live DB (`withdrawn_at NOT NULL` count 16→0, 3 titles spot-checked including `0826AB0593`). **Staging: RESOLVED, 16/16 cleared.** Production still holds 0 withdrawn marks; its first real exercise of this path is October's import. See § 13 F146 |
