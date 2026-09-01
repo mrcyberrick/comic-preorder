@@ -54,12 +54,13 @@ Deployed to staging (`puoaiyezsreowpwxzxhj`) one function at a time, each preser
 `verify_jwt` setting.
 
 **A real surprise surfaced at the verify_jwt read, not a formality.** CLAUDE.md's own § Supabase
-platform facts claims "all six JWT-off"; the live dashboard read (Rick) showed `approve-customer`
-and `send-my-list` actually **ON**, the other four OFF. **Preserved exactly as found, not corrected
-to match the doc** — S1's whole purpose is zero behavior change, and re-deriving why two admin/
-session-gated functions run JWT-on while four public-ish ones don't is a separate question. Flagged
-in the § 13 F99 table row above; the platform-facts line itself is not yet corrected — Rick's call
-whether/when.
+platform facts claimed "all six JWT-off"; the live dashboard read (Rick) showed `approve-customer`
+and `send-my-list` actually **ON**, the other four OFF. **The deploy preserved exactly what was
+found, not what the doc claimed** — S1's whole purpose is zero behavior change, and re-deriving why
+two admin/session-gated functions run JWT-on while `invite-customer` (also admin-only) doesn't is a
+separate, unresolved question — a plausible but unconfirmed guess is recorded where the doc line was
+fixed. **§ Supabase platform facts corrected the same session** (below this entry's date) — the line
+no longer claims universal JWT-off.
 
 **Gates green.** V3a: `grep -n "from:" supabase/functions/*/index.ts` — six hits, all reading
 `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME`, zero literal addresses; `mrcyberrick` still greps 6× (the
@@ -695,7 +696,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F130 | **Low, but the number was wrong — re-measured 2026-08-30 as 893, not 197**, with explicit pagination (the 197 was taken by an unrecorded method; GoTrue's admin list defaults to a small page size, the same unpaginated-read class as F82/F113/F139/F140 — five times now). **Classification done**, which is what the finding asked for: 5 prefixes hold 737/893, and `10-post-reserve-prompt` + `11-reserved-suggestions` each call `createUser` 9× against `deleteUser` 2× — users made *inside* tests are never torn down (383 orphans, the fix target). `pw-iso` (207) is balanced 2×/2× and is a **different, undiagnosed** cause. `pw-pending` (70) must NOT be bulk-deleted — those survivors are intended (F64 item 5 Option A). Read-only pass; nothing deleted. Old text follows: 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
 | F133 | **Low — variant (a) RESOLVED 2026-08-30; variant (b) re-dispositioned, its diagnosis does not match the code.** (a) fixed by `ensureDeadlineCovers()`/`restoreDeadline()` in the Playwright fixtures — the describe block that depends on the At-risk classification now **owns** `order_deadline` instead of hoping the ambient value cooperates. Reproduced **deterministically** first (forced past deadline → `06:148 toContainText(atRiskTitle)` fails), then negative-control tested (guard removed → 1 failed; restored → 9 passed). (b) **does not reproduce**: spec 21 passes targeted 6/6, its assertions all target unique stamped titles, and the panel has no row cap — so “assumes the panel holds only its fixture” is not what they do. **Its claim that targeted runs are untrustworthy is not currently demonstrable.** Needs a real captured failure before anyone “fixes” it. Original entry retained — the date-dependence was real | Owner: § 13 F133. Old text follows: date-dependent specs flip red with zero code involved, via the live `order_deadline` (2026-08-21). **Two variants, not one:** (a) a fixture FOC crossing *past* the deadline (2026-08-20, three specs); (b) **the deadline having LAPSED** re-admits *real* catalog rows into `#backorder-risk-panel`, breaking any spec that assumes the panel holds only its fixture — **recurred 2026-08-24 in a fourth spec** (`21-arrival-resolution:136`) — **but only in a TARGETED run; it passes in the full suite**, because spec 15 runs first and leaves the state it needs. Test-infra only | deferred — no plan doc. **The entry's prediction that a lapse would end this was wrong — a lapse started variant (b).** Also exposes an **undeclared spec-order dependency**: spec 21 is green by ordering luck, so **targeted runs of these specs are not trustworthy**. Fix: deadline-aware helper closes (a) only; (b) needs panel assertions scoped to the seeded row. See § 13 F133 |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
-| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **Plan doc: `docs/f99-sender-domain-consolidation.md`. S0 ANSWERED 2026-08-31** — MailerSend signs a subdomain `From` under its one verified parent domain, so `pulllist.app` verified once covers every `<slug>.pulllist.app`; F99's per-tenant-subdomain direction is viable on the free tier. **S1 DONE on staging 2026-08-31 (`eff9793`)** — the six sender-email `from:` literals are now `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` secrets with a `??` fallback to today's values (zero behavior change); staging's secrets set to those same values and proven via two live `reset-password` sends, `From` byte-identical both times. **Surfaced, not fixed, during S1:** `approve-customer` and `send-my-list` actually run `verify_jwt` **ON** on staging, contradicting CLAUDE.md § Supabase platform facts' "all six JWT-off" claim — preserved as-is (S1's job is no behavior change), flagged here for a future correction pass. **S2 (DNS) / S3 (cutover) / S4 (alignment) not started.** Production untouched. Design together with F72 |
+| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **Plan doc: `docs/f99-sender-domain-consolidation.md`. S0 ANSWERED 2026-08-31** — MailerSend signs a subdomain `From` under its one verified parent domain, so `pulllist.app` verified once covers every `<slug>.pulllist.app`; F99's per-tenant-subdomain direction is viable on the free tier. **S1 DONE on staging 2026-08-31 (`eff9793`)** — the six sender-email `from:` literals are now `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` secrets with a `??` fallback to today's values (zero behavior change); staging's secrets set to those same values and proven via two live `reset-password` sends, `From` byte-identical both times. **Surfaced during S1, code left as-is, doc corrected:** `approve-customer` and `send-my-list` actually run `verify_jwt` **ON** on staging — CLAUDE.md § Supabase platform facts claimed universal JWT-off and was wrong; the deploy preserved the live setting rather than matching the doc (S1's job is no behavior change), and the platform-facts line itself was corrected the same session (2026-08-31) to state the real, non-universal pattern. **S2 (DNS) / S3 (cutover) / S4 (alignment) not started.** Production untouched. Design together with F72 |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
@@ -812,11 +813,27 @@ remain local-only and must never be committed to any repo.
   anon key in `config.js` is not a finding.
 - **Service-role key bypasses RLS.** Lives only in local scripts; never in
   client code or any committed file.
-- **Edge Functions follow off-plus-in-body-auth.** JWT verification disabled at
-  the platform level is the recommended pattern; in-body `Authorization` header
-  verification (`/auth/v1/user` → profile lookup) is the actual gate. JWT-off is
-  not a misconfiguration. The exception is `register-customer` and any other
-  intentionally-public endpoint.
+- **Edge Functions follow off-plus-in-body-auth — MOST of them.** JWT
+  verification disabled at the platform level is the recommended pattern for a
+  function that must also accept a non-user caller (a service-role key, e.g.
+  `notify-customers` invoked by the import script) or no caller at all (a public
+  endpoint like `register-customer`); in-body `Authorization` header
+  verification (`/auth/v1/user` → profile lookup, or Turnstile/honeypot for the
+  public case) is the actual gate there. JWT-off is not a misconfiguration.
+  **This is not universal, corrected 2026-08-31 (F99 S1)** — the previous
+  wording implied all Edge Functions are JWT-off; measured live against the
+  staging dashboard, `approve-customer` and `send-my-list` actually run
+  `verify_jwt = ON`. Both already forward the caller's own bearer token to
+  `/auth/v1/user` themselves (in-body check, same as the off functions), so the
+  platform-level check is additive, not their only gate — and a plausible
+  reason they can afford it is that neither ever needs to accept a
+  non-user-JWT caller the way `notify-customers` (service-role) or
+  `register-customer` (anonymous) do. **That reasoning is inference, not
+  independently confirmed** — no one has audited why these two specifically
+  differ from `invite-customer` (also admin-only, but OFF). Read each
+  function's live `verify_jwt` setting before assuming either state; do not
+  deploy any of the six without explicitly preserving whatever the dashboard
+  shows, per F93 discipline (`docs/f99-sender-domain-consolidation.md` § 4 S1).
 - **Supabase SQL Editor runs as `postgres` superuser** — it bypasses RLS. To
   test RLS isolation, simulate an authenticated user with `SET LOCAL role
   authenticated` and `SET LOCAL "request.jwt.claims"` inside a transaction.
