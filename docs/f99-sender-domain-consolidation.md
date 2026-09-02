@@ -865,6 +865,14 @@ provider's free tier, sending from `pulllist.app`, **while MailerSend keeps serv
 That probe cost 20 minutes and zero downtime here, and the equivalent check would have caught S3's
 failure *before* the 50-minute outage rather than during it.
 
+**PLANNED 2026-09-02 — `docs/f99-resend-discovery.md`** (STATUS: PLANNED, not started). It does
+exactly this, sequenced on one lesson from § 9: **the disqualifiers are tested first.** Brevo died
+on link rewriting, and that test could have run before the account work, the domain check and the
+header reads that preceded it. Resend's sandbox sender needs no DNS at all, so **Phase 1 can
+disqualify Resend in ~10 minutes with nothing published and nothing to roll back**; the DNS and
+alignment work in Phase 2 only happens if Phase 1 passes. **Kill criteria K1–K6 are written down
+before the tests**, deliberately, so the result is read honestly rather than rationalised.
+
 ---
 
 ## Reference
