@@ -13,6 +13,9 @@
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
 const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
 
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -23,10 +26,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_ANON      = Deno.env.get('SUPABASE_ANON_KEY')
-    const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
+    const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_ANON    = Deno.env.get('SUPABASE_ANON_KEY')
+    const SUPABASE_SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const RESEND_API_KEY   = Deno.env.get('RESEND_API_KEY')
 
     // ── Parse body ──────────────────────────────────────────────
     let user_id: string
@@ -153,15 +156,15 @@ Deno.serve(async (req) => {
       ? `${APP_INDEX_URL}?token_hash=${hashedToken}&type=magiclink`
       : `${APP_BASE_URL}/`
 
-    const mailRes = await fetch('https://api.mailersend.com/v1/email', {
+    const mailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization:  `Bearer ${MAILERSEND_API_KEY}`,
+        Authorization:  `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from:    { email: 'noreply@mrcyberrick.us', name: "Ray & Judy's Book Stop" },
-        to:      [{ email, name: fullName }],
+        from:    `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+        to:      email,
         subject: "Ray & Judy's Book Stop — You're approved for the pull list!",
         html:    buildApprovalEmail(fullName, magicUrl),
       }),
@@ -169,7 +172,7 @@ Deno.serve(async (req) => {
 
     if (!mailRes.ok) {
       const mailErr = await mailRes.json().catch(() => ({}))
-      console.error('approve-customer: MailerSend error', JSON.stringify(mailErr))
+      console.error('approve-customer: Resend error', JSON.stringify(mailErr))
       // Don't fail — approval was saved, just the email didn't send
       return Response.json({ success: true, emailed: false }, { headers: corsHeaders })
     }

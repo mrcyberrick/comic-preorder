@@ -1,6 +1,9 @@
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
 const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
 
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -14,7 +17,7 @@ Deno.serve(async (req) => {
     const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
     const SUPABASE_ANON      = Deno.env.get('SUPABASE_ANON_KEY')
     const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
+    const RESEND_API_KEY     = Deno.env.get('RESEND_API_KEY')
     const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
 
     if (!FOUNDING_TENANT_ID) {
@@ -98,16 +101,16 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Failed to generate invite link' }, { status: 500, headers: corsHeaders })
     }
 
-    // Send branded invite email via MailerSend — inline HTML, no template dependency
-    const mailRes = await fetch('https://api.mailersend.com/v1/email', {
+    // Send branded invite email via Resend — inline HTML, no template dependency
+    const mailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer ' + MAILERSEND_API_KEY,
+        Authorization: 'Bearer ' + RESEND_API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from:    { email: 'noreply@mrcyberrick.us', name: "Ray & Judy's Book Stop" },
-        to:      [{ email: email, name: name }],
+        from:    `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+        to:      email,
         subject: "Ray & Judy's Book Stop — Your pull list account is ready",
         html:    buildInviteEmail(name, action_url),
       }),
@@ -115,7 +118,7 @@ Deno.serve(async (req) => {
 
     if (!mailRes.ok) {
       const mailErr = await mailRes.json().catch(() => ({}))
-      console.error('MailerSend error:', JSON.stringify(mailErr))
+      console.error('Resend error:', JSON.stringify(mailErr))
       return Response.json({ error: 'Failed to send invite email' }, { status: 500, headers: corsHeaders })
     }
 

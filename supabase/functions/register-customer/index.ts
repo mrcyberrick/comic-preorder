@@ -24,7 +24,7 @@
  * Required env vars (set in Supabase → Edge Functions → Secrets):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
- *   MAILERSEND_API_KEY
+ *   RESEND_API_KEY              ← F99 migration: replaced the old MailerSend key, 2026-09-02
  *   FOUNDING_TENANT_ID          ← retained for diagnostics; not the tenant source (see F34 note)
  *   TURNSTILE_SECRET_KEY        ← server-side Turnstile token verification
  *
@@ -36,6 +36,9 @@
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
 const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
 
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -46,12 +49,12 @@ const corsHeaders = {
 async function provisionPendingCustomer(opts: {
   SUPABASE_URL: string
   SUPABASE_SERVICE: string
-  MAILERSEND_API_KEY: string
+  RESEND_API_KEY: string
   tenantId: string
   fullName: string
   email: string
 }): Promise<Response> {
-  const { SUPABASE_URL, SUPABASE_SERVICE, MAILERSEND_API_KEY, tenantId, fullName, email } = opts
+  const { SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY, tenantId, fullName, email } = opts
 
   // ── Create Supabase auth user (no password, email pre-confirmed) ──
   const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -133,15 +136,15 @@ async function provisionPendingCustomer(opts: {
   }
 
   // ── Send branded "browse while we review" email ──────────────
-  const mailRes = await fetch('https://api.mailersend.com/v1/email', {
+  const mailRes = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${MAILERSEND_API_KEY}`,
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
       'Content-Type':  'application/json',
     },
     body: JSON.stringify({
-      from:    { email: 'noreply@mrcyberrick.us', name: "Ray & Judy's Book Stop" },
-      to:      [{ email, name: fullName }],
+      from:    `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+      to:      email,
       subject: "Ray & Judy's Book Stop — Your PULLLIST access is being set up",
       html:    buildPendingEmail(fullName, magicUrl),
     }),
@@ -149,7 +152,7 @@ async function provisionPendingCustomer(opts: {
 
   if (!mailRes.ok) {
     const mailErr = await mailRes.json().catch(() => ({}))
-    console.error('register-customer: MailerSend error', JSON.stringify(mailErr))
+    console.error('register-customer: Resend error', JSON.stringify(mailErr))
   }
 
   console.log(`register-customer: complete for ${email} (userId: ${userId})`)
@@ -181,7 +184,7 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL        = Deno.env.get('SUPABASE_URL')!
     const SUPABASE_SERVICE    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const MAILERSEND_API_KEY  = Deno.env.get('MAILERSEND_API_KEY')!
+    const RESEND_API_KEY      = Deno.env.get('RESEND_API_KEY')!
     const FOUNDING_TENANT_ID  = Deno.env.get('FOUNDING_TENANT_ID')
     const TURNSTILE_SECRET_KEY = Deno.env.get('TURNSTILE_SECRET_KEY')
 
@@ -257,7 +260,7 @@ Deno.serve(async (req) => {
     console.log(`register-customer: native signup ${name} <${email}> for tenant slug "${slug}"`)
 
     return await provisionPendingCustomer({
-      SUPABASE_URL, SUPABASE_SERVICE, MAILERSEND_API_KEY,
+      SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY,
       tenantId, fullName: name, email,
     })
 

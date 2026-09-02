@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31 (covered branch, evidence in § 2)**; **S1 DONE on staging 2026-08-31** (`eff9793`); S2/S3/S4 not started | staging=`eff9793` | prod=— | findings=F99,F72,F148,F145
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **PROVIDER DECIDED 2026-09-02: Resend — GREEN discovery, `pulllist.app` verified, flat `noreply@pulllist.app` addressing (§ 10, `docs/f99-resend-discovery.md`)**; **migration EXECUTED on staging, GREEN, same day — `docs/f99-resend-migration.md` M1–M5 complete** (S4/old-S3-equivalent cutover is done, on staging); **production not cut over — needs Rick's explicit separate request (M6)** | staging=`85ce9ce` (code) + RESEND_API_KEY/MAIL_FROM_EMAIL secrets set | prod=`mrcyberrick.us`/MailerSend (unchanged) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -365,6 +365,35 @@ prepares the exact command text, Rick executes anything touching `plgegklqtdjxeg
 Add the DKIM + Return-Path records the new domain will need, **before** touching MailerSend, so
 verification is near-instant when the slot frees.
 
+> ✅ **DKIM + Return-Path PUBLISHED and verified 2026-09-01 — the SPF piece is genuinely blocked
+> until S3, not merely deferred by choice.** Live DNS reconnaissance against `mrcyberrick.us`'s own
+> working records (not the dashboard, which can't be reached without adding the domain — see § 1's
+> hard 1-domain limit) showed the three record types S2 needs split into two different shapes:
+>
+> | Record | Pattern confirmed live | Portable without MailerSend? |
+> |---|---|---|
+> | DKIM CNAMEs | `<selector>._domainkey.<domain>` → `<selector>._domainkey.mailersend.net` — generic target, same for every domain | **Yes** |
+> | Return-Path | `mta.<domain>` → `mailersend.net` — same generic target | **Yes** |
+> | SPF include | `dc-<hash>._spfm.<domain>` — the domain name AND a unique hash are baked into the *hostname*, one hash per domain (`mrcyberrick.us` carries three) | **No** — cannot be known until MailerSend actually issues one for `pulllist.app`, which cannot happen before S3 removes `mrcyberrick.us` and frees the slot |
+>
+> (Also confirmed in passing: `ms1`/`ms2._domainkey.mrcyberrick.us` are genuine NXDOMAIN — S-1 really
+> was skipped, exactly as recorded above; only the legacy `mlsend2` CNAME is live there.)
+>
+> **Published in Cloudflare (`pulllist.app` zone), DNS-only/unproxied, all three externally verified
+> post-publish (`dns.google` resolver, not the Cloudflare dashboard — confirms both correctness and
+> that they're genuinely unproxied, since a proxied record would not expose the real CNAME chain to
+> an outside resolver):**
+> ```
+> ms1._domainkey.pulllist.app  CNAME  ms1._domainkey.mailersend.net   (verified live)
+> ms2._domainkey.pulllist.app  CNAME  ms2._domainkey.mailersend.net   (verified live)
+> mta.pulllist.app             CNAME  mailersend.net                  (verified live)
+> ```
+> All three were NXDOMAIN before publishing (checked first — no collision risk).
+>
+> **The SPF merge stays exactly where § "The SPF merge" below describes it, done at S3, not before** —
+> now confirmed as a hard sequencing constraint, not a scheduling preference. V0b (the 10-lookup
+> ceiling check) therefore also happens at S3, once the real include value exists to count.
+
 > ⚠️ **Do not copy `mrcyberrick.us`'s current DKIM shape — it is the legacy one.** Observed in the
 > MailerSend dashboard 2026-08-31: MailerSend has moved from the legacy **`mlsend2._domainkey` TXT**
 > selector to **two CNAMEs**, `ms1._domainkey.<domain>` → `ms1._domainkey.mailersend.net` and
@@ -426,6 +455,107 @@ secrets. No code deploy. Keep the old DNS records in place for rollback.
 > import gate is Fri 2026-09-25** (October catalog, `trig_01FQesEHRh9XdRXgwASFJoh7`). Cut over well
 > clear of it.
 
+> ⛔ **ATTEMPTED 2026-09-01, ROLLED BACK — read this before trying again.** Maintenance Mode ON,
+> `mrcyberrick.us` removed from MailerSend, `pulllist.app` added and **fully verified** (all four
+> dashboard checks green: domain, SPF, DKIM, Return-Path). Two real, unanticipated problems surfaced
+> — neither was foreseeable from anything in this plan or MailerSend's own docs, both confirmed
+> empirically, not guessed:
+>
+> 1. **MailerSend's API tokens are scoped to a domain ("server"), not the account.** The existing
+>    `MAILERSEND_API_KEY` died the moment `mrcyberrick.us` was removed — first symptom was
+>    `MailerSend error: {"message":"Unauthenticated."}`. Not documented anywhere obvious; discovered
+>    by reading the error and confirming in the dashboard. **Fix for next attempt:** budget time to
+>    generate a fresh token (Sending-access scope is sufficient — none of the six functions do
+>    anything but `POST /v1/email`) immediately after adding the new domain, *before* attempting any
+>    send.
+ 2. **The blocker that forced the rollback — and its cause is UNRESOLVED. Do not treat any
+>    explanation below as established.** After fixing the token, every send attempt returned
+>    `#MS42207 — "The from.email domain must be verified in your account to send emails"` — for
+>    **both** the subdomain (`noreply@rjbookstop.pulllist.app`) **and the exact bare verified domain**
+>    (`noreply@pulllist.app`), twice each, ~10 minutes apart, ~15–20 min total past full verification.
+>
+>    ⚠️ **An earlier version of this entry (written the same evening, corrected 2026-09-01) asserted
+>    "MailerSend send-time activation delay" as the cause. That was a tidy story stated with more
+>    confidence than the evidence carried, and it is contradicted by the rollback itself:
+>    `mrcyberrick.us` was re-added minutes later and sent successfully on the first try.** A generic
+>    newly-added-domain activation delay should have hit it too. (Confound: `mrcyberrick.us` had
+>    prior history in the account, so re-activating a known domain may differ from cold-adding a new
+>    one — which is itself hypothesis 2 below, not a defence of the delay theory.) Recording this
+>    because writing an unverified cause into a permanent doc is the exact failure mode F132/F138/
+>    F139/F145 all exist to catch.
+>
+>    **Ruled OUT, with reasons, so nobody re-investigates these:**
+>    - **Sender Identities (premium feature) — NOT the cause.** Read directly 2026-09-01
+>      (`mailersend.com/help/send-email-on-behalf-of-clients`, Rick's find). That feature exists to
+>      send from *clients'* domains without those clients verifying; MailerSend's own page states it
+>      is not required for a domain you have verified yourself, and that the parent domain must be
+>      verified regardless. Starter-and-above, but it does not gate this work.
+>    - **The subdomain design / a free-tier subdomain restriction — NOT the cause.** S0's own probe
+>      (2026-08-31, § 2) sent successfully from `noreply@probe.mrcyberrick.us` under verified
+>      `mrcyberrick.us` **on this same free account**, returning `dkim=pass`/`spf=pass`/`dmarc=pass`.
+>      Subdomain sending demonstrably works here. And the bare root domain failed identically anyway.
+>    - **A "Default email address" account setting** — chased from a web-search hint, no such setting
+>      found in this account's UI. Dead end, not a finding.
+>
+>    **Live hypotheses, ranked by fit — check in this order next attempt:**
+>    1. **Token↔domain binding mismatch (best fit).** MailerSend's own docs state the FROM address
+>       must match the domain the *API token* belongs to. A token bound to the wrong domain produces
+>       exactly this error, permanently, regardless of waiting. **Never verified during the attempt** —
+>       the new token's domain binding was assumed correct, not confirmed. This is the first thing to
+>       check, and it is checkable in seconds on the token's own page.
+>    2. **Cold-domain vs. known-domain state.** `pulllist.app` showed `0 Sent` and had never existed
+>       in this account; `mrcyberrick.us` re-added and worked instantly. That asymmetry is real and
+>       unexplained — possibly a per-domain flag, review hold, or warm-up state distinct from DNS
+>       verification.
+>    3. **Send-time activation delay** (the original claim). Still possible, but weakest — see the
+>       rollback contradiction above. If it is this, the true ceiling is unknown; 15–20 min is only a
+>       measured floor.
+>
+> **Rollback executed and independently verified, ~20 min after the domain-check symptom first
+> appeared:** `pulllist.app` removed from MailerSend, `mrcyberrick.us` re-added (its DNS was never
+> touched, so it re-verified immediately), a **third** fresh API token generated (same
+> domain-scoping issue applies on the way back), both secrets flipped back to
+> `noreply@mrcyberrick.us` / "Ray & Judy's Book Stop". **A real send was confirmed via actual
+> delivered headers** (Outlook, `View message source`), not just the API's own `{"success":true}`
+> (which the plan itself warns proves nothing): `spf=pass`, `dkim=pass` (both `d=mrcyberrick.us` and
+> `d=mailersend.net` signatures), `dmarc=pass`, `compauth=pass reason=100`, `From:` correctly reading
+> `Ray & Judy's Book Stop <noreply@mrcyberrick.us>` — byte-identical to pre-attempt production.
+> Maintenance Mode confirmed OFF afterward via the anon RPC (F149), not just the toggle's own UI
+> state. **Total outage window: Maintenance Mode ON to OFF, roughly 50–55 minutes** — every
+> transactional path was down for real customers that whole time (a deliberate, consented window,
+> not an accident, but a real one).
+>
+> **State left behind, relevant to the next attempt:** `pulllist.app`'s S2 DNS records (DKIM,
+> Return-Path, the merged SPF) are **still live in Cloudflare** — they were never MailerSend-specific
+> in a way that removing the domain from MailerSend would invalidate, so **S2 does not need
+> repeating**. The `pulllist.app`-scoped API token created during this attempt is now dead (its
+> domain was removed) — harmless to leave, safe to delete in MailerSend's dashboard whenever
+> convenient, not urgent.
+>
+> **Before attempting S3 again, in this order:**
+> 1. **Strongly consider one month of paid tier first — see § 8 Q7.** Tonight proved the structural
+>    trap: on the free tier's single domain slot, the *only* way to test `pulllist.app` is to remove
+>    the working sender first, so every diagnosis costs a live customer-facing outage. Two
+>    simultaneous domains converts this into a zero-downtime change with unlimited time to
+>    investigate.
+> 2. **Check the API token's domain binding** (hypothesis 1) — seconds to verify, best fit to the
+>    evidence, and never checked during this attempt.
+> 3. **Generate the new domain-scoped token as an explicit sub-step** immediately after adding the
+>    domain, not as an afterthought — it is a *known* requirement now, not a surprise.
+> 4. **Ask MailerSend support directly** what governs send-time readiness for a newly-added domain,
+>    ahead of the window rather than discovering it inside one.
+> 5. **Fix abort criteria in wall-clock terms before Maintenance Mode goes on** (e.g. "not sending by
+>    T+15 → roll back"). This attempt improvised the wait ladder mid-incident; deciding it in advance
+>    is free and removes judgement pressure from the worst moment to be exercising it.
+> 6. **The rollback path itself worked cleanly and fast** — trust it rather than waiting past a second
+>    reasonable check if the same symptom recurs.
+>
+> **A note on scope, from Rick 2026-09-01:** he would accept **root-domain-only**
+> (`noreply@pulllist.app`, per-tenant display name only) for this task and defer subdomains. That is a
+> legitimate simplification — it is this plan's own documented fallback (§ 2 decision tree, "uncovered"
+> row) and costs only F72's per-tenant email branding later. **But it would not have changed tonight's
+> outcome:** the bare root domain failed identically. Treat it as a design choice, not a fix.
+
 ### S4 — Verify alignment, then consider `p=quarantine`
 
 Confirm the new domain authenticates on **both** mechanisms before retiring anything. **Publish
@@ -466,8 +596,12 @@ mechanism for Brevo** (no aligned SPF, no margin), so it gets checked rather tha
 - **F72's body-copy substitution** (name / address / phone per tenant). S1 enables it; this plan does
   not do it.
 - **F148's bulk-endpoint change.** Same account, different problem.
-- **Brevo / marketing mail.** Already on `rjbookstop.pulllist.app` and authenticated.
-- **Paid-tier migration.** Revisit after this work, per Rick 2026-08-31.
+- **Brevo / marketing mail.** Already on `rjbookstop.pulllist.app` and authenticated — and it stays
+  there, untouched. **Brevo's *transactional* product was evaluated for this migration on 2026-09-02
+  and REJECTED (§ 9). That changes nothing about its marketing role.**
+- ~~**Paid-tier migration.** Revisit after this work, per Rick 2026-08-31.~~ — **MOVED IN SCOPE
+  2026-09-01, promoted to § 8 Q7.** That deferral was made when S3's outage was theoretical. After
+  the failed attempt it is the leading approach, not a later question.
 
 ---
 
@@ -487,6 +621,29 @@ monthly cycle.**
    answer means the free tier carries the per-tenant design.
 3. Cutover window preference, given it must clear 2026-09-25.
 4. `p=quarantine` — publish at S4, or hold until after a second tenant is live?
+7. **One month of paid tier to buy a parallel run? — OPEN, and Rick is inclined toward yes
+   (2026-09-01, after the failed S3 attempt).** Rick's reasoning, recorded so it is not re-derived:
+   *"A one month's fee may offer some extra time to explore the issue and offer the buffer we need to
+   migrate without risking an error on the end user side. The risk is still low now but as the site
+   grows it can translate to a much bigger issue."*
+   **Why this is now the leading approach rather than a deferred nicety:** the single free-tier domain
+   slot means the only way to test `pulllist.app` at all is to remove the working sender first — so
+   *every* diagnostic attempt costs a live, customer-facing mail outage, and tonight's cost ~50–55
+   minutes to learn one error code. Two simultaneous domains removes that entirely: verify and fully
+   exercise `pulllist.app` while `mrcyberrick.us` keeps serving customers, cut over only once proven,
+   downgrade after. **The blast radius argument is the real one** — ~30 customers today makes a
+   50-minute outage survivable; at several hundred, across multiple tenants, it is not, and the
+   migration only gets harder to schedule the longer it waits.
+   **PRICED 2026-09-02 — and the cheap tier does NOT buy this.** Read from MailerSend's own plans
+   page: **Hobby ($7/mo) still allows only ONE sending domain.** It lifts the daily API cap 100 →
+   1,000 (so it *does* close **F148**) but buys **no parallel run at all**. The parallel run needs
+   **Starter, $35/mo** (10 domains, 100k API req/day, 7-day activity retention). **Q7's real price is
+   $35, not ~$6.** **Check the advertised 14-day Professional trial first** — it claims access to all
+   Professional features (1,000 domains); if this account is still eligible the parallel run is free.
+   Still unpriced: whether a mid-cycle downgrade is clean.
+   **Also note § 9's finding, which partly supersedes this question:** a swap to a *different*
+   provider needs no paid tier at all, because the old provider keeps serving while the new one is
+   tested.
 5. ~~**Is there a live email-forwarding address on `pulllist.app`?**~~ — ✅ **ANSWERED 2026-08-31:
    none configured yet, but Rick intends to set one up, and MX records are already provisioned.
    The Namecheap SPF include therefore STAYS in the S2 merge.** See § 4 S2.
@@ -499,6 +656,259 @@ monthly cycle.**
    *(Related: the MailerSend hosted template deleted 2026-08-31 carried the copy "Questions? Reply to
    this email or call the shop directly." It was never wired to any function, so no customer ever
    received it — but it would have black-holed if anyone had connected it.)*
+8. ~~**Move transactional to Brevo, reusing the newsletter's existing `pulllist.app` sender?**~~ —
+   ⛔ **EVALUATED AND REJECTED 2026-09-02. Do not re-propose without reading § 9 first.** Rick's
+   proposal after S3's rollback, and the reasoning was sound: it would have collapsed *both* splits
+   F99 names — domain **and** provider — with no parallel-run problem. Killed by Brevo rewriting
+   every link in transactional mail through its own click-tracking redirector, password-reset links
+   included, with no way to disable it. Full evidence in **§ 9**.
+9. ~~**Open a second free MailerSend account holding `pulllist.app` in its own domain slot?**~~ —
+   ⛔ **CLOSED 2026-09-02: this is an explicit ToS violation.** Rick's other proposal. MailerSend
+   Terms of Use **§ 11.1**: *"Creating multiple accounts is forbidden. Therefore you, as a natural
+   person, must not: create multiple users and / or; create different accounts with the same domain
+   or different subdomains and / or; log in with different login credentials."* **§ 11.2**: *"The
+   Customer, as a natural person, shall create only one account, where all the Customer's domains
+   shall be maintained."* **§ 13.1** permits suspension where MailerSend *"reasonably believes that
+   the Services are being used in violation of the Terms."* **The exposure is not the throwaway
+   account — it is the EXISTING one, which sends every password reset and registration confirmation
+   to real customers.**
+   *Separately, it would most likely not have worked anyway.* The one-domain limit forced S3's
+   **rollback**; it did not cause the **send failure**. `#MS42207`'s cause is unresolved and its
+   leading hypothesis is token↔domain binding — which a fresh single-domain account reproduces
+   exactly.
+
+---
+
+## 9. S3-B — Brevo transactional: EVALUATED AND REJECTED (2026-09-02)
+
+**Verdict: do not migrate transactional mail to Brevo.** Closed on measured evidence, not preference.
+
+Rick proposed it after S3's rollback on sound reasoning: Brevo already sends the weekly newsletter,
+already has a `pulllist.app` subdomain authenticated, and moving there would collapse *both* splits
+F99 names — the domain split **and** the provider split — with no parallel-run problem, since
+MailerSend keeps serving untouched while a *different* provider is exercised. **That reasoning was
+right. The product turned out to be wrong for the job.**
+
+**No finding ID consumed** — an external platform's product design, not a defect in our code, DNS or
+plan. Same disposition as S3's own record. **F152 remains the next free finding ID.**
+
+### What was tested — three live sends, zero downtime, production untouched
+
+All three ran against the real Brevo account **while MailerSend continued serving production**.
+Verified from **delivered Gmail headers** (`Show original`), never the API's own `201` — the standard
+§ 2 demands and the S3 rollback used.
+
+| Test | Sender | Question | Result |
+|---|---|---|---|
+| **A** | `previews@rjbookstop.pulllist.app` (the newsletter's own sender) | Is transactional activated on this account? | **201, delivered** — active; no support ticket needed |
+| **B** | `noreply@rjbookstop.pulllist.app` (never registered as a sender) | Does domain auth cover arbitrary addresses? | **201, delivered**, signed identically to A |
+| **C** | `noreply@rjbookstop.pulllist.app`, body carrying links | Does Brevo rewrite links? | **201, delivered — EVERY link rewritten** |
+
+**Two pre-flight worries were also closed cheaply, and both were false alarms.** The *"Sent with
+Brevo"* free-tier sticker that several third-party sources report: **not present**, on the newsletter
+or on any of the three sends. The transactional-activation support ticket Brevo's own help centre
+describes as required for new accounts: **not required here** — already activated.
+
+### The authentication result is good, and it is the part worth keeping
+
+Identical across all three sends:
+
+```
+dkim=pass  header.i=@rjbookstop.pulllist.app  header.s=brevo2
+spf=pass   smtp.mailfrom=bounces-…@ha.d.sender-sib.com
+dmarc=pass (p=NONE sp=NONE dis=NONE)  header.from=pulllist.app
+From: "Ray & Judy's Book Stop" <noreply@rjbookstop.pulllist.app>
+```
+
+**DKIM signs as the exact From domain — strict alignment**, and Test B proves domain authentication
+genuinely covers addresses never registered as senders.
+
+**SPF is NOT aligned.** It passes for Brevo's bounce domain (`ha.d.sender-sib.com`), not
+`pulllist.app`, so **DMARC is passing on DKIM alone**. This **confirms § 4's existing prediction**
+(*"Brevo and MailerLite are DKIM-only with no aligned SPF"*, and V6's *"no margin"*) — now measured
+rather than assumed. Not itself a blocker, since DMARC needs only one aligned mechanism and
+`p=quarantine` would still be safe; but it trades MailerSend's two independent aligned mechanisms
+for one, with no fallback if DKIM ever breaks.
+
+### Why it was rejected — one root cause, three symptoms
+
+Brevo's stated reason for the first symptom explains all three: **they do not distinguish
+transactional from marketing on the API/SMTP interface**, so everything sent through it inherits
+marketing-mail behaviour.
+
+| Injected into our transactional mail | Removable? |
+|---|---|
+| `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click` — a one-click unsubscribe **on a password reset** | **No.** Brevo does not remove it from SMTP/API sends. The documented alternative (`list-help` instead) needs a support request **and**, per their help centre, an **Enterprise plan** |
+| Open-tracking pixel injected into the body | **No.** Only *anonymous tracking* (Settings ▸ Automations ▸ Transactional emails ▸ Tracking), which anonymises the log entries — not the injection |
+| **Every link rewritten through `bbfjjjaf.r.af.d.sendibt2.com/tr/cl/…`** | **No — explicitly declined.** Brevo's position: *"Link tracking enables us to keep the platform secure and prevent fraudulent sending"* |
+
+**The link rewriting disqualifies it on its own.** Test C sent
+`https://pulllist.app/forgot-password.html?token_hash=…&type=recovery`; it arrived as an opaque
+`sendibt2.com/tr/cl/…` redirect. Three consequences:
+
+1. **A one-time password-reset credential now transits and is stored by a third-party
+   click-tracker**, mapped to the recipient. Brevo's own community carries an open thread raising
+   exactly this.
+2. **The visible link in a security email points at a domain the customer has never heard of.** That
+   is the shape of a phishing mail, and it trains customers to click through unfamiliar redirectors.
+3. **A new hard dependency on `sendibt2.com` for account recovery.** Corporate filters and DNS
+   blocklists routinely block tracking redirectors — the reset would be dead while `pulllist.app` is
+   perfectly fine.
+
+It hits **every** action link, not only resets: `invite-customer`, `approve-customer`, the
+`register-customer` confirmation, `notify-customers`' catalog CTA, `send-my-list`.
+
+**Be precise about what does NOT break.** `reset-password`'s `hashed_token` design still holds —
+token consumption happens through a client-side `verifyOtp`, so a scanner following the redirect does
+not burn it. This is a **credential-handling and trust** problem, not a functional one. It is still
+disqualifying.
+
+**A second, independent concern, recorded because it nearly stood alone.** F96's own record states
+Brevo blocklisting is *"a per-contact, account-level property rather than a per-list one."* If a
+transactional unsubscribe writes to that same blocklist, a customer clicking Unsubscribe on a
+"pull list is live" notice could silently lose password resets and registration confirmations too —
+the exact silent-failure shape that went **18 days undetected** in F96. **NOT VERIFIED:** the
+account-level blocklist is documented in our own repo, but that the transactional unsubscribe writes
+to it is inference. Never tested — the link rewriting closed the question first. **Re-open this only
+if someone revisits Brevo; do not treat it as established.**
+
+### What this bought
+
+Not a wasted session. It closed a genuinely promising option with hard evidence in ~20 minutes at
+zero cost and zero downtime, and proved two things that outlive the rejection:
+
+- **`<slug>.pulllist.app` sending authenticates cleanly with strict DKIM alignment**, verified from
+  real delivered headers. Reusable whatever provider is chosen.
+- **A swap to a DIFFERENT provider has no parallel-run problem at all.** The incumbent keeps serving
+  on `mrcyberrick.us` while the challenger is exercised on `pulllist.app`. The constraint that made
+  S3 cost a ~50-minute outage **only exists within a single provider's domain slot.** This is the
+  most valuable thing learned this session and it reframes the whole migration — see § 10.
+
+**Nothing was changed and there is nothing to roll back.** Brevo's `rjbookstop.pulllist.app` DNS is
+untouched and still serving newsletters; the three sends were ordinary API calls.
+
+---
+
+## 10. Provider selection — DECIDED: Resend (2026-09-02, GREEN discovery)
+
+**Rick's call, 2026-09-02: Resend is the transactional provider.** Escalated from *direction* to
+*decision* the same day, after `docs/f99-resend-discovery.md` ran end to end and came back **GREEN**.
+An account exists, `pulllist.app` is verified in Resend, real sends were made and read from delivered
+Gmail headers, and the addressing scheme is settled. **No code has changed and MailerSend is
+untouched** — the discovery session ran entirely on a new account and additive DNS, with MailerSend
+serving production throughout. What remains is the migration itself:
+`docs/f99-resend-migration.md` (written, not started).
+
+### What the discovery measured, in brief — full record in `f99-resend-discovery.md`
+
+- **K1–K6 all clear on our own domain.** No link rewriting, no `List-Unsubscribe`, no tracking pixel
+  — confirmed by sending from `noreply@pulllist.app` with no Resend tracking subdomain configured.
+  (An early sandbox test on `onboarding@resend.dev` *did* trip K1/K3 — traced to Resend's own domain
+  having a tracking subdomain pre-configured, not something that carries to a domain we verify
+  ourselves; re-confirmed clean on our own domain before concluding anything.)
+- **Alignment beats Brevo's result and matches MailerSend's today:** `dkim=pass` with `d=pulllist.app`
+  — an exact match, not merely aligned — **and** `spf=pass` aligned via `send.pulllist.app`'s
+  organizational domain. Brevo passed DMARC on DKIM alone; Resend gets both mechanisms.
+- **The apex SPF MailerSend's `spf=pass` depends on was never touched (K5).** Every record Resend
+  requested — DKIM TXT, Return-Path MX, SPF TXT — landed on new names (`resend._domainkey`, `send`),
+  externally confirmed via `dns.google` both before and after publishing. Confirmed unchanged,
+  byte-identical, throughout.
+- **Domain verification covers arbitrary local parts** (same as Brevo, unlike MailerSend's
+  `#MS42207`) — a never-registered address delivered and signed identically to `noreply@`.
+- **The addressing decision flipped from the original plan, and D7 is why.** § 3 above (and this
+  finding's own S0-era recommendation) assumed per-tenant subdomain sending the way MailerSend's S0
+  proved it works there. **Resend's own parent domain does NOT cover subdomains** — sending as
+  `noreply@rjbookstop.pulllist.app` returned `403 validation_error: "The rjbookstop.pulllist.app
+  domain is not verified"` with only the parent verified. Unlike MailerSend's unresolved `#MS42207`,
+  this error is unambiguous and self-explaining. **Consequence: per-tenant subdomains would cost a
+  second domain slot — Pro, $20/mo — starting immediately, not deferred to a hypothetical tenant #2.**
+  Per the standing "prioritize the free tier, don't auto-upgrade" rule, **the decision is flat
+  `noreply@pulllist.app`** for the actual migration. Per-tenant subdomains remain available later as
+  a deliberate paid choice, not a default.
+- **F148 is not dissolved, but the ceiling improves.** Resend's cap meters **emails**, not API
+  requests (the opposite of MailerSend's shape) — with `notify-customers`' code unchanged, the daily
+  ceiling stays ~100/day (same as today), but the monthly ceiling rises 500→3,000. Pay-as-you-go
+  overage ($0.90/1,000) exists on paid tiers only, not Free — a real option for whenever F148 is
+  actually fixed, not relevant to today's free-tier picture.
+
+### Superseded by this decision
+
+Both of Rick's earlier alternatives to S3 are closed (Brevo, § 9; the second free MailerSend
+account, § 8 Q9). **None of this is urgent** — production is serving customers correctly from
+`noreply@mrcyberrick.us` today, and the October import gate (2026-09-25) is the only fixed date
+nearby.
+
+### Requirements, derived from this session rather than assumed
+
+1. **No link rewriting on transactional** — non-negotiable, per § 9.
+2. **No unsubscribe-header injection on transactional.**
+3. **Enough domain slots for the chosen sending design** — see the lever below.
+4. **Free-tier headroom past MailerSend's 500/month and 100 API requests/day** (F148).
+5. **A `from`/`to`/`subject`/`html` REST API** — all six functions POST an identical shape, so a
+   provider swap is ~4 lines each plus a secret.
+
+### Decide this lever FIRST: flat sender vs. per-tenant subdomain
+
+F99 recorded per-tenant `<slug>.pulllist.app` as the direction and § 2 confirmed it viable. But that
+choice was made partly **because Brevo was already sitting there** — and Brevo is now out.
+
+**A flat `noreply@pulllist.app` needs exactly one domain slot forever, at any tenant count.** F72's
+per-tenant branding lives in the `from` **name** and the body copy, both already secret-driven since
+S1 — it does **not** require a per-tenant sending **domain**. The subdomain buys reputation
+segmentation, not branding.
+
+**This decides which free tiers are sufficient, so settle it before picking a provider.**
+
+### Candidates — researched 2026-09-02, NOT yet tested live
+
+| | **Resend** | **MailerSend Starter** | **Amazon SES** |
+|---|---|---|---|
+| Link rewriting | **Off by default**, opt-in per domain | Off | Opt-in via configuration sets |
+| Unsubscribe injection | **None on the Send API** (Broadcasts only) | None | None |
+| Free tier | 3,000/mo, **100/day**, 1 domain | 500/mo, 100 API req/day, 1 domain | $0.10/1,000; credits vary by account age |
+| Subdomain coverage | **Separate verification per subdomain** | Parent covers subdomains (§ 2) | **DKIM inherits to subdomains** |
+| Domains on relevant paid tier | Pro $20/mo → 10 | Starter $35/mo → 10 | effectively unlimited |
+| Cost to close F148 | Pro $20/mo | Hobby $7/mo (1 domain; F148 only) | negligible |
+| Operational overhead | Low | **Lowest — already integrated** | **High** — sandbox exit, bounce/complaint handling, IAM, region |
+
+**Resend is the chosen direction (Rick, 2026-09-02).** It explicitly advises against tracking on
+transactional mail *precisely so inbox providers don't classify it as marketing* — the opposite
+posture to Brevo. Two further reasons it beat MailerSend Starter on the merits:
+
+- **It is better AFTER the migration, not only during it.** MailerSend Starter is a one-month bridge
+  that drops back onto a free tier of 500/month and 100 API requests/day — the F148 ceiling. Resend's
+  free tier (3,000/month) is strictly better in both directions.
+- **The code change is smaller than Brevo's would have been.** Resend keeps `Authorization: Bearer`
+  and the `html` field name, so realistically only the endpoint URL and the `from` shape move (a
+  string rather than an object). **Confirm the exact request shape against Resend's own docs at
+  implementation time — this was read from research, not from a live call.**
+
+**Honest caveat, recorded so it is not a surprise later: Resend's free tier is 100/day, so it does
+NOT dissolve F148** — it lifts the monthly ceiling 500 → 3,000 but keeps roughly the same blast-day
+ceiling. Only Brevo's 300/day would have closed F148 outright, and Brevo is out. Pro ($20/mo)
+removes it.
+
+**MailerSend Starter stays viable** and is the lowest-effort path, since the integration already
+exists and works. $35 for one month is exactly what § 8 Q7 asks for.
+
+**Amazon SES is cheapest at scale and by far the most work** — likely disproportionate for a
+~30-customer shop, worth revisiting only at much larger volume.
+
+### Recommended next step whenever this is picked up — ✅ DONE 2026-09-02
+
+**Everything this subsection called for was run, live, the same day it was written.**
+`docs/f99-resend-discovery.md` executed both phases against a real Resend account: the three-test
+probe (send / delivered-headers / link-rewriting, D2), the flat-vs-subdomain lever settled by
+measurement rather than guesswork (D7 forced it — see above), and `pulllist.app` verified with
+MailerSend serving production throughout, zero downtime. **Result: GREEN.** Full record in that doc;
+the summary is above this subsection.
+
+**✅ Migration itself DONE on staging, same day: `docs/f99-resend-migration.md` M1–M5, GREEN.**
+All six functions cut over to Resend, `verify_jwt` preserved, two real sends confirmed clean from
+delivered headers, full regression suite green (279 unit + 143 Playwright). MailerSend was never
+touched — production keeps serving from it unmodified, exactly per this section's own "no
+parallel-run problem" finding. **Remaining: M6 (production promotion), Rick's explicit call, not
+started.** Full record in the migration doc itself.
 
 ---
 
@@ -507,12 +917,55 @@ monthly cycle.**
 - **F99** (`docs/technical-reference.md` § 13) — the finding this executes; steps (1)–(2) done, the
   2026-08-20 sender inventory, the GoDaddy-zone trap, the reputation note (no warm-up concern).
 - **F72** — per-tenant email branding; S1 is its shared first step.
-- **F148** — the daily-API-cap limit on the same account.
-- **F145** — no wildcard DNS on `pulllist.app`; each hostname is individually provisioned. Relevant
-  if per-tenant sending subdomains are chosen.
+- **F148** — the daily-API-cap limit on the same account. Not dissolved by Resend either (§ 10).
+- **F145** — no wildcard DNS on `pulllist.app`; each hostname is individually provisioned. **No
+  longer relevant to the sending decision** — addressing landed on flat `noreply@pulllist.app` (§ 10),
+  so no per-tenant sending subdomain is being provisioned. Still relevant to **web** front-door
+  hostnames, unrelated to this plan.
+- **`docs/f99-resend-discovery.md`** — the discovery session, GREEN, full measured record (K1–K8,
+  D1–D8, delivered headers).
+- **`docs/f99-resend-migration.md`** — new, the actual migration plan. Written, not started.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-08-31 — **eleventh pass: S3's Maintenance Mode mitigation recorded** (§ 3, § 4
+**Last updated:** 2026-09-02 — **sixteenth pass: provider selection RESOLVED from direction to
+decision. Resend discovery ran end to end, same day as the fifteenth pass, GREEN.** `pulllist.app`
+verified in Resend; K1–K6 all clear on our own domain (an early sandbox trip on K1/K3 was traced to
+`resend.dev`'s own pre-configured tracking subdomain and re-verified clean on our domain before
+concluding anything); alignment measured **stronger than Brevo's** (DKIM exact-match **and** SPF
+aligned, not DKIM-only); apex SPF confirmed untouched before and after DNS publish. **D7 — the
+pivotal test — came back negative**: the verified parent does **not** cover `rjbookstop.pulllist.app`
+(`403`, exact text recorded), the opposite of MailerSend's S0 result. That forced the addressing
+decision immediately rather than at a deferred tenant-#2 milestone: **flat `noreply@pulllist.app`**,
+per the standing "prioritize the free tier" rule — per-tenant subdomains remain a future paid choice,
+not a default. F148 unchanged in kind under Resend (still ~100/day, code unchanged) but the monthly
+ceiling improves 6× (500→3,000), and a paid-tier pay-as-you-go overage ($0.90/1,000) exists for
+whenever it's actually fixed. **New migration plan doc written**, not started. No finding ID
+consumed; **F152 still free.**
+Fourteenth pass, 2026-09-01 — same evening: the thirteenth pass's diagnosis was
+CORRECTED.** It asserted "MailerSend send-time activation delay" as S3's cause; that is contradicted
+by the rollback (`mrcyberrick.us` re-added minutes later and sent first try) and was stated with more
+confidence than the evidence carried. § 4 S3 now records the cause as **unresolved**, with two
+theories ruled out *with reasons* (Sender Identities — read directly, it is an agency feature not
+required for your own verified domain, Rick's find; and any subdomain/free-tier restriction — S0's
+own probe already sent from a subdomain on this same free account) and three ranked live hypotheses,
+**token↔domain binding first** since it best fits the evidence and was never checked. Paid-tier
+promoted from § 6 "out of scope, revisit later" to **§ 8 Q7**, with Rick's growth-risk reasoning
+recorded. Thirteenth pass: S3 attempted and ROLLED BACK, same day as S2.
+Full cutover sequence run for real (Maintenance Mode ON, domain swapped in MailerSend, SPF merged
+with the real value, secrets flipped) and got as far as a fully-verified `pulllist.app` — then hit
+two unanticipated MailerSend-side problems in sequence: API tokens are domain-scoped (the existing
+key died with the old domain, fixed by generating a new one) and, more seriously, send-time
+enforcement did not activate for 15–20+ minutes past full dashboard verification, for the verified
+domain itself, not just the subdomain. Rolled back cleanly and independently verified via real
+delivered headers (not just the API's own unconditional success response) — production is back to
+exactly its pre-attempt state, `noreply@mrcyberrick.us`. See § 4 S3 for the full record and what to
+do differently next attempt. Total real outage window: ~50–55 minutes, Maintenance Mode ON to OFF.
+Twelfth pass: S2 partially executed — DKIM (`ms1`/`ms2._domainkey`)
+and Return-Path (`mta`) CNAMEs published in Cloudflare and externally verified; discovered live (not
+assumed) that DKIM/Return-Path targets are generic across domains but MailerSend's SPF include is a
+per-domain hash that cannot be known before S3, so the SPF merge is a hard sequencing constraint, not
+a preference. F149 added to the findings line (heavily referenced in § 3/§ 4 S3, was missing).
+Eleventh pass: S3's Maintenance Mode mitigation recorded (§ 3, § 4
 S3) — Rick confirmed the 1-domain-at-a-time constraint is real and proposed the toggle as a cutover
 safety net; checked against the actual code, found a real gap (index.html/forgot-password.html
 uncovered), filed as **F149**. Tenth pass: S1 EXECUTED on staging (`eff9793`) — all six files
@@ -527,3 +980,13 @@ confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
 merge trap and the 10-lookup ceiling**; zero-risk S0 probe method recorded. **S0 still not run.**
+
+**Seventeenth pass, 2026-09-02 (same day as the sixteenth): the migration itself EXECUTED on
+staging, GREEN.** `docs/f99-resend-migration.md` M1–M5 run end to end — `RESEND_API_KEY` set (fresh
+key), all six functions cut to Resend's request shape exactly, `verify_jwt` preserved, two real
+sends (`reset-password`, `invite-customer`) confirmed clean from delivered headers at two different
+receiving MTAs, magic-link auth traced in code and confirmed fully covered (no separate Supabase-
+native mail path exists), full regression suite green. MailerSend untouched throughout — still
+serving production. `register-customer`'s live UI check accepted as a residual (Turnstile-gated, no
+real tenant-hostname URL on staging). **Production not cut over — M6 needs Rick's explicit separate
+request.** No finding ID consumed.
