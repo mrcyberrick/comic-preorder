@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **§ 8 Q7 (one month paid tier for a parallel run) is now the leading approach, not a deferred nicety**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **provider selection is now the open decision (§ 10)**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -596,7 +596,9 @@ mechanism for Brevo** (no aligned SPF, no margin), so it gets checked rather tha
 - **F72's body-copy substitution** (name / address / phone per tenant). S1 enables it; this plan does
   not do it.
 - **F148's bulk-endpoint change.** Same account, different problem.
-- **Brevo / marketing mail.** Already on `rjbookstop.pulllist.app` and authenticated.
+- **Brevo / marketing mail.** Already on `rjbookstop.pulllist.app` and authenticated — and it stays
+  there, untouched. **Brevo's *transactional* product was evaluated for this migration on 2026-09-02
+  and REJECTED (§ 9). That changes nothing about its marketing role.**
 - ~~**Paid-tier migration.** Revisit after this work, per Rick 2026-08-31.~~ — **MOVED IN SCOPE
   2026-09-01, promoted to § 8 Q7.** That deferral was made when S3's outage was theoretical. After
   the failed attempt it is the leading approach, not a later question.
@@ -632,9 +634,16 @@ monthly cycle.**
    downgrade after. **The blast radius argument is the real one** — ~30 customers today makes a
    50-minute outage survivable; at several hundred, across multiple tenants, it is not, and the
    migration only gets harder to schedule the longer it waits.
-   **Still to price:** MailerSend's actual Starter cost, whether a mid-cycle downgrade is clean, and
-   whether the paid tier also lifts F148's 100/day API-request cap (same account, possibly two
-   problems solved by one month's spend).
+   **PRICED 2026-09-02 — and the cheap tier does NOT buy this.** Read from MailerSend's own plans
+   page: **Hobby ($7/mo) still allows only ONE sending domain.** It lifts the daily API cap 100 →
+   1,000 (so it *does* close **F148**) but buys **no parallel run at all**. The parallel run needs
+   **Starter, $35/mo** (10 domains, 100k API req/day, 7-day activity retention). **Q7's real price is
+   $35, not ~$6.** **Check the advertised 14-day Professional trial first** — it claims access to all
+   Professional features (1,000 domains); if this account is still eligible the parallel run is free.
+   Still unpriced: whether a mid-cycle downgrade is clean.
+   **Also note § 9's finding, which partly supersedes this question:** a swap to a *different*
+   provider needs no paid tier at all, because the old provider keeps serving while the new one is
+   tested.
 5. ~~**Is there a live email-forwarding address on `pulllist.app`?**~~ — ✅ **ANSWERED 2026-08-31:
    none configured yet, but Rick intends to set one up, and MX records are already provisioned.
    The Namecheap SPF include therefore STAYS in the S2 merge.** See § 4 S2.
@@ -647,6 +656,197 @@ monthly cycle.**
    *(Related: the MailerSend hosted template deleted 2026-08-31 carried the copy "Questions? Reply to
    this email or call the shop directly." It was never wired to any function, so no customer ever
    received it — but it would have black-holed if anyone had connected it.)*
+8. ~~**Move transactional to Brevo, reusing the newsletter's existing `pulllist.app` sender?**~~ —
+   ⛔ **EVALUATED AND REJECTED 2026-09-02. Do not re-propose without reading § 9 first.** Rick's
+   proposal after S3's rollback, and the reasoning was sound: it would have collapsed *both* splits
+   F99 names — domain **and** provider — with no parallel-run problem. Killed by Brevo rewriting
+   every link in transactional mail through its own click-tracking redirector, password-reset links
+   included, with no way to disable it. Full evidence in **§ 9**.
+9. ~~**Open a second free MailerSend account holding `pulllist.app` in its own domain slot?**~~ —
+   ⛔ **CLOSED 2026-09-02: this is an explicit ToS violation.** Rick's other proposal. MailerSend
+   Terms of Use **§ 11.1**: *"Creating multiple accounts is forbidden. Therefore you, as a natural
+   person, must not: create multiple users and / or; create different accounts with the same domain
+   or different subdomains and / or; log in with different login credentials."* **§ 11.2**: *"The
+   Customer, as a natural person, shall create only one account, where all the Customer's domains
+   shall be maintained."* **§ 13.1** permits suspension where MailerSend *"reasonably believes that
+   the Services are being used in violation of the Terms."* **The exposure is not the throwaway
+   account — it is the EXISTING one, which sends every password reset and registration confirmation
+   to real customers.**
+   *Separately, it would most likely not have worked anyway.* The one-domain limit forced S3's
+   **rollback**; it did not cause the **send failure**. `#MS42207`'s cause is unresolved and its
+   leading hypothesis is token↔domain binding — which a fresh single-domain account reproduces
+   exactly.
+
+---
+
+## 9. S3-B — Brevo transactional: EVALUATED AND REJECTED (2026-09-02)
+
+**Verdict: do not migrate transactional mail to Brevo.** Closed on measured evidence, not preference.
+
+Rick proposed it after S3's rollback on sound reasoning: Brevo already sends the weekly newsletter,
+already has a `pulllist.app` subdomain authenticated, and moving there would collapse *both* splits
+F99 names — the domain split **and** the provider split — with no parallel-run problem, since
+MailerSend keeps serving untouched while a *different* provider is exercised. **That reasoning was
+right. The product turned out to be wrong for the job.**
+
+**No finding ID consumed** — an external platform's product design, not a defect in our code, DNS or
+plan. Same disposition as S3's own record. **F152 remains the next free finding ID.**
+
+### What was tested — three live sends, zero downtime, production untouched
+
+All three ran against the real Brevo account **while MailerSend continued serving production**.
+Verified from **delivered Gmail headers** (`Show original`), never the API's own `201` — the standard
+§ 2 demands and the S3 rollback used.
+
+| Test | Sender | Question | Result |
+|---|---|---|---|
+| **A** | `previews@rjbookstop.pulllist.app` (the newsletter's own sender) | Is transactional activated on this account? | **201, delivered** — active; no support ticket needed |
+| **B** | `noreply@rjbookstop.pulllist.app` (never registered as a sender) | Does domain auth cover arbitrary addresses? | **201, delivered**, signed identically to A |
+| **C** | `noreply@rjbookstop.pulllist.app`, body carrying links | Does Brevo rewrite links? | **201, delivered — EVERY link rewritten** |
+
+**Two pre-flight worries were also closed cheaply, and both were false alarms.** The *"Sent with
+Brevo"* free-tier sticker that several third-party sources report: **not present**, on the newsletter
+or on any of the three sends. The transactional-activation support ticket Brevo's own help centre
+describes as required for new accounts: **not required here** — already activated.
+
+### The authentication result is good, and it is the part worth keeping
+
+Identical across all three sends:
+
+```
+dkim=pass  header.i=@rjbookstop.pulllist.app  header.s=brevo2
+spf=pass   smtp.mailfrom=bounces-…@ha.d.sender-sib.com
+dmarc=pass (p=NONE sp=NONE dis=NONE)  header.from=pulllist.app
+From: "Ray & Judy's Book Stop" <noreply@rjbookstop.pulllist.app>
+```
+
+**DKIM signs as the exact From domain — strict alignment**, and Test B proves domain authentication
+genuinely covers addresses never registered as senders.
+
+**SPF is NOT aligned.** It passes for Brevo's bounce domain (`ha.d.sender-sib.com`), not
+`pulllist.app`, so **DMARC is passing on DKIM alone**. This **confirms § 4's existing prediction**
+(*"Brevo and MailerLite are DKIM-only with no aligned SPF"*, and V6's *"no margin"*) — now measured
+rather than assumed. Not itself a blocker, since DMARC needs only one aligned mechanism and
+`p=quarantine` would still be safe; but it trades MailerSend's two independent aligned mechanisms
+for one, with no fallback if DKIM ever breaks.
+
+### Why it was rejected — one root cause, three symptoms
+
+Brevo's stated reason for the first symptom explains all three: **they do not distinguish
+transactional from marketing on the API/SMTP interface**, so everything sent through it inherits
+marketing-mail behaviour.
+
+| Injected into our transactional mail | Removable? |
+|---|---|
+| `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click` — a one-click unsubscribe **on a password reset** | **No.** Brevo does not remove it from SMTP/API sends. The documented alternative (`list-help` instead) needs a support request **and**, per their help centre, an **Enterprise plan** |
+| Open-tracking pixel injected into the body | **No.** Only *anonymous tracking* (Settings ▸ Automations ▸ Transactional emails ▸ Tracking), which anonymises the log entries — not the injection |
+| **Every link rewritten through `bbfjjjaf.r.af.d.sendibt2.com/tr/cl/…`** | **No — explicitly declined.** Brevo's position: *"Link tracking enables us to keep the platform secure and prevent fraudulent sending"* |
+
+**The link rewriting disqualifies it on its own.** Test C sent
+`https://pulllist.app/forgot-password.html?token_hash=…&type=recovery`; it arrived as an opaque
+`sendibt2.com/tr/cl/…` redirect. Three consequences:
+
+1. **A one-time password-reset credential now transits and is stored by a third-party
+   click-tracker**, mapped to the recipient. Brevo's own community carries an open thread raising
+   exactly this.
+2. **The visible link in a security email points at a domain the customer has never heard of.** That
+   is the shape of a phishing mail, and it trains customers to click through unfamiliar redirectors.
+3. **A new hard dependency on `sendibt2.com` for account recovery.** Corporate filters and DNS
+   blocklists routinely block tracking redirectors — the reset would be dead while `pulllist.app` is
+   perfectly fine.
+
+It hits **every** action link, not only resets: `invite-customer`, `approve-customer`, the
+`register-customer` confirmation, `notify-customers`' catalog CTA, `send-my-list`.
+
+**Be precise about what does NOT break.** `reset-password`'s `hashed_token` design still holds —
+token consumption happens through a client-side `verifyOtp`, so a scanner following the redirect does
+not burn it. This is a **credential-handling and trust** problem, not a functional one. It is still
+disqualifying.
+
+**A second, independent concern, recorded because it nearly stood alone.** F96's own record states
+Brevo blocklisting is *"a per-contact, account-level property rather than a per-list one."* If a
+transactional unsubscribe writes to that same blocklist, a customer clicking Unsubscribe on a
+"pull list is live" notice could silently lose password resets and registration confirmations too —
+the exact silent-failure shape that went **18 days undetected** in F96. **NOT VERIFIED:** the
+account-level blocklist is documented in our own repo, but that the transactional unsubscribe writes
+to it is inference. Never tested — the link rewriting closed the question first. **Re-open this only
+if someone revisits Brevo; do not treat it as established.**
+
+### What this bought
+
+Not a wasted session. It closed a genuinely promising option with hard evidence in ~20 minutes at
+zero cost and zero downtime, and proved two things that outlive the rejection:
+
+- **`<slug>.pulllist.app` sending authenticates cleanly with strict DKIM alignment**, verified from
+  real delivered headers. Reusable whatever provider is chosen.
+- **A swap to a DIFFERENT provider has no parallel-run problem at all.** The incumbent keeps serving
+  on `mrcyberrick.us` while the challenger is exercised on `pulllist.app`. The constraint that made
+  S3 cost a ~50-minute outage **only exists within a single provider's domain slot.** This is the
+  most valuable thing learned this session and it reframes the whole migration — see § 10.
+
+**Nothing was changed and there is nothing to roll back.** Brevo's `rjbookstop.pulllist.app` DNS is
+untouched and still serving newsletters; the three sends were ordinary API calls.
+
+---
+
+## 10. Provider selection — the open decision (2026-09-02)
+
+Both of Rick's alternatives to S3 are now closed (Brevo, § 9; the second free MailerSend account,
+§ 8 Q9). What remains is a real three-way choice. **None of it is urgent** — production is serving
+customers correctly from `noreply@mrcyberrick.us` today, and the October import gate (2026-09-25) is
+the only fixed date nearby.
+
+### Requirements, derived from this session rather than assumed
+
+1. **No link rewriting on transactional** — non-negotiable, per § 9.
+2. **No unsubscribe-header injection on transactional.**
+3. **Enough domain slots for the chosen sending design** — see the lever below.
+4. **Free-tier headroom past MailerSend's 500/month and 100 API requests/day** (F148).
+5. **A `from`/`to`/`subject`/`html` REST API** — all six functions POST an identical shape, so a
+   provider swap is ~4 lines each plus a secret.
+
+### Decide this lever FIRST: flat sender vs. per-tenant subdomain
+
+F99 recorded per-tenant `<slug>.pulllist.app` as the direction and § 2 confirmed it viable. But that
+choice was made partly **because Brevo was already sitting there** — and Brevo is now out.
+
+**A flat `noreply@pulllist.app` needs exactly one domain slot forever, at any tenant count.** F72's
+per-tenant branding lives in the `from` **name** and the body copy, both already secret-driven since
+S1 — it does **not** require a per-tenant sending **domain**. The subdomain buys reputation
+segmentation, not branding.
+
+**This decides which free tiers are sufficient, so settle it before picking a provider.**
+
+### Candidates — researched 2026-09-02, NOT yet tested live
+
+| | **Resend** | **MailerSend Starter** | **Amazon SES** |
+|---|---|---|---|
+| Link rewriting | **Off by default**, opt-in per domain | Off | Opt-in via configuration sets |
+| Unsubscribe injection | **None on the Send API** (Broadcasts only) | None | None |
+| Free tier | 3,000/mo, **100/day**, 1 domain | 500/mo, 100 API req/day, 1 domain | $0.10/1,000; credits vary by account age |
+| Subdomain coverage | **Separate verification per subdomain** | Parent covers subdomains (§ 2) | **DKIM inherits to subdomains** |
+| Domains on relevant paid tier | Pro $20/mo → 10 | Starter $35/mo → 10 | effectively unlimited |
+| Cost to close F148 | Pro $20/mo | Hobby $7/mo (1 domain; F148 only) | negligible |
+| Operational overhead | Low | **Lowest — already integrated** | **High** — sandbox exit, bounce/complaint handling, IAM, region |
+
+**Resend leads.** It explicitly advises against tracking on transactional mail *precisely so inbox
+providers don't classify it as marketing* — the opposite posture to Brevo. **Honest caveat: its free
+tier is 100/day, so it does NOT dissolve F148** — it lifts the monthly ceiling 500 → 3,000 but keeps
+roughly the same blast-day ceiling. Pro ($20/mo) removes it.
+
+**MailerSend Starter stays viable** and is the lowest-effort path, since the integration already
+exists and works. $35 for one month is exactly what § 8 Q7 asks for.
+
+**Amazon SES is cheapest at scale and by far the most work** — likely disproportionate for a
+~30-customer shop, worth revisiting only at much larger volume.
+
+### Recommended next step whenever this is picked up
+
+**Do not write code first.** Settle the flat-vs-subdomain lever, then run **the same three-test probe
+this session ran against Brevo** — send / delivered-headers / link-rewriting — against the chosen
+provider's free tier, sending from `pulllist.app`, **while MailerSend keeps serving production**.
+That probe cost 20 minutes and zero downtime here, and the equivalent check would have caught S3's
+failure *before* the 50-minute outage rather than during it.
 
 ---
 
@@ -660,7 +860,20 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-09-01 — **fourteenth pass, same evening: the thirteenth pass's diagnosis was
+**Last updated:** 2026-09-02 — **fifteenth pass: both of Rick’s alternatives to S3 evaluated and
+CLOSED; provider selection is now the open decision.** Brevo transactional tested live (three sends,
+zero downtime, production untouched) and **REJECTED** — it rewrites every link in transactional mail
+through its own click-tracking redirector, password-reset links included, with no way to disable it.
+New **§ 9** carries the full evidence and the delivered headers. A second free MailerSend account
+**CLOSED as an explicit ToS violation** (§ 11.1/11.2 quoted) — new **§ 8 Q9**. **§ 8 Q7 repriced:**
+Hobby ($7) is still ONE domain and buys no parallel run; **Starter ($35) is the real price**, and the
+advertised 14-day Professional trial is worth checking first. New **§ 10** records the requirements,
+the flat-vs-subdomain lever to settle before choosing, and three researched candidates (Resend
+leading, not yet tested). **Two durable results kept from the rejection:** `<slug>.pulllist.app`
+authenticates with strict DKIM alignment, and **a swap to a DIFFERENT provider has no parallel-run
+problem at all** — the constraint that cost S3 ~50 minutes of outage exists only within a single
+provider’s domain slot. No finding ID consumed; **F152 still free.**
+Fourteenth pass, 2026-09-01 — same evening: the thirteenth pass's diagnosis was
 CORRECTED.** It asserted "MailerSend send-time activation delay" as S3's cause; that is contradicted
 by the rollback (`mrcyberrick.us` re-added minutes later and sent first try) and was stated with more
 confidence than the evidence carried. § 4 S3 now records the cause as **unresolved**, with two
