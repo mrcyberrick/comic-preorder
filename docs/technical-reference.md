@@ -2203,15 +2203,29 @@ existing row's tenant_id.
 
 Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
 added 5.4 S3). All are written in TypeScript, all use Supabase service-role
-for privileged operations, and all that send email use MailerSend.
+for privileged operations. **Email provider now differs by environment as of
+2026-09-02: staging's six mail-sending functions call Resend
+(`api.resend.com/emails`); production still calls MailerSend
+(`api.mailersend.com/v1/email`), untouched.** See F99 migration below.
+
 **Post-F99-S1 (2026-08-31, staging only):** the sender is no longer
 hardcoded. The six email-sending functions (§ 11.2) read `MAIL_FROM_EMAIL` /
 `MAIL_FROM_NAME` from Edge Function secrets, each with a `??` fallback to
 today's literal (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop") so an
-unset secret changes nothing. Staging has both secrets set to those same
-values — verified byte-identical via a live `reset-password` send read
-against a real inbox, 2026-08-31. Production is untouched (separate,
-explicitly-requested step). See `docs/f99-sender-domain-consolidation.md`
+unset secret changes nothing. Staging had both secrets set to those same
+values from 2026-08-31 through the F99 Resend migration below.
+
+**Post-F99-migration-M1–M5 (2026-09-02, staging only):** the six functions'
+mail-send block now targets Resend, not MailerSend — endpoint, auth header,
+`RESEND_API_KEY` secret (new), `from` as a string, `to` as a plain email
+string. Staging's `MAIL_FROM_EMAIL` secret now holds `noreply@pulllist.app`
+(the flat address, not a per-tenant subdomain — decided in
+`f99-sender-domain-consolidation.md` § 10); `MAIL_FROM_NAME`'s value is
+unchanged (the brand name doesn't depend on provider). The `MAIL_FROM_EMAIL
+?? 'noreply@mrcyberrick.us'` fallback literal in code is unchanged — it is
+S1's regression control, not part of this diff. Production is untouched
+(separate, explicitly-requested step per CLAUDE.md § Staging Only). See
+`docs/f99-resend-migration.md` and `docs/f99-sender-domain-consolidation.md`
 § 4 S1.
 
 ### 11.1 Function inventory
@@ -2249,9 +2263,10 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_URL` | all |
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
-| `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
-| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **set on staging** to that same value, confirmed present via `supabase secrets list`; not set on production) |
-| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value; not set on production) |
+| `MAILERSEND_API_KEY` | **production only** as of 2026-09-02 — every function that sends email there (all except claim-paper-customer). Still present in staging's secret store (dormant, unread by any deployed code since the F99 Resend migration; harmless, not yet cleaned up per the plan's optional M8) |
+| `RESEND_API_KEY` | **staging only** as of 2026-09-02 (F99 migration M1) — the same six functions, now calling `api.resend.com/emails`. Fresh dedicated key, not the discovery session's key (Rick's call). Not set on production |
+| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **staging value changed 2026-09-02 to `noreply@pulllist.app`** per the Resend migration's flat-addressing decision, confirmed via a changed `supabase secrets list` digest; **production still `noreply@mrcyberrick.us`**, unset explicitly, using the fallback) |
+| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value — unchanged by the Resend migration, since the brand name doesn't depend on provider; not set on production) |
 | `APP_BASE_URL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password (pre-existing, not new to F99 S1 — `??` fallback to `https://pulllist.app`; was missing from this table until 2026-08-31. **Confirmed present in staging's secret store** via `supabase secrets list`; actual value not readable from the CLI (digest only) and not independently verified here — production status unchecked) |
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
@@ -3664,7 +3679,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 
 #### F99 — transactional and marketing mail are split across two sender domains on two DNS providers; consolidate the sending identity onto `pulllist.app`
 
-- **Status:** filed 2026-07-25 at the close of the F97 fix, while the complete sender-domain picture was verified in front of us. **Open — PLAN DOC WRITTEN 2026-08-31: `docs/f99-sender-domain-consolidation.md` (STATUS: PLANNED, S0 gate open). Not started.** *(This line previously read "Direction only, no plan doc yet" — true until 2026-08-31.)* The plan executes **this finding's own steps (3)–(5)**; steps (1)–(2) are already done (reporting-authorization record 2026-07-25; the 4-week report read 2026-08-20). **Must be designed together with F72, not sequenced ahead of it.** **A constraint this entry did not have, measured 2026-08-31: MailerSend's free tier allows exactly ONE verified domain** (plus 100 daily API requests — see **F148** — 500 emails/month, and no overage). That is in direct tension with this entry's per-tenant-subdomain recommendation: one slot spent on `rjbookstop.pulllist.app` leaves a second tenant with no sending identity at all. **The plan's S0 is the blocking question — whether one verified domain authorizes its subdomains as `From` addresses — and it must be answered from delivered message headers, not an API status.** Also newly measured: **no Edge Function uses a MailerSend template**; all six POST inline HTML, so the free tier's 1-template limit is moot (the single hosted template was unused, had drifted from production, and was deleted 2026-08-31).
+- **Status:** filed 2026-07-25 at the close of the F97 fix, while the complete sender-domain picture was verified in front of us. **Open — PLAN DOC WRITTEN 2026-08-31: `docs/f99-sender-domain-consolidation.md`.** ***That doc, not this entry, is the live record — read its STATUS token first.*** **Progress since: S0 ANSWERED 2026-08-31; S1 DONE on staging 2026-08-31 (`eff9793`); S2 (DNS) DONE 2026-09-01; S3 ATTEMPTED 2026-09-01 and ROLLED BACK with `#MS42207` UNRESOLVED (~50–55 min of real production outage); S3-B Brevo transactional EVALUATED and REJECTED 2026-09-02 (it rewrites password-reset links through its own click redirector, not disableable); a second free MailerSend account CLOSED as an explicit ToS violation; DIRECTION SET 2026-09-02 to **Resend** — a direction, not a commitment, nothing probed live. S4 not started.** *(This line read "(STATUS: PLANNED, S0 gate open). Not started." from 2026-08-31 until 2026-09-02 — by which point four sub-steps had run and one had caused a real outage. Corrected during the F99 provider-direction session; same stale-status pattern as F132/F138/F139/F145.)* *(This line previously read "Direction only, no plan doc yet" — true until 2026-08-31.)* The plan executes **this finding's own steps (3)–(5)**; steps (1)–(2) are already done (reporting-authorization record 2026-07-25; the 4-week report read 2026-08-20). **Must be designed together with F72, not sequenced ahead of it.** **A constraint this entry did not have, measured 2026-08-31: MailerSend's free tier allows exactly ONE verified domain** (plus 100 daily API requests — see **F148** — 500 emails/month, and no overage). That is in direct tension with this entry's per-tenant-subdomain recommendation: one slot spent on `rjbookstop.pulllist.app` leaves a second tenant with no sending identity at all. **The plan's S0 is the blocking question — whether one verified domain authorizes its subdomains as `From` addresses — and it must be answered from delivered message headers, not an API status.** Also newly measured: **no Edge Function uses a MailerSend template**; all six POST inline HTML, so the free tier's 1-template limit is moot (the single hosted template was unused, had drifted from production, and was deleted 2026-08-31).
 - **Severity:** Low as a defect — nothing is broken, nothing is blocked, no data or security exposure. Medium as a **decision**: the split is customer-visible (a customer receives marketing mail from `rjbookstop.pulllist.app` and magic-link logins from `mrcyberrick.us`, a domain carrying no PULLLIST branding), it spreads email authentication across two DNS providers, and deferring it past F72 means provisioning sender domains **twice**.
 - **Current state (verified against public DNS 2026-07-25):**
 
@@ -3677,6 +3692,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   | DMARC | ✓ `p=none` (F97, 2026-07-25) | present, but **reports undeliverable** — see blocker below |
 
 - **The design decision this finding exists to force:** flat `noreply@pulllist.app` versus per-tenant `<slug>.pulllist.app`. **Recommend the per-tenant subdomain.** Brevo's sender already sits at `rjbookstop.pulllist.app` — set ad hoc during the F96 incident when `SENDER_EMAIL` was repointed off the noncompliant `hello@mrcyberrick.us` — so the tenant-slug shape is already established and fully authenticated. It is also precisely what **F72** needs, since per-tenant email branding requires a per-tenant sending identity. Branding consistency and multi-tenancy then fall out of one structure. A flat apex sender would have to be torn out and redone when F72 lands.
+  ***⚠️ REASSESS 2026-09-02 — this recommendation's stated rationale is now partly void.*** *It rests on "Brevo's sender already sits at `rjbookstop.pulllist.app`", and **Brevo has since been evaluated for transactional and REJECTED** (plan doc § 9), so that argument no longer supports the **transactional** sender — Brevo keeps its **marketing** sender there, untouched. Two corrections follow. **(a)** F72's per-tenant branding lives in the `from` **name** and the body copy, both secret-driven since S1 — it does **not** require a per-tenant sending **domain**, so "would have to be torn out and redone when F72 lands" overstates the cost; the subdomain buys reputation segmentation, not branding. **(b)** A flat `noreply@pulllist.app` needs exactly **one** domain slot forever at any tenant count, which decides whether a 1-domain free tier suffices — and provider free tiers differ on whether a parent domain even covers its subdomains (MailerSend yes, Resend no, SES yes). **Plan doc § 10 names this the lever to settle BEFORE choosing a provider.*
 - **Blocker on the destination domain — RESOLVED 2026-07-25, same session as filing:** `_dmarc.pulllist.app` publishes `rua=mailto:hello@mrcyberrick.us` — a **cross-organizational-domain** reporting address — with **no** RFC 7489 §7.1 authorization record at `pulllist.app._report._dmarc.mrcyberrick.us` (verified **NXDOMAIN** at the authoritative nameserver, 2026-07-25). Conformant reporters (Google, Microsoft, Yahoo) must discard those reports, so `pulllist.app` has never delivered a single aggregate report despite carrying a policy since ~2026-06-11 — and it now has a live sending subdomain under that policy. This is exactly the telemetry needed **during** a sender migration to confirm the new domain authenticates. Fix is one TXT record, name `pulllist.app._report._dmarc`, value `v=DMARC1`, **in the GoDaddy zone** — the name's parent zone is `mrcyberrick.us`, not `pulllist.app`, so adding it in Cloudflare produces an inert `…_dmarc.pulllist.app` record that looks correct in the UI and does nothing. **Rick published the record in GoDaddy the same day**; verified live at the authoritative nameserver and at both `8.8.8.8` and `1.1.1.1`: `pulllist.app._report._dmarc.mrcyberrick.us TXT "v=DMARC1"`. Both domains are now observable. Never given its own finding ID — it was raised, decided, and fixed inside this entry's filing session.
 - **Fix direction (dedicated session):** (1) ~~publish the reporting-authorization record above so both domains become observable~~ — **done 2026-07-25**; (2) let 2–4 weeks of aggregate reports accumulate and read them **before** changing any sender address — they are a free, accurate inventory of everything currently sending as either domain, which is hard to reconstruct any other way; (3) verify the chosen sending domain in MailerSend and add its DKIM + Return-Path CNAMEs **in Cloudflare**; (4) update the six `from:` sites, staging first, then promote through the standard workflow; (5) re-verify DMARC alignment on the new domain before retiring the old sender identity. **`mrcyberrick.us` is not being retired as a domain** — it remains the GitHub Pages rollback surface at `/comic-preorder/` and serves the F98 newsletter thumbnails at `/weekly-pull-feed/`. Only the sending identity moves.
 - **Reputation note:** no warm-up concern. The F96 campaigns were suspended at submission with zero recipients, so no delivery ever occurred and no reputation signal — good or bad — was generated on either domain; the cause was a per-contact account-level blocklist flag, not domain reputation. A new sending domain likewise starts with no reputation, which only matters to senders above a few thousand messages/day. PULLLIST is orders of magnitude below that.
@@ -3699,8 +3715,48 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - **⚠️ TRIGGER FIRED 2026-08-30 — the app-side half of MailerLite retirement is DONE.** `register-customer`'s `?secret=` webhook path was removed entirely (native-signup § S5), platform-wide. **F99 is now unblocked but UNSCHEDULED — it is no longer gated, and § 13 should not be read as saying it is.** *(Scheduling is a separate matter: Rick's 2026-08-29 direction is “small features for now,” so the Founding Partner / email-identity track is deliberately not next.)*
   - **What fired is the APP half, not the DNS half — do not conflate them before tightening DMARC.** PULLLIST no longer *receives* MailerLite webhooks, but that says nothing about whether MailerLite still *sends* as `mrcyberrick.us`. The condition this decision actually waits on is **`litesrv._domainkey` being removed from the `mrcyberrick.us` zone and MailerSend confirmed as its sole sender.** **Verify that in the zone before publishing `p=quarantine`** — tightening while a live DKIM-only sender remains is precisely the failure this entry was written to prevent. *(Separately measured 2026-08-30 on the other domain: `_dmarc.pulllist.app` is `p=none`, and the apex SPF authorizes only Namecheap's forwarder — `include:spf.efwd.registrar-servers.com` — **not** MailerSend. Any move to send transactional mail from `@pulllist.app` needs that SPF extended first.)*
   - **Consequence for F99's own design:** consolidation is not merely rewriting six Edge Function `from:` addresses. There is an independent sender on the transactional domain whose content PULLLIST does not control and which is already scheduled to leave. **F99 should sequence with or after MailerLite retirement**, not design around a sender that is being removed.
-- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional), Brevo (marketing).
-- **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design.
+- **Provider selection RESOLVED 2026-09-02 — Resend, GREEN discovery.** The § "REASSESS 2026-09-02"
+  note above flagged the per-tenant-subdomain recommendation as void pending a live probe; that probe
+  ran the same day (`docs/f99-resend-discovery.md`, both phases, real account, real sends, real
+  delivered headers) and came back GREEN. `pulllist.app` verified in Resend; K1–K6 all clear on the
+  domain we verified (K1/K3 tripped only on Resend's own `resend.dev` sandbox, traced to a
+  tracking-subdomain Resend itself pre-configured, and confirmed clean on our own domain before
+  concluding anything); alignment measured **stronger than Brevo achieved** — DKIM exact match
+  (`d=pulllist.app`) **and** SPF aligned, not DKIM-only. **The per-tenant-subdomain recommendation
+  this entry made is now superseded, not merely reassessed**: D7 (sending as
+  `noreply@rjbookstop.pulllist.app` with only the parent verified) was rejected —
+  `403 validation_error: "The rjbookstop.pulllist.app domain is not verified"` — the opposite of
+  MailerSend's own subdomain-coverage result this recommendation was modeled on. **Decision: flat
+  `noreply@pulllist.app`**, per the standing "prioritize the free tier" rule; per-tenant subdomains
+  are a future paid-tier (Pro, $20/mo) choice, not the default. Full record: `f99-resend-discovery.md`;
+  decision recorded in `f99-sender-domain-consolidation.md` § 10; migration plan
+  `docs/f99-resend-migration.md` written, not started. No finding ID consumed.
+- **Migration EXECUTED on staging, GREEN — 2026-09-02, same day as the discovery.**
+  `docs/f99-resend-migration.md` M1–M5 run end to end: `RESEND_API_KEY` set (fresh dedicated key,
+  Rick's call over reusing the discovery session's key), all six functions rewritten to the plan's
+  own diff table exactly (endpoint `api.resend.com/emails`, `from` a string
+  `` `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>` ``, `to` a plain email string, `html` unchanged) and
+  deployed with `verify_jwt` read live and preserved per function (`approve-customer`/`send-my-list`
+  ON, the other four OFF — matches this doc's own § 11.2 record exactly). `MAIL_FROM_EMAIL` flipped
+  to `noreply@pulllist.app` on staging, landed together with the code deploy per the plan's own
+  sequencing note. **Two real sends confirmed clean from delivered headers, at two different
+  receiving MTAs:** `reset-password` (Gmail) and `invite-customer` (`jellyfish.systems`/
+  `privateemail.com`, triggered by Rick from the live admin panel as a substitute for
+  `register-customer`, which needs a live Turnstile token this session cannot produce) — both
+  `dkim=pass header.i=@pulllist.app header.s=resend` (exact match), `spf=pass` aligned via
+  `send.pulllist.app`, `dmarc=pass`, correct `From:`, no rewritten links, no tracking pixel.
+  **Magic-link auth traced in code, not assumed:** no separate Supabase-native mail path exists
+  anywhere in the app (`signInWithOtp`/`resetPasswordForEmail`/`inviteUserByEmail` are never called
+  client-side) — this migration already covers 100% of PULLLIST's outbound mail. Full regression
+  suite green post-push: 279 unit + 143 Playwright, 0 failures. **`register-customer`'s live UI
+  check is an accepted residual** — no real tenant-hostname URL exists on staging (`*.pages.dev` is
+  hard-coded to the apex bucket), same disposition F149 already gives this exact
+  untestable-headlessly class of check; the two functions actually exercised share its identical
+  request shape. **Production untouched — M6 requires Rick's explicit separate promotion request**,
+  same as every other production promotion in this project. Full record:
+  `docs/f99-resend-migration.md` (STATUS: staging complete). No finding ID consumed.
+- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional, still live in production — untouched), Brevo (marketing), **Resend (transactional — wired into all six Edge Functions on staging 2026-09-02; production not yet cut over)**.
+- **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design. **F148** — Resend's daily cap is emails-metered (not requests, unlike MailerSend), so F148 is not dissolved by this provider choice; see `f99-resend-discovery.md` § 4 D8.
 
 #### F100 — `weekly-pull-feed` publishes to GitHub Pages from two independent deployers with no ordering guarantee between them; this, not cancelled Actions runs, is what broke F98
 
@@ -5306,17 +5362,41 @@ reasoning — only the disposition changed, not the diagnosis.
     existing 100ms inter-send delay in the loop is presumably what keeps the current code under it; a
     bulk or chunked redesign must respect both.
 - **Where:** `supabase/functions/notify-customers/index.ts:179-203` (this repo) · `scripts/import.js:2260-2273` Step 7 (private scripts repo, local working tree). No schema change, no client change.
-- **Related:** **F131** (the same class — a structural single-operator/single-account dependency that works perfectly until tenant count moves, and that no test can reach). **F99** (sender-identity consolidation onto `pulllist.app` — same MailerSend account, and any domain work should be aware of these quotas). **F72** (per-tenant email branding — the other half of what makes transactional mail multi-tenant-ready). **F135** (the other side effect welded into the import script's run). **F105** (the "verification that doesn't announce failure" pattern this echoes).
+- **Related:** **F131** (the same class — a structural single-operator/single-account dependency that works perfectly until tenant count moves, and that no test can reach). **F99** (sender-identity consolidation onto `pulllist.app` — same MailerSend account, and any domain work should be aware of these quotas). ***2026-09-02: "same MailerSend account" no longer holds automatically — F99's direction is now **Resend**. Its free tier is 3,000/month but still **100/day**, so a provider move raises the monthly ceiling and does NOT dissolve this finding. Re-derive the bulk-endpoint fix direction against whichever provider is actually chosen.*** **F72** (per-tenant email branding — the other half of what makes transactional mail multi-tenant-ready). **F135** (the other side effect welded into the import script's run). **F105** (the "verification that doesn't announce failure" pattern this echoes).
 
 #### F149 — Maintenance Mode doesn't cover `index.html`'s sign-up flow or `forgot-password.html`, the two paths F99 S3's outage window exposes most
 
-- **Status: RESOLVED on staging, 2026-08-31** (`feature/f149-maintenance-mode-anon-paths`
-  `ca8c481`, merged `--ff-only` to `staging`). Filed the same day, found while planning F99 S3's
-  cutover risk (the "no parallel run" window where the old MailerSend sender is removed before the
-  new one is verified — see `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling
-  Maintenance Mode during that window as a risk control; checked against the actual code before
-  writing that into the plan, and the coverage had a real gap. Production untouched — staging only,
-  per CLAUDE.md § Staging Only.
+- **Status: RESOLVED, BOTH ENVIRONMENTS, 2026-09-01** — staging `feature/f149-maintenance-mode-anon-paths`
+  `ca8c481` (2026-08-31, merged `--ff-only`), **production PR #147 `36b79ff`** (2026-09-01). Filed
+  2026-08-31, found while planning F99 S3's cutover risk (the "no parallel run" window where the old
+  MailerSend sender is removed before the new one is verified — see
+  `docs/f99-sender-domain-consolidation.md` § 3). Rick proposed toggling Maintenance Mode during that
+  window as a risk control; checked against the actual code before writing that into the plan, and
+  the coverage had a real gap.
+- **Promotion excluded F99 S1, deliberately.** Staging was 19 commits ahead of `main` at promotion
+  time, most of it F99 S1 (staging-only per its own STATUS line). A plain merge would have carried
+  F99 S1's six `supabase/functions/*.ts` changes into `main` alongside F149 — caught before
+  committing; the six files were restored to `origin/main`'s version and confirmed byte-identical.
+  Doc files synced wholesale (normal for every promotion — inert project journal, not deployed
+  behavior).
+- **The production RPC was applied and independently verified BEFORE any client code merged**, per
+  F105's unapplied-migration gate: the client already calls `is_maintenance_mode()`, so promoting the
+  code first would have left a window where the RPC didn't exist yet (fails open — nothing would have
+  broken, but the fix would have silently no-op'd). Rick ran
+  `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql` against production via SQL Editor; a
+  live anon RPC call confirmed `200, false` before the code PR was even opened, and re-confirmed
+  identically post-deploy.
+- **F150 filed during this promotion's own pre-flight, not fixed inline** — production's
+  `app_settings` grants `anon` full table-level DML that staging doesn't; RLS confirmed still
+  blocking real reads (`200, []` live). See § 13 F150 below.
+- **Post-deploy verified against the bytes `pulllist.app` actually serves:** `app.js`, `index.html`,
+  `forgot-password.html` all confirmed carrying `isMaintenanceModePublic`; `config.js` still the prod
+  ref. PR file list checked on GitHub itself (`gh pr diff --name-only`), not just local state — 7
+  files, matching intent exactly, no Edge Function files, no `config.js`. **Write-smoke deliberately
+  skipped** — this change never touches `preorders` or the customer reserve path, same disposition
+  PR #141/#145/#133 record. **A live toggle-ON test against real production traffic was deliberately
+  not run by the agent** — left to Rick's own call, since it would show the holding-page banner to
+  any real customer on the four already-gated pages during the window.
 - **A second, more fundamental gap surfaced while implementing, not while planning: the naive fix
   (call the existing `Settings.isMaintenanceMode()` from either anonymous page) cannot work at all.**
   `app_settings`'s only SELECT policy is `TO authenticated` — confirmed live, not inferred: an anon-key
@@ -5445,7 +5525,64 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Related:** **F149** (whose promotion surfaced this), **F64** (the existing prod↔staging DDL
   divergence catalogue — this is the same class, one more instance).
 
-Next free finding ID: **F151**.
+#### F151 — `tenants.settings` still stores `mailerlite_webhook_secret` on every real tenant row, and the authenticated client path can read it
+
+- **Status:** filed 2026-09-01, found while planning **F72** (`docs/f72-multi-tenant-branding.md`
+  § 6 discovery 2) — the plan needed to know exactly which `tenants` columns the client may read, and
+  measuring that surfaced this. **Open, not started** — filed per Rick's explicit call (Q5: file it,
+  don't fix it inside F72), matching F150's disposition one day earlier.
+- **Severity: Low, for two independent reasons — and the second is the one that matters.**
+  (1) **The secret is inert.** The `?secret=` webhook path was removed from `register-customer`
+  platform-wide on 2026-08-30 (`docs/native-customer-signup.md` § S5); CLAUDE.md already records
+  `tenants.settings->>'mailerlite_webhook_secret'` as **dead config**. The stored value authorizes
+  nothing today. (2) **The read is tenant-scoped.** `tenants`' SELECT policy admits an authenticated
+  user to **their own tenant row only** (§ 4.1), so the worst case is a customer reading *their own
+  shop's* dead secret — **not another tenant's**. There is no cross-tenant exposure.
+- **What was actually measured, 2026-09-01** (service-role read-only, both environments; **only the
+  jsonb key names were read and recorded — the secret value was never fetched, printed, or stored**):
+
+  | Environment | Tenant | `settings` keys |
+  |---|---|---|
+  | staging (`puoaiyezsreowpwxzxhj`) | `raysandjudys` | `mailerlite_webhook_secret` |
+  | staging | `pw-fc2e3fc7`, `pw-2d3c4d60`, `pw-56132e92`, `pw-a62e4116` (Playwright fixtures) | `{}` — clean |
+  | production (`plgegklqtdjxeglvyjte`) | `rjbookstop` | `mailerlite_webhook_secret` |
+  | production | `comicstore` | `mailerlite_webhook_secret` |
+
+  So **all three real tenant rows carry it; only the throwaway test tenants are clean.**
+- **The mechanism, and why the existing safeguards do not cover this path.** Two separate read paths
+  reach `tenants`, and only one of them was ever designed with a projection boundary:
+  - **Anon path — covered, and it holds.** `resolve_tenant_by_slug` returns exactly
+    `id, slug, display_name, branding`. `docs/phase-5.3-per-tenant-branding.md` § 1.5 makes the
+    exclusion explicit: *"`settings` jsonb is STILL never returned … it may carry non-public config."*
+    That decision is correct and is not what this finding is about.
+  - **Authenticated path — not covered.** `app.js:82-86` reads the table **directly**
+    (`.from('tenants').select('id, slug, display_name, branding')`). That `select()` list is a
+    *client-side convention*, not an enforcement boundary — Postgres RLS filters **rows, not
+    columns**, so any client holding a valid session for that tenant can simply ask for
+    `select=settings` and receive it. The RPC's careful projection is bypassed entirely because this
+    path never calls the RPC.
+- **What is NOT confirmed, and should be before anyone acts on the severity above.** The
+  authenticated-read claim is **inferred**, not exercised: it rests on § 4.1's policy description
+  (*"Authenticated users can SELECT only their own tenant"*) plus the fact that RLS cannot filter
+  columns. **No probe was run with a real user JWT.** Specifically unchecked: whether a
+  **column-level GRANT** (`GRANT SELECT (id, slug, …) TO authenticated`) restricts `settings` — if
+  one exists, the conclusion flips and there is nothing to fix. Verify with a real authenticated
+  `GET /rest/v1/tenants?select=settings` before treating this as real.
+- **Fix direction (cheap, and rotation is not required).** Delete the dead key rather than protecting
+  it — there is no reason to keep a credential nothing reads:
+  `UPDATE public.tenants SET settings = settings - 'mailerlite_webhook_secret';` on both
+  environments, then re-verify the key is gone. **No rotation needed** — the value authorizes nothing
+  since 2026-08-30. If a genuinely-secret key ever needs to live on a tenant row, a column-level
+  `REVOKE`/`GRANT` on `tenants` is the durable fix; the client-side `select()` list is not.
+- **Where:** `tenants.settings` on **both** environments (unlike F150, which was production-only).
+  Client read path: `app.js:82-86`.
+- **Related:** **F72** (whose planning surfaced this — `docs/f72-multi-tenant-branding.md` § 6).
+  **F73 / F74** (the webhook-secret credential-handling lineage — this is the same secret, now
+  outliving its own feature). **F150** (filed one day earlier, same "found during planning, filed not
+  fixed" disposition, and the same GRANT-vs-RLS distinction at its core). **Phase 5.3 § 1.5** (the
+  anon projection boundary that holds and is *not* the gap here).
+
+Next free finding ID: **F152**.
 
 ---
 

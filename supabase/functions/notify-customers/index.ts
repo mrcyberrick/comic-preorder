@@ -1,3 +1,6 @@
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -11,7 +14,7 @@ Deno.serve(async (req) => {
   const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
   const SUPABASE_ANON      = Deno.env.get('SUPABASE_ANON_KEY')
   const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
+  const RESEND_API_KEY     = Deno.env.get('RESEND_API_KEY')
   const FOUNDING_TENANT_ID = Deno.env.get('FOUNDING_TENANT_ID')
 
   // Caller authentication: this function triggers a customer-wide email blast,
@@ -177,15 +180,15 @@ Deno.serve(async (req) => {
     let failed = 0
 
     for (const recipient of recipients) {
-      const mailRes = await fetch('https://api.mailersend.com/v1/email', {
+      const mailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: 'Bearer ' + MAILERSEND_API_KEY,
+          Authorization: 'Bearer ' + RESEND_API_KEY,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: { email: 'noreply@mrcyberrick.us', name: "Ray & Judy's Book Stop" },
-          to: [{ email: recipient.email, name: recipient.name }],
+          from: `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+          to: recipient.email,
           subject: "Ray & Judy's Book Stop — The " + monthLabel + ' pull list is live',
           html,
         }),
@@ -199,7 +202,7 @@ Deno.serve(async (req) => {
         console.error('Failed to send to', recipient.email, JSON.stringify(err))
       }
 
-      // Small delay to avoid MailerSend rate limits
+      // Small delay to avoid Resend rate limits
       await new Promise(resolve => setTimeout(resolve, 100))
     }
 
