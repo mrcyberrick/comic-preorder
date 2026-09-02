@@ -5582,7 +5582,57 @@ reasoning — only the disposition changed, not the diagnosis.
   fixed" disposition, and the same GRANT-vs-RLS distinction at its core). **Phase 5.3 § 1.5** (the
   anon projection boundary that holds and is *not* the gap here).
 
-Next free finding ID: **F152**.
+#### F152 — a real Resend send to an Outlook/Microsoft recipient landed in spam despite fully clean authentication
+
+- **Status:** filed 2026-09-02, found during **F99 M7** — the migration's own post-cutover
+  production verification, immediately after the six Edge Functions were cut over to Resend on
+  `plgegklqtdjxeglvyjte`. **Open, not started — Rick's explicit call: monitor, don't act yet.**
+- **What happened, measured, not inferred.** A real `reset-password` send to
+  `rick.sedivec@outlook.com`, triggered right after M6's production deploy, delivered with **every
+  authentication check clean**, read from the actual delivered headers:
+  ```
+  spf=pass smtp.mailfrom=send.pulllist.app
+  dkim=pass header.d=pulllist.app   (verified)
+  dkim=pass header.d=amazonses.com  (verified)
+  dmarc=pass action=none
+  compauth=pass reason=100
+  From: Ray & Judy's Book Stop <noreply@pulllist.app>
+  ```
+  **It still landed in the recipient's spam folder.** This is not a K1–K6 kill-criterion trip — the
+  discovery session's kill criteria (`docs/f99-resend-discovery.md`) cover link rewriting, tracking
+  injection, and alignment, none of which are in play here; every one of those measured clean, both
+  in discovery and again in this send. This is a separate axis: deliverability/reputation, which the
+  plan's own V6 gate (dkim/spf/dmarc passing) does not and cannot measure.
+- **Likely cause, not confirmed as the sole one.** `pulllist.app` has essentially no prior send
+  history with Microsoft's mail graph specifically — before this migration it was only ever used for
+  Brevo's marketing newsletter subdomain (`rjbookstop.pulllist.app`), and the parent domain was only
+  Resend-verified days earlier in the discovery session. `mrcyberrick.us` (the outgoing MailerSend
+  sender this replaces) had years of accumulated history with every major receiver. A brand-new
+  sender/domain combination commonly lands in spam at first regardless of authentication correctness
+  — a cold-start reputation cost, not a technical defect — and this reads as that. **Not
+  independently verified**: no probe was run against Microsoft's postmaster/SNDS tools, and no second
+  Outlook/Hotmail/Live send was attempted to see if the result repeats.
+- **What this is NOT.** Gmail (twice, in earlier M4 staging tests) and a third-party relay
+  (`jellyfish.systems`/`privateemail.com`, also M4) both delivered `pulllist.app`-sent mail to the
+  inbox cleanly in this same session. Only the one Outlook send has been observed going to spam — one
+  data point, one receiver, not a broad pattern yet.
+- **Mitigating factor, verified in code, not assumed:** `forgot-password.html:194`'s existing
+  success-state copy already reads *"Didn't get it? Check your spam folder, or **send again**"* —
+  this exact failure mode already has a UX safety net, present before this finding and not added
+  because of it. The customer is not left guessing.
+- **Severity: Low.** Not a defect in the migration's own correctness — every technical check this
+  migration is responsible for passes. A real customer-facing deliverability risk for
+  Outlook/Hotmail/Live recipients specifically, during whatever reputation warm-up period follows a
+  sender-domain change, softened by the pre-existing spam-folder prompt.
+- **Fix direction: none proposed, deliberately.** Rick's call, 2026-09-02: monitor as real customer
+  traffic (not test sends) builds `pulllist.app`'s reputation with Microsoft over the following days
+  to weeks; escalate only if it does not self-resolve. No code change, no DNS change, no provider
+  change proposed here.
+- **Where:** production only (`plgegklqtdjxeglvyjte`) — this send was against production, post-M6.
+  Not tested against staging.
+- **Related:** **F99** (the migration this surfaced during — `docs/f99-resend-migration.md` M7).
+
+Next free finding ID: **F153**.
 
 ---
 
