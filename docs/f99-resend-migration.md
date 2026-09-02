@@ -1,9 +1,10 @@
 # F99 — Resend migration: cut the six Edge Functions over from MailerSend
 
-**STATUS:** **STAGING COMPLETE, GREEN — 2026-09-02.** M1–M5 executed end to end same day as the plan
-was written; V1, V2, V3, V4, V5, V7 all green. **M6 (production promotion) NOT started — requires
-Rick's explicit separate request per CLAUDE.md § Staging Only.** | staging=`85ce9ce` (code) +
-secrets set | prod=untouched | findings=F99,F72,F148,F145
+**STATUS:** **COMPLETE, BOTH ENVIRONMENTS, GREEN — 2026-09-02, same day as the plan was written.**
+M1–M7 all executed; V1–V7 all green. Production real send authenticated perfectly but surfaced a
+separate, unrelated finding (**F152** — Outlook spam placement, Rick's call: monitor, not act) filed
+during M7. | staging=`85ce9ce` (code) + secrets set | prod=PR #148 (merge `4a4a475`) + secrets set,
+both live | findings=F99,F72,F148,F145,F152
 
 **What this is:** the actual cutover, following `docs/f99-resend-discovery.md`'s **GREEN** result
 (2026-09-02). That session proved Resend works from a brand-new account with zero bearing on
@@ -204,6 +205,31 @@ project (`plgegklqtdjxeglvyjte`), deploy the six updated functions one at a time
 other production promotion in this project, it needs Rick's explicit request and confirmation that
 staging has soaked.
 
+> ✅ **DONE 2026-09-02, same day, Rick's explicit request ("start M6/M7").** Code promoted via PR
+> #148 (`feat/f99-resend-migration-prod` → `main`, merge `4a4a475`). **A real surprise surfaced
+> during the merge, not a formality:** production's `main` had never actually received F99 S1's
+> parameterization — every prior promotion since 2026-08-31 (F149's, explicitly recorded; by the
+> same pattern presumably the rest) deliberately restored these six files to their pre-S1
+> hardcoded-literal state after merging, mirroring `config.js`'s own preservation step. So the merge
+> conflicted on all six files (main: old hardcoded object shape; staging: parameterized-then-Resend
+> string shape), resolved by taking staging's side wholesale (`git checkout --theirs`), verified
+> byte-identical to `origin/staging` by hash before committing. This promotion is therefore the one
+> that finally carries S1 forward too, not only M2. F125 tree-integrity checks all green:
+> `supabase/migrations/` still exactly 2 files, `config.js` still carries the prod ref, PR file list
+> matched intent on GitHub itself (12 files: the six functions + doc set, no `config.js`, no
+> migrations).
+>
+> **Secrets:** Rick set `RESEND_API_KEY` + `MAIL_FROM_EMAIL=noreply@pulllist.app` via
+> `supabase secrets set` against `plgegklqtdjxeglvyjte` — **reused the same Resend API key as
+> staging**, a deliberate choice (not the "fresh dedicated key per environment" pattern M1 used on
+> staging). Confirmed via `supabase secrets list` digest comparison (`RESEND_API_KEY` digest matches
+> staging's exactly; `MAIL_FROM_EMAIL` digest changed from its pre-migration value; `MAIL_FROM_NAME`
+> unchanged, as expected).
+>
+> **`verify_jwt` read live before deploy, matched staging exactly** (`approve-customer`/
+> `send-my-list` ON, other four OFF) — deployed one at a time with `--no-verify-jwt` on the four OFF
+> functions, no flag on the two ON functions. **V2 re-confirmed post-deploy, identical.**
+
 ### M7 — Post-cutover verification (production)
 
 Real delivered-header check on at least one production send (`reset-password` is the lowest-risk
@@ -211,6 +237,24 @@ candidate, matching S1's own choice). **This will NOT be byte-identical to pre-m
 S1's regression control was — the sending domain itself changes (`mrcyberrick.us` → `pulllist.app`)
 by design. The control is "arrives, correctly branded, `dkim=pass`/`spf=pass`/`dmarc=pass`," not
 byte-for-byte sameness.
+
+> ✅ **DONE 2026-09-02.** Real `reset-password` send triggered via direct `curl` against
+> `plgegklqtdjxeglvyjte`, to `rick.sedivec@outlook.com`. Delivered headers, read from the actual
+> message (not the API's `{"success":true}`): `spf=pass smtp.mailfrom=send.pulllist.app`,
+> `dkim=pass header.d=pulllist.app` (verified) **+** `dkim=pass header.d=amazonses.com` (verified),
+> `dmarc=pass action=none`, **`compauth=pass reason=100`** (Microsoft's own composite-authentication
+> verdict — a stronger signal than Gmail/Google ever reports), correct
+> `From: Ray & Judy's Book Stop <noreply@pulllist.app>`. **Every technical check this gate asks for
+> passes, cleanly.**
+>
+> **A real, separate finding surfaced anyway: the message landed in spam.** Filed as **F152**
+> (`docs/technical-reference.md` § 13) rather than treated as a V6 failure — it isn't one; nothing
+> V6 checks for is wrong. Reads as cold-start reputation cost for the brand-new `pulllist.app`
+> sender identity specifically with Microsoft (no prior send history there, unlike `mrcyberrick.us`'s
+> years of it), not confirmed as the sole cause. Gmail and a third-party relay both delivered cleanly
+> in this session's earlier tests. Mitigated by `forgot-password.html`'s pre-existing "check your
+> spam folder" copy. **Rick's explicit call: monitor real customer traffic over the following days to
+> weeks, do not act unless it doesn't self-resolve.**
 
 ### M8 — Retire `MAILERSEND_API_KEY` (later, optional)
 
@@ -230,7 +274,7 @@ Not scoped in this plan — a future, explicit decision.
 | **V3** | Staging real sends (M4) — delivered headers show `dkim=pass d=pulllist.app`, `spf=pass` aligned, `dmarc=pass`, correct `From:` display name | ✅ **GREEN** — `reset-password` + `invite-customer`, both from delivered headers, both clean; `register-customer` a recorded residual (Rick's call) |
 | **V4** | Full `run-smoke.ps1` green against deployed staging bytes, post-push | ✅ **GREEN** — 279 unit + 143 Playwright, 0 failures, exit 0 |
 | **V5** | Magic-link auth path confirmed either unaffected (Supabase-native) or explicitly migrated — not assumed either way | ✅ **GREEN** — confirmed by code trace, not assumed: no separate Supabase-native mail path exists anywhere in the app; `signInWithOtp`/`resetPasswordForEmail`/`inviteUserByEmail` are never called client-side. All magic-link/invite/reset mail already goes through the six functions this migration covers |
-| **V6** | Production real send (M7) — same header checks as V3, against `plgegklqtdjxeglvyjte` | ⏸️ **NOT STARTED — M6/M7 require Rick's explicit separate production-promotion request** |
+| **V6** | Production real send (M7) — same header checks as V3, against `plgegklqtdjxeglvyjte` | ✅ **GREEN** — `dkim=pass d=pulllist.app` + `amazonses.com`, `spf=pass` aligned, `dmarc=pass`, `compauth=pass reason=100`. Landed in spam anyway — filed as **F152**, not a V6 failure (see M7 above) |
 | **V7** | `MAILERSEND_API_KEY` and the six functions' old endpoint confirmed absent from the final deployed code (`grep` returns 0) | ✅ **GREEN** — both return 0 in the final committed code |
 
 ---
@@ -288,6 +332,23 @@ migration — no separate path exists (V5 green), full regression suite green (2
 Playwright, V4 green). `register-customer`'s live UI check accepted as a residual — Turnstile-gated,
 no real tenant-hostname URL exists on staging, same disposition F149 already established for this
 exact class of check; the two functions actually exercised share its identical request shape.
-**M6 (production promotion) NOT started** — needs Rick's explicit separate request per CLAUDE.md
-§ Staging Only, same as every other production promotion in this project. First pass: written, same
+~~**M6 (production promotion) NOT started**~~ — **superseded below.** First pass: written, same
 session as the discovery's GREEN result, not started.
+
+**Last updated:** 2026-09-02 (third pass, same day, Rick's explicit request "start M6/M7") —
+**M6/M7 executed, COMPLETE on production too.** Code promoted via PR #148 (merge `4a4a475`) — the
+merge conflicted on all six functions because production's `main` had never received F99 S1's
+parameterization (every prior promotion had deliberately restored these files to hardcoded
+literals, mirroring `config.js`'s preservation pattern); resolved by taking staging's side wholesale,
+verified byte-identical by hash. F125 tree-integrity checks green (migrations still 2 files,
+`config.js` still prod ref, PR file list matched intent on GitHub). Secrets set by Rick
+(`RESEND_API_KEY` — reused the same key as staging, his explicit choice this time, not a fresh one;
+`MAIL_FROM_EMAIL` → `noreply@pulllist.app`). All six deployed, `verify_jwt` preserved and
+re-confirmed post-deploy (V2 green again). **V6: real production send, authentication fully
+clean** — `dkim=pass d=pulllist.app` + `amazonses.com`, `spf=pass` aligned, `dmarc=pass`,
+`compauth=pass reason=100` — **but it landed in spam**, filed as **F152** (cold-start Microsoft
+reputation, not a technical defect; Rick's call: monitor, don't act). Write-smoke deliberately
+skipped — this migration never touches `app.js`/HTML or the customer reserve path, confirmed via
+the production diff itself (Edge Functions + docs only). **Both environments now fully cut over to
+Resend.** MailerSend secrets left in place on both projects as a dormant rollback path (M8, optional,
+not scoped here).
