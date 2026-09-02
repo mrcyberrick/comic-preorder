@@ -13,9 +13,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_SERVICE   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const MAILERSEND_API_KEY = Deno.env.get('MAILERSEND_API_KEY')
+    const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const RESEND_API_KEY   = Deno.env.get('RESEND_API_KEY')
 
     let email
     try {
@@ -65,15 +65,15 @@ Deno.serve(async (req) => {
               || 'there'
 
     // Send branded reset email — inline HTML, no shared template dependency
-    const mailRes = await fetch('https://api.mailersend.com/v1/email', {
+    const mailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer ' + MAILERSEND_API_KEY,
+        Authorization: 'Bearer ' + RESEND_API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from:    { email: MAIL_FROM_EMAIL, name: MAIL_FROM_NAME },
-        to:      [{ email: email, name: name }],
+        from:    `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+        to:      email,
         subject: "Ray & Judy's Book Stop — Reset your password",
         html:    buildResetEmail(name, action_url),
       }),
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
     if (!mailRes.ok) {
       const mailErr = await mailRes.json().catch(() => ({}))
-      console.error('MailerSend error:', JSON.stringify(mailErr))
+      console.error('Resend error:', JSON.stringify(mailErr))
     }
 
     return Response.json({ success: true }, { headers: corsHeaders })
