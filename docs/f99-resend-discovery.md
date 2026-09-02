@@ -361,6 +361,32 @@ recorded gets re-tested — which is exactly why § 9 exists.
 
 ---
 
+## 10. Completion criteria
+
+**A discovery session is done when the question is answered and written down — not when the tests
+pass.** A RED result that is fully recorded is a complete session; a GREEN result left in scrollback
+is not.
+
+- [ ] **V1–V8 recorded**, each with its measured value — *or* the session ended early at **V2** with
+      the tripped kill criterion and its evidence recorded
+- [ ] **Every § 2 row marked RESEARCH** is now either **confirmed** or **corrected** against a live
+      measurement, and § 2 updated in place
+- [ ] **K1–K6 each explicitly evaluated**, or marked "not reached" with the reason
+- [ ] **D7's answer recorded** — the delivered `d=` value if it sent, or the provider's **exact
+      rejection string** if it did not
+- [ ] **This doc's STATUS token** updated to `COMPLETE` or `REJECTED` with the date and outcome
+- [ ] **Parent plan `f99-sender-domain-consolidation.md` § 10** updated from *direction* to
+      *decision*
+- [ ] **`CLAUDE.md` F99 row** updated, and a "Last completed work" entry added
+- [ ] **If GREEN:** the migration plan is written as a **new** F99 sub-step doc — **not started, not
+      executed, in this session**
+- [ ] **If RED:** the fallback is recorded (parent plan § 8 Q7 — MailerSend Starter, $35/mo)
+- [ ] **Production confirmed untouched** — MailerSend domain, API token, `MAIL_FROM_EMAIL` /
+      `MAIL_FROM_NAME` secrets, and all six Edge Functions verified unchanged
+- [ ] **`/wrap-up` run** (CLAUDE.md § Anti-Drift Rules)
+
+---
+
 ## Reference
 
 - **`docs/f99-sender-domain-consolidation.md`** — the parent plan. **§ 9** (Brevo evaluated and
