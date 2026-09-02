@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK — read § 4 S3 before retrying**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **§ 8 Q7 (one month paid tier for a parallel run) is now the leading approach, not a deferred nicety**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -468,19 +468,48 @@ secrets. No code deploy. Keep the old DNS records in place for rollback.
 >    generate a fresh token (Sending-access scope is sufficient — none of the six functions do
 >    anything but `POST /v1/email`) immediately after adding the new domain, *before* attempting any
 >    send.
-> 2. **The real blocker: MailerSend's send-time domain check did not activate for at least 15–20
->    minutes after the dashboard showed full verification — this is the one that forced the
->    rollback.** After fixing the token, every send attempt returned
+ 2. **The blocker that forced the rollback — and its cause is UNRESOLVED. Do not treat any
+>    explanation below as established.** After fixing the token, every send attempt returned
 >    `#MS42207 — "The from.email domain must be verified in your account to send emails"` — for
->    **both** the subdomain (`noreply@rjbookstop.pulllist.app`, which MailerSend's own docs confirm
->    should work under a verified parent with no extra verification) **and the exact bare verified
->    domain** (`noreply@pulllist.app`), ruling out any subdomain-specific cause. Waited 2.5 min, then
->    10 more (~15–20 min total past verification) — error persisted unchanged both times. No
->    "Default email address" setting was found in the account to investigate as an alternate cause
->    (that lead came from a general web search, not confirmed to exist in this account's UI). Not
->    something DNS, our code, or this plan's own design could have surfaced in advance — MailerSend's
->    own docs describe verification as taking "a few minutes," and the dashboard showing "verified"
->    turned out not to mean the send-time enforcement layer had caught up.
+>    **both** the subdomain (`noreply@rjbookstop.pulllist.app`) **and the exact bare verified domain**
+>    (`noreply@pulllist.app`), twice each, ~10 minutes apart, ~15–20 min total past full verification.
+>
+>    ⚠️ **An earlier version of this entry (written the same evening, corrected 2026-09-01) asserted
+>    "MailerSend send-time activation delay" as the cause. That was a tidy story stated with more
+>    confidence than the evidence carried, and it is contradicted by the rollback itself:
+>    `mrcyberrick.us` was re-added minutes later and sent successfully on the first try.** A generic
+>    newly-added-domain activation delay should have hit it too. (Confound: `mrcyberrick.us` had
+>    prior history in the account, so re-activating a known domain may differ from cold-adding a new
+>    one — which is itself hypothesis 2 below, not a defence of the delay theory.) Recording this
+>    because writing an unverified cause into a permanent doc is the exact failure mode F132/F138/
+>    F139/F145 all exist to catch.
+>
+>    **Ruled OUT, with reasons, so nobody re-investigates these:**
+>    - **Sender Identities (premium feature) — NOT the cause.** Read directly 2026-09-01
+>      (`mailersend.com/help/send-email-on-behalf-of-clients`, Rick's find). That feature exists to
+>      send from *clients'* domains without those clients verifying; MailerSend's own page states it
+>      is not required for a domain you have verified yourself, and that the parent domain must be
+>      verified regardless. Starter-and-above, but it does not gate this work.
+>    - **The subdomain design / a free-tier subdomain restriction — NOT the cause.** S0's own probe
+>      (2026-08-31, § 2) sent successfully from `noreply@probe.mrcyberrick.us` under verified
+>      `mrcyberrick.us` **on this same free account**, returning `dkim=pass`/`spf=pass`/`dmarc=pass`.
+>      Subdomain sending demonstrably works here. And the bare root domain failed identically anyway.
+>    - **A "Default email address" account setting** — chased from a web-search hint, no such setting
+>      found in this account's UI. Dead end, not a finding.
+>
+>    **Live hypotheses, ranked by fit — check in this order next attempt:**
+>    1. **Token↔domain binding mismatch (best fit).** MailerSend's own docs state the FROM address
+>       must match the domain the *API token* belongs to. A token bound to the wrong domain produces
+>       exactly this error, permanently, regardless of waiting. **Never verified during the attempt** —
+>       the new token's domain binding was assumed correct, not confirmed. This is the first thing to
+>       check, and it is checkable in seconds on the token's own page.
+>    2. **Cold-domain vs. known-domain state.** `pulllist.app` showed `0 Sent` and had never existed
+>       in this account; `mrcyberrick.us` re-added and worked instantly. That asymmetry is real and
+>       unexplained — possibly a per-domain flag, review hold, or warm-up state distinct from DNS
+>       verification.
+>    3. **Send-time activation delay** (the original claim). Still possible, but weakest — see the
+>       rollback contradiction above. If it is this, the true ceiling is unknown; 15–20 min is only a
+>       measured floor.
 >
 > **Rollback executed and independently verified, ~20 min after the domain-check symptom first
 > appeared:** `pulllist.app` removed from MailerSend, `mrcyberrick.us` re-added (its DNS was never
@@ -503,14 +532,29 @@ secrets. No code deploy. Keep the old DNS records in place for rollback.
 > domain was removed) — harmless to leave, safe to delete in MailerSend's dashboard whenever
 > convenient, not urgent.
 >
-> **Before attempting S3 again:** (1) budget real slack for a MailerSend activation delay of unknown
-> length past the observed 15–20 min floor — do not assume the outage window closes the moment the
-> dashboard shows verified; (2) generate the new domain-scoped API token as an explicit sub-step
-> immediately after adding the domain, not as an afterthought; (3) consider contacting MailerSend
-> support ahead of the next attempt to ask directly how long send-time activation actually takes for
-> a newly-added domain, rather than discovering the number live in a customer-facing outage window
-> again; (4) the rollback path itself worked cleanly and quickly once invoked — trust it rather than
-> waiting past a second reasonable check if the same symptom recurs.
+> **Before attempting S3 again, in this order:**
+> 1. **Strongly consider one month of paid tier first — see § 8 Q7.** Tonight proved the structural
+>    trap: on the free tier's single domain slot, the *only* way to test `pulllist.app` is to remove
+>    the working sender first, so every diagnosis costs a live customer-facing outage. Two
+>    simultaneous domains converts this into a zero-downtime change with unlimited time to
+>    investigate.
+> 2. **Check the API token's domain binding** (hypothesis 1) — seconds to verify, best fit to the
+>    evidence, and never checked during this attempt.
+> 3. **Generate the new domain-scoped token as an explicit sub-step** immediately after adding the
+>    domain, not as an afterthought — it is a *known* requirement now, not a surprise.
+> 4. **Ask MailerSend support directly** what governs send-time readiness for a newly-added domain,
+>    ahead of the window rather than discovering it inside one.
+> 5. **Fix abort criteria in wall-clock terms before Maintenance Mode goes on** (e.g. "not sending by
+>    T+15 → roll back"). This attempt improvised the wait ladder mid-incident; deciding it in advance
+>    is free and removes judgement pressure from the worst moment to be exercising it.
+> 6. **The rollback path itself worked cleanly and fast** — trust it rather than waiting past a second
+>    reasonable check if the same symptom recurs.
+>
+> **A note on scope, from Rick 2026-09-01:** he would accept **root-domain-only**
+> (`noreply@pulllist.app`, per-tenant display name only) for this task and defer subdomains. That is a
+> legitimate simplification — it is this plan's own documented fallback (§ 2 decision tree, "uncovered"
+> row) and costs only F72's per-tenant email branding later. **But it would not have changed tonight's
+> outcome:** the bare root domain failed identically. Treat it as a design choice, not a fix.
 
 ### S4 — Verify alignment, then consider `p=quarantine`
 
@@ -553,7 +597,9 @@ mechanism for Brevo** (no aligned SPF, no margin), so it gets checked rather tha
   not do it.
 - **F148's bulk-endpoint change.** Same account, different problem.
 - **Brevo / marketing mail.** Already on `rjbookstop.pulllist.app` and authenticated.
-- **Paid-tier migration.** Revisit after this work, per Rick 2026-08-31.
+- ~~**Paid-tier migration.** Revisit after this work, per Rick 2026-08-31.~~ — **MOVED IN SCOPE
+  2026-09-01, promoted to § 8 Q7.** That deferral was made when S3's outage was theoretical. After
+  the failed attempt it is the leading approach, not a later question.
 
 ---
 
@@ -573,6 +619,22 @@ monthly cycle.**
    answer means the free tier carries the per-tenant design.
 3. Cutover window preference, given it must clear 2026-09-25.
 4. `p=quarantine` — publish at S4, or hold until after a second tenant is live?
+7. **One month of paid tier to buy a parallel run? — OPEN, and Rick is inclined toward yes
+   (2026-09-01, after the failed S3 attempt).** Rick's reasoning, recorded so it is not re-derived:
+   *"A one month's fee may offer some extra time to explore the issue and offer the buffer we need to
+   migrate without risking an error on the end user side. The risk is still low now but as the site
+   grows it can translate to a much bigger issue."*
+   **Why this is now the leading approach rather than a deferred nicety:** the single free-tier domain
+   slot means the only way to test `pulllist.app` at all is to remove the working sender first — so
+   *every* diagnostic attempt costs a live, customer-facing mail outage, and tonight's cost ~50–55
+   minutes to learn one error code. Two simultaneous domains removes that entirely: verify and fully
+   exercise `pulllist.app` while `mrcyberrick.us` keeps serving customers, cut over only once proven,
+   downgrade after. **The blast radius argument is the real one** — ~30 customers today makes a
+   50-minute outage survivable; at several hundred, across multiple tenants, it is not, and the
+   migration only gets harder to schedule the longer it waits.
+   **Still to price:** MailerSend's actual Starter cost, whether a mid-cycle downgrade is clean, and
+   whether the paid tier also lifts F148's 100/day API-request cap (same account, possibly two
+   problems solved by one month's spend).
 5. ~~**Is there a live email-forwarding address on `pulllist.app`?**~~ — ✅ **ANSWERED 2026-08-31:
    none configured yet, but Rick intends to set one up, and MX records are already provisioned.
    The Namecheap SPF include therefore STAYS in the S2 merge.** See § 4 S2.
@@ -598,7 +660,16 @@ monthly cycle.**
   if per-tenant sending subdomains are chosen.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-09-01 — **thirteenth pass: S3 attempted and ROLLED BACK, same day as S2.**
+**Last updated:** 2026-09-01 — **fourteenth pass, same evening: the thirteenth pass's diagnosis was
+CORRECTED.** It asserted "MailerSend send-time activation delay" as S3's cause; that is contradicted
+by the rollback (`mrcyberrick.us` re-added minutes later and sent first try) and was stated with more
+confidence than the evidence carried. § 4 S3 now records the cause as **unresolved**, with two
+theories ruled out *with reasons* (Sender Identities — read directly, it is an agency feature not
+required for your own verified domain, Rick's find; and any subdomain/free-tier restriction — S0's
+own probe already sent from a subdomain on this same free account) and three ranked live hypotheses,
+**token↔domain binding first** since it best fits the evidence and was never checked. Paid-tier
+promoted from § 6 "out of scope, revisit later" to **§ 8 Q7**, with Rick's growth-risk reasoning
+recorded. Thirteenth pass: S3 attempted and ROLLED BACK, same day as S2.
 Full cutover sequence run for real (Maintenance Mode ON, domain swapped in MailerSend, SPF merged
 with the real value, secrets flipped) and got as far as a fully-verified `pulllist.app` — then hit
 two unanticipated MailerSend-side problems in sequence: API tokens are domain-scoped (the existing
