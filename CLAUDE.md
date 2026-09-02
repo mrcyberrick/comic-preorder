@@ -43,6 +43,107 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
+**Last completed work: F72 S0 — the tier mechanism, GREEN on STAGING, 2026-09-02** (`cadd35b`,
+merged `--ff-only`, pushed). Later the same day as the F99 promotion below, Rick's explicit
+direction to move toward *"a unique custom platform for new tenants… onboard new tenants based on
+their branding and identify for a paid tier environment."*
+
+**The plan was resequenced first, in the same session** (`9a87b73`, doc-only).
+`docs/f72-multi-tenant-branding.md` went from three steps to four: **S0 is new and now first.**
+§ 0.1 had named it only as *"implied, not yet written up as steps."* Two decisions were taken and
+recorded as **Q10/Q11** — see that doc, which is the live record for all of F72. **Q10:** paid-tier
+email means footer identity + a branded "View Online" link over a **flat sender for both tiers** —
+no new DNS, no domain slot, F99's addressing decision untouched; its consequence is that
+`index.html:247-262`'s *"customer emails from your shop"* pricing claim is now knowingly stale and
+is an S4 edit. **Q11:** the tier check ships as six byte-identical Edge Function copies gated by a
+grep (V10) rather than a new cross-function import convention — there is no `_shared/` folder and
+**zero cross-function imports exist**, and F99 S1 set the precedent by duplicating its
+`MAIL_FROM_*` constants six times.
+
+**S0 deliberately changes no rendered byte on any surface**, and that is its headline property, not
+a caveat: it makes the system able to *identify* a paid tenant without acting on that identity
+anywhere. All 18 Tier-A client sites, 6 Tier-B footers and 6 email templates are untouched. **`Tier`
+has zero call sites** — S1/S2/S3 are what consume it. Shipping the branch's *input* first turns
+those three into mechanical edits against a proven helper; shipping it last would have meant
+reopening every S1 site.
+
+**What landed.** `app.js`: the authenticated tenant read widened to include `plan` (RLS already
+permits it — row-level, no policy change, no RPC change), plus a new `Tier` helper (`isPaid`,
+`publicUrl`) reusing the existing `TENANT_APEX`. **`resolve_tenant_by_slug` was deliberately NOT
+widened**, so `plan` never reaches the anon path and no anon-reachable surface can tier-gate —
+5.3 § 1.5's projection boundary preserved, and confirmed live (V12: an anon-resolved tenant's keys
+are `id`/`slug`/`display_name`, with no `plan`).
+
+**`Tier` fails CLOSED, and the direction is the whole design.** Unresolved tenant, missing `plan`,
+mis-cased `'Pro'`, `'paid'`, `''`, and the anon path all read as **free**. Free is the safe render;
+a wrong *paid* render emits `<slug>.pulllist.app`, and **F145 measured there is no wildcard DNS
+behind that name** — an unprovisioned paid tenant would put a non-resolving URL on customer paper.
+
+**A real gap found during the work, not previously recorded anywhere:**
+`register-tenant/index.ts:148` hardcoded `plan: 'free'` and no runbook step set it afterwards — so
+**there was no supported path to create a paid tenant at all.** It now takes an allowlisted `plan`
+input (`'free'` default, `'pro'`); **allowlist, not pass-through**, because the column is `NOT NULL`
+with **no CHECK constraint**, so a typo like `'Pro'` would persist and read as free forever while
+looking paid to an operator inspecting the row.
+
+**`tenant-onboarding-runbook.md` — four edits, one of which is a live bug fix.** `plan` added to
+Step 0 inputs and the Step 1 body; Step 3's hostname provisioning marked **REQUIRED for
+`plan = 'pro'`** with the consequence stated plainly; a plan-verification line added to the go-live
+checklist. **Step 2's SQL was wrong** — it told operators to write `display_name` into the
+`branding` jsonb, but `Branding.apply()` reads the `display_name` **column** (`app.js:186`) and
+ignores the jsonb key entirely; production's `comicstore` still carries that ignored key today.
+
+**Gates.** `node --check` clean; unit suite **279/279, exit 0** (unchanged — no import-script code
+touched); **zero HTML files in the diff**; the only deletion in the entire `app.js` diff is the
+select line it replaces. **V9/V11/V12 green — 11/11** in a local, uncommitted harness
+(`playwright/f72-s0-tier-verify.mjs`, same convention as `f149-maintenance-verify.mjs`) run against
+the **deployed staging bytes**, confirmed served on the plain URL first (not a cache-busted one).
+**Three assertions were negative-control tested** by inverting them and observing red, then
+reverted.
+
+**V8 — the full suite came back 139 passed / 1 flaky / 3 FAILED (30.1m), and the three were run
+down rather than waved through.** All three are **timeouts**, two of them explicitly `while setting
+up "authenticatedPage"` — the fixture's own documented signature for magic-link pressure (**F107**)
+— not assertion failures: `21-arrival-resolution:225`, `:254`, and
+`22-f143-f144-ordering-rejections:203`. **A targeted re-run of both specs passed 10/10 in 1.8m.**
+
+**S0 was exonerated positively, not by assuming it was innocent.** The only mechanism by which S0
+could break an authenticated page is the widened `tenants` select — if `plan` were not readable by
+the `authenticated` role that query would 400, and `TenantContext` would silently degrade. **The
+first verification pass never tested this**: V9/V11/V12 all ran on the **anon** path, which never
+selects `plan` — a real gap in the gate design, found only by taking the failures seriously instead
+of pattern-matching them to a known-flaky story. A second local harness
+(`playwright/f72-s0-authed-verify.mjs`) drove a real magic-link sign-in and measured it: **both
+`/rest/v1/tenants` requests returned 200**, the authenticated tenant carries `plan`, zero console
+errors, throwaway user torn down clean. **Staging's founding tenant is `plan = 'pro'`**, so
+`Tier.publicUrl()` returns `raysandjudys.pulllist.app`.
+
+**⚠️ Worth carrying into S3:** `raysandjudys.pulllist.app` is **not a provisioned hostname** — only
+`rjbookstop` and `comicstore` are (F145). Harmless today (zero call sites), but the moment S3 prints
+that link, staging's own founding tenant would emit a non-resolving URL. Decide there whether
+staging gets a provisioned hostname or is treated as an explicit exception.
+
+**Honest limit on the F107 attribution:** no 429 was observed directly. What is demonstrated is that
+the failures are timeouts rather than assertions, that they do not reproduce on a targeted run, and
+that S0's only causal mechanism is measured working. The failures are **not attributed to this
+change**; the underlying full-suite fragility is test-infra, same bucket as F107/F130/F133.
+
+**⚠️ OPEN, and it gates S1 rather than this step: production's `rjbookstop` is marked
+`plan = 'free'` although it is the real paying tenant.** `UPDATE public.tenants SET plan = 'pro'
+WHERE slug = 'rjbookstop';` — **Rick's step, not the agent's.** Safe to run now and it should be:
+with `plan` read by zero lines on production, the UPDATE is inert until S1 lands, so doing it early
+de-risks the sequence instead of making it a launch-day step. **Staging also needs a durable
+`free`/`pro` tenant pair** for V3/V4 — the only `free` tenants today are the ephemeral `pw-*`
+fixtures (F130). **`register-tenant` has NOT been redeployed** — its `plan` input is code-only until
+Rick deploys it, and per F93 discipline its live `verify_jwt` must be **read from the dashboard
+first** (the in-file docblock claims OFF; CLAUDE.md's own platform-facts line was wrong about
+`verify_jwt` once already).
+
+**S1/S2/S3 remain design-level and must NOT be executed from their current text** — they still owe
+the free/paid-content-per-site pass. **Production untouched. No finding ID consumed** — S0 advances
+F72, which already owns this work. **F153 remains the next free finding ID.**
+
+
 **Last completed work: F99 Resend MIGRATION — M6/M7 GREEN on PRODUCTION, 2026-09-02.** Same day as
 M1–M5 below, later, **Rick's explicit request** ("start M6/M7"). Promoted via **PR #148** (staging
 `85ce9ce`/`162fd40`/`d5e6ea1` → production merge `4a4a475`, `/promote-prod` skill used end to end).

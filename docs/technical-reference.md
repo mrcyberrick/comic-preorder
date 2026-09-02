@@ -3361,7 +3361,21 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
 
 #### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
-- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist. **Re-confirmed deferred at Phase 5 close (5.5 S6, 2026-07-15)** — tenant 2 (`comicstore`) stayed pilot/seeded through the soak with no real `register-customer` customers, so F72 never surfaced live; it becomes a **prerequisite to evaluate at tenant-2's real-customer go-live** (post-Phase-5 operational step) per `docs/tenant-onboarding-runbook.md`.
+- **Status:** filed 2026-06-16 (5.4 S2). **NO LONGER DEFERRED — IN PROGRESS as of 2026-09-02;
+  S0 (the tier mechanism) is on STAGING.** ***This entry's recorded scope is too narrow and
+  always was:*** it names one email template in one function; the measured surface is **6 Edge
+  Functions plus 24 client line sites across 7 files**, and the work is now **tier-gated on
+  `tenants.plan`** rather than uniform for every tenant. ***`docs/f72-multi-tenant-branding.md`
+  is the live record — read its STATUS token first, not this entry.*** **S0 shipped to staging
+  2026-09-02** (`cadd35b`): `plan` plumbed into the authenticated `TenantContext` read, a
+  fail-closed `Tier` helper added to `app.js`, `register-tenant` given an allowlisted `plan`
+  input (it previously hardcoded `'free'`, so **no path to create a paid tenant existed at
+  all**), and the onboarding runbook corrected. **S0 deliberately changes no rendered byte** —
+  `Tier` has zero call sites; S1/S2/S3 consume it. **Not on production.** **Open sub-item
+  carried by S0 and not yet done: production's `rjbookstop` is marked `plan = 'free'` although
+  it is the real paying tenant** — must be corrected before S1 renders anything, or Ray &
+  Judy's own site flips to generic branding. *(Prior disposition, kept for the record:*
+  deferred.) Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist. **Re-confirmed deferred at Phase 5 close (5.5 S6, 2026-07-15)** — tenant 2 (`comicstore`) stayed pilot/seeded through the soak with no real `register-customer` customers, so F72 never surfaced live; it becomes a **prerequisite to evaluate at tenant-2's real-customer go-live** (post-Phase-5 operational step) per `docs/tenant-onboarding-runbook.md`.
 - **Severity:** Low (documented gap, not a defect) — the un-pin (F34 residual) is data-correct: a customer registered via a non-founding tenant's webhook secret lands in that tenant's `user_profiles` with the right `tenant_id`. But `buildPendingEmail()` (register-customer/index.ts ~line 215+) hardcodes "Ray & Judy's Book Stop" / PULLLIST founding copy and the `from` name, regardless of which tenant the customer resolved to.
 - **Where:** `supabase/functions/register-customer/index.ts` — `buildPendingEmail()` and the MailerSend `from`/`subject` fields in the main handler.
 - **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
