@@ -1,6 +1,9 @@
 # F99 — Resend migration: cut the six Edge Functions over from MailerSend
 
-**STATUS:** PLANNED — not started | staging=untouched | prod=untouched | findings=F99,F72,F148,F145
+**STATUS:** **STAGING COMPLETE, GREEN — 2026-09-02.** M1–M5 executed end to end same day as the plan
+was written; V1, V2, V3, V4, V5, V7 all green. **M6 (production promotion) NOT started — requires
+Rick's explicit separate request per CLAUDE.md § Staging Only.** | staging=`85ce9ce` (code) +
+secrets set | prod=untouched | findings=F99,F72,F148,F145
 
 **What this is:** the actual cutover, following `docs/f99-resend-discovery.md`'s **GREEN** result
 (2026-09-02). That session proved Resend works from a brand-new account with zero bearing on
@@ -91,12 +94,35 @@ supabase secrets set RESEND_API_KEY=<value> --project-ref puoaiyezsreowpwxzxhj -
 
 F93 discipline: explicit `--workdir`, watch the CLI's "Using workdir ..." line.
 
+> ✅ **DONE 2026-09-02.** Rick's call: a **fresh dedicated key** (Sending-access scope, not the
+> discovery session's key) — asked explicitly since the plan left it open. Set by Rick via
+> `supabase secrets set` (same credential-touching-command discipline as every other secret in this
+> project). Confirmed present via `supabase secrets list --project-ref puoaiyezsreowpwxzxhj` —
+> digest `5d0c32d...`, names-only per the CLI's own behavior. **This CLI version (2.75.0) never
+> printed a "Using workdir ..." line on any `secrets set`/`functions deploy` call this session** —
+> noted as a discrepancy from F93's documented tell, not something to chase; `--workdir` was passed
+> explicitly every time and the correct repo's files were unambiguously what got deployed (matched
+> filenames in each deploy's own "Uploading asset" line).
+
 ### M2 — Rewrite each function's mail-send block (staging, code)
 
 Apply the § 1 diff to all six files. **Read and preserve each function's live `verify_jwt` setting
 before deploying** — same F93/S1 discipline, a deploy with no `config.toml` in the repo can silently
 reset it, and `approve-customer`/`send-my-list` are the two currently JWT-ON (CLAUDE.md § Supabase
 platform facts).
+
+> ✅ **DONE 2026-09-02.** Live `verify_jwt` read via `supabase functions list -o json` **before any
+> edit** — matched CLAUDE.md exactly (`approve-customer`/`send-my-list` ON, the other four OFF).
+> All six files rewritten on `feature/f99-resend-migration-m2`, committed (`85ce9ce`), merged
+> `--ff-only` to `staging`, pushed. Deployed one at a time — the four OFF functions with
+> `--no-verify-jwt` explicit, the two ON functions with no flag (CLI default is verify_jwt=true with
+> no `config.toml` present, confirmed this is what "no flag" actually produced, not assumed).
+> **V1 green:** `grep -rn "api.mailersend.com" supabase/functions/` → 0; diff matches § 1's table
+> exactly (endpoint, secret name, auth header, `from` string shape, `to` plain-string shape, `html`
+> unchanged) in all six files. **V7 green:** `grep -rn "MAILERSEND_API_KEY" supabase/functions/` → 0
+> (one explanatory comment that would have tripped this was reworded before committing). The
+> deliberate `noreply@mrcyberrick.us` fallback literals in the `MAIL_FROM_EMAIL ??` default are
+> unchanged in all six files, per this step's own note — 6 occurrences, untouched.
 
 ### M3 — Set `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` to the Resend-verified sender (staging)
 
@@ -108,6 +134,13 @@ deploys before M3, sends fail — **loudly**, per D7's own measured shape (`403 
 domain not verified), the same "fails loud, not silent" property S1's design note already called for
 with MailerSend's `422`. Confirm this is the intended failure mode before treating it as a surprise
 mid-deploy.
+
+> ✅ **DONE 2026-09-02, landed with M1 in one combined `supabase secrets set` call** — sequenced
+> deliberately before M2's deploy, so the loud-failure window this note describes never actually
+> occurred. `MAIL_FROM_EMAIL` set to `noreply@pulllist.app` (digest changed: `3ee1c46...` →
+> `78f5a8b8...`, confirming the value actually changed, not just re-set). `MAIL_FROM_NAME`'s digest
+> is **unchanged** (`68ee1d6...` both before and after) — correct, not a miss: the brand name itself
+> ("Ray & Judy's Book Stop") doesn't change between providers, only the address does.
 
 ### M4 — V1: staging functional test, real sends, delivered headers
 
@@ -121,11 +154,47 @@ a separate mechanism this plan has not confirmed one way or the other. **Verify 
 magic-link auth needs no change** — do not carry the assumption from S1/S3's own scope without
 re-checking it here.
 
+> ✅ **DONE 2026-09-02.** Two real sends triggered, both read from delivered headers (not the API's
+> success response):
+>
+> 1. **`reset-password`**, via direct `curl` to the deployed staging endpoint, to
+>    `rssedivec@gmail.com` (a real account on staging, per S1's own prior use of the same address).
+>    Delivered headers (Gmail `Show original`): `dkim=pass header.i=@pulllist.app header.s=resend`
+>    (exact match), `spf=pass smtp.mailfrom=...@send.pulllist.app` (aligned via the organizational
+>    domain), `dmarc=pass (p=NONE)`, `From: Ray & Judy's Book Stop <noreply@pulllist.app>`. Link
+>    un-rewritten (`staging.pulllist.pages.dev/forgot-password.html?token_hash=...`), no injected
+>    tracking pixel, no `List-Unsubscribe` header.
+> 2. **`invite-customer`**, triggered by Rick from the live admin panel on staging (substituting for
+>    `register-customer`, which needs a real Cloudflare Turnstile token this session cannot produce —
+>    same untestable-headlessly limitation this project's own F149 already recorded; Rick's call to
+>    accept this as the second confirmation rather than chase a DevTools workaround). Delivered
+>    headers, read at a **different** receiving MTA (`jellyfish.systems`/`privateemail.com`, not
+>    Gmail): `dkim=pass header.d=pulllist.app header.s=resend` (exact match), `spf=pass` aligned via
+>    `send.pulllist.app`, `dmarc=pass (policy=none)`, correct `From:`. The body's `action_link` still
+>    points at `puoaiyezsreowpwxzxhj.supabase.co/auth/v1/verify...` (Supabase's own link, untouched
+>    by this migration) and is un-rewritten.
+>
+> **`register-customer`'s live UI check was not completed this session** — Turnstile-gated, no real
+> tenant-hostname URL exists on staging (`*.pages.dev` is hard-coded to the apex bucket in
+> `index.html`'s pre-paint script; confirmed in code, not assumed — this project's own
+> `native-signup-verify.mjs` has to fake the hostname via Playwright request-interception to reach
+> this form at all). Accepted as a residual, Rick's explicit call, same disposition F149 gives this
+> exact class of check. The two real sends above share `register-customer`'s identical request shape
+> (same secrets, same endpoint, same `from`/`to`/`html` construction), so the underlying Resend
+> integration this migration actually changed is proven either way.
+
 ### M5 — V2: full regression suite
 
 `run-smoke.ps1`, full run, against deployed staging bytes post-push (not pre-push — see CLAUDE.md
 § Smoke-test ordering). Confirm no unrelated regression; this touches only Edge Function internals,
 not `app.js`/HTML, so a client-side diff is not expected but should not be assumed.
+
+> ✅ **DONE 2026-09-02.** Run directly (not through an agent PowerShell tool, per CLAUDE.md's
+> 2026-08-30 note) — unit stage `npm test` in the scripts repo: **279/279 passed**. Playwright stage,
+> `npx playwright test --reporter=line` against `https://staging.pulllist.pages.dev/`: **143 passed,
+> 0 failed, exit 0, 22.1 minutes** — real "N passed" text present in the output, not a truncated
+> false-green (the exact failure mode CLAUDE.md's own note warns about). No client-side diff, as
+> expected — this change never touched `app.js`/HTML.
 
 ### M6 — Promote to production (separate, explicit request per CLAUDE.md § Staging Only)
 
@@ -154,15 +223,15 @@ Not scoped in this plan — a future, explicit decision.
 
 ## 4. Verification gates
 
-| Gate | Assertion |
-|---|---|
-| **V1** | All six functions' diff matches § 1's table exactly; `grep -rn "api.mailersend.com" supabase/functions/` returns 0 post-M2 |
-| **V2** | Each function's `verify_jwt` setting identical before and after deploy (dashboard read both times) |
-| **V3** | Staging real sends (M4) — delivered headers show `dkim=pass d=pulllist.app`, `spf=pass` aligned, `dmarc=pass`, correct `From:` display name |
-| **V4** | Full `run-smoke.ps1` green against deployed staging bytes, post-push |
-| **V5** | Magic-link auth path confirmed either unaffected (Supabase-native) or explicitly migrated — not assumed either way |
-| **V6** | Production real send (M7) — same header checks as V3, against `plgegklqtdjxeglvyjte` |
-| **V7** | `MAILERSEND_API_KEY` and the six functions' old endpoint confirmed absent from the final deployed code (`grep` returns 0) |
+| Gate | Assertion | Result |
+|---|---|---|
+| **V1** | All six functions' diff matches § 1's table exactly; `grep -rn "api.mailersend.com" supabase/functions/` returns 0 post-M2 | ✅ **GREEN** — diff matches exactly, grep → 0 |
+| **V2** | Each function's `verify_jwt` setting identical before and after deploy (dashboard read both times) | ✅ **GREEN** — read live via CLI both times, all six identical (2 ON, 4 OFF) |
+| **V3** | Staging real sends (M4) — delivered headers show `dkim=pass d=pulllist.app`, `spf=pass` aligned, `dmarc=pass`, correct `From:` display name | ✅ **GREEN** — `reset-password` + `invite-customer`, both from delivered headers, both clean; `register-customer` a recorded residual (Rick's call) |
+| **V4** | Full `run-smoke.ps1` green against deployed staging bytes, post-push | ✅ **GREEN** — 279 unit + 143 Playwright, 0 failures, exit 0 |
+| **V5** | Magic-link auth path confirmed either unaffected (Supabase-native) or explicitly migrated — not assumed either way | ✅ **GREEN** — confirmed by code trace, not assumed: no separate Supabase-native mail path exists anywhere in the app; `signInWithOtp`/`resetPasswordForEmail`/`inviteUserByEmail` are never called client-side. All magic-link/invite/reset mail already goes through the six functions this migration covers |
+| **V6** | Production real send (M7) — same header checks as V3, against `plgegklqtdjxeglvyjte` | ⏸️ **NOT STARTED — M6/M7 require Rick's explicit separate production-promotion request** |
+| **V7** | `MAILERSEND_API_KEY` and the six functions' old endpoint confirmed absent from the final deployed code (`grep` returns 0) | ✅ **GREEN** — both return 0 in the final committed code |
 
 ---
 
@@ -208,4 +277,17 @@ this migration is mid-flight, rolled back, or abandoned.
 - **F148** — daily-cap shape under Resend, measured (D8), not fixed here.
 - **F72** — per-tenant branding; unaffected by provider choice.
 
-**Last updated:** 2026-09-02 — written, same session as the discovery's GREEN result. Not started.
+**Last updated:** 2026-09-02 (second pass, same day) — **M1–M5 executed end to end, staging COMPLETE
+and GREEN.** RESEND_API_KEY set (fresh dedicated key, Rick's call), all six functions rewritten
+exactly per § 1's diff table and deployed with `verify_jwt` preserved (V1/V2/V7 green),
+`MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` flipped to `noreply@pulllist.app` (M3 landed with M1, before any
+code deploy — the loud-failure window this doc warned about never occurred), two real sends
+(`reset-password`, `invite-customer`) confirmed clean from delivered headers at two different
+receiving MTAs (V3 green), magic-link auth path traced in code and confirmed fully covered by this
+migration — no separate path exists (V5 green), full regression suite green (279 unit + 143
+Playwright, V4 green). `register-customer`'s live UI check accepted as a residual — Turnstile-gated,
+no real tenant-hostname URL exists on staging, same disposition F149 already established for this
+exact class of check; the two functions actually exercised share its identical request shape.
+**M6 (production promotion) NOT started** — needs Rick's explicit separate request per CLAUDE.md
+§ Staging Only, same as every other production promotion in this project. First pass: written, same
+session as the discovery's GREEN result, not started.

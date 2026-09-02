@@ -2203,15 +2203,29 @@ existing row's tenant_id.
 
 Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
 added 5.4 S3). All are written in TypeScript, all use Supabase service-role
-for privileged operations, and all that send email use MailerSend.
+for privileged operations. **Email provider now differs by environment as of
+2026-09-02: staging's six mail-sending functions call Resend
+(`api.resend.com/emails`); production still calls MailerSend
+(`api.mailersend.com/v1/email`), untouched.** See F99 migration below.
+
 **Post-F99-S1 (2026-08-31, staging only):** the sender is no longer
 hardcoded. The six email-sending functions (§ 11.2) read `MAIL_FROM_EMAIL` /
 `MAIL_FROM_NAME` from Edge Function secrets, each with a `??` fallback to
 today's literal (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop") so an
-unset secret changes nothing. Staging has both secrets set to those same
-values — verified byte-identical via a live `reset-password` send read
-against a real inbox, 2026-08-31. Production is untouched (separate,
-explicitly-requested step). See `docs/f99-sender-domain-consolidation.md`
+unset secret changes nothing. Staging had both secrets set to those same
+values from 2026-08-31 through the F99 Resend migration below.
+
+**Post-F99-migration-M1–M5 (2026-09-02, staging only):** the six functions'
+mail-send block now targets Resend, not MailerSend — endpoint, auth header,
+`RESEND_API_KEY` secret (new), `from` as a string, `to` as a plain email
+string. Staging's `MAIL_FROM_EMAIL` secret now holds `noreply@pulllist.app`
+(the flat address, not a per-tenant subdomain — decided in
+`f99-sender-domain-consolidation.md` § 10); `MAIL_FROM_NAME`'s value is
+unchanged (the brand name doesn't depend on provider). The `MAIL_FROM_EMAIL
+?? 'noreply@mrcyberrick.us'` fallback literal in code is unchanged — it is
+S1's regression control, not part of this diff. Production is untouched
+(separate, explicitly-requested step per CLAUDE.md § Staging Only). See
+`docs/f99-resend-migration.md` and `docs/f99-sender-domain-consolidation.md`
 § 4 S1.
 
 ### 11.1 Function inventory
@@ -2249,9 +2263,10 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_URL` | all |
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
-| `MAILERSEND_API_KEY` | every function that sends email (all except claim-paper-customer) |
-| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **set on staging** to that same value, confirmed present via `supabase secrets list`; not set on production) |
-| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value; not set on production) |
+| `MAILERSEND_API_KEY` | **production only** as of 2026-09-02 — every function that sends email there (all except claim-paper-customer). Still present in staging's secret store (dormant, unread by any deployed code since the F99 Resend migration; harmless, not yet cleaned up per the plan's optional M8) |
+| `RESEND_API_KEY` | **staging only** as of 2026-09-02 (F99 migration M1) — the same six functions, now calling `api.resend.com/emails`. Fresh dedicated key, not the discovery session's key (Rick's call). Not set on production |
+| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **staging value changed 2026-09-02 to `noreply@pulllist.app`** per the Resend migration's flat-addressing decision, confirmed via a changed `supabase secrets list` digest; **production still `noreply@mrcyberrick.us`**, unset explicitly, using the fallback) |
+| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value — unchanged by the Resend migration, since the brand name doesn't depend on provider; not set on production) |
 | `APP_BASE_URL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password (pre-existing, not new to F99 S1 — `??` fallback to `https://pulllist.app`; was missing from this table until 2026-08-31. **Confirmed present in staging's secret store** via `supabase secrets list`; actual value not readable from the CLI (digest only) and not independently verified here — production status unchecked) |
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
@@ -3716,7 +3731,31 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   are a future paid-tier (Pro, $20/mo) choice, not the default. Full record: `f99-resend-discovery.md`;
   decision recorded in `f99-sender-domain-consolidation.md` § 10; migration plan
   `docs/f99-resend-migration.md` written, not started. No finding ID consumed.
-- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional), Brevo (marketing), **Resend (transactional, chosen — account created, domain verified, not yet wired into any Edge Function)**.
+- **Migration EXECUTED on staging, GREEN — 2026-09-02, same day as the discovery.**
+  `docs/f99-resend-migration.md` M1–M5 run end to end: `RESEND_API_KEY` set (fresh dedicated key,
+  Rick's call over reusing the discovery session's key), all six functions rewritten to the plan's
+  own diff table exactly (endpoint `api.resend.com/emails`, `from` a string
+  `` `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>` ``, `to` a plain email string, `html` unchanged) and
+  deployed with `verify_jwt` read live and preserved per function (`approve-customer`/`send-my-list`
+  ON, the other four OFF — matches this doc's own § 11.2 record exactly). `MAIL_FROM_EMAIL` flipped
+  to `noreply@pulllist.app` on staging, landed together with the code deploy per the plan's own
+  sequencing note. **Two real sends confirmed clean from delivered headers, at two different
+  receiving MTAs:** `reset-password` (Gmail) and `invite-customer` (`jellyfish.systems`/
+  `privateemail.com`, triggered by Rick from the live admin panel as a substitute for
+  `register-customer`, which needs a live Turnstile token this session cannot produce) — both
+  `dkim=pass header.i=@pulllist.app header.s=resend` (exact match), `spf=pass` aligned via
+  `send.pulllist.app`, `dmarc=pass`, correct `From:`, no rewritten links, no tracking pixel.
+  **Magic-link auth traced in code, not assumed:** no separate Supabase-native mail path exists
+  anywhere in the app (`signInWithOtp`/`resetPasswordForEmail`/`inviteUserByEmail` are never called
+  client-side) — this migration already covers 100% of PULLLIST's outbound mail. Full regression
+  suite green post-push: 279 unit + 143 Playwright, 0 failures. **`register-customer`'s live UI
+  check is an accepted residual** — no real tenant-hostname URL exists on staging (`*.pages.dev` is
+  hard-coded to the apex bucket), same disposition F149 already gives this exact
+  untestable-headlessly class of check; the two functions actually exercised share its identical
+  request shape. **Production untouched — M6 requires Rick's explicit separate promotion request**,
+  same as every other production promotion in this project. Full record:
+  `docs/f99-resend-migration.md` (STATUS: staging complete). No finding ID consumed.
+- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional, still live in production — untouched), Brevo (marketing), **Resend (transactional — wired into all six Edge Functions on staging 2026-09-02; production not yet cut over)**.
 - **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design. **F148** — Resend's daily cap is emails-metered (not requests, unlike MailerSend), so F148 is not dissolved by this provider choice; see `f99-resend-discovery.md` § 4 D8.
 
 #### F100 — `weekly-pull-feed` publishes to GitHub Pages from two independent deployers with no ordering guarantee between them; this, not cancelled Actions runs, is what broke F98

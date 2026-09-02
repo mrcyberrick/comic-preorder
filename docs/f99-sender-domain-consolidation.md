@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **PROVIDER DECIDED 2026-09-02: Resend — GREEN discovery, `pulllist.app` verified, flat `noreply@pulllist.app` addressing (§ 10, `docs/f99-resend-discovery.md`)**; migration plan `docs/f99-resend-migration.md` written, not started; S4 (old S3-equivalent cutover, now a Resend step) not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — Resend discovery never touched it) | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **PROVIDER DECIDED 2026-09-02: Resend — GREEN discovery, `pulllist.app` verified, flat `noreply@pulllist.app` addressing (§ 10, `docs/f99-resend-discovery.md`)**; **migration EXECUTED on staging, GREEN, same day — `docs/f99-resend-migration.md` M1–M5 complete** (S4/old-S3-equivalent cutover is done, on staging); **production not cut over — needs Rick's explicit separate request (M6)** | staging=`85ce9ce` (code) + RESEND_API_KEY/MAIL_FROM_EMAIL secrets set | prod=`mrcyberrick.us`/MailerSend (unchanged) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -901,8 +901,14 @@ exists and works. $35 for one month is exactly what § 8 Q7 asks for.
 probe (send / delivered-headers / link-rewriting, D2), the flat-vs-subdomain lever settled by
 measurement rather than guesswork (D7 forced it — see above), and `pulllist.app` verified with
 MailerSend serving production throughout, zero downtime. **Result: GREEN.** Full record in that doc;
-the summary is above this subsection. **Next actual step is the migration itself:**
-`docs/f99-resend-migration.md` (written, not started).
+the summary is above this subsection.
+
+**✅ Migration itself DONE on staging, same day: `docs/f99-resend-migration.md` M1–M5, GREEN.**
+All six functions cut over to Resend, `verify_jwt` preserved, two real sends confirmed clean from
+delivered headers, full regression suite green (279 unit + 143 Playwright). MailerSend was never
+touched — production keeps serving from it unmodified, exactly per this section's own "no
+parallel-run problem" finding. **Remaining: M6 (production promotion), Rick's explicit call, not
+started.** Full record in the migration doc itself.
 
 ---
 
@@ -974,3 +980,13 @@ confirmed hard** (no unverified second domain, so no parallel run); **`pulllist.
 domain to verify in both S0 branches**; **S-1 added** (legacy `mlsend2` DKIM needs the `ms1`/`ms2`
 CNAMEs — a live issue found in passing, not part of this migration); **S2 gained the single-SPF-record
 merge trap and the 10-lookup ceiling**; zero-risk S0 probe method recorded. **S0 still not run.**
+
+**Seventeenth pass, 2026-09-02 (same day as the sixteenth): the migration itself EXECUTED on
+staging, GREEN.** `docs/f99-resend-migration.md` M1–M5 run end to end — `RESEND_API_KEY` set (fresh
+key), all six functions cut to Resend's request shape exactly, `verify_jwt` preserved, two real
+sends (`reset-password`, `invite-customer`) confirmed clean from delivered headers at two different
+receiving MTAs, magic-link auth traced in code and confirmed fully covered (no separate Supabase-
+native mail path exists), full regression suite green. MailerSend untouched throughout — still
+serving production. `register-customer`'s live UI check accepted as a residual (Turnstile-gated, no
+real tenant-hostname URL on staging). **Production not cut over — M6 needs Rick's explicit separate
+request.** No finding ID consumed.
