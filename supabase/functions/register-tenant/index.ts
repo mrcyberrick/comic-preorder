@@ -16,7 +16,13 @@
  *
  * Input JSON body:
  *   { slug, display_name, admin_email, contact_email?, contact_phone?,
- *     location?, branding? }
+ *     location?, plan?, branding? }
+ *
+ *   plan: 'free' (default) | 'pro'. Allowlisted — any other value becomes 'free'.
+ *   'pro' gates tenant identity on customer-facing surfaces (F72). A 'pro' tenant
+ *   MUST have its <slug>.pulllist.app hostname provisioned (runbook Step 3): there
+ *   is no wildcard DNS, so an unprovisioned paid tenant emails and prints a
+ *   non-resolving URL to real customers (F145).
  *
  * Required env vars (set in Supabase → Edge Functions → Secrets):
  *   SUPABASE_URL
@@ -107,6 +113,11 @@ Deno.serve(async (req) => {
     const contactEmail = (body.contact_email as string | undefined)?.trim() || null
     const contactPhone = (body.contact_phone as string | undefined)?.trim() || null
     const location      = (body.location as string | undefined)?.trim() || null
+    // Plan tier (F72 S0). ALLOWLIST, not pass-through: the column is NOT NULL with
+    // no CHECK constraint, so an unrecognised value ('Pro', 'paid', '') would persist
+    // and read as free forever while looking paid to an operator inspecting the row.
+    const planRaw       = (body.plan as string | undefined)?.trim().toLowerCase() || 'free'
+    const plan          = planRaw === 'pro' ? 'pro' : 'free'
     const branding      = (body.branding && typeof body.branding === 'object') ? body.branding : {}
 
     if (!slug || !displayName || !adminEmail || !adminEmail.includes('@')) {
@@ -145,7 +156,7 @@ Deno.serve(async (req) => {
         contact_email: contactEmail,
         contact_phone: contactPhone,
         location,
-        plan:     'free',
+        plan,
         branding,
         settings: { mailerlite_webhook_secret: webhookSecret },
       }),

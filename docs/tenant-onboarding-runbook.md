@@ -23,6 +23,7 @@ Collect from the operator before writing any SQL or running any curl:
 | `admin_email` | a real, reachable mailbox the tenant admin controls |
 | `branding` (optional) | jsonb: `{ "primary_color": "#xxxxxx", "display_name": "...", "logo_url": "..." }` — may be set at create or updated after |
 | `contact_email`, `contact_phone`, `location` (optional) | tenant metadata; passed in the `register-tenant` body |
+| `plan` | **`free` (default) or `pro`.** Set `pro` only for a tenant who is actually paying. Gates how much of the tenant's identity appears on customer-facing web, email and print surfaces (F72). Allowlisted in `register-tenant` — any other value silently becomes `free`, so check the read-back in Step 1 |
 
 **Reserved slug denylist** (hard-coded in `register-tenant`): `www`, `app`, `api`, `admin`, `staging`, `prod`, `mail`, `ftp`, `blog`, `dev`, `test`, `canary`, `pulllist`, `raysandjudys`, `rjbookstop`.
 
@@ -47,6 +48,7 @@ $tmpBody = "$env:TEMP\new-tenant.json"
   "display_name": "<display_name>",
   "admin_email": "<admin_email>",
   "location": "<optional>",
+  "plan": "free",
   "branding": { "primary_color": "#xxxxxx" }
 }
 '@)
@@ -82,19 +84,41 @@ Error responses:
 
 If branding was included in the `register-tenant` body it is already seeded. If not, or if you want to update it after creation:
 
+> ⚠️ **`display_name` is a COLUMN, not a `branding` key.** `Branding.apply()` reads
+> `tenant.display_name` (`app.js:186`) and **ignores** `branding.display_name` entirely.
+> This step's SQL used to write the name into the jsonb, which does nothing — production's
+> `comicstore` still carries that ignored key today. Corrected 2026-09-02 (F72 S0).
+
 ```sql
 -- Prod SQL Editor
+-- Name: the COLUMN. Colour/logo/banner: the jsonb.
 UPDATE public.tenants
-  SET branding = '{"primary_color":"#xxxxxx","display_name":"<display_name>"}'::jsonb
+  SET display_name = '<display_name>',
+      branding     = '{"primary_color":"#xxxxxx","logo_url":"<optional>"}'::jsonb
   WHERE slug = '<slug>';
-SELECT id, slug, display_name, branding FROM public.tenants WHERE slug = '<slug>';
+SELECT id, slug, display_name, plan, branding FROM public.tenants WHERE slug = '<slug>';
 ```
 
-Expected: one row with the correct branding.
+Expected: one row with the correct name, plan and branding.
+
+**Recognised `branding` keys** (anything else is inert): `primary_color`, `logo_url`,
+`promo_banner` (`catalog.html:508`). **`display_name` is NOT one of them** — see the warning
+above.
 
 ---
 
 ## Step 3 — Add the Cloudflare custom domain
+
+> ⚠️ **REQUIRED, not optional, for any `plan = 'pro'` tenant** (F72 S0, 2026-09-02).
+> A paid tenant's own `<slug>.pulllist.app` is printed on their customers' pickup slips and
+> bagging lists and is emailed as the "View Online" link. **There is no wildcard DNS on
+> `pulllist.app`** — every hostname is individually provisioned here (F145, measured). So a
+> paid tenant whose hostname is not provisioned ships a **non-resolving URL to real
+> customers, on paper**. Free tenants are unaffected: they always link to the `pulllist.app`
+> apex, which needs no provisioning.
+
+> **Order matters:** provision the hostname *before* setting `plan = 'pro'`, or before the
+> tenant's first print/email run if the plan was set at create.
 
 **Rick — Cloudflare dashboard (Pages project for `pulllist.app`):**
 
@@ -243,6 +267,7 @@ If any count is unexpected, investigate before announcing the new tenant. File a
   ```
 
   If the result does **not** contain `tenant_id`, F9 has regressed: **do not run a shipment import for this tenant.** (**Prod and staging state as of 2026-07-28: fixed** — `weekly_shipment_tenant_unique` on `(tenant_id, distributor, upc, on_sale_date)`, with the old `weekly_shipment_unique` constraint dropped on both. The check is kept as a standing guard, not because it is currently failing.) See `docs/technical-reference.md` § 13 F9.
+- [ ] **Plan tier is correct and matches reality** (F72 S0): `SELECT slug, plan FROM public.tenants WHERE slug = '<slug>';` returns the intended value. A paying tenant left on `free` renders generic identity everywhere; a `pro` tenant whose `<slug>.pulllist.app` is unprovisioned puts a non-resolving URL on customer paper (Step 3). **Check the column, not the invoice.**
 - [ ] **F72 email-branding decision:** `register-customer` sends founding-branded confirmation emails regardless of tenant. Confirm this is acceptable for the tenant's launch, OR wait for a dedicated multi-tenant email branding sub-deploy (Phase 6 / follow-on). Surfacing this to the tenant admin before go-live is required.
 - [x] ~~**MailerLite webhook configured** (Step 4)~~ — **N/A since 2026-08-30.** The webhook path was removed from `register-customer` platform-wide; there is nothing to configure. Customers arrive via admin **Invite Customer** / **Add Paper Customer**, or via native self-registration — and native signup is gated on **F72** (founding-branded confirmation email), which is the item that actually matters before a real-customer go-live.
 - [ ] **Isolation spot-check green** (Step 6) against the pilot/seeded data.

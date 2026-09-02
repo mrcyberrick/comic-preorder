@@ -1,11 +1,11 @@
 # F72 — multi-tenant branding: remove the founding tenant's identity from every tenant-facing surface
 
-**STATUS:** **RESEQUENCED 2026-09-02 (later, same day) — S0 written up and moved to first; NOT
-STARTED.** § 8 Q1–Q6 (2026-09-01) still hold for *what data exists*; **§ 0.1 is a premise change** —
+**STATUS:** **IN PROGRESS — S0 EXECUTED ON STAGING 2026-09-02** (`feature/f72-s0-tier-mechanism`).
+S1/S2/S3 NOT STARTED. § 8 Q1–Q6 (2026-09-01) still hold for *what data exists*; **§ 0.1 is a premise change** —
 branding is gated on `tenants.plan`, not uniform. **Q7–Q9 answered 2026-09-02**; **Q10–Q11 answered
 2026-09-02 (later)** — paid-tier email promise, and how the tier check is shared across six Edge
-Functions. **§ 4.0 (S0) is byte-exact and ready to execute**, re-read from disk 2026-09-02 and
-verified against the post-Resend tree. **§ 4.1–§ 4.3 (S1/S2/S3) are still design-level** and owe the
+Functions. **§ 4.0 (S0) has been executed** — code on staging, gates below. Its
+byte-exact steps are retained as the record of what was done. **§ 4.1–§ 4.3 (S1/S2/S3) are still design-level** and owe the
 free/paid-content-per-site pass § 0.1's closing note describes — do not execute them from their
 current text. | staging=— | prod=— | findings=F72,F99,F145,F151
 
@@ -824,7 +824,8 @@ gate, the generic-content definition, the link-by-tier rule — were answered 20
       EF copies gated by V10
 - [x] ~~**S0 written up as byte-exact steps**~~ — done 2026-09-02, § 4.0, re-read from disk against
       the post-Resend tree
-- [ ] **S0 complete** — V9, V11, V12, V13 green. `plan` in the authenticated select; `Tier` helper
+- [~] **S0 code complete on staging 2026-09-02** — V9/V11/V12 run post-deploy (below); **V13 is
+      Rick's data step and is still open.** `plan` in the authenticated select; `Tier` helper
       in `app.js`; `register-tenant` accepting an allowlisted `plan`; runbook's three edits
       (§ 4.0.3). **No rendered byte changes** (V9 is the gate that says so)
 - [ ] **`rjbookstop`'s `plan` corrected from `free` to `pro` on production** — real data bug found

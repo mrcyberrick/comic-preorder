@@ -81,7 +81,7 @@ const TenantContext = {
         if (profile?.tenant_id) {
           const { data: tenant } = await db
             .from('tenants')
-            .select('id, slug, display_name, branding')
+            .select('id, slug, display_name, branding, plan')
             .eq('id', profile.tenant_id)
             .single();
 
@@ -200,6 +200,26 @@ const Branding = {
   },
 };
 window.Branding = Branding;
+
+// ── Plan Tier ────────────────────────────────────────────────
+// Reads tenants.plan. 'pro' ⇒ full identity; anything else ⇒ platform defaults.
+// Fails CLOSED: an unresolved tenant, a missing plan, a mis-cased value, or the
+// anon path (which never selects plan — the resolve_tenant_by_slug projection is
+// deliberately narrow) all evaluate to free. A free render is always safe; a wrong
+// PAID render puts an unprovisioned <slug>.pulllist.app on customer paper, and
+// there is no wildcard DNS behind that name (F145).
+const Tier = {
+  isPaid(tenant) {
+    return !!(tenant && tenant.plan === 'pro');
+  },
+  // The "View Online" target. Paid ⇒ their provisioned subdomain; free ⇒ the apex.
+  publicUrl(tenant) {
+    return this.isPaid(tenant) && tenant.slug
+      ? `${tenant.slug}.${TENANT_APEX}`
+      : TENANT_APEX;
+  },
+};
+window.Tier = Tier;
 
 // ── Auth Helpers ─────────────────────────────────────────────
 const Auth = {
