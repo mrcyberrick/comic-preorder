@@ -1,6 +1,6 @@
 # F99 — Resend discovery session (evaluate before committing)
 
-**STATUS:** PLANNED — not started | staging=n/a | prod=untouched by design | findings=F99,F72,F148,F145
+**STATUS:** PLANNED — not started | **Q1 ANSWERED 2026-09-02 (Rick): per-tenant `noreply@<slug>.pulllist.app`, FREE TIER PRIORITIZED, flat `noreply@pulllist.app` is the reconsideration point — § 3** | staging=n/a | prod=untouched by design | findings=F99,F72,F148,F145
 
 **What this is:** a **discovery** session to decide whether Resend becomes PULLLIST's transactional
 provider. It produces a **measured yes/no**, not a migration. Written 2026-09-02 after Brevo was
@@ -65,7 +65,7 @@ Honest accounting, so the session knows what it is actually verifying.
 
 ---
 
-## 3. Decide this BEFORE Phase 2: flat sender vs. per-tenant subdomain
+## 3. Sender shape — DECIDED: per-tenant subdomain, free tier prioritized
 
 This is a **decision, not a discovery**, and it changes what Phase 2 costs. Carried forward from
 `f99-sender-domain-consolidation.md` § 10.
@@ -79,14 +79,45 @@ This is a **decision, not a discovery**, and it changes what Phase 2 costs. Carr
 | F145 interaction | None — no new hostname | Each sending subdomain is another individually-provisioned name |
 
 **The `<slug>` shape was originally recommended because Brevo was already sitting there** (§ 13 F99,
-now flagged REASSESS). **That reason is gone.** A per-tenant sending *domain* is not required for
-per-tenant *branding* — it buys reputation segmentation, which matters at volumes PULLLIST is
-nowhere near.
+now flagged REASSESS). That particular reason is gone. A per-tenant sending *domain* is not required
+for per-tenant *branding* — it buys reputation segmentation.
 
-**Recommendation: flat `noreply@pulllist.app` for this evaluation.** It keeps the free tier
-sufficient indefinitely and removes a per-tenant provisioning step from Phase 6. **Rick's call —
-§ 7 Q1.** Brevo's marketing sender stays at `rjbookstop.pulllist.app` regardless; nothing about
-that changes.
+### ✅ DECIDED 2026-09-02 (Rick): start with `noreply@<slug>.pulllist.app`; **prioritize the free tier**
+
+**Flat `noreply@pulllist.app` is the reconsideration point, not the starting point.** Recorded
+verbatim so it is not re-litigated: *"Start with `noreply@<slug>.pulllist.app` and reconsider at
+`noreply@pulllist.app` — prioritize the free tier."*
+
+**These two instructions are compatible today and collide at tenant #2**, which is worth stating
+plainly rather than discovering later. One real sending tenant exists (`rjbookstop`; `comicstore` is
+demo/test, never a real customer), so **one domain slot is enough right now** — free either way. The
+collision arrives only when a second real tenant needs its own sending identity.
+
+**This makes D7 the pivotal test of the session, not a curiosity.** Everything depends on one
+unmeasured question: *does verifying the parent `pulllist.app` authorize sending from
+`<slug>.pulllist.app`?*
+
+| D7 outcome | What it means for Rick's instruction |
+|---|---|
+| **Parent covers subdomains** | **Best case, and both instructions hold forever.** One free slot carries per-tenant senders at any tenant count. Nothing to reconsider, ever |
+| **Parent does NOT cover subdomains** (what research predicts) | Free covers **tenant #1 only**. At tenant #2: either Pro at **$20/mo**, or switch to flat. **"Prioritize the free tier" resolves this toward flat** unless Rick says otherwise at the time |
+
+**So verify the PARENT domain in Phase 2, not the subdomain** — strictly more informative, and it
+costs nothing extra. Verifying `pulllist.app` tests the free-forever hypothesis *and* leaves the flat
+fallback already working in the same slot. Verifying `rjbookstop.pulllist.app` directly would answer
+neither question and would spend the one free slot on the narrower option. **D4/D5 are written
+accordingly.**
+
+**The honest cost of starting with the subdomain**, recorded so it is a known trade rather than a
+surprise: if D7 comes back negative and tenant #2 later forces the switch to flat, customers will
+have seen the sending domain change **twice** (`mrcyberrick.us` → `<slug>.pulllist.app` →
+`pulllist.app`), and the DNS + verification work is done twice. That is the price of deferring the
+decision, and deferring is a legitimate choice at one tenant — but it is not free.
+
+**Standing rule from "prioritize the free tier": do NOT auto-upgrade to Pro.** If the discovery
+finds the chosen shape needs a paid plan, that is a **stop-and-ask**, not a purchase.
+
+Brevo's marketing sender stays at `rjbookstop.pulllist.app` regardless; nothing about that changes.
 
 ---
 
@@ -145,8 +176,8 @@ explicitly flags it unconfirmed. The migration will be written against whatever 
 
 #### D4 — DNS reconnaissance, before publishing anything (~20 min)
 
-Add the chosen domain (§ 3 / Q1) in Resend and **read the records it demands without publishing
-them.** Then, for each requested record, resolve the name live against an external resolver
+**Add the PARENT domain `pulllist.app`** — not `rjbookstop.pulllist.app`, per § 3's reasoning — and
+**read the records Resend demands without publishing them.** Then, for each requested record, resolve the name live against an external resolver
 (`dns.google`) — the S2 method, which catches both collisions and Cloudflare proxying:
 
 - **Collision check.** Is the name NXDOMAIN today, or does something already live there? S2's own
@@ -179,7 +210,8 @@ Resend's dashboard reports the domain verified.
 
 Repeat D2's sends, now from the verified domain, plus one address-coverage test:
 
-1. `noreply@<verified domain>` — the intended production sender
+1. `noreply@pulllist.app` — the verified parent itself. **This is the flat FALLBACK identity**, not
+   the intended one (§ 3); proving it works is what makes the fallback real rather than assumed.
 2. **An address never registered as a sender** — does domain verification cover arbitrary local
    parts? (It did on Brevo; MailerSend's `#MS42207` is precisely the failure where it did not.)
 
@@ -193,16 +225,24 @@ Read delivered headers and record: `dkim=pass` with **`d=` matching the From dom
 
 **→ V6**
 
-#### D7 — Subdomain coverage + the multi-tenant cost (~10 min)
+#### D7 — ⭐ THE PIVOTAL TEST: does the parent cover `<slug>.pulllist.app`? (~10 min)
 
-Send from `noreply@rjbookstop.pulllist.app` **without separately verifying that subdomain**.
+**This is the test the session exists to run**, because § 3's decision rests entirely on it. Send
+from **`noreply@rjbookstop.pulllist.app`** — the identity Rick chose — with **only the parent
+`pulllist.app` verified** and that subdomain never separately added to Resend.
 
-- **Delivers** → a parent domain covers its subdomains; per-tenant sending is free-tier viable and
-  § 3's decision is low-stakes.
-- **Rejected** → research confirmed; **per-tenant subdomains cost one domain slot each**, so tenant
-  #2 requires Pro at $20/mo. That is a real input to Q1 and to Phase 6 planning.
+- **Delivers, DKIM aligned** → **best case.** One free domain slot carries per-tenant senders at any
+  tenant count. Rick's chosen identity and "prioritize the free tier" both hold permanently, and the
+  flat reconsideration never has to happen. Check `d=` in the header — delivery alone is not enough;
+  it must be **aligned to the subdomain or its parent**, or K4 is in play.
+- **Rejected** → research confirmed. Per-tenant subdomains cost **one slot each**, so tenant #2 means
+  Pro at **$20/mo** or a switch to flat. Per § 3's standing rule, that is a **stop-and-ask**, not an
+  upgrade. `noreply@pulllist.app` (proven in D6) is the free fallback, and the parent stays verified
+  in the one slot either way — so **nothing is wasted by this outcome.**
 
-Either answer is useful. **This is measurement, not a gate.**
+**Record the exact rejection text if it fails** — `#MS42207` taught that a provider's own error
+string is the most useful artifact when a send is refused, and the S3 session had to reconstruct it
+afterwards.
 
 **→ V7**
 
@@ -232,7 +272,7 @@ here** — different finding, different session.
 | **V4** | Every requested DNS name resolved live; collisions enumerated; **explicit yes/no on whether the apex SPF must change** | Any name unchecked, or K5 unanswered |
 | **V5** | Domain verified in Resend **and** records confirmed at an external resolver | Verified only in the Cloudflare UI |
 | **V6** | `dkim=pass` with `d=` aligned to the From domain, read from a delivered header; SPF alignment recorded either way | Trusting the API's success response |
-| **V7** | Subdomain coverage answered by a real send | Answered from documentation |
+| **V7** | **Parent-covers-subdomain answered by a real send from `noreply@rjbookstop.pulllist.app` with only the parent verified** — and, if it delivered, `d=` confirmed aligned. This gate decides whether § 3's chosen identity stays on the free tier | Answered from documentation; or delivery accepted without reading `d=` |
 | **V8** | F148's shape under Resend stated with measured numbers | Stated as a general claim |
 
 **A verification step that cannot fail is not a verification step.** Before running each, ask what
@@ -267,16 +307,19 @@ record MailerSend's live `spf=pass` depends on. It is a stop-and-ask, not a disc
 
 ## 7. Open questions for Rick
 
-1. **Flat `noreply@pulllist.app` or per-tenant `noreply@<slug>.pulllist.app`?** — **needed before
-   D4**, not before D1. § 3 recommends **flat**: it keeps the free tier sufficient at any tenant
-   count, and F72's branding does not require a per-tenant sending domain. D7 measures what the
-   alternative would actually cost.
+1. ~~**Flat `noreply@pulllist.app` or per-tenant `noreply@<slug>.pulllist.app`?**~~ — ✅ **ANSWERED
+   2026-09-02 (Rick): start with the per-tenant subdomain; flat is the reconsideration point;
+   prioritize the free tier.** See § 3 for the decision, the tenant-#2 collision it defers, and why
+   D7 is now the pivotal test. *(This plan had recommended flat; Rick chose otherwise and the
+   reasoning is recorded rather than re-argued.)*
 2. **Publish DNS for a provider not yet committed to?** D5 asks for real Cloudflare records for
    something that may still be rejected. They are additive and deletable, and nothing consults them
    until an Edge Function changes — but it is live infrastructure, so it is Rick's call, not an
    assumption. *(Phase 1 needs none of this, so this question can wait until V2 is green.)*
-3. **Budget ceiling.** If D7 shows per-tenant subdomains need one slot each, is **Pro at $20/mo**
-   acceptable at tenant #2, or does that settle Q1 toward flat by itself?
+3. **Budget ceiling — partly answered.** "Prioritize the free tier" (Q1) sets the default: **do not
+   auto-upgrade.** Still open, and only if D7 comes back negative: at tenant #2, is **Pro at $20/mo**
+   worth keeping per-tenant senders, or does the free tier win and the identity goes flat? **Not
+   needed for this session** — it is a tenant-#2 decision, and D7 may make it moot.
 4. **Timing.** The **October catalog import gate is Fri 2026-09-25** and is an attended session with
    an admin-ordering freeze. This session is independent of it and low-risk, but it should not be
    run *during* that window. Before or well after.
@@ -327,8 +370,12 @@ recorded gets re-tested — which is exactly why § 9 exists.
   recommendation is flagged **REASSESS**; § 3 above is where that gets settled.
 - **F148** — the daily-cap ceiling on `notify-customers`; D8 re-derives its shape.
 - **F72** — per-tenant email branding. Unaffected by provider choice; relevant to § 3.
-- **F145** — no wildcard DNS on `pulllist.app`; each hostname is individually provisioned. Relevant
-  only if per-tenant sending subdomains win Q1.
+- **F145** — no wildcard DNS on `pulllist.app`; each hostname is individually provisioned. **Now
+  directly relevant, since per-tenant sending subdomains won Q1 — but do not over-apply it.** F145 is
+  about **web** hostnames (Cloudflare Pages custom hostnames serving a tenant front door). A
+  **sending** subdomain needs only DNS records (DKIM/SPF/Return-Path); it does **not** need a Pages
+  custom hostname, and no web front door has to exist for mail to authenticate. Conflating the two
+  would invent per-tenant provisioning work that mail does not require.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate (Q4).
 
 **Last updated:** 2026-09-02 — written. Not started.
