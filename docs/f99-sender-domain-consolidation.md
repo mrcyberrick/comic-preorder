@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **DIRECTION SET 2026-09-02: Resend, pending a live probe (§ 10)**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **PROVIDER DECIDED 2026-09-02: Resend — GREEN discovery, `pulllist.app` verified, flat `noreply@pulllist.app` addressing (§ 10, `docs/f99-resend-discovery.md`)**; migration plan `docs/f99-resend-migration.md` written, not started; S4 (old S3-equivalent cutover, now a Resend step) not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — Resend discovery never touched it) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -789,12 +789,49 @@ untouched and still serving newsletters; the three sends were ordinary API calls
 
 ---
 
-## 10. Provider selection — DIRECTION: Resend (2026-09-02)
+## 10. Provider selection — DECIDED: Resend (2026-09-02, GREEN discovery)
 
-**Rick's call, 2026-09-02: pursue Resend — a competitor to MailerSend — as the intended
-transactional provider.** Recorded as a **direction, not a commitment**: no account exists, nothing
-has been probed live, and no code has changed. Whether to actually migrate stays open until the
-three-test probe at the end of this section comes back green.
+**Rick's call, 2026-09-02: Resend is the transactional provider.** Escalated from *direction* to
+*decision* the same day, after `docs/f99-resend-discovery.md` ran end to end and came back **GREEN**.
+An account exists, `pulllist.app` is verified in Resend, real sends were made and read from delivered
+Gmail headers, and the addressing scheme is settled. **No code has changed and MailerSend is
+untouched** — the discovery session ran entirely on a new account and additive DNS, with MailerSend
+serving production throughout. What remains is the migration itself:
+`docs/f99-resend-migration.md` (written, not started).
+
+### What the discovery measured, in brief — full record in `f99-resend-discovery.md`
+
+- **K1–K6 all clear on our own domain.** No link rewriting, no `List-Unsubscribe`, no tracking pixel
+  — confirmed by sending from `noreply@pulllist.app` with no Resend tracking subdomain configured.
+  (An early sandbox test on `onboarding@resend.dev` *did* trip K1/K3 — traced to Resend's own domain
+  having a tracking subdomain pre-configured, not something that carries to a domain we verify
+  ourselves; re-confirmed clean on our own domain before concluding anything.)
+- **Alignment beats Brevo's result and matches MailerSend's today:** `dkim=pass` with `d=pulllist.app`
+  — an exact match, not merely aligned — **and** `spf=pass` aligned via `send.pulllist.app`'s
+  organizational domain. Brevo passed DMARC on DKIM alone; Resend gets both mechanisms.
+- **The apex SPF MailerSend's `spf=pass` depends on was never touched (K5).** Every record Resend
+  requested — DKIM TXT, Return-Path MX, SPF TXT — landed on new names (`resend._domainkey`, `send`),
+  externally confirmed via `dns.google` both before and after publishing. Confirmed unchanged,
+  byte-identical, throughout.
+- **Domain verification covers arbitrary local parts** (same as Brevo, unlike MailerSend's
+  `#MS42207`) — a never-registered address delivered and signed identically to `noreply@`.
+- **The addressing decision flipped from the original plan, and D7 is why.** § 3 above (and this
+  finding's own S0-era recommendation) assumed per-tenant subdomain sending the way MailerSend's S0
+  proved it works there. **Resend's own parent domain does NOT cover subdomains** — sending as
+  `noreply@rjbookstop.pulllist.app` returned `403 validation_error: "The rjbookstop.pulllist.app
+  domain is not verified"` with only the parent verified. Unlike MailerSend's unresolved `#MS42207`,
+  this error is unambiguous and self-explaining. **Consequence: per-tenant subdomains would cost a
+  second domain slot — Pro, $20/mo — starting immediately, not deferred to a hypothetical tenant #2.**
+  Per the standing "prioritize the free tier, don't auto-upgrade" rule, **the decision is flat
+  `noreply@pulllist.app`** for the actual migration. Per-tenant subdomains remain available later as
+  a deliberate paid choice, not a default.
+- **F148 is not dissolved, but the ceiling improves.** Resend's cap meters **emails**, not API
+  requests (the opposite of MailerSend's shape) — with `notify-customers`' code unchanged, the daily
+  ceiling stays ~100/day (same as today), but the monthly ceiling rises 500→3,000. Pay-as-you-go
+  overage ($0.90/1,000) exists on paid tiers only, not Free — a real option for whenever F148 is
+  actually fixed, not relevant to today's free-tier picture.
+
+### Superseded by this decision
 
 Both of Rick's earlier alternatives to S3 are closed (Brevo, § 9; the second free MailerSend
 account, § 8 Q9). **None of this is urgent** — production is serving customers correctly from
@@ -857,21 +894,15 @@ exists and works. $35 for one month is exactly what § 8 Q7 asks for.
 **Amazon SES is cheapest at scale and by far the most work** — likely disproportionate for a
 ~30-customer shop, worth revisiting only at much larger volume.
 
-### Recommended next step whenever this is picked up
+### Recommended next step whenever this is picked up — ✅ DONE 2026-09-02
 
-**Do not write code first.** Settle the flat-vs-subdomain lever, then run **the same three-test probe
-this session ran against Brevo** — send / delivered-headers / link-rewriting — against the chosen
-provider's free tier, sending from `pulllist.app`, **while MailerSend keeps serving production**.
-That probe cost 20 minutes and zero downtime here, and the equivalent check would have caught S3's
-failure *before* the 50-minute outage rather than during it.
-
-**PLANNED 2026-09-02 — `docs/f99-resend-discovery.md`** (STATUS: PLANNED, not started). It does
-exactly this, sequenced on one lesson from § 9: **the disqualifiers are tested first.** Brevo died
-on link rewriting, and that test could have run before the account work, the domain check and the
-header reads that preceded it. Resend's sandbox sender needs no DNS at all, so **Phase 1 can
-disqualify Resend in ~10 minutes with nothing published and nothing to roll back**; the DNS and
-alignment work in Phase 2 only happens if Phase 1 passes. **Kill criteria K1–K6 are written down
-before the tests**, deliberately, so the result is read honestly rather than rationalised.
+**Everything this subsection called for was run, live, the same day it was written.**
+`docs/f99-resend-discovery.md` executed both phases against a real Resend account: the three-test
+probe (send / delivered-headers / link-rewriting, D2), the flat-vs-subdomain lever settled by
+measurement rather than guesswork (D7 forced it — see above), and `pulllist.app` verified with
+MailerSend serving production throughout, zero downtime. **Result: GREEN.** Full record in that doc;
+the summary is above this subsection. **Next actual step is the migration itself:**
+`docs/f99-resend-migration.md` (written, not started).
 
 ---
 
@@ -880,24 +911,30 @@ before the tests**, deliberately, so the result is read honestly rather than rat
 - **F99** (`docs/technical-reference.md` § 13) — the finding this executes; steps (1)–(2) done, the
   2026-08-20 sender inventory, the GoDaddy-zone trap, the reputation note (no warm-up concern).
 - **F72** — per-tenant email branding; S1 is its shared first step.
-- **F148** — the daily-API-cap limit on the same account.
-- **F145** — no wildcard DNS on `pulllist.app`; each hostname is individually provisioned. Relevant
-  if per-tenant sending subdomains are chosen.
+- **F148** — the daily-API-cap limit on the same account. Not dissolved by Resend either (§ 10).
+- **F145** — no wildcard DNS on `pulllist.app`; each hostname is individually provisioned. **No
+  longer relevant to the sending decision** — addressing landed on flat `noreply@pulllist.app` (§ 10),
+  so no per-tenant sending subdomain is being provisioned. Still relevant to **web** front-door
+  hostnames, unrelated to this plan.
+- **`docs/f99-resend-discovery.md`** — the discovery session, GREEN, full measured record (K1–K8,
+  D1–D8, delivered headers).
+- **`docs/f99-resend-migration.md`** — new, the actual migration plan. Written, not started.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate.
 
-**Last updated:** 2026-09-02 — **fifteenth pass: both of Rick’s alternatives to S3 evaluated and
-CLOSED; provider selection is now the open decision.** Brevo transactional tested live (three sends,
-zero downtime, production untouched) and **REJECTED** — it rewrites every link in transactional mail
-through its own click-tracking redirector, password-reset links included, with no way to disable it.
-New **§ 9** carries the full evidence and the delivered headers. A second free MailerSend account
-**CLOSED as an explicit ToS violation** (§ 11.1/11.2 quoted) — new **§ 8 Q9**. **§ 8 Q7 repriced:**
-Hobby ($7) is still ONE domain and buys no parallel run; **Starter ($35) is the real price**, and the
-advertised 14-day Professional trial is worth checking first. New **§ 10** records the requirements,
-the flat-vs-subdomain lever to settle before choosing, and three researched candidates (Resend
-leading, not yet tested). **Two durable results kept from the rejection:** `<slug>.pulllist.app`
-authenticates with strict DKIM alignment, and **a swap to a DIFFERENT provider has no parallel-run
-problem at all** — the constraint that cost S3 ~50 minutes of outage exists only within a single
-provider’s domain slot. No finding ID consumed; **F152 still free.**
+**Last updated:** 2026-09-02 — **sixteenth pass: provider selection RESOLVED from direction to
+decision. Resend discovery ran end to end, same day as the fifteenth pass, GREEN.** `pulllist.app`
+verified in Resend; K1–K6 all clear on our own domain (an early sandbox trip on K1/K3 was traced to
+`resend.dev`'s own pre-configured tracking subdomain and re-verified clean on our domain before
+concluding anything); alignment measured **stronger than Brevo's** (DKIM exact-match **and** SPF
+aligned, not DKIM-only); apex SPF confirmed untouched before and after DNS publish. **D7 — the
+pivotal test — came back negative**: the verified parent does **not** cover `rjbookstop.pulllist.app`
+(`403`, exact text recorded), the opposite of MailerSend's S0 result. That forced the addressing
+decision immediately rather than at a deferred tenant-#2 milestone: **flat `noreply@pulllist.app`**,
+per the standing "prioritize the free tier" rule — per-tenant subdomains remain a future paid choice,
+not a default. F148 unchanged in kind under Resend (still ~100/day, code unchanged) but the monthly
+ceiling improves 6× (500→3,000), and a paid-tier pay-as-you-go overage ($0.90/1,000) exists for
+whenever it's actually fixed. **New migration plan doc written**, not started. No finding ID
+consumed; **F152 still free.**
 Fourteenth pass, 2026-09-01 — same evening: the thirteenth pass's diagnosis was
 CORRECTED.** It asserted "MailerSend send-time activation delay" as S3's cause; that is contradicted
 by the rollback (`mrcyberrick.us` re-added minutes later and sent first try) and was stated with more

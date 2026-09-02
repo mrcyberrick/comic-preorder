@@ -3700,8 +3700,24 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - **⚠️ TRIGGER FIRED 2026-08-30 — the app-side half of MailerLite retirement is DONE.** `register-customer`'s `?secret=` webhook path was removed entirely (native-signup § S5), platform-wide. **F99 is now unblocked but UNSCHEDULED — it is no longer gated, and § 13 should not be read as saying it is.** *(Scheduling is a separate matter: Rick's 2026-08-29 direction is “small features for now,” so the Founding Partner / email-identity track is deliberately not next.)*
   - **What fired is the APP half, not the DNS half — do not conflate them before tightening DMARC.** PULLLIST no longer *receives* MailerLite webhooks, but that says nothing about whether MailerLite still *sends* as `mrcyberrick.us`. The condition this decision actually waits on is **`litesrv._domainkey` being removed from the `mrcyberrick.us` zone and MailerSend confirmed as its sole sender.** **Verify that in the zone before publishing `p=quarantine`** — tightening while a live DKIM-only sender remains is precisely the failure this entry was written to prevent. *(Separately measured 2026-08-30 on the other domain: `_dmarc.pulllist.app` is `p=none`, and the apex SPF authorizes only Namecheap's forwarder — `include:spf.efwd.registrar-servers.com` — **not** MailerSend. Any move to send transactional mail from `@pulllist.app` needs that SPF extended first.)*
   - **Consequence for F99's own design:** consolidation is not merely rewriting six Edge Function `from:` addresses. There is an independent sender on the transactional domain whose content PULLLIST does not control and which is already scheduled to leave. **F99 should sequence with or after MailerLite retirement**, not design around a sender that is being removed.
-- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional), Brevo (marketing).
-- **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design.
+- **Provider selection RESOLVED 2026-09-02 — Resend, GREEN discovery.** The § "REASSESS 2026-09-02"
+  note above flagged the per-tenant-subdomain recommendation as void pending a live probe; that probe
+  ran the same day (`docs/f99-resend-discovery.md`, both phases, real account, real sends, real
+  delivered headers) and came back GREEN. `pulllist.app` verified in Resend; K1–K6 all clear on the
+  domain we verified (K1/K3 tripped only on Resend's own `resend.dev` sandbox, traced to a
+  tracking-subdomain Resend itself pre-configured, and confirmed clean on our own domain before
+  concluding anything); alignment measured **stronger than Brevo achieved** — DKIM exact match
+  (`d=pulllist.app`) **and** SPF aligned, not DKIM-only. **The per-tenant-subdomain recommendation
+  this entry made is now superseded, not merely reassessed**: D7 (sending as
+  `noreply@rjbookstop.pulllist.app` with only the parent verified) was rejected —
+  `403 validation_error: "The rjbookstop.pulllist.app domain is not verified"` — the opposite of
+  MailerSend's own subdomain-coverage result this recommendation was modeled on. **Decision: flat
+  `noreply@pulllist.app`**, per the standing "prioritize the free tier" rule; per-tenant subdomains
+  are a future paid-tier (Pro, $20/mo) choice, not the default. Full record: `f99-resend-discovery.md`;
+  decision recorded in `f99-sender-domain-consolidation.md` § 10; migration plan
+  `docs/f99-resend-migration.md` written, not started. No finding ID consumed.
+- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional), Brevo (marketing), **Resend (transactional, chosen — account created, domain verified, not yet wired into any Edge Function)**.
+- **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design. **F148** — Resend's daily cap is emails-metered (not requests, unlike MailerSend), so F148 is not dissolved by this provider choice; see `f99-resend-discovery.md` § 4 D8.
 
 #### F100 — `weekly-pull-feed` publishes to GitHub Pages from two independent deployers with no ordering guarantee between them; this, not cancelled Actions runs, is what broke F98
 

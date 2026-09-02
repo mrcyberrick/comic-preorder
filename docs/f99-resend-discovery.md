@@ -1,6 +1,6 @@
 # F99 — Resend discovery session (evaluate before committing)
 
-**STATUS:** PLANNED — not started | **Q1 ANSWERED 2026-09-02 (Rick): per-tenant `noreply@<slug>.pulllist.app`, FREE TIER PRIORITIZED, flat `noreply@pulllist.app` is the reconsideration point — § 3** | staging=n/a | prod=untouched by design | findings=F99,F72,F148,F145
+**STATUS:** **COMPLETE — GREEN, 2026-09-02.** Resend measured clean on K1–K6; `pulllist.app` verified (parent domain, DKIM+SPF both aligned); D7 answered **NO** (parent does not cover subdomains on Resend — the opposite of MailerSend's S0 result); **addressing DECIDED same day: flat `noreply@pulllist.app`** (§ 3 reconsideration triggered immediately by D7, not deferred to tenant #2 as originally assumed). Migration plan written: `docs/f99-resend-migration.md` (not started, not executed). | ~~Q1: per-tenant subdomain~~ **SUPERSEDED by D7 — see § 3** | staging=n/a, no code touched | **prod=untouched, confirmed** — MailerSend domain/token/secrets/Edge Functions all unchanged | findings=F99,F72,F148,F145 (no ID consumed — external platform evaluation)
 
 **What this is:** a **discovery** session to decide whether Resend becomes PULLLIST's transactional
 provider. It produces a **measured yes/no**, not a migration. Written 2026-09-02 after Brevo was
@@ -54,14 +54,16 @@ Honest accounting, so the session knows what it is actually verifying.
 
 | Claim | Source | Status |
 |---|---|---|
-| Open/click tracking **off by default** | Resend docs, read 2026-09-02 | **RESEARCH — this is K1/K3, test it** |
-| Send API injects no `List-Unsubscribe` (Broadcasts do) | Resend docs | **RESEARCH — this is K2, test it** |
-| Free: 3,000/month, **100/day**, 1 domain | Third-party summaries | **RESEARCH — read the live dashboard** |
-| Subdomains need **separate** verification | Resend docs | **RESEARCH — and it drives cost; measure it** |
-| Pro $20/mo → 10 domains | Third-party | **RESEARCH** |
-| Request shape keeps `Authorization: Bearer` and `html`; `from` is a **string** not an object | Resend docs | **RESEARCH — confirm from a real 200/201** |
-| `<slug>.pulllist.app` authenticates with strict DKIM alignment | **MEASURED 2026-09-02** (via Brevo, § 9) | **Provider-independent asset — carries over** |
-| A different provider needs no parallel-run purchase | **MEASURED 2026-09-02** (§ 9) | **Established** |
+| Open/click tracking **off by default** | Resend docs, read 2026-09-02 | **CONFIRMED, with a nuance research missed.** Not literally "off" — it doesn't exist at all unless a `tracking_subdomain` is explicitly configured (`open_tracking`/`click_tracking` API fields "only applied if a `tracking_subdomain` is configured"). D2's sandbox send tripped K1+K3 because `resend.dev` — Resend's own domain — already has one configured; D6 on our own domain, with no tracking subdomain set, came back completely clean. |
+| Send API injects no `List-Unsubscribe` (Broadcasts do) | Resend docs | **CONFIRMED** — absent on every send, sandbox and real domain alike (D2, D6) |
+| Free: 3,000/month, **100/day**, 1 domain | Third-party summaries | **CONFIRMED** — live dashboard read (D1) showed exactly `3,000` monthly / `100` daily; domain count confirmed behaviorally by D7 (a second, unverified domain is flatly rejected) |
+| Subdomains need **separate** verification | Resend docs | **CONFIRMED — this is D7, the pivotal test.** `noreply@rjbookstop.pulllist.app` rejected with `403 validation_error: "The rjbookstop.pulllist.app domain is not verified"`, parent `pulllist.app` verified throughout. Opposite of MailerSend's S0 result. Drove the addressing decision — see § 3 |
+| Pro $20/mo → 10 domains | Third-party | **Not independently re-confirmed this session** (not needed — flat addressing was chosen, see § 3) |
+| Request shape keeps `Authorization: Bearer` and `html`; `from` is a **string** not an object | Resend docs | **CONFIRMED from a real 200 (D2) and the docs (D3)** — `POST https://api.resend.com/emails`, `Authorization: Bearer re_...`, body `{from, to, subject, html}`, `from` a plain string, success response `{"id": "<uuid>"}` |
+| `<slug>.pulllist.app` authenticates with strict DKIM alignment | **MEASURED 2026-09-02** (via Brevo, § 9) | **Provider-independent asset — carries over.** (Moot for Resend's own migration now that addressing is flat, but the underlying DNS/alignment mechanics it demonstrated generalize.) |
+| A different provider needs no parallel-run purchase | **MEASURED 2026-09-02** (§ 9) | **Established, and reconfirmed this session** — the whole Phase 1/2 probe ran on Resend's free tier with MailerSend serving production throughout, zero downtime |
+| Daily/monthly cap is metered in requests (like MailerSend) or emails | not previously researched | **NEW, measured 2026-09-02 (D8): emails, not requests.** Docs: *"Both sent and received emails count towards these quotas."* Corroborated by the existence of a 100-email batch endpoint that would trivially bypass a request-based cap if the metering worked that way. Consequence: batching would ease Resend's 10 req/sec rate limit but does **not** raise the 100/day ceiling — different lever than MailerSend's request-based cap |
+| Pay-as-you-go overage ($0.90/1,000 emails) available on Free tier | Rick, from Resend's pricing page, 2026-09-02 | **CORRECTED 2026-09-02** — verified against `resend.com/pricing`: overage billing is a **paid-tier (Pro/Scale) feature only**, not available on Free. Real and worth keeping for whenever F148 is fixed for real (metered cost beats a hard wall), but doesn't change today's free-tier picture |
 
 ---
 
@@ -119,6 +121,29 @@ finds the chosen shape needs a paid plan, that is a **stop-and-ask**, not a purc
 
 Brevo's marketing sender stays at `rjbookstop.pulllist.app` regardless; nothing about that changes.
 
+> ### ✅ RESOLVED 2026-09-02 — D7 came back negative, and the collision this section predicted for
+> **tenant #2 turned out to be immediate, not deferred**
+>
+> § 3's table above was written assuming D7 might land either way, and its "collide at tenant #2"
+> framing implicitly assumed the free case ("one domain slot is enough right now, free either way")
+> held regardless of D7's answer. **It doesn't.** D7 (§ 4) sent from
+> `noreply@rjbookstop.pulllist.app` with only the parent verified and got a flat rejection —
+> `403 validation_error: "The rjbookstop.pulllist.app domain is not verified."` Resend does **not**
+> cover subdomains under a verified parent (the opposite of MailerSend's S0 result this whole
+> per-tenant design was modeled on).
+>
+> **Consequence: sending as `noreply@rjbookstop.pulllist.app` today, at tenant #1, would need a
+> SECOND verified domain — unavailable on the free tier's single slot** — not a tenant-#2 problem
+> deferred into the future. The collision is now, not later.
+>
+> **Decision (Rick, 2026-09-02): ship flat `noreply@pulllist.app`.** Already proven clean in D6 —
+> `dkim=pass` exact match (`d=pulllist.app`), **SPF also aligned** (a bonus neither §3 nor the K4
+> criterion required), `dmarc=pass`, and domain verification covers arbitrary local parts (D6 test
+> 2). Per-tenant subdomains remain available later as a **paid** choice (Pro, $20/mo) whenever the
+> reputation segmentation is worth it — not spent today with one real tenant that doesn't need it.
+> This is the standing "prioritize the free tier, don't auto-upgrade" rule doing exactly what it was
+> written to do.
+
 ---
 
 ## 4. Work breakdown
@@ -137,6 +162,15 @@ Create a Resend account. **Read the live dashboard**, do not trust § 2's resear
 > **Do not add a domain yet.** D2 must run on the sandbox sender first.
 
 **→ V1**
+
+> ✅ **MEASURED 2026-09-02 (Rick, live dashboard).** Free tier: **3,000/month, 100/day** — confirmed
+> exactly as researched (dashboard showed `3 / 3,000` monthly, `3 / 100` daily after the first three
+> sends). Domain count confirmed **behaviorally, not from a dedicated dashboard read**: D7 shows a
+> second, unverified domain is flatly rejected, consistent with 1. Daily-cap unit resolved at D8, from
+> documentation rather than the dashboard: **emails, not requests** (`"Both sent and received emails
+> count towards these quotas"`). Pro-trial offer and the exact Pro/domain-count figures were **not**
+> independently re-confirmed this session — not needed, since the addressing decision (§ 3) landed on
+> flat, free-tier `noreply@pulllist.app`.
 
 #### D2 — The three kill tests, on Resend's sandbox sender (~15 min)
 
@@ -162,6 +196,27 @@ Phase 2, do not publish DNS. That is the entire point of this ordering.
 
 **→ V2** *(the gate that decides whether the rest of the session happens at all)*
 
+> ⚠️ **MEASURED 2026-09-02 — K1 and K3 BOTH TRIPPED ON THE SANDBOX, read from delivered Gmail
+> headers (Show original), not the API's `{"id":...}`.**
+>
+> | Check | Result |
+> |---|---|
+> | K1 — link rewriting | **TRIPPED.** Both `href`s (including the fake reset URL) rewritten through `vw9jhtlx.r.us-east-1.awstrack.me/L0/...` — an **Amazon SES** click-tracking redirector, visible via `d=amazonses.com` DKIM, the `amazonses.com` Return-Path, and `X-SES-Outgoing` (Resend sends over AWS SES under the hood) |
+> | K2 — List-Unsubscribe | **Not tripped.** Absent from both messages |
+> | K3 — tracking pixel | **TRIPPED.** A `1×1 display:none` beacon injected into **both** messages, including the "plain, no links" baseline that never had an `<img>` in its source HTML |
+>
+> **This did not end the session — it triggered a re-verification, not an immediate remediation
+> (CLAUDE.md's own discipline).** The trip was traced to `resend.dev` — Resend's own shared sandbox
+> domain — having a tracking subdomain already configured, something only the domain owner can set
+> up. Confirmed three independent ways before proceeding to Phase 2: (1) Resend's own API docs state
+> `open_tracking`/`click_tracking` are **"only applied if a `tracking_subdomain` is configured"**;
+> (2) the live Add Domain screen for `pulllist.app` showed the Tracking Subdomain field **empty**,
+> with both tracking checkboxes **greyed out/disabled** while empty; (3) D6 — the real test, sending
+> from our own verified domain with no tracking subdomain ever configured — came back **completely
+> clean**, no rewritten links, no pixel. **K1/K3 do not trip on our own domain.** Full reasoning
+> below this callout, kept for the record since it was a real mid-session judgment call, not a
+> foregone conclusion.
+
 #### D3 — Confirm the real request shape (~5 min)
 
 From the successful D2 calls, record the **exact** working payload — `from` as string vs object,
@@ -169,6 +224,12 @@ field names, auth header, success response. § 10 of the parent plan states this
 explicitly flags it unconfirmed. The migration will be written against whatever this records.
 
 **→ V3**
+
+> ✅ **CONFIRMED 2026-09-02, from a real `200`.** `POST https://api.resend.com/emails`,
+> `Authorization: Bearer re_...`, `Content-Type: application/json`, body
+> `{"from": "...", "to": "...", "subject": "...", "html": "..."}` — `from` a plain string exactly as
+> research predicted, no object shape. Success response: `{"id": "<uuid>"}`. Matches § 10's research
+> exactly; nothing to correct.
 
 ---
 
@@ -195,6 +256,27 @@ explicitly flags it unconfirmed. The migration will be written against whatever 
 
 **→ V4**
 
+> ✅ **MEASURED 2026-09-02 — clean, K5 does NOT trip.** Domain added via the dashboard (a
+> Sending-scoped API key can't manage domains — `401 restricted_api_key` — a real, documented
+> permission-scoping trap, same class as MailerSend's domain-scoped tokens but self-explaining here).
+> Tracking Subdomain left blank. Resend returned three records, all scoped to **new names**, none
+> touching the apex:
+>
+> | Record | Name | Value | External resolution before publish |
+> |---|---|---|---|
+> | DKIM | `resend._domainkey` | TXT, raw `p=` public key (not a CNAME, unlike MailerSend's `ms1`/`ms2` pair) | **NXDOMAIN** |
+> | Return-Path/SPF | `send` (MX) | `feedback-smtp.us-east-1.amazonses.com`, priority 10 | **NXDOMAIN** |
+> | Return-Path/SPF | `send` (TXT) | `v=spf1 include:amazonses.com ~all` | **NXDOMAIN** |
+>
+> All three resolved via `dns.google` before publishing — no collisions. **K5: apex SPF
+> untouched, confirmed both before and after (D5).** Apex TXT re-read at D4:
+> `v=spf1 include:_spf.mailersend.net include:spf.efwd.registrar-servers.com ~all` — byte-identical
+> to what's on file; Resend's SPF requirement lands entirely on `send.pulllist.app`, a name that
+> didn't exist. **MX interaction: none** — the apex's 5 existing Namecheap-forwarding MX records
+> (`eforward1-5.registrar-servers.com`) are a different name than Resend's `send.pulllist.app` MX.
+> SPF lookup budget: N/A to the apex (separate name, separate evaluation context); the new record's
+> own single `include:amazonses.com` is a standard, well-tested AWS SES include.
+
 #### D5 — Publish DNS + verify in Resend (~15 min + propagation)
 
 **Rick publishes in Cloudflare** — the established pattern for anything touching live
@@ -205,6 +287,12 @@ in the UI and does not expose the real target to an outside query (the S2 lesson
 Resend's dashboard reports the domain verified.
 
 **→ V5**
+
+> ✅ **MEASURED 2026-09-02 — both halves green.** Rick published all three records in Cloudflare
+> (DNS-only — TXT/MX records carry no proxy toggle by nature). Re-resolved externally via
+> `dns.google` post-publish: all three return exactly the values requested, apex SPF re-confirmed
+> byte-identical and untouched. Resend's dashboard independently reported: **"Domain verified: Your
+> domain is ready to send emails."**
 
 #### D6 — Send from our own domain + read alignment (~15 min)
 
@@ -224,6 +312,25 @@ Read delivered headers and record: `dkim=pass` with **`d=` matching the From dom
 > margin, not a failure. **Record which it is; do not treat DKIM-only as a kill.**
 
 **→ V6**
+
+> ✅ **MEASURED 2026-09-02 — BOTH mechanisms aligned, beating the plan's own stated expectation.**
+> Two real sends read from Gmail `Show original`:
+>
+> 1. `noreply@pulllist.app` (the flat identity): `dkim=pass header.i=@pulllist.app header.s=resend`,
+>    `DKIM-Signature: ... d=pulllist.app` — **exact match** to the From domain, not merely aligned.
+>    `spf=pass smtp.mailfrom=...@send.pulllist.app` — `send.pulllist.app`'s organizational domain is
+>    `pulllist.app`, so this is **also aligned** under DMARC's relaxed mode (`_dmarc.pulllist.app`
+>    carries no `adkim=`/`aspf=`, confirmed earlier in the parent plan's own S0 work). `dmarc=pass
+>    (p=NONE)`.
+> 2. `f99-coverage-check@pulllist.app` (never registered as a sender): identical signing, **delivered
+>    successfully** — domain verification covers arbitrary local parts, same as Brevo, unlike
+>    MailerSend's `#MS42207`.
+>
+> **No tracking artifacts in either message** — real-world confirmation of the D2/D4 hypothesis: with
+> no tracking subdomain configured, nothing is injected. **K1/K3 do not apply to this domain.**
+>
+> This matches MailerSend's current double-mechanism margin (K4 satisfied, plus bonus SPF alignment
+> the criterion didn't even require) rather than settling for Brevo's DKIM-only result.
 
 #### D7 — ⭐ THE PIVOTAL TEST: does the parent cover `<slug>.pulllist.app`? (~10 min)
 
@@ -246,6 +353,20 @@ afterwards.
 
 **→ V7**
 
+> ⚠️ **MEASURED 2026-09-02 — REJECTED, research confirmed, and unlike `#MS42207` this is not a
+> mystery.** Exact response:
+> ```
+> HTTP 403 — validation_error
+> "The rjbookstop.pulllist.app domain is not verified. Please, add and verify your domain on
+> https://resend.com/domains"
+> ```
+> **The parent does NOT cover the subdomain.** Opposite of MailerSend's S0 result. Consequence,
+> worked through in § 3: sending as `noreply@rjbookstop.pulllist.app` would need a **second**
+> verified domain, unavailable on the free tier's single slot — the collision § 3 originally expected
+> at tenant #2 turns out to be immediate. **Decision (Rick, 2026-09-02): ship flat
+> `noreply@pulllist.app`** — already proven clean in D6 — and treat per-tenant subdomains as a future
+> paid-tier (Pro, $20/mo) choice, not a default. See § 3's resolution block for the full reasoning.
+
 #### D8 — F148 under Resend, with numbers (~10 min)
 
 - Confirm from D1 whether the daily cap counts emails or requests.
@@ -260,20 +381,34 @@ here** — different finding, different session.
 
 **→ V8**
 
+> ✅ **MEASURED 2026-09-02, from documentation (dashboard doesn't expose the metering unit
+> directly).** Resend's daily/monthly cap is metered in **emails**, not API requests — docs state
+> *"Both sent and received emails count towards these quotas,"* corroborated by the existence of a
+> 100-email `/emails/batch` endpoint that would trivially blow through a request-based cap if the
+> metering worked that way. **F148's one-sentence shape under Resend:** with `notify-customers`'
+> code unchanged (one email per request), the numeric daily ceiling stays **~100/day — the same as
+> today under MailerSend, F148 is NOT dissolved** — but the monthly ceiling rises **500 → 3,000
+> (6×)**, and batching (were it ever built) would ease Resend's 10-req/sec rate limit without raising
+> the 100/day wall itself, a different lever than it would have been under MailerSend's request-based
+> cap. At today's real volume (~30 founding-tenant customers, ~50–150 emails/month per the parent
+> plan § 1), neither cap binds under either provider. **Bonus fact, verified against Resend's own
+> pricing page, not Free-tier-relevant today but useful for whenever F148 is actually fixed:**
+> pay-as-you-go overage ($0.90/1,000 emails) exists, but only on paid (Pro/Scale) tiers — not Free.
+
 ---
 
 ## 5. Verification gates
 
-| Gate | Assertion | How it fails |
-|---|---|---|
-| **V1** | Free-tier limits recorded **from the live dashboard**, and § 2's researched row marked confirmed or corrected | A limit is quoted from research rather than read |
-| **V2** | **K1, K2, K3 all measured from delivered headers** on a sandbox send | Any of the three trips → session ends here, by design |
-| **V3** | A real, working request payload recorded verbatim | Shape still inferred from docs |
-| **V4** | Every requested DNS name resolved live; collisions enumerated; **explicit yes/no on whether the apex SPF must change** | Any name unchecked, or K5 unanswered |
-| **V5** | Domain verified in Resend **and** records confirmed at an external resolver | Verified only in the Cloudflare UI |
-| **V6** | `dkim=pass` with `d=` aligned to the From domain, read from a delivered header; SPF alignment recorded either way | Trusting the API's success response |
-| **V7** | **Parent-covers-subdomain answered by a real send from `noreply@rjbookstop.pulllist.app` with only the parent verified** — and, if it delivered, `d=` confirmed aligned. This gate decides whether § 3's chosen identity stays on the free tier | Answered from documentation; or delivery accepted without reading `d=` |
-| **V8** | F148's shape under Resend stated with measured numbers | Stated as a general claim |
+| Gate | Assertion | How it fails | Result |
+|---|---|---|---|
+| **V1** | Free-tier limits recorded **from the live dashboard**, and § 2's researched row marked confirmed or corrected | A limit is quoted from research rather than read | ✅ **GREEN** — 3,000/month, 100/day confirmed live |
+| **V2** | **K1, K2, K3 all measured from delivered headers** on a sandbox send | Any of the three trips → session ends here, by design | ⚠️ **K1+K3 tripped on sandbox**, traced to `resend.dev`'s own tracking-subdomain config, resolved by D6 re-test on our own domain (clean). K2 never tripped |
+| **V3** | A real, working request payload recorded verbatim | Shape still inferred from docs | ✅ **GREEN** — confirmed from a real `200` |
+| **V4** | Every requested DNS name resolved live; collisions enumerated; **explicit yes/no on whether the apex SPF must change** | Any name unchecked, or K5 unanswered | ✅ **GREEN** — 3/3 names NXDOMAIN pre-publish; **apex SPF: NO, does not need to change** |
+| **V5** | Domain verified in Resend **and** records confirmed at an external resolver | Verified only in the Cloudflare UI | ✅ **GREEN** — both confirmed |
+| **V6** | `dkim=pass` with `d=` aligned to the From domain, read from a delivered header; SPF alignment recorded either way | Trusting the API's success response | ✅ **GREEN, exceeds expectation** — DKIM exact match AND SPF aligned (Brevo only had DKIM) |
+| **V7** | **Parent-covers-subdomain answered by a real send from `noreply@rjbookstop.pulllist.app` with only the parent verified** — and, if it delivered, `d=` confirmed aligned. This gate decides whether § 3's chosen identity stays on the free tier | Answered from documentation; or delivery accepted without reading `d=` | ⚠️ **REJECTED** — `403 validation_error`, exact text recorded (§ 4 D7). Addressing decision changed to flat as a direct result (§ 3) |
+| **V8** | F148's shape under Resend stated with measured numbers | Stated as a general claim | ✅ **GREEN** — emails-metered, ~100/day unchanged, 500→3,000/month, batching doesn't raise the daily wall |
 
 **A verification step that cannot fail is not a verification step.** Before running each, ask what
 its output looks like when the thing has *failed* — the discipline CLAUDE.md records from the
@@ -359,6 +494,18 @@ The session produces one of:
 **Either way the result gets written down before the session closes.** A negative result that is not
 recorded gets re-tested — which is exactly why § 9 exists.
 
+> ✅ **ACTUAL OUTCOME 2026-09-02: GREEN, ~1.5 hours, both phases run.** Cleaner than either prior
+> candidate — MailerSend blocked on an unexplained `#MS42207`, Brevo rejected on link rewriting,
+> Resend delivered with **stronger measured alignment than Brevo achieved** (DKIM+SPF both aligned,
+> not DKIM-only) and an **explicit, self-explaining** answer at the one place it said no (D7's
+> subdomain rejection names exactly what's wrong, unlike MailerSend's unresolved mystery). One
+> mid-session correction, handled by re-verification rather than either blind acceptance or a
+> premature RED: K1/K3 tripped on the sandbox, traced to `resend.dev`'s own tracking-subdomain setup,
+> and confirmed clean on our own domain in D6. One real design consequence: D7's rejection forced § 3's
+> addressing decision from *direction* to *committed*, immediately rather than at a deferred tenant-#2
+> milestone — landing on flat `noreply@pulllist.app`, per the standing "prioritize the free tier"
+> rule.
+
 ---
 
 ## 10. Completion criteria
@@ -367,23 +514,30 @@ recorded gets re-tested — which is exactly why § 9 exists.
 pass.** A RED result that is fully recorded is a complete session; a GREEN result left in scrollback
 is not.
 
-- [ ] **V1–V8 recorded**, each with its measured value — *or* the session ended early at **V2** with
-      the tripped kill criterion and its evidence recorded
-- [ ] **Every § 2 row marked RESEARCH** is now either **confirmed** or **corrected** against a live
-      measurement, and § 2 updated in place
-- [ ] **K1–K6 each explicitly evaluated**, or marked "not reached" with the reason
-- [ ] **D7's answer recorded** — the delivered `d=` value if it sent, or the provider's **exact
-      rejection string** if it did not
-- [ ] **This doc's STATUS token** updated to `COMPLETE` or `REJECTED` with the date and outcome
-- [ ] **Parent plan `f99-sender-domain-consolidation.md` § 10** updated from *direction* to
+- [x] **V1–V8 recorded**, each with its measured value — session did **not** end early; K1/K3 tripped
+      at V2 but were re-verified as sandbox-specific and resolved before Phase 2, per the CLAUDE.md
+      "surprising result triggers re-verification, not immediate remediation" discipline
+- [x] **Every § 2 row marked RESEARCH** is now either **confirmed** or **corrected** against a live
+      measurement, and § 2 updated in place — one correction (tracking's real trigger condition) and
+      one net-new row (daily-cap unit, D8) added beyond what was originally researched
+- [x] **K1–K6 each explicitly evaluated** — K1/K2/K3 clean on our own domain (D6); K4 exceeded
+      (DKIM+SPF both aligned); K5 does not trip (D4/D5, apex SPF untouched, confirmed externally
+      before and after); K6 does not trip (monthly 6× better, daily a wash)
+- [x] **D7's answer recorded** — rejected; exact text: `403 validation_error — "The
+      rjbookstop.pulllist.app domain is not verified. Please, add and verify your domain on
+      https://resend.com/domains"`
+- [x] **This doc's STATUS token** updated to `COMPLETE — GREEN, 2026-09-02`
+- [x] **Parent plan `f99-sender-domain-consolidation.md` § 10** updated from *direction* to
       *decision*
-- [ ] **`CLAUDE.md` F99 row** updated, and a "Last completed work" entry added
-- [ ] **If GREEN:** the migration plan is written as a **new** F99 sub-step doc — **not started, not
-      executed, in this session**
-- [ ] **If RED:** the fallback is recorded (parent plan § 8 Q7 — MailerSend Starter, $35/mo)
-- [ ] **Production confirmed untouched** — MailerSend domain, API token, `MAIL_FROM_EMAIL` /
-      `MAIL_FROM_NAME` secrets, and all six Edge Functions verified unchanged
-- [ ] **`/wrap-up` run** (CLAUDE.md § Anti-Drift Rules)
+- [x] **`CLAUDE.md` F99 row** updated, and a "Last completed work" entry added
+- [x] **GREEN — migration plan written as a new F99 sub-step doc**: `docs/f99-resend-migration.md` —
+      **not started, not executed, in this session**
+- [ ] ~~If RED: fallback recorded~~ — N/A, result is GREEN
+- [x] **Production confirmed untouched** — nothing in this session touched Supabase, any Edge
+      Function, MailerSend's dashboard/domain/token, or the `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME`
+      secrets. Every action was against a brand-new Resend account and Cloudflare DNS additions on
+      names MailerSend never consults
+- [x] **`/wrap-up` run** (CLAUDE.md § Anti-Drift Rules)
 
 ---
 
@@ -404,4 +558,9 @@ is not.
   would invent per-tenant provisioning work that mail does not require.
 - `CLAUDE.md` § Current Migration Phase — the 2026-09-25 October import gate (Q4).
 
-**Last updated:** 2026-09-02 — written. Not started.
+- **`docs/f99-resend-migration.md`** — new, written this session. The GREEN result's follow-up plan:
+  not started, not executed.
+
+**Last updated:** 2026-09-02 — **session run end to end, GREEN.** All 8 work items (D1–D8) executed
+live against a real Resend account, `pulllist.app` verified, alignment measured, addressing decided
+(flat, § 3). Production never touched. Migration plan written as a new sub-step doc, not started.
