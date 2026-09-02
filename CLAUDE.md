@@ -817,7 +817,19 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F151**. **F150 filed 2026-09-01** (production's `app_settings` grants
+**Next free finding ID:** **F152**. **F151 filed 2026-09-01** (`tenants.settings` still stores
+`mailerlite_webhook_secret` on **all three real tenant rows** — staging `raysandjudys`, production
+`rjbookstop` and `comicstore`; only the four `pw-*` Playwright fixture tenants are clean. Measured
+service-role, key names only — the value was never read. The secret is **inert** (the `?secret=`
+path was removed from `register-customer` platform-wide 2026-08-30) and the read is **tenant-scoped**
+— worst case is a customer reading their *own* shop's dead secret, never another tenant's — so
+severity is Low. The gap is that `resolve_tenant_by_slug`'s careful "never return `settings`"
+projection (5.3 § 1.5) is **bypassed** by the authenticated path, which reads `tenants` directly
+(`app.js:82-86`); RLS filters rows, not columns, so that `select()` list is a client convention, not
+a boundary. **Unconfirmed:** no probe was run with a real user JWT, and a column-level GRANT — if one
+exists — would flip the conclusion. Fix direction: delete the dead key, no rotation needed. Found
+while planning F72, filed per Rick's call rather than fixed inline. See § 13 F151). **F150 filed
+2026-09-01** (production's `app_settings` grants
 `anon` full table-level DML — staging grants none on the same table; RLS confirmed still blocking
 real reads live, so no active exposure, but an unexplained prod/staging divergence. Found by F149's
 own migration pre-flight during its production promotion, filed per Rick's call rather than fixed
@@ -893,6 +905,7 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F151 | **Low, both environments** — `tenants.settings` still stores `mailerlite_webhook_secret` on all three **real** tenant rows (staging `raysandjudys`, prod `rjbookstop` + `comicstore`; the four `pw-*` fixture tenants are clean). Inert since 2026-08-30 (the `?secret=` path was removed platform-wide) and the read is **tenant-scoped** — a customer could read their *own* shop's dead secret, never another tenant's. The real point: `resolve_tenant_by_slug`'s deliberate "never return `settings`" projection (5.3 § 1.5) is **bypassed** by the authenticated path, which reads `tenants` directly at `app.js:82-86` — RLS filters rows, not columns | Owner: § 13 F151. **Open, not started — Rick's call (F72 plan § 8 Q5): file now, fix later.** **Verify first:** no probe was run with a real user JWT; a column-level GRANT on `tenants`, if one exists, flips the conclusion entirely. Fix direction: `UPDATE public.tenants SET settings = settings - 'mailerlite_webhook_secret';` on both environments — **no rotation needed**, the value authorizes nothing. Found while planning **F72** |
 | F150 | **Low today, confirmed by a live test not inferred.** Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER) — staging grants `anon` nothing on the same table (hard 401). Found by F149's own migration pre-flight, which halted exactly as designed. A live anon read against production returns `200, []` — RLS still filters every row (only SELECT policy is `TO authenticated`), so no data is actually exposed today, just a thinner defense-in-depth layer than staging | Owner: § 13 F150. **Open, not started — Rick's call: file now, fix later.** Still unconfirmed: whether RLS is actually *enabled* (`pg_class.relrowsecurity`) on this table vs. merely having zero anon-applicable policies (both give the same empty-read symptom); writes were not probed against production. Not investigated: how the divergence arose, or whether other tables share it |
 | F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-01.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`, `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` — staging `ca8c481`, **production PR #147 `36b79ff`**. **Verified staging**: 12/12 checks in a local Playwright harness — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON, full suite 142 passed/1 skipped (unrelated)/0 failed. **Verified production post-deploy**: served bytes confirmed carrying the fix, RPC re-confirmed live (`200/false`), `config.js` still prod ref, PR file list matched intent on GitHub itself (F99 S1's Edge Function changes deliberately excluded, confirmed byte-identical to `main`). Write-smoke skipped (doesn't touch the reserve path, same disposition as PR #141/#145/#133). Surfaced **F150** during the promotion's own pre-flight (filed, not fixed) |
 | F148 | **Low today, Medium at ~100 customers, High at 2+ tenants** — `notify-customers` sends **one API request per recipient** in a serial loop, so a monthly blast costs N requests for N customers. MailerSend free allows **100 daily API requests** / 500 emails-per-month / **no overage** — so the *daily* cap binds first, and quotas are **per-account**, shared across tenants whose imports all land in the same window. Not a defect; works as designed and is ~3x under cap today | Owner: § 13 F148. **Open, not started.** Fix direction: MailerSend's bulk endpoint (many messages, one request) — **free-tier availability unverified, confirm against the live account first**. Cheaper mitigation regardless: make `import.js` Step 7 *prompt* on a non-zero `failed` count instead of logging it behind a green check. Sequence with **F99**/**F72** — same MailerSend account |
@@ -1189,7 +1202,7 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
   config.js                        ← tracked per branch; never edited by agent
   CLAUDE.md                        ← this file
   README.md
-  supabase/functions/              ← all 8 Edge Functions (post-4.1 Session 1)
+  supabase/functions/              ← all 9 Edge Functions (8 post-4.1 Session 1; register-tenant added 5.4 S3)
   docs/
     technical-reference.md         ← canonical schema + findings index § 13
     pre-multitenancy-state.md      ← § 1, § 3, § 5 still valid; § 2/§ 4 superseded
@@ -1548,7 +1561,12 @@ auto-reserve detects existing reservations and skips.
 
 ## Edge Functions
 
-All 8 functions are in the repo at `supabase/functions/*` (post-4.1 Session 1).
+All **9** functions are in the repo at `supabase/functions/*` (8 landed post-4.1
+Session 1; `register-tenant` was added at 5.4 S3, commit `0bdc55c`, whose own message
+reads *"EF inventory -> 9"*). *(This line and § Repository Structure both read "8" until
+2026-09-01 — a miscount, not a missing function: `register-tenant` is fully documented in
+`docs/phase-5.4-tenant-signup.md`. Found while planning F72; corrected as a doc fix, no
+finding consumed, per that plan's § 8 Q4.)*
 Tenant-aware as of Phase 2 + 4.1 hardening:
 - `notify-customers` — in-body admin auth (F47); recipient list scoped to caller's tenant
 - `create-paper-customer` — in-body auth; JWT-off platform setting (post-4.1 C13)
@@ -1564,7 +1582,12 @@ Tenant-aware as of Phase 2 + 4.1 hardening:
 - `send-my-list` — in-body auth + caller identity check (F51, F54); tenant-scoped queries
 - `claim-paper-customer` — in-body auth; PATCHes tenant-scoped (F50)
 - `approve-customer` — PATCH-only on existing rows; tenant inherited from row
-- `reset-password` — public endpoint by design
+- `reset-password` — public endpoint by design. **Holds no tenant reference at all** —
+  the only one of the six mail-sending functions that does not (relevant to F72; see
+  `docs/f72-multi-tenant-branding.md` § 4.2.2)
+- `register-tenant` — **gated operator provisioning EF** (added 5.4 S3); service-role
+  tenant creation behind an operator secret. Phase 6 reuses this engine unchanged in its
+  core and layers public self-serve on top. See `docs/tenant-onboarding-runbook.md` Step 1
 
 `FOUNDING_TENANT_ID` secret must be set in Supabase staging → Edge Functions →
 Secrets for tenant-aware functions to work.

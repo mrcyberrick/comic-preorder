@@ -1,6 +1,6 @@
 # F72 — multi-tenant branding: remove the founding tenant's identity from every tenant-facing surface
 
-**STATUS:** PLANNED — not started | staging=— | prod=— | findings=F72,F99,F145
+**STATUS:** PLANNED — **§ 8 Q1–Q6 all ANSWERED 2026-09-01 (Rick); ready to execute** | staging=— | prod=— | findings=F72,F99,F145,F151
 
 **Owner finding:** F72 (`docs/technical-reference.md` § 13). This plan **widens F72's
 recorded scope** — it is filed as one email template in `register-customer`, and the
@@ -116,6 +116,43 @@ id), plus *one* new id-derivation in `reset-password` alone (§ 4.2.2).
 F99 S1 (`eff9793`, staging) made all six read `MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` via
 `Deno.env.get()` with a `??` fallback to the founding literal. Those fallbacks are six
 of the Tier-A leaks in § 2, and S2 replaces the **name** half with the tenant's own.
+
+### 1.7 The live tenant data — measured 2026-09-01, and it changes two things
+
+Service-role read-only against both projects (jsonb **key names only**; no secret value was
+fetched or recorded):
+
+| Env | Tenant | `contact_phone` | `location` | `branding` keys |
+|---|---|---|---|---|
+| staging | `raysandjudys` | `973-586-9182` | `Rockaway, NJ` | `promo_banner` |
+| staging | `pw-fc2e3fc7`, `pw-2d3c4d60` | NULL | NULL | `promo_banner`, `primary_color` |
+| staging | `pw-56132e92`, `pw-a62e4116` | NULL | NULL | `{}` |
+| prod | `rjbookstop` | **NULL** | **NULL** | `promo_banner` |
+| prod | `comicstore` | `555-555-5555` | `New Jersey` | `display_name`, `primary_color` |
+
+**Three consequences the plan had wrong before this read:**
+
+1. **There is no `comicstore` on staging.** The second tenant exists on **production only**.
+   Staging holds the founding tenant plus four `pw-*` Playwright fixture tenants. **V3 as
+   originally written — "sign in as a `comicstore` user on staging" — was impossible.** It is
+   rewritten in § 5 to use a `pw-*` fixture tenant, which is the only second-tenant vehicle
+   staging actually has.
+2. **`location` is currently a city string, not a postal address** (`Rockaway, NJ`). Under Q1
+   this value must be **changed**, not merely populated — and `Rockaway, NJ` becomes
+   `branding.location_short`. Production's founding tenant has **both fields NULL**, so it needs
+   populating from scratch before S1 renders anything there.
+3. **`branding` has a fourth key in live use that no doc lists: `promo_banner`** — read by
+   `catalog.html:508`, documented in `docs/subscription-promotion.md`, absent from the onboarding
+   runbook's key table. Not this plan's defect, but S4 fixes the list while it is there.
+
+**Also found, and it is a live doc defect:** `tenant-onboarding-runbook.md` Step 2 instructs
+operators to write `display_name` **into the `branding` jsonb** — and `Branding.apply()` reads the
+`tenant.display_name` **column** (`app.js:186`), never `branding.display_name`. Production's
+`comicstore` has the jsonb key set, and **it is ignored**. Harmless today only because the column is
+`NOT NULL` and therefore always populated. S4 corrects the runbook.
+
+**`tenants.settings` finding:** the same probe found `mailerlite_webhook_secret` still stored on all
+three real tenant rows — **filed as F151** (§ 6 discovery 2, resolved disposition below).
 
 ---
 
@@ -310,9 +347,18 @@ literal characters.
   template in one function) and set status.
 - `docs/technical-reference.md` § 4.1: note `contact_phone` / `location` are now read by
   `Branding.apply()`, matching the existing `branding` note.
-- `docs/tenant-onboarding-runbook.md`: `contact_phone` / `location` move from *optional
-  metadata* to **required at create** — they are now rendered. Update the go-live
-  checklist F72 item.
+- `docs/tenant-onboarding-runbook.md` — **four fixes, three of them found by § 1.7's live read:**
+  1. `contact_phone` / `location` move from *optional metadata* to **required at create** — they
+     are now rendered. `location` must be a **full postal address** (Q1 / § 4.2.3).
+  2. Update the go-live checklist F72 item.
+  3. **Step 2's SQL is wrong.** It instructs operators to write `display_name` into the `branding`
+     jsonb; `Branding.apply()` reads the `tenant.display_name` **column** (`app.js:186`) and ignores
+     the jsonb key entirely. Production's `comicstore` has the ignored key set today. Correct the
+     example to `UPDATE ... SET display_name = ...` for the name, `branding` for colour/logo only.
+  4. The branding key table lists `primary_color` / `display_name` / `logo_url`. Real keys in use
+     are `primary_color`, `logo_url`, **`promo_banner`** (`catalog.html:508`, documented in
+     `docs/subscription-promotion.md`), and — added by this plan — **`location_short`** (Q1) and
+     **`website`** (Q2). `display_name` should be **removed** from the list per fix 3.
 - `docs/phase-5.3-per-tenant-branding.md`: append a note that the `Branding.apply()`
   contract was extended, and that § 1.5's anon projection boundary was **preserved**.
 - `CLAUDE.md`: § Current Migration Phase entry; § Key Business Logic branding line.
@@ -325,7 +371,7 @@ literal characters.
 |---|---|---|
 | **V1** | Grep for `Ray & Judy` / `973-586-9182` / `9735869182` / `Rockaway` / `40 W Main` over `*.html` and `app.js` returns **only** inline fallbacks inside a `data-tenant-*` element or a `??` / `\|\|` fallback expression | any bare literal remains |
 | **V2** | Same grep over `supabase/functions/*/index.ts` returns only `??` fallbacks | a hardcoded literal survives in a template |
-| **V3** | **Second-tenant render proof.** Sign in as a `comicstore` user on staging and load all six nav pages + the My List print header + an arrivals pickup slip. **Zero** occurrences of the founding name, phone or city | the leak is not actually closed |
+| **V3** | **Second-tenant render proof.** ⚠️ **`comicstore` does not exist on staging** (§ 1.7) — the second tenant is production-only. Use a **`pw-*` Playwright fixture tenant** (or create a purpose-made staging tenant via `register-tenant`), give it a distinct `display_name` / `contact_phone` / `location`, sign in as one of its users, and load all six nav pages + the My List print header + an arrivals pickup slip. **Zero** occurrences of the founding name, phone or city | the leak is not actually closed |
 | **V4** | **Real delivered email, per function.** Trigger each of the six against a `comicstore` recipient; read the **delivered** message (not the API's unconditional `{"success":true}` — F99 § 2's own warning) and confirm From-name, subject and footer all carry `comicstore`'s identity | a template was missed |
 | **V5** | `reset-password` returns a **byte-identical** `{success:true}` body for a known-good address and a nonexistent one (§ 4.2.2) | enumeration signal introduced |
 | **V6** | Founding tenant renders **byte-identically** to pre-change on all six pages and all six emails | the fallback contract broke |
@@ -355,19 +401,21 @@ print headers or pickup slips at all** — a green suite says nothing about this
 - **Phase 6 self-service signup** and the wildcard spike.
 - **`tenants.settings` exposure.** Noted below as a discovery, deliberately not acted on.
 
-### Discovered while measuring, filed nowhere yet — Rick's call
+### Discovered while measuring — both now dispositioned (§ 8 Q4, Q5)
 
-1. **CLAUDE.md says "all 8 Edge Functions" in two places** (§ Repository Structure,
-   § Edge Functions). There are **9** — `register-tenant`, added at Phase 5.4 S3, whose
-   own commit `0bdc55c` reads *"EF inventory -> 9"*. Same stale-claim class as
-   F132 / F138 / F145. **Doc fix or finding? — § 8 Q4.**
-2. **`tenants` RLS is row-level, so any authenticated user can `SELECT` every column of
-   their own tenant row — including `settings`.** `app.js` deliberately never selects it
-   and `resolve_tenant_by_slug` deliberately never returns it (5.3 § 1.5), but neither is
-   an enforcement boundary against a client that asks directly. `settings` historically
-   held `mailerlite_webhook_secret`, which CLAUDE.md records as **dead config since
-   2026-08-30** — so there is likely nothing sensitive in it today, **and that has not
-   been verified live.** **Not filed — § 8 Q5.**
+1. ✅ **RESOLVED 2026-09-01 — doc fix, no finding.** CLAUDE.md said "all 8 Edge Functions"
+   in two places (§ Repository Structure, § Edge Functions). There are **9** —
+   `register-tenant`, added at Phase 5.4 S3, whose own commit `0bdc55c` reads
+   *"EF inventory -> 9"*. It was also **missing from the § Edge Functions list itself**,
+   not merely miscounted. Both sites corrected and the function added to the list.
+2. ✅ **FILED AS F151, 2026-09-01 — not fixed here.** `tenants` RLS is row-level, so any
+   authenticated user can `SELECT` every column of their own tenant row — including
+   `settings`. `app.js:82-86` deliberately never selects it and `resolve_tenant_by_slug`
+   deliberately never returns it (5.3 § 1.5), **but neither is an enforcement boundary**
+   against a client that asks directly. **Verified live before filing, as Q5 required:**
+   `mailerlite_webhook_secret` is still stored on all three real tenant rows — the hoped-for
+   `{}` was wrong. Inert (dead config since 2026-08-30) and tenant-scoped, hence Low.
+   Full entry and fix direction: § 13 F151.
 
 ---
 
@@ -387,23 +435,28 @@ No DDL, no migration, no data write ⇒ **there is no database state to roll bac
 
 ---
 
-## 8. Open questions for Rick
+## 8. Decisions — all ANSWERED 2026-09-01 (Rick)
 
-| # | Question | Recommendation |
+**Every question below is settled. Do not re-litigate; execute against these.**
+
+| # | Question | ✅ DECISION |
 |---|---|---|
-| **Q1** | `tenants.location` has to serve both a compact page footer (*"Rockaway, NJ"*) and a full postal footer in email (*"40 W Main St. Rockaway, NJ 07866"*). One column, two granularities. | **Hold the full postal address in `location`** (§ 4.2.3 — `notify-customers` plausibly needs it) and add `branding.location_short` for the six page footers, falling back to `location` when absent. |
-| **Q2** | `rjbookstop.com` is a tenant's own website. No field exists for it. | Add **`branding.website`** — jsonb key, no DDL, consistent with `logo_url`. Omit the line entirely when absent rather than printing a placeholder. |
-| **Q3** | Both existing tenants need `contact_phone` / `location` populated before S1 renders anything. `comicstore` is demo/test. | Populate the founding tenant with its real values; give `comicstore` obviously-synthetic ones — that makes V3 a **real** leak test rather than two rows that happen to look alike. |
-| **Q4** | The 8-vs-9 Edge Function count (§ 6 discovery 1). | Doc fix in this plan's S4, **no finding** — it is a miscount, not a defect, and `register-tenant` is fully documented in 5.4 S3. Say the word if you'd rather it consume F151. |
-| **Q5** | `tenants.settings` readable by any authenticated user (§ 6 discovery 2). | **File it, don't fix it here** — same disposition as F150 during F149's promotion. Verify live what `settings` actually holds on both environments first; if it is `{}` on both, it is a defense-in-depth note, not an exposure. |
-| **Q6** | Step order. | **S1 → S2 → S3.** S1 is the largest visible win, is pure client, and is the only step with existing Playwright coverage nearby. S2 needs six live sends. S3 is partial by construction. |
+| **Q1** | `tenants.location` has to serve both a compact page footer (*"Rockaway, NJ"*) and a full postal footer in email (*"40 W Main St. Rockaway, NJ 07866"*). One column, two granularities. | **Full postal address in `location`**; add **`branding.location_short`** for the six page footers, falling back to `location` when absent. ⚠️ Staging's founding tenant currently holds `Rockaway, NJ` in `location` — that value **moves to `location_short`** and `location` is **rewritten** as the full address (§ 1.7). |
+| **Q2** | `rjbookstop.com` is a tenant's own website. No field exists for it. | Add **`branding.website`** — jsonb key, no DDL, consistent with `logo_url`. **Omit the line entirely when absent**; never print a placeholder. |
+| **Q3** | Both existing tenants need `contact_phone` / `location` populated before S1 renders anything. | **Populate the founding tenant with real values; give the test tenant obviously-synthetic ones.** ⚠️ Reality per § 1.7: prod `rjbookstop` has **both NULL** (needs full population); prod `comicstore` **already** carries synthetic values (`555-555-5555` / `New Jersey`) — Q3 is already satisfied there; staging's `pw-*` fixtures are all NULL and are the V3 vehicle. |
+| **Q4** | The 8-vs-9 Edge Function count (§ 6 discovery 1). | **Doc fix, no finding.** ✅ **Applied 2026-09-01, ahead of S4** — both CLAUDE.md sites corrected and `register-tenant` added to the § Edge Functions list (it was missing from the list too, not just the count). Done early because a stale claim in CLAUDE.md misleads the *next* session, and this is exactly the F132/F138/F145 pattern. |
+| **Q5** | `tenants.settings` readable by any authenticated user (§ 6 discovery 2). | **File it, don't fix it here.** ✅ **Filed as F151, 2026-09-01** (§ 13). Live verification ran first, as this question required: `mailerlite_webhook_secret` is present on **all three real tenant rows**, not `{}` as hoped — so it is a real stored value, though inert and tenant-scoped. Fix direction recorded in F151; **out of scope for this plan.** |
+| **Q6** | Step order. | **S1 → S2 → S3.** |
 
 ---
 
 ## 9. Completion criteria
 
-- [ ] Q1–Q6 answered
-- [ ] Both tenants' `contact_phone` / `location` populated (Q3)
+- [x] ~~Q1–Q6 answered~~ — **all six settled 2026-09-01 (§ 8); Q4 applied, Q5 filed as F151**
+- [ ] Tenant data prepared (Q3 / § 1.7): prod `rjbookstop` `contact_phone` + `location`
+      populated from NULL; staging `raysandjudys` `location` rewritten to a full postal
+      address with `Rockaway, NJ` moved to `branding.location_short`; a staging second
+      tenant given distinct values for V3
 - [ ] S1 complete — V1, V3, V6, V7 green
 - [ ] S2 complete — V2, V4, V5, V6 green; all six deployed with `verify_jwt` preserved and each setting **read from the live dashboard, not from a doc**
 - [ ] S3 complete — name + phone parameterized; hostname/website halves explicitly deferred and recorded

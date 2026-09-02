@@ -5469,7 +5469,64 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Related:** **F149** (whose promotion surfaced this), **F64** (the existing prod↔staging DDL
   divergence catalogue — this is the same class, one more instance).
 
-Next free finding ID: **F151**.
+#### F151 — `tenants.settings` still stores `mailerlite_webhook_secret` on every real tenant row, and the authenticated client path can read it
+
+- **Status:** filed 2026-09-01, found while planning **F72** (`docs/f72-multi-tenant-branding.md`
+  § 6 discovery 2) — the plan needed to know exactly which `tenants` columns the client may read, and
+  measuring that surfaced this. **Open, not started** — filed per Rick's explicit call (Q5: file it,
+  don't fix it inside F72), matching F150's disposition one day earlier.
+- **Severity: Low, for two independent reasons — and the second is the one that matters.**
+  (1) **The secret is inert.** The `?secret=` webhook path was removed from `register-customer`
+  platform-wide on 2026-08-30 (`docs/native-customer-signup.md` § S5); CLAUDE.md already records
+  `tenants.settings->>'mailerlite_webhook_secret'` as **dead config**. The stored value authorizes
+  nothing today. (2) **The read is tenant-scoped.** `tenants`' SELECT policy admits an authenticated
+  user to **their own tenant row only** (§ 4.1), so the worst case is a customer reading *their own
+  shop's* dead secret — **not another tenant's**. There is no cross-tenant exposure.
+- **What was actually measured, 2026-09-01** (service-role read-only, both environments; **only the
+  jsonb key names were read and recorded — the secret value was never fetched, printed, or stored**):
+
+  | Environment | Tenant | `settings` keys |
+  |---|---|---|
+  | staging (`puoaiyezsreowpwxzxhj`) | `raysandjudys` | `mailerlite_webhook_secret` |
+  | staging | `pw-fc2e3fc7`, `pw-2d3c4d60`, `pw-56132e92`, `pw-a62e4116` (Playwright fixtures) | `{}` — clean |
+  | production (`plgegklqtdjxeglvyjte`) | `rjbookstop` | `mailerlite_webhook_secret` |
+  | production | `comicstore` | `mailerlite_webhook_secret` |
+
+  So **all three real tenant rows carry it; only the throwaway test tenants are clean.**
+- **The mechanism, and why the existing safeguards do not cover this path.** Two separate read paths
+  reach `tenants`, and only one of them was ever designed with a projection boundary:
+  - **Anon path — covered, and it holds.** `resolve_tenant_by_slug` returns exactly
+    `id, slug, display_name, branding`. `docs/phase-5.3-per-tenant-branding.md` § 1.5 makes the
+    exclusion explicit: *"`settings` jsonb is STILL never returned … it may carry non-public config."*
+    That decision is correct and is not what this finding is about.
+  - **Authenticated path — not covered.** `app.js:82-86` reads the table **directly**
+    (`.from('tenants').select('id, slug, display_name, branding')`). That `select()` list is a
+    *client-side convention*, not an enforcement boundary — Postgres RLS filters **rows, not
+    columns**, so any client holding a valid session for that tenant can simply ask for
+    `select=settings` and receive it. The RPC's careful projection is bypassed entirely because this
+    path never calls the RPC.
+- **What is NOT confirmed, and should be before anyone acts on the severity above.** The
+  authenticated-read claim is **inferred**, not exercised: it rests on § 4.1's policy description
+  (*"Authenticated users can SELECT only their own tenant"*) plus the fact that RLS cannot filter
+  columns. **No probe was run with a real user JWT.** Specifically unchecked: whether a
+  **column-level GRANT** (`GRANT SELECT (id, slug, …) TO authenticated`) restricts `settings` — if
+  one exists, the conclusion flips and there is nothing to fix. Verify with a real authenticated
+  `GET /rest/v1/tenants?select=settings` before treating this as real.
+- **Fix direction (cheap, and rotation is not required).** Delete the dead key rather than protecting
+  it — there is no reason to keep a credential nothing reads:
+  `UPDATE public.tenants SET settings = settings - 'mailerlite_webhook_secret';` on both
+  environments, then re-verify the key is gone. **No rotation needed** — the value authorizes nothing
+  since 2026-08-30. If a genuinely-secret key ever needs to live on a tenant row, a column-level
+  `REVOKE`/`GRANT` on `tenants` is the durable fix; the client-side `select()` list is not.
+- **Where:** `tenants.settings` on **both** environments (unlike F150, which was production-only).
+  Client read path: `app.js:82-86`.
+- **Related:** **F72** (whose planning surfaced this — `docs/f72-multi-tenant-branding.md` § 6).
+  **F73 / F74** (the webhook-secret credential-handling lineage — this is the same secret, now
+  outliving its own feature). **F150** (filed one day earlier, same "found during planning, filed not
+  fixed" disposition, and the same GRANT-vs-RLS distinction at its core). **Phase 5.3 § 1.5** (the
+  anon projection boundary that holds and is *not* the gap here).
+
+Next free finding ID: **F152**.
 
 ---
 
