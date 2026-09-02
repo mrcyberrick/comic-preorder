@@ -1,6 +1,12 @@
 # F72 — multi-tenant branding: remove the founding tenant's identity from every tenant-facing surface
 
-**STATUS:** PLANNED — **§ 8 Q1–Q6 all ANSWERED 2026-09-01 (Rick); ready to execute** | staging=— | prod=— | findings=F72,F99,F145,F151
+**STATUS:** **REVISED 2026-09-02 — tier-gated design, NOT the plan approved 2026-09-01.** § 8 Q1–Q6
+(2026-09-01) still hold for *what data exists*; **§ 0.1 below is a real premise change** — branding
+is no longer uniform-for-everyone, it is gated on `tenants.plan`. **New decisions Q7–Q9 answered
+2026-09-02** (chat with Rick, not yet a runbook session). **Not started — this revision needs one
+more pass (byte-exact diffs re-read from disk) before execution**, per this project's own
+plan-when-its-turn-comes discipline; the *design* is settled, the *implementation detail* is not.
+| staging=— | prod=— | findings=F72,F99,F145,F151
 
 **Owner finding:** F72 (`docs/technical-reference.md` § 13). This plan **widens F72's
 recorded scope** — it is filed as one email template in `register-customer`, and the
@@ -16,7 +22,127 @@ per CLAUDE.md § Staging Only.
 
 ---
 
-## 0. Why this is worth doing now
+## 0.1 Tier-gated branding — 2026-09-02 revision (read this first)
+
+**This section changes the plan's premise. Everything below it (§ 1–§ 10) was written and approved
+2026-09-01 against a *uniform-for-everyone* branding model. That model is superseded — Rick's
+explicit direction, decided in a planning conversation 2026-09-02, after F99's own migration
+finished (both environments, same day): branding is now split by `tenants.plan`, and the split is
+the product's actual free-vs-paid lever, not an afterthought layered on top of a uniform fix.**
+
+### Why this changed
+
+F72 was originally framed as pure defect-fixing — "the software works for two tenants" (Phase 5)
+vs. "the software can be sold to a second tenant" (blocked by identity leaks). That framing produced
+a plan where every tenant, paid or free, gets full identity everywhere. But the live pricing page
+(`index.html:247-262`) already sells a "Branded" tier — *"your own `yourshop.pulllist.app` address,
+your logo and colors, and customer emails from your shop"* — and a uniform-for-everyone F72 would
+make that entire value proposition **disappear the moment F72 shipped**: two of its three claimed
+perks (subdomain, logo/colors) would already be free-tier baseline, and the third (branded sending
+address) isn't built by F72 at all (F99 kept the sending address flat for everyone, deliberately).
+Nobody had caught that collision before this conversation.
+
+### The mechanism: `tenants.plan` — already exists, already has live values, currently dead code
+
+No new schema needed. `tenants.plan` (`text NOT NULL DEFAULT 'free'`) has existed since before this
+plan was written (`docs/technical-reference.md` § 4.1) and is **read by zero lines of code anywhere**
+— confirmed by grep across `app.js` and every Edge Function, 2026-09-02.
+
+**Live values, checked 2026-09-02 (service-role read-only):**
+
+| Environment | Tenant | `plan` |
+|---|---|---|
+| staging | `raysandjudys` (test proxy for the founding tenant) | `pro` ✅ |
+| staging | all four `pw-*` Playwright fixtures | `free` (correct — none are paying) |
+| production | **`rjbookstop` — the real, paying, $50/mo Ray & Judy's Book Stop** | **`free` ❌ — a real data bug** |
+| production | `comicstore` (demo/test, never a real customer) | `free` ✅ correct |
+
+**Production's actual paying tenant is currently marked `free`.** This must be corrected
+(`UPDATE tenants SET plan = 'pro' WHERE slug = 'rjbookstop'`) as part of shipping this work, not
+left for later — shipping tier-gated branding without that fix would flip Ray & Judy's own
+production site to generic branding, which is exactly backwards. **New completion-criteria item**, see
+§ 9.
+
+### The surface-by-surface design (Rick, 2026-09-02)
+
+The balance being struck, stated explicitly so it isn't re-derived: **free tier needs enough
+identity to establish trust with a new customer** (a shop's own name, so the relationship reads as
+legitimate, not as a generic tool) **while paid tier needs enough held back to motivate upgrading**
+(full identity, custom visual branding, and a branded link). The four rows differ in how much of
+that identity shows, and the pattern is deliberate — web and email are where a free customer needs
+to trust the shop is real, so the name shows; print has the least trust-building need (handed over
+in person by a staffer the customer already trusts) and the most visible upgrade nudge (an owner
+sees their own pickup slips carry no name/phone and that's a concrete, tangible reason to pay):
+
+| Surface | Free tier | Paid tier |
+|---|---|---|
+| **Color / logo** — everywhere | PULLLIST apex defaults, always — `branding.primary_color`/`branding.logo_url` are **never** applied | Tenant's own `primary_color` / `logo_url` (existing `Branding.apply()` mechanism, § 1.3) |
+| **Web pages** (nav, footers, pending-approval messages, welcome modal) | Tenant's own `display_name` shown (trust signal) | `display_name` + `contact_phone` + `location` + `branding.website` shown wherever § 2.1 already identifies a site |
+| **Emails** (all six Edge Functions) | PULLLIST template chrome + tenant name in subject/greeting/`from` display-name; footer carries **no** shop phone/address; **link: `pulllist.app`** | Name + phone + address in the footer; PULLLIST chrome (color stays platform-default here too, same rule as web); **link: `<slug>.pulllist.app`** |
+| **Print-outs** (My List, pickup slips, bagging list, catalog print) | **Fully generic** — no name, no phone, no address; **link: `pulllist.app`** | Full identity — name + phone + street address, matching what's live today; **link: `<slug>.pulllist.app`** |
+
+### The link-by-tier requirement — new work, not a small addition
+
+**Every email and every print-out gets a "View Online" style link, and which URL it carries is
+itself tier-gated.** This is genuinely new scope in three ways:
+
+1. **It resolves § 4.3's blocked hostname item, but only for paid tenants.** § 4.3 (below, 2026-09-01)
+   correctly blocked deriving `<slug>.pulllist.app` unconditionally — F145 measured there is no
+   wildcard DNS, so an unprovisioned tenant's paper would carry a **non-resolving URL**. This
+   revision doesn't lift that block for everyone; it resolves it narrowly: **`<slug>.pulllist.app`
+   is only ever printed/emailed for a `plan = 'pro'` tenant, and provisioning that hostname becomes
+   a required, manual step of onboarding a tenant to paid** (same mechanism as `comicstore` today,
+   5.5's pattern) — not a self-serve or wildcard mechanism. A paid tenant without a provisioned
+   subdomain is a shipping error, not an edge case to handle gracefully.
+2. **Free tier's link is always safe** — `pulllist.app` is the apex, always resolves, needs no
+   per-tenant provisioning. This is also new: today's print-outs that already carry a "View Online"
+   link (`admin.html`'s Bagging List and Print Catalog, PR #140) hardcode
+   `rjbookstop.pulllist.app` unconditionally — that becomes tier-conditional too.
+3. **No email carries any such link today.** All six templates' only links are the specific
+   action URL (reset link, magic link, catalog CTA) — verified by re-reading all six in this same
+   session (F99 M2). A generic "View Online: `{link}`" line is new copy in every template's footer.
+
+### What this means for § 4's work breakdown
+
+**S1–S4 below (2026-09-01) still describe correct mechanics — the data plumbing, the `Branding.apply()`
+extension, the client hook pattern, the Edge Function tenant-row fetch — but every render decision
+in them needs a `plan === 'pro' ? tenantValue : genericDefault` branch, not the unconditional
+`tenantValue ?? foundingLiteral` fallback they currently describe.** Concretely:
+
+- **The `??`/`||` fallback content changes meaning.** Today's fallback literals
+  (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop" / the street address) exist so an
+  *unresolved* tenant renders safely. Under tier-gating, the **free-tier branch is not a fallback
+  for a broken lookup — it is the deliberately-shipped free experience**, and its content must be
+  genuinely generic (PULLLIST-only), never a specific tenant's literal identity. Re-using Ray &
+  Judy's info as the "default" would re-introduce F72's original defect for every free tenant.
+- **S1** (client) needs a `TenantContext.current().plan` (or equivalent) read available wherever
+  § 2.1's hooks render, gating name/phone/location/website/color/logo independently per the table
+  above — not a single flag, since web shows name-for-free but print does not.
+- **S2** (Edge Functions) needs each function's tenant-row fetch to include `plan`, and the
+  subject/body/footer construction to branch on it — including the new "View Online" line.
+- **S3** (print) needs the *existing* `rjbookstop.pulllist.app` literals in `admin.html` made
+  tier-conditional (§ 4.3 above), extended to **mylist.html and arrivals.html's print outputs**,
+  which today have no such link at all and were explicitly out of scope for PR #140.
+- **A new S0** (implied, not yet written up as steps): fix `rjbookstop`'s `plan` value; write the
+  shared `plan === 'pro'` check as one helper both client and server code call, rather than six
+  independent ternaries; decide and write the exact generic-tier copy (what a free-tier email
+  subject/footer/print header literally says).
+
+**This section is a design record, not a byte-exact implementation plan.** § 4's own steps need a
+real rewrite pass — re-reading every site in § 2.1 from disk and stating its free-tier and paid-tier
+content explicitly — before this is ready to execute. That pass has not happened yet.
+
+### New decisions (Q7–Q9), same numbering series as § 8
+
+| # | Question | ✅ DECISION |
+|---|---|---|
+| **Q7** | What gates the tier? | **`tenants.plan`** (`'free'` \| `'pro'`) — already exists, was dead code. `rjbookstop` must be corrected to `'pro'` before/as part of shipping (data bug, § 0.1 above) |
+| **Q8** | What does "generic" free-tier content actually say? | Web/email: tenant's own name, PULLLIST chrome, no phone/address, link to `pulllist.app`. Print: no identity at all beyond PULLLIST, link to `pulllist.app`. Color/logo: PULLLIST defaults on every surface, both tiers' emails, and paid-tier email chrome too — **the one thing that's never tenant-customized on email regardless of plan** |
+| **Q9** | Should `<slug>.pulllist.app` ever appear for a free tenant? | **No, never.** Only `plan = 'pro'` tenants get the subdomain link, and only once it's been manually provisioned as part of their paid onboarding — never derived/assumed (F145's own warning) |
+
+---
+
+## 0.2 Why this is worth doing now
 
 PULLLIST is being priced and sold to other shops (Founding Partner tiering). Today a
 second shop's customers would receive email and printed pickup slips carrying **Ray &
@@ -216,23 +342,33 @@ correct for every tenant. This plan parameterizes *store* identity only.
 
 ## 3. The separation that makes this shippable — F72 is not blocked by F99
 
-F99's § 13 entry says F99 *"must be designed together with F72, not sequenced ahead of
-it."* That constrains **F99**. It does not make F72 wait on F99, and it must not, because:
+> ⚠️ **Overtaken by events, kept for the record — F99 is done, both environments, 2026-09-02.**
+> The reasoning below was written 2026-09-01 while F99 S3 was genuinely stuck. It resolved the same
+> day this revision was written, via a different provider (Resend) rather than the blocked
+> MailerSend path — see `docs/f99-resend-migration.md`. The **conclusion** (F72 doesn't need to
+> wait on F99) still holds, for a stronger reason than the one below: there's no longer anything to
+> wait *for*. **The specific address** cited below is wrong — see the correction after the list.
 
-- **F99 S3 is stuck.** Attempted and rolled back 2026-09-01 at the cost of a ~50-minute
-  production outage, `#MS42207` **cause unresolved**, next attempt gated on buying a
-  month of MailerSend paid tier (§ 8 Q7 there).
-- **The From *name* is free text.** MailerSend takes a display name alongside a verified
-  From address, so `"Comic Shop X" <noreply@mrcyberrick.us>` needs **zero** DNS work.
-  F99 S1 already made that name a variable.
+F99's § 13 entry says F99 *"must be designed together with F72, not sequenced ahead of
+it."* That constrained **F99**. It never made F72 wait on F99, and by 2026-09-02 there's nothing
+left to wait on:
+
+- ~~**F99 S3 is stuck.**~~ **Resolved 2026-09-02** — not by unsticking S3, by replacing it. Both
+  environments now send via Resend, `noreply@pulllist.app`, cleanly authenticated on both
+  mechanisms. See `docs/f99-resend-migration.md`.
+- **The From *name* is free text**, same fact under either provider. Resend takes a display name
+  alongside a verified From address exactly like MailerSend did, so `"Comic Shop X"
+  <noreply@pulllist.app>` needs **zero** DNS work. F99 S1's parameterization survived the provider
+  swap unchanged in shape.
 - **Body, subject and footer are pure template code.** No vendor involvement at all.
 
-**What still leaks after this plan, and why it is acceptable:** mail arrives from
-`noreply@mrcyberrick.us`. That reads as an unbranded relay — odd, and worth fixing — not
-as a competitor's shop. **That is the whole difference between "odd" and "unsellable",
-and it is why F72 goes first.**
+**Corrected sending address:** mail now arrives from **`noreply@pulllist.app`**, not
+`noreply@mrcyberrick.us` — flat, for every tenant, any `plan` value, per § 0.1 Q8. If anything this
+argument is *stronger* now than the original "odd, not a competitor's shop" framing: `pulllist.app`
+reads as the platform's own domain, not as any one shop's (founding or otherwise), so there's no
+longer even a founding-tenant-flavored oddity to explain away.
 
-The one hard F99/F145 dependency is § 4.3's hostname half, which is scoped out.
+The one hard F145 dependency is § 4.3's hostname half — **resolved for paid tenants**, § 0.1 Q9.
 
 ---
 
@@ -326,14 +462,24 @@ compliant to non-compliant for every new tenant. See § 8 Q1.
 | Store name, `admin.html:3825` | `display_name` | ✅ yes |
 | Phone, `admin.html:3825` | `contact_phone` | ✅ yes |
 | `rjbookstop.com`, `:3825`, `:4966`, `:5354` | a tenant website — **no such field exists** | ⛔ needs `branding.website` (§ 8 Q2) |
-| `rjbookstop.pulllist.app`, `:3826`, `:4966`, `:5134` | a per-tenant hostname | ⛔ **F145 / Phase 6 S0** — see below |
+| `rjbookstop.pulllist.app`, `:3826`, `:4966`, `:5134` | a per-tenant hostname | ✅ **RESOLVED for `plan = 'pro'` tenants only — § 0.1 Q9, 2026-09-02.** Unconditional derivation is still ⛔ blocked (below); tier-gating it is what unblocks it |
 
-**Why the hostname half is genuinely blocked, not deferred by preference:** F145
-measured that **there is no wildcard DNS on `pulllist.app`**; `rjbookstop` and
+> **⚠️ 2026-09-02 update — narrower than a full unblock.** § 0.1 Q9 resolves this for *paid*
+> tenants specifically: `<slug>.pulllist.app` prints/emails only when `plan = 'pro'`, and only once
+> that hostname has been manually provisioned as a required step of paid onboarding (same 5.5
+> mechanism as `comicstore`) — never derived and assumed. **Free tenants still get the safe,
+> always-resolving `pulllist.app` apex link, per Q9** — the reasoning below (why an unconditional
+> derivation is dangerous) is exactly why the free-tier branch stays on the apex rather than
+> guessing at a subdomain. Phase 6 S0 (the wildcard spike) remains untouched and unneeded by this —
+> paid-tier provisioning stays manual, low-volume, per F145's own recorded pattern.
+
+**Why deriving the hostname unconditionally is genuinely dangerous, not deferred by preference:**
+F145 measured that **there is no wildcard DNS on `pulllist.app`**; `rjbookstop` and
 `comicstore` resolve only because each is an individually provisioned Cloudflare Pages
 custom hostname. Deriving `<slug>.pulllist.app` in print output would put a
 **non-resolving URL on customer paper** for any tenant not manually provisioned. That
-gate is Phase 6 S0.
+gate is Phase 6 S0 — **for a wildcard/self-serve mechanism.** It is not a gate on a manually-provisioned,
+paid-tenant-only link, which is what § 0.1 Q9 actually ships.
 
 `:4966` and `:5354` are CSS `@page` `content:` strings — they are built inside a JS
 template literal and can be interpolated the same way, but **note the escape trap** the
@@ -390,16 +536,32 @@ print headers or pickup slips at all** — a green suite says nothing about this
 
 ## 6. Out of scope — stop and ask
 
-- **The sending domain.** `MAIL_FROM_EMAIL` stays `noreply@mrcyberrick.us`. That is F99
-  S3, blocked (§ 3).
+> ⚠️ **The sending-domain line below is stale — corrected 2026-09-02, kept for the record.** It
+> read "F99 S3, blocked" when F99 was written 2026-09-01; **F99 has since shipped in full, both
+> environments** (M1–M7, same day as this revision, via Resend rather than the blocked MailerSend
+> S3 path). `MAIL_FROM_EMAIL` is now `noreply@pulllist.app` — flat, for every tenant, any plan —
+> **not** `noreply@mrcyberrick.us`. This does not change § 0.1's design: the flat address stays flat
+> for both tiers (§ 0.1 Q8 — sender address is not a branding lever this plan uses), it's just no
+> longer the *founding tenant's* address either.
+
+- ~~**The sending domain.** `MAIL_FROM_EMAIL` stays `noreply@mrcyberrick.us`. That is F99
+  S3, blocked (§ 3).~~ **Superseded — see callout above.** F99 is done; the address is flat
+  `noreply@pulllist.app` for every tenant regardless of plan, by this plan's own § 0.1 design, not
+  because of a blocker.
 - **Widening `resolve_tenant_by_slug`.** Preserves 5.3 § 1.5. Needed only if a
   `[data-tenant-phone]` / `[data-tenant-location]` hook is ever wanted on an
   anon-reachable page (§ 1.2 trap).
-- **The per-tenant print hostname.** F145 / Phase 6 S0 (§ 4.3).
+- ~~**The per-tenant print hostname.** F145 / Phase 6 S0 (§ 4.3).~~ **Resolved for paid tenants —
+  see § 4.3's 2026-09-02 update and § 0.1 Q9.** Still out of scope: deriving it for a tenant with no
+  manually-provisioned subdomain, and anything wildcard/self-serve (that part is still Phase 6 S0).
 - **Per-tenant MailerSend sender identities**, `reply_to` (F99 § 8 Q6, declined),
-  bulk-send (F148).
+  bulk-send (F148). *(MailerSend itself is now dormant, not live — F99 — but the same "no
+  per-tenant sending identity" decision holds under Resend too, per § 0.1 Q8.)*
 - **Phase 6 self-service signup** and the wildcard spike.
 - **`tenants.settings` exposure.** Noted below as a discovery, deliberately not acted on.
+- **Billing / plan enforcement / an upgrade flow.** `tenants.plan` is set manually by Rick (same
+  operator-driven pattern as tenant onboarding itself, § 0.1 Q7) — this plan reads that column, it
+  does not build a way for a tenant to change it themselves.
 
 ### Discovered while measuring — both now dispositioned (§ 8 Q4, Q5)
 
@@ -437,7 +599,9 @@ No DDL, no migration, no data write ⇒ **there is no database state to roll bac
 
 ## 8. Decisions — all ANSWERED 2026-09-01 (Rick)
 
-**Every question below is settled. Do not re-litigate; execute against these.**
+**Every question below is settled. Do not re-litigate; execute against these.** *(Q7–Q9 — the tier
+gate, the generic-content definition, the link-by-tier rule — were answered 2026-09-02 and live in
+§ 0.1, not here. This section's numbering intentionally stops at Q6; it predates the tier revision.)*
 
 | # | Question | ✅ DECISION |
 |---|---|---|
@@ -452,14 +616,33 @@ No DDL, no migration, no data write ⇒ **there is no database state to roll bac
 
 ## 9. Completion criteria
 
+**§ 0.1 items — new 2026-09-02, block execution start, not just close-out:**
+
+- [x] ~~Q7–Q9 answered~~ — settled 2026-09-02 (§ 0.1): `tenants.plan` is the gate, generic-tier
+      content defined per surface, hostname link resolved for paid tenants only
+- [ ] **`rjbookstop`'s `plan` corrected from `free` to `pro` on production** — real data bug found
+      2026-09-02, must land before/with this ships, not after (§ 0.1)
+- [ ] § 4's work breakdown rewritten with explicit free/paid content per site — **not done yet**,
+      this revision is a design record, not byte-exact steps (§ 0.1 closing note)
+- [ ] A shared `plan === 'pro'` check written once (client + each Edge Function), not six
+      independent ternaries
+- [ ] mylist.html and arrivals.html print outputs gain the tier-gated "View Online" link — new
+      scope, these had none before (§ 0.1)
+- [ ] admin.html's existing `rjbookstop.pulllist.app` literals (§ 4.3) made tier-conditional,
+      falling back to `pulllist.app` for any non-`pro` tenant
+
+**§ 8 items — 2026-09-01, still valid for what data exists (not gated on tier):**
+
 - [x] ~~Q1–Q6 answered~~ — **all six settled 2026-09-01 (§ 8); Q4 applied, Q5 filed as F151**
 - [ ] Tenant data prepared (Q3 / § 1.7): prod `rjbookstop` `contact_phone` + `location`
       populated from NULL; staging `raysandjudys` `location` rewritten to a full postal
       address with `Rockaway, NJ` moved to `branding.location_short`; a staging second
-      tenant given distinct values for V3
-- [ ] S1 complete — V1, V3, V6, V7 green
-- [ ] S2 complete — V2, V4, V5, V6 green; all six deployed with `verify_jwt` preserved and each setting **read from the live dashboard, not from a doc**
-- [ ] S3 complete — name + phone parameterized; hostname/website halves explicitly deferred and recorded
+      tenant given distinct values for V3 — **and now also a distinct-`plan` tenant pair**,
+      one `free` and one `pro`, since V3/V4 need to prove both branches, not just "a second tenant"
+- [ ] S1 complete — V1, V3, V6, V7 green, **re-run against both a `free` and a `pro` tenant**
+- [ ] S2 complete — V2, V4, V5, V6 green, **both plans**; all six deployed with `verify_jwt` preserved and each setting **read from the live dashboard, not from a doc**
+- [ ] S3 complete — name + phone parameterized **per plan**; hostname link tier-gated (no longer
+      deferred, § 0.1 Q9); website half still explicitly deferred and recorded
 - [ ] V8 green — `node --check` clean, full suite 0 failures, run post-push against deployed staging bytes
 - [ ] S4 doc updates landed
 - [ ] § 13 F72 status updated with its corrected scope
@@ -473,12 +656,17 @@ No DDL, no migration, no data write ⇒ **there is no database state to roll bac
 | Thing | Where |
 |---|---|
 | F72 (owner finding) | `docs/technical-reference.md` § 13 F72 |
+| **§ 0.1's tier design (2026-09-02)** | this doc, § 0.1 — the live record; nowhere else |
+| `tenants.plan` — the gate | `docs/technical-reference.md` § 4.1 (schema); § 0.1 (live values, the `rjbookstop` bug) |
+| Live pricing page this design must eventually match | `index.html:247-262` — currently describes the pre-tier-gating "Branded" perks, itself now stale, not yet updated |
 | `Branding.apply()` contract | `docs/phase-5.3-per-tenant-branding.md` § 1.1, § 1.5 |
 | `resolve_tenant_by_slug` contract | `docs/technical-reference.md` § 6; `docs/phase-5.2-slug-id-routing-rpc.md` |
 | `tenants` schema | `docs/technical-reference.md` § 4.1 |
-| Sender parameterization (F99 S1) | `docs/f99-sender-domain-consolidation.md` § 4 S1 |
-| Why the sending domain is blocked | `docs/f99-sender-domain-consolidation.md` § 4 S3 |
+| Sender parameterization (F99 S1, now on Resend) | `docs/f99-resend-migration.md`; `docs/f99-sender-domain-consolidation.md` § 4 S1 |
+| F99's own completion, both environments | `docs/f99-resend-migration.md` STATUS token |
 | No wildcard DNS (F145) | `docs/technical-reference.md` § 13 F145 |
+| Existing "View Online" pattern to extend | `admin.html:3826`, `:4966`, `:5134` (PR #140) |
 | Phase 6 S0 wildcard gate | `docs/phase-6-self-service-signup.md` |
 | Tenant onboarding metadata | `docs/tenant-onboarding-runbook.md` Step 1, Step 2 |
 | EF deploy discipline (`verify_jwt`) | CLAUDE.md § Supabase platform facts |
+| Founding Partner pricing this design should reconcile with | `hybrid_frontdoor_premium_tiering` memory; `docs/pre-phase-6-consolidation-wave-2.md` § 2.5 |
