@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **provider selection is now the open decision (§ 10)**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **DIRECTION SET 2026-09-02: Resend, pending a live probe (§ 10)**; S4 not started | staging=`eff9793` | prod=`mrcyberrick.us` (unchanged — attempt rolled back) | findings=F99,F72,F148,F145,F149
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -789,12 +789,17 @@ untouched and still serving newsletters; the three sends were ordinary API calls
 
 ---
 
-## 10. Provider selection — the open decision (2026-09-02)
+## 10. Provider selection — DIRECTION: Resend (2026-09-02)
 
-Both of Rick's alternatives to S3 are now closed (Brevo, § 9; the second free MailerSend account,
-§ 8 Q9). What remains is a real three-way choice. **None of it is urgent** — production is serving
-customers correctly from `noreply@mrcyberrick.us` today, and the October import gate (2026-09-25) is
-the only fixed date nearby.
+**Rick's call, 2026-09-02: pursue Resend — a competitor to MailerSend — as the intended
+transactional provider.** Recorded as a **direction, not a commitment**: no account exists, nothing
+has been probed live, and no code has changed. Whether to actually migrate stays open until the
+three-test probe at the end of this section comes back green.
+
+Both of Rick's earlier alternatives to S3 are closed (Brevo, § 9; the second free MailerSend
+account, § 8 Q9). **None of this is urgent** — production is serving customers correctly from
+`noreply@mrcyberrick.us` today, and the October import gate (2026-09-25) is the only fixed date
+nearby.
 
 ### Requirements, derived from this session rather than assumed
 
@@ -829,10 +834,22 @@ segmentation, not branding.
 | Cost to close F148 | Pro $20/mo | Hobby $7/mo (1 domain; F148 only) | negligible |
 | Operational overhead | Low | **Lowest — already integrated** | **High** — sandbox exit, bounce/complaint handling, IAM, region |
 
-**Resend leads.** It explicitly advises against tracking on transactional mail *precisely so inbox
-providers don't classify it as marketing* — the opposite posture to Brevo. **Honest caveat: its free
-tier is 100/day, so it does NOT dissolve F148** — it lifts the monthly ceiling 500 → 3,000 but keeps
-roughly the same blast-day ceiling. Pro ($20/mo) removes it.
+**Resend is the chosen direction (Rick, 2026-09-02).** It explicitly advises against tracking on
+transactional mail *precisely so inbox providers don't classify it as marketing* — the opposite
+posture to Brevo. Two further reasons it beat MailerSend Starter on the merits:
+
+- **It is better AFTER the migration, not only during it.** MailerSend Starter is a one-month bridge
+  that drops back onto a free tier of 500/month and 100 API requests/day — the F148 ceiling. Resend's
+  free tier (3,000/month) is strictly better in both directions.
+- **The code change is smaller than Brevo's would have been.** Resend keeps `Authorization: Bearer`
+  and the `html` field name, so realistically only the endpoint URL and the `from` shape move (a
+  string rather than an object). **Confirm the exact request shape against Resend's own docs at
+  implementation time — this was read from research, not from a live call.**
+
+**Honest caveat, recorded so it is not a surprise later: Resend's free tier is 100/day, so it does
+NOT dissolve F148** — it lifts the monthly ceiling 500 → 3,000 but keeps roughly the same blast-day
+ceiling. Only Brevo's 300/day would have closed F148 outright, and Brevo is out. Pro ($20/mo)
+removes it.
 
 **MailerSend Starter stays viable** and is the lowest-effort path, since the integration already
 exists and works. $35 for one month is exactly what § 8 Q7 asks for.
