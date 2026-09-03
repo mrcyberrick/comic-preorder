@@ -5674,7 +5674,64 @@ reasoning — only the disposition changed, not the diagnosis.
   Not tested against staging.
 - **Related:** **F99** (the migration this surfaced during — `docs/f99-resend-migration.md` M7).
 
-Next free finding ID: **F153**.
+#### F153 — `register-tenant` created a new tenant's admin account with no way to sign in at all
+
+- **Status:** filed AND RESOLVED same session, 2026-09-03. Found while answering a plain question
+  ("how does first login work?") — not a scoping session, not a scheduled audit.
+- **What happened, measured, not inferred.** `register-tenant/index.ts` (259 lines, full file read)
+  created the first admin's `auth.users` row via `/auth/v1/admin/users` with `email_confirm: true`
+  and no password — then did **nothing else**. Zero hits for `generate_link`, `invite`, `RESEND`, or
+  any mail-sending code anywhere in the file. `docs/tenant-onboarding-runbook.md` Step 5 claimed
+  otherwise — *"The `register-tenant` function sends the magic link automatically to `admin_email`
+  at creation time (via Supabase Auth's invite flow)"* — which was false against the live code, not
+  merely stale. **There was no automated path into a brand-new tenant at all.** The only way in was
+  the doc's own "if the magic link has expired" fallback (Supabase dashboard → Users → Send magic
+  link) — undocumented as the actual, only, every-single-time path.
+- **Severity: Medium.** Not a security issue (the account was correctly scoped and gated) — an
+  onboarding-completeness gap. Every tenant created before this fix landed the same way: real
+  account, real data, no way for the operator to hand off access without going into the Supabase
+  dashboard by hand.
+- **Fixed same session.** `register-tenant` now generates a GoTrue link and sends a branded invite
+  via Resend after the tenant + admin profile are both written. A mail failure does not roll back
+  the tenant/admin — both are already real, and recoverable via the existing dashboard fallback or
+  the admin's own Forgot Password (proven separately to work on any existing account, § 13
+  `reset-password`'s `type: 'recovery'` pattern). The response gained `invite_sent: boolean` so an
+  operator can tell without reading logs whether the fallback is actually needed.
+- **A real platform-behavior claim was verified live, and the first attempt was wrong.** GoTrue's
+  `generate_link` `type: 'invite'` (the type `invite-customer` already uses successfully) only works
+  to *create* a user as a side effect — it does not work against a user who already exists, which
+  the admin here already does (this function creates them first). Confirmed directly: a live probe
+  against a fresh, already-confirmed throwaway user returned `422 email_exists`. Switched to
+  `type: 'recovery'` (`reset-password`'s own proven type for an existing account) and re-verified
+  live: a real throwaway tenant created through the deployed function came back `invite_sent: true`,
+  7/7 on the full check including a fresh-read teardown confirming **zero orphaned auth users**
+  (F130's own failure mode, checked rather than assumed).
+- **Sender identity is deliberately "PULLLIST"** — not `MAIL_FROM_NAME` (today's founding-tenant
+  literal; reusing it would have relocated F72's exact leak into a brand-new function) and not the
+  new tenant's own `display_name` either, since this is the platform inviting someone to a shop that
+  has no operating identity yet from the recipient's own point of view.
+- **The email always links to the apex `?t=<slug>` URL, never a `<slug>.pulllist.app` guess**, even
+  for `plan = 'pro'` — the paid hostname is a later, separate manual step (runbook Step 3, sequenced
+  *after* this one) that may not be provisioned yet when this email sends. F145's own warning against
+  printing an unprovisioned hostname anywhere, applied here deliberately.
+- **Runbook corrected in the same commit**, not left stale: Step 5 now describes what
+  `invite_sent` means, that everyone lands on `catalog.html` (not `admin.html` directly) after
+  setting a password and reaches Admin via the nav, and that a `free` tenant's real access URL is
+  `pulllist.app/?t=<slug>` — not the subdomain the old text implied every tenant had.
+- **Verification:** live end-to-end via the deployed function (real tenant created, `invite_sent`
+  checked, admin profile read back, full FK-ordered teardown verified by fresh read). Template
+  output separately verified mechanically (`f72-admin-invite-template-verify.mjs`, local,
+  uncommitted): the new shop's own name renders, the apex link is always used, no founding-tenant
+  literal appears anywhere, a hostile `display_name` is HTML-escaped rather than injected, one
+  assertion negative-control tested. Unit suite 279/279 (unchanged — no import-script code touched).
+- **Where:** staging only (`puoaiyezsreowpwxzxhj`). **Not production** — separate explicit request
+  per CLAUDE.md § Staging Only.
+- **Related:** **F72** (found while working through F72's own free-tier resequence, but scoped
+  separately — this is a missing onboarding mechanism, not a branding leak). **F130** (the
+  orphaned-auth-user failure mode this fix's own teardown checked against). **F145** (the
+  no-wildcard-DNS constraint this fix's link design respects).
+
+Next free finding ID: **F154**.
 
 ---
 
