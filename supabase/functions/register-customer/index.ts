@@ -29,8 +29,16 @@
  *   TURNSTILE_SECRET_KEY        ← server-side Turnstile token verification
  *
  * F34 note (resolved 5.4 S2, 2026-06-16): this function is no longer pinned to the founding
- * tenant. With the webhook path gone, the sole tenant source is the posted `slug`. Email branding
- * remains founding-branded for all tenants — tracked separately as F72, still open.
+ * tenant. With the webhook path gone, the sole tenant source is the posted `slug`.
+ *
+ * F72 S2 (free-tier slice, 2026-09-03): email branding is now tenant-aware. Every tenant's own
+ * `display_name` appears in the from-name, subject and greeting (both tiers — this was hardcoded
+ * to the founding tenant for every signup before this change, which was F72's actual defect).
+ * `plan = 'pro'` additionally shows phone/address in the footer; free tier omits it. The founding
+ * tenant's own email renders byte-identically to before this change (its display_name equals the
+ * former hardcoded literal exactly). Remaining, deliberately NOT done here: the other five mail
+ * functions, and the tier-gated "View Online" link (new scope per the plan's § 0.1) — F72 remains
+ * open for those.
  */
 
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
@@ -38,6 +46,13 @@ const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
 
 const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
 const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
+// F72 S2 (free-tier slice): a tenant's display_name is admin-set, not
+// user-submitted, but it is interpolated into HTML mail — escape it before
+// use, same as any DB-sourced string reaching an HTML template.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,8 +68,10 @@ async function provisionPendingCustomer(opts: {
   tenantId: string
   fullName: string
   email: string
+  storeName: string
+  isPaid: boolean
 }): Promise<Response> {
-  const { SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY, tenantId, fullName, email } = opts
+  const { SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY, tenantId, fullName, email, storeName, isPaid } = opts
 
   // ── Create Supabase auth user (no password, email pre-confirmed) ──
   const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -143,10 +160,10 @@ async function provisionPendingCustomer(opts: {
       'Content-Type':  'application/json',
     },
     body: JSON.stringify({
-      from:    `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+      from:    `${storeName} <${MAIL_FROM_EMAIL}>`,
       to:      email,
-      subject: "Ray & Judy's Book Stop — Your PULLLIST access is being set up",
-      html:    buildPendingEmail(fullName, magicUrl),
+      subject: `${storeName} — Your PULLLIST access is being set up`,
+      html:    buildPendingEmail(fullName, magicUrl, storeName, isPaid),
     }),
   })
 
@@ -240,7 +257,7 @@ Deno.serve(async (req) => {
     //    plan § the hard design question for the accepted low-severity posture
     //    of a caller posting a different tenant's slug). ──────────────────
     const tenantLookupRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/tenants?slug=eq.${encodeURIComponent(slug)}&select=id,slug,display_name`,
+      `${SUPABASE_URL}/rest/v1/tenants?slug=eq.${encodeURIComponent(slug)}&select=id,slug,display_name,plan`,
       {
         headers: {
           'Authorization': `Bearer ${SUPABASE_SERVICE}`,
@@ -250,18 +267,27 @@ Deno.serve(async (req) => {
       }
     )
     const matchedTenants = await tenantLookupRes.json()
-    const tenantId = Array.isArray(matchedTenants) ? matchedTenants[0]?.id as string | undefined : undefined
+    const matchedTenant  = Array.isArray(matchedTenants) ? matchedTenants[0] : undefined
+    const tenantId       = matchedTenant?.id as string | undefined
 
     if (!tenantLookupRes.ok || !tenantId) {
       console.warn('register-customer: native signup posted an unknown slug', slug)
       return Response.json({ error: 'Unknown shop' }, { status: 400, headers: corsHeaders })
     }
 
+    // F72 S2 (free-tier slice): tenant identity for the confirmation email.
+    // isPaid gates ONLY the phone/address footer content (§ 0.1 Q8) — the
+    // tenant's own name is shown to BOTH tiers, in subject/greeting/from, as
+    // it always should have been (this was hardcoded to the founding tenant
+    // for every signup until this change, which is F72's actual defect).
+    const storeName = (matchedTenant?.display_name as string | undefined) || MAIL_FROM_NAME
+    const isPaid    = matchedTenant?.plan === 'pro'
+
     console.log(`register-customer: native signup ${name} <${email}> for tenant slug "${slug}"`)
 
     return await provisionPendingCustomer({
       SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY,
-      tenantId, fullName: name, email,
+      tenantId, fullName: name, email, storeName, isPaid,
     })
 
   } catch (err) {
@@ -271,17 +297,35 @@ Deno.serve(async (req) => {
 })
 
 // ── Email template ────────────────────────────────────────────────────────────
-function buildPendingEmail(name: string, magicUrl: string): string {
+// F72 S2 (free-tier slice, 2026-09-03): storeName/isPaid parameterize what was
+// unconditionally the founding tenant's identity. isPaid gates ONLY the
+// phone/address content (§ 0.1 Q8) — storeName (the tenant's OWN name) shows
+// to every tenant, both tiers, which is what should have been true all along;
+// this was hardcoded to "Ray & Judy's Book Stop" for every signup regardless
+// of tenant until this change. For the founding (paid) tenant storeName
+// equals that exact literal, so its rendered email is byte-identical to
+// before this change — verified live (V4).
+function buildPendingEmail(name: string, magicUrl: string, storeName: string, isPaid: boolean): string {
+  const safeStore = escapeHtml(storeName)
+  const phoneBullet = isPaid
+    ? '<br>\n        &#10003;&nbsp; Questions? Call us at (973) 586-9182'
+    : ''
+  const contactParagraph = isPaid
+    ? `    <p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">
+      ${safeStore} &middot; 40 W Main St. Rockaway, NJ 07866 &middot; (973) 586-9182
+    </p>
+`
+    : ''
   return `
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#1a1a1a;color:#f0f0f0;border-radius:8px;overflow:hidden">
   <div style="background:#111;padding:24px 32px;border-bottom:3px solid #e63946">
     <div style="font-size:1.6rem;font-weight:900;letter-spacing:0.08em">PULL<span style="color:#e63946">LIST</span></div>
-    <div style="font-size:0.75rem;color:#888;margin-top:2px">Ray &amp; Judy's Book Stop &mdash; Monthly Comics Pre-Order System</div>
+    <div style="font-size:0.75rem;color:#888;margin-top:2px">${safeStore} &mdash; Monthly Comics Pre-Order System</div>
   </div>
   <div style="padding:32px">
     <h2 style="margin:0 0 16px;font-size:1.1rem;color:#fff">Hi ${name} — we received your request</h2>
     <p style="color:#ccc;line-height:1.7;margin:0 0 16px">
-      Thanks for signing up for the PULLLIST pre-order system at Ray &amp; Judy's Book Stop.
+      Thanks for signing up for the PULLLIST pre-order system at ${safeStore}.
       Your account has been created and is being reviewed.
     </p>
     <p style="color:#ccc;line-height:1.7;margin:0 0 24px">
@@ -300,16 +344,12 @@ function buildPendingEmail(name: string, magicUrl: string): string {
       <div style="font-size:0.78rem;color:#aaa;line-height:1.8">
         &#10003;&nbsp; Reservations will be available once your account is confirmed<br>
         &#10003;&nbsp; This link is for your use only &mdash; do not share it<br>
-        &#10003;&nbsp; Link expires after use &mdash; use Forgot Password on the login page for a new one<br>
-        &#10003;&nbsp; Questions? Call us at (973) 586-9182
+        &#10003;&nbsp; Link expires after use &mdash; use Forgot Password on the login page for a new one${phoneBullet}
       </div>
     </div>
-    <p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">
-      Ray &amp; Judy's Book Stop &middot; 40 W Main St. Rockaway, NJ 07866 &middot; (973) 586-9182
-    </p>
-  </div>
+${contactParagraph}  </div>
   <div style="background:#111;padding:16px 32px;font-size:0.72rem;color:#555;border-top:1px solid #222">
-    Ray &amp; Judy's Book Stop &middot; Sent via the PullList pre-order system
+    ${safeStore} &middot; Sent via the PullList pre-order system
   </div>
 </div>`
 }
