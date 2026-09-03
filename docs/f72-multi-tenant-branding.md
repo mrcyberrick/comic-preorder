@@ -1,13 +1,16 @@
 # F72 — multi-tenant branding: remove the founding tenant's identity from every tenant-facing surface
 
-**STATUS:** **IN PROGRESS — S0 EXECUTED ON STAGING 2026-09-02** (`feature/f72-s0-tier-mechanism`).
-S1/S2/S3 NOT STARTED. § 8 Q1–Q6 (2026-09-01) still hold for *what data exists*; **§ 0.1 is a premise change** —
-branding is gated on `tenants.plan`, not uniform. **Q7–Q9 answered 2026-09-02**; **Q10–Q11 answered
-2026-09-02 (later)** — paid-tier email promise, and how the tier check is shared across six Edge
-Functions. **§ 4.0 (S0) has been executed** — code on staging, gates below. Its
-byte-exact steps are retained as the record of what was done. **§ 4.1–§ 4.3 (S1/S2/S3) are still design-level** and owe the
-free/paid-content-per-site pass § 0.1's closing note describes — do not execute them from their
-current text. | staging=— | prod=— | findings=F72,F99,F145,F151
+**STATUS:** **IN PROGRESS — RESEQUENCED 2026-09-03, Rick: ship free-tier-only first for a demo.**
+**S0 EXECUTED 2026-09-02. S1a (free-tier web) + S2a (register-customer, free-tier email) EXECUTED
+2026-09-03, both on STAGING** (`d7669b0`, `efadbf0`) — see § 4.1a/§ 4.2a, the live record for this
+resequence. **A demo tenant exists on staging** (`demoshop`, `plan=free`, 2,288 catalog rows,
+reachable at `?t=demoshop` — no DNS needed). § 4.1/§ 4.2's original uniform-design text is
+SUPERSEDED for the parts S1a/S2a cover; still accurate in shape for what remains (the other five
+mail functions, S3 print). § 8 Q1–Q6 (2026-09-01) still hold for *what data exists*. **Q7–Q11**
+answered 2026-09-02 (see § 0.1). **§ 4.1–§ 4.3's remaining, NOT-yet-executed scope is still
+design-level** and owes the free/paid-content-per-site pass § 0.1's closing note describes — do not
+execute the untouched parts from their current text; S1a/S2a are the pattern to extend, not the
+original steps. | staging=2026-09-03 (S0,S1a,S2a) | prod=— | findings=F72,F99,F145,F151
 
 **Owner finding:** F72 (`docs/technical-reference.md` § 13). This plan **widens F72's
 recorded scope** — it is filed as one email template in `register-customer`, and the
@@ -571,6 +574,132 @@ path rather than an undocumented manual UPDATE:**
 - **Free-tier service restriction.** Rick's explicit sequencing, 2026-09-02: identity and branding
   first, lockdown later. `Tier.isPaid()` is the hook a future restriction step would read, but S0
   gates nothing functional — a free tenant keeps every capability they have today.
+
+### 4.1a S1a — Free-tier web fixes, EXECUTED 2026-09-03 (Rick's resequence)
+
+**Rick's direction, 2026-09-03: ship free-tier-only first**, to validate a demoable, sellable
+service — not the full tier-gated design in one pass. This section records what actually shipped,
+which differs from § 4.1's plan in two ways worth stating plainly:
+
+1. **§ 4.1 step 1 (widen the select to `contact_phone, location`) was NOT done.** This slice does
+   not need those columns — the founding tenant's phone/address stay as inline literals for the
+   PAID branch (§ 0.1's own design: *"the paid branch is a no-op — today's hardcoded literals
+   already ARE Ray & Judy's identity"*), and the FREE branch omits them entirely rather than reading
+   a column. Q1/Q3's `location` full-postal-address population is still not done on either
+   environment (production `rjbookstop` still NULL) — doing it now would have been premature.
+2. **The mechanism is a general-purpose `[data-paid-only]` hook in `Branding.apply()`, not the
+   per-field `[data-tenant-phone]`/`[data-tenant-location]` hooks step 2 describes.** Simpler,
+   and sufficient for "omit entirely on free" — it hides an element outright rather than filling a
+   value. Sets `el.hidden = true` **and** `el.style.display = 'none'` — one target
+   (`index.html`'s tenant-logo wrapper) carries its own inline `style="display:flex"`, and an inline
+   style outranks the UA stylesheet's un-`!important` `[hidden]{display:none}`; `.hidden` alone
+   would have silently failed to hide it. Worth carrying into any future `[hidden]`-based gate in
+   this codebase.
+
+**A demo tenant now exists on staging, reached with NO DNS work.** `demoshop` / "Capital City
+Comics", `plan = 'free'`, 2,288 real catalog rows (copied from the founding tenant's current month).
+`TenantContext` already resolves `?t=<slug>` and persists it in sessionStorage (`app.js:113-127`,
+pre-existing) — so `https://staging.pulllist.pages.dev/?t=demoshop` reaches it today. **This means
+F145's no-wildcard-DNS constraint does not block a free-tier demo at all** — it only blocks the
+*paid*-tier subdomain link (§ 0.1 Q9, unchanged). Local setup script (uncommitted, playwright
+folder): `f72-demo-tenant-setup.mjs`, idempotent.
+
+**Decided the same session, worth recording:** the apex marketing page (`data-front-door="apex"`)
+stays the free-tier front door — `?t=` does NOT flip it to the branded tenant sign-in. Free tier's
+own pricing copy already promises *"the shared `pulllist.app` front door"*; giving `?t=` a branded
+door would hand free tier one of the two things "Branded" currently sells, undermining the tier
+this plan exists to build. No code change was needed either way — confirmed via `f72-demo-leak-audit.mjs`
+that `data-front-door` stays `"apex"` on `?t=demoshop`.
+
+**A found-during-the-work leak, not in the original inventory:** `index.html:313`'s
+`<img data-tenant-logo src="bookstop_logo.png">` — the **default** `src` for ANY tenant without a
+custom `logo_url` is Ray & Judy's own actual logo file (18KB, distinctly branded), not a generic
+PULLLIST mark. This matters because it's reachable TODAY, not merely a future risk: `comicstore`
+is `plan = 'free'` **and** has an individually provisioned `comicstore.pulllist.app` hostname (F145),
+so it can hit this exact `ax-when-tenant` block. Fixed by marking the whole logo wrapper
+`data-paid-only` (image content, not text — a source grep would never have caught it; found by
+reasoning about what `Tier.isPaid()=false` actually reaches).
+
+**Verified against DEPLOYED staging bytes, not local files** (`f72-demo-leak-audit.mjs`, local,
+uncommitted, real-browser via Playwright): signed in as a real throwaway customer of `demoshop` in
+both `pending` and `active` states, scanned rendered `innerText` across catalog/mylist/arrivals/
+subscriptions for the founding tenant's name/phone/address/city. **Before the fix: 7 of 7 pages
+leaked.** **After: 0 of 7.** Re-ran `f72-s0-authed-verify.mjs` (S0's harness) and a new
+`f72-s1a-founding-verify.mjs` against the founding tenant to confirm the PAID branch is unaffected:
+the footer locality and mylist pickup-notice phone are both still **visible** for Ray & Judy's own
+signed-in customers.
+
+**Gates:** `node --check` clean on `app.js` and every inline `<script>` block across the seven
+touched HTML files (extracted and checked individually — `catalog/mylist/arrivals/subscriptions/
+admin/analytics.html` one block each, `index.html` three). Unit suite 279/279 (unchanged). **Full
+Playwright suite: 143 passed, 0 failed, exit 0, 22.0 min** — run against deployed bytes post-push,
+after both S1a and S2a had landed (one combined run covers both). Zero regressions.
+
+**Deployed:** staging only, `d7669b0`, merged `--ff-only`, pushed. **Not production** — separate
+explicit request per CLAUDE.md § Staging Only.
+
+**Explicitly NOT in S1a:** the six email templates (S2 — see § 4.2a below) and print outputs (S3,
+`admin.html` bagging/catalog print + `arrivals.html`/`mylist.html` print headers) — the print work
+is genuinely unreachable from a screen-share demo and was deliberately deferred, not forgotten.
+
+### 4.2a S2a — `register-customer` only, EXECUTED 2026-09-03
+
+**Ships the ONE email a prospect actually receives during a live demo signup first**, not all six
+functions at once — same free-tier-first sequencing as S1a. § 4.2's original design (widen every
+function's select to `display_name, contact_phone, location`, thread `??`-fallback literals) is
+correct in shape for a *uniform* design but was written before the tier revision; this slice
+diverges from it in the same way S1a diverged from § 4.1 (see above) — the free branch is generic
+omission, not a DB-driven contact string, and only `plan` was added to the select (not
+`contact_phone, location`, not needed yet).
+
+**What changed, and the one thing that isn't merely "free vs paid":** `storeName` (the tenant's own
+`display_name`) now appears in the **from-name, subject, and greeting for EVERY tenant, both
+tiers** — this was hardcoded to `"Ray & Judy's Book Stop"` for every signup regardless of which
+shop the customer actually signed up for, which is F72's real defect, not just a missing free/paid
+split. `isPaid` gates only the phone/address footer content (§ 0.1 Q8). A `MAIL_FROM_NAME`-shaped
+`??` fallback covers an unresolved `display_name` (empty string case).
+
+**A new, small, correctly-scoped addition:** `display_name` is admin-set, not user-submitted, but
+this change makes it reach an HTML email body for the first time via string interpolation — added a
+minimal `escapeHtml()` (`&`/`</>`) and applied it to `storeName` everywhere it's interpolated,
+closing a latent injection surface this change would otherwise have opened. Verified: a
+`display_name` of `Bob's <Comics> & Co` renders as `Bob's &lt;Comics&gt; &amp; Co`, not raw markup.
+
+**Verification, and its real limit stated plainly.** `register-customer` checks Turnstile **before**
+the tenant lookup (`index.ts`, unchanged), so a scripted signup cannot reach this logic via HTTP at
+all — the same limitation `native-signup-verify.mjs`'s own header comment already documents for this
+exact function. Built `f72-s2-template-verify.mjs` instead (local, uncommitted, playwright folder):
+extracts `buildPendingEmail()` from both the pre-edit original (`git show HEAD`) and the edited
+file, strips only TS type annotations from the signature (logic untouched), and runs both.
+**Result: the edited PAID-tier output is BYTE-IDENTICAL to the original's unconditional output —
+mechanically proven by string equality, not merely traced by eye (V6).** Free-tier output confirmed
+to contain the tenant's own name and the magic link, and to contain neither the founding tenant's
+name, phone, street address, nor city. One assertion negative-control tested (inverted, confirmed
+red, reverted).
+
+**Deployed to staging** with `--no-verify-jwt`, preserving what F93 requires: an unauthenticated
+POST returns the function's own body-validation error (`"email, name, and slug are required"`),
+not the platform gateway's rejection, both before and after deploy — confirms `verify_jwt` stayed
+OFF (correct for a public signup endpoint). **Deployed artifact read back and hashed** (`functions
+download --workdir` into a scratch dir, never touching the repo tree): identical to committed
+source, sha256 `bb0a3a51599a12f4`.
+
+**⚠️ Honest limit, not closed out: final delivered-inbox verification did not run this session.**
+Every prior email-header verification in this project (F99 M1–M7) read a REAL inbox — this session
+has none available. What's verified is that the function constructs and would send the correct
+payload (mechanically, via the extracted-function harness); what's NOT verified is how it actually
+renders in a real client or whether it lands in the inbox at all. **Needs Rick**, same as every
+prior instance of this exact gate.
+
+**Deployed:** staging only, `efadbf0`, merged `--ff-only`, pushed.
+
+**Explicitly NOT in S2a:** `approve-customer`, `invite-customer`, `notify-customers`,
+`reset-password`, `send-my-list` — all five still founding-branded for every tenant, unconditionally.
+None of these fire during a self-serve demo signup, so they don't block "show a prospect the app" —
+but `approve-customer` **would** fire the moment an admin approves the demo signup, and that email
+would say "Ray & Judy's Book Stop" to a prospect's own test account. **Worth doing next if the demo
+walkthrough includes the approval step.** The tier-gated "View Online" link (new scope per § 0.1) is
+also not in this slice, for any function.
 
 ### 4.1 S1 — Client surfaces (no DB change, no EF change)
 
