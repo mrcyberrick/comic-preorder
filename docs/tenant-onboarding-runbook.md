@@ -67,10 +67,12 @@ curl.exe -s -X POST "https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/regis
 **Expected response (`200`):**
 
 ```json
-{ "tenant_id": "...", "admin_user_id": "...", "slug": "...", "webhook_secret": "..." }
+{ "tenant_id": "...", "admin_user_id": "...", "slug": "...", "webhook_secret": "...", "invite_sent": true }
 ```
 
-**Save all four values to a local scratch file. Do not paste `webhook_secret` into chat.**
+**Save the first four values to a local scratch file. Do not paste `webhook_secret` into chat.**
+**Check `invite_sent`** — `false` means the tenant and admin were created correctly but the
+invite email failed to send; see Step 5 for the fallback.
 
 Error responses:
 - `401` — operator secret wrong or not loaded; re-check `.env`
@@ -223,12 +225,33 @@ than find a gap in the numbering.*
 
 ## Step 5 — Admin handoff
 
-Deliver the magic link to the tenant admin's mailbox. The `register-tenant` function sends the magic link automatically to `admin_email` at creation time (via Supabase Auth's invite flow). Confirm with the admin that they can:
+**`register-tenant` sends a real invite email automatically to `admin_email` at creation time**
+(added 2026-09-03 — before this, the function created the admin's auth user with no password, no
+email, and no automated way in at all; the only path was this section's own dashboard fallback,
+run every time). Check the function's JSON response for `invite_sent: true` — if it came back
+`false`, the tenant and admin account are still real and correctly created, but the email failed
+(check `RESEND_API_KEY` is set) and you need the fallback below.
 
-1. Sign in via the link at `https://<slug>.pulllist.app/admin.html`
-2. See an **empty, scoped** admin surface (0 customers, no founding data visible)
+**What the admin actually sees:** the email links to a page where they set a password. Once set,
+**they land on `catalog.html`, not `admin.html` directly** — from there they use the nav's Admin
+link (visible because their profile has `is_admin = true`) to reach the admin surface. Confirm with
+them that they can:
 
-If the magic link has expired (links expire; re-invitation may be needed), use the Supabase Auth dashboard → **Users** → find `admin_email` → **Send magic link**.
+1. Follow the emailed link and set a password
+2. Reach `admin.html` via the nav and see an **empty, scoped** admin surface (0 customers, no
+   founding data visible)
+
+**The access URL depends on `plan`, and this matters for what you tell the admin.** A `free`
+tenant has **no provisioned hostname** (Step 3 is paid-only, § above) — their shop, and their own
+admin panel, live at `https://pulllist.app/?t=<slug>` (the invite email itself says this). Do
+**not** tell a free-tier admin to expect `<slug>.pulllist.app` — it will not resolve (F145). A
+`pro` tenant's hostname should already be live from Step 3, run before this step for a paid tenant.
+
+If the invite email didn't arrive or the link has expired (links expire; re-invitation may be
+needed), use the Supabase Auth dashboard → **Users** → find `admin_email` → **Send magic link**.
+(Note: a **magic link** signs them straight into `catalog.html` with no password-setup step at
+all — different from the emailed **recovery** link, which prompts them to set one. Either gets
+them in; only the recovery-style link also gets them a password for next time.)
 
 ---
 

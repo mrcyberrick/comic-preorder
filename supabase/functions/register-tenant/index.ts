@@ -27,7 +27,10 @@
  * Required env vars (set in Supabase → Edge Functions → Secrets):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
- *   TENANT_PROVISION_SECRET   ← operator gate; never shared with tenant admins
+ *   TENANT_PROVISION_SECRET     ← operator gate; never shared with tenant admins
+ *   RESEND_API_KEY              ← admin invite email (added below, 2026-09-03)
+ *   MAIL_FROM_EMAIL             ← same secret every other mail-sending function reads
+ *   APP_BASE_URL                ← optional; defaults to https://pulllist.app
  *
  * Non-atomicity: this function performs a tenants INSERT, a GoTrue admin user
  * create, and a user_profiles INSERT — three separate calls, no shared
@@ -39,7 +42,38 @@
  * F23 note: this is a Deno Edge Function, not a SQL SECURITY DEFINER function —
  * the parent's SET search_path hardening carve-out for new SQL functions does
  * not apply here; 5.4 adds no new SQL function.
+ *
+ * Admin invite email, added 2026-09-03 (closes the gap the onboarding runbook's
+ * Step 5 wrongly claimed was already closed — this function previously created
+ * the admin auth user with NO password, NO invite, NO email of any kind; the
+ * only way in was an operator manually triggering a link via the Supabase
+ * dashboard). Sent AFTER the tenant + admin profile are fully written; a mail
+ * failure here does NOT roll back the tenant (compensate() is not called) —
+ * the account is real and recoverable via the runbook's existing dashboard
+ * fallback or the admin's own Forgot Password flow (reset-password's `type:
+ * 'recovery'` works on any existing account). The response's new `invite_sent`
+ * field tells the operator whether that fallback is actually needed.
+ *
+ * Sender identity is deliberately "PULLLIST", not MAIL_FROM_NAME (which holds
+ * today's founding-tenant literal) and not the new tenant's own display_name
+ * either — this is the platform inviting someone to a shop that doesn't have
+ * an operating identity yet from the recipient's own point of view. Re-reading
+ * MAIL_FROM_NAME here would just relocate F72's leak into a brand-new
+ * function; not reading it at all is the fix, not a fallback.
  */
+
+const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
+const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
+
+// Deliberately NOT reading MAIL_FROM_NAME here — see the header note above.
+const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
+
+// No _shared/ folder and no cross-function imports in this codebase (F72 S0
+// Q11) — duplicated locally, same as every other mail-sending function's own
+// copy of this exact helper.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,6 +97,7 @@ Deno.serve(async (req) => {
   const SUPABASE_URL             = Deno.env.get('SUPABASE_URL')
   const SUPABASE_SERVICE         = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const TENANT_PROVISION_SECRET  = Deno.env.get('TENANT_PROVISION_SECRET')
+  const RESEND_API_KEY           = Deno.env.get('RESEND_API_KEY')
 
   // ── Operator-secret gate (checked before any body parsing) ────
   const providedSecret = req.headers.get('x-operator-secret') || ''
@@ -246,8 +281,70 @@ Deno.serve(async (req) => {
     }
 
     console.log(`register-tenant: created tenant ${tenantId} (${slug}) with admin ${adminUserId}`)
+
+    // ── Invite the new admin (added 2026-09-03) — see header note. A failure
+    // here does NOT roll back the tenant/admin: both are already real and
+    // recoverable via the runbook's dashboard fallback or Forgot Password.
+    // `invite_sent` in the response is how the operator finds out a fallback
+    // is actually needed, instead of silently assuming this step worked.
+    let inviteSent = false
+    try {
+      const genRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE}`,
+          'apikey':        SUPABASE_SERVICE!,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({
+          // NOT 'invite' — verified live (2026-09-03) that GoTrue's 'invite' type
+          // only works to CREATE a user as a side effect (invite-customer's own
+          // pattern, where the user doesn't exist yet). This function already
+          // created the admin via /auth/v1/admin/users above, so 'invite' here
+          // fails 422 email_exists every time. 'recovery' is the type reset-
+          // password already proves works on an existing account; index.html's
+          // own completion logic (both types share the set-password UI, differing
+          // only in the heading text) confirms this lands correctly either way.
+          type:        'recovery',
+          email:       adminEmail,
+          data:        { full_name: `${displayName} Admin` },
+          redirect_to: APP_INDEX_URL,
+        }),
+      })
+      const genData = await genRes.json()
+      const actionUrl = genData.action_link as string | undefined
+
+      if (!genRes.ok || !actionUrl) {
+        console.error('register-tenant: admin invite link generation failed', JSON.stringify(genData))
+      } else if (!RESEND_API_KEY) {
+        console.error('register-tenant: RESEND_API_KEY not set, cannot send admin invite')
+      } else {
+        const mailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            from:    `PULLLIST <${MAIL_FROM_EMAIL}>`,
+            to:      adminEmail,
+            subject: `Welcome to PULLLIST — your ${displayName} admin account is ready`,
+            html:    buildAdminInviteEmail(displayName, slug, actionUrl),
+          }),
+        })
+        if (!mailRes.ok) {
+          const mailErr = await mailRes.json().catch(() => ({}))
+          console.error('register-tenant: admin invite Resend error', JSON.stringify(mailErr))
+        } else {
+          inviteSent = true
+        }
+      }
+    } catch (inviteErr) {
+      console.error('register-tenant: admin invite step threw', String(inviteErr))
+    }
+
     return Response.json(
-      { tenant_id: tenantId, admin_user_id: adminUserId, slug, webhook_secret: webhookSecret },
+      { tenant_id: tenantId, admin_user_id: adminUserId, slug, webhook_secret: webhookSecret, invite_sent: inviteSent },
       { headers: corsHeaders }
     )
 
@@ -257,3 +354,57 @@ Deno.serve(async (req) => {
     return Response.json({ error: String(err) }, { status: 500, headers: corsHeaders })
   }
 })
+
+// ── Admin invite email — platform-branded, not tenant-branded (see header) ──
+// Deliberately does NOT use the isPaid-gated phone/address pattern F72 S2a
+// established for register-customer: this is PULLLIST inviting the SHOP OWNER
+// to their own new shop, not a shop emailing its own customer, so there is no
+// "hold back identity to motivate upgrading" angle here at all — showing the
+// admin their own shop's info back to them isn't a paid-tier perk.
+//
+// Always shows the free `?t=<slug>` access link, never `<slug>.pulllist.app` —
+// deliberately, even for a `plan='pro'` tenant. The paid hostname is a LATER,
+// separate manual step (runbook Step 3, sequenced AFTER this one), so it may
+// not be provisioned yet when this email sends. F145's own warning: printing
+// an unprovisioned hostname anywhere puts a non-resolving URL in someone's
+// hands. The apex `?t=` link always resolves, immediately, regardless of plan.
+function buildAdminInviteEmail(storeName: string, slug: string, actionUrl: string): string {
+  const safeStore = escapeHtml(storeName)
+  const shopLink   = `${APP_BASE_URL}/?t=${encodeURIComponent(slug)}`
+  return `
+<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#1a1a1a;color:#f0f0f0;border-radius:8px;overflow:hidden">
+  <div style="background:#111;padding:24px 32px;border-bottom:3px solid #e63946">
+    <div style="font-size:1.6rem;font-weight:900;letter-spacing:0.08em">PULL<span style="color:#e63946">LIST</span></div>
+    <div style="font-size:0.75rem;color:#888;margin-top:2px">Monthly Comics Pre-Order System</div>
+  </div>
+  <div style="padding:32px">
+    <h2 style="margin:0 0 16px;font-size:1.1rem;color:#fff">Welcome to PULLLIST!</h2>
+    <p style="color:#ccc;line-height:1.7;margin:0 0 16px">
+      Your new shop, <strong>${safeStore}</strong>, is ready. Click below to sign in and set a
+      password for your admin account.
+    </p>
+    <a href="${actionUrl}"
+       style="display:inline-block;background:#e63946;color:white;padding:13px 28px;
+              border-radius:4px;text-decoration:none;font-weight:700;font-size:0.9rem;
+              letter-spacing:0.03em">
+      Set Up My Admin Account &rarr;
+    </a>
+    <div style="margin-top:24px;background:rgba(255,255,255,0.04);
+                border-left:3px solid rgba(232,57,70,0.4);padding:12px 16px;
+                border-radius:0 4px 4px 0">
+      <div style="font-size:0.78rem;color:#aaa;line-height:1.8">
+        &#10003;&nbsp; Your customers can already reach ${safeStore} at:<br>
+        &nbsp;&nbsp;&nbsp;<a href="${shopLink}" style="color:#e63946">${shopLink}</a><br>
+        &#10003;&nbsp; Sign in any time at pulllist.app with your email<br>
+        &#10003;&nbsp; If this link expires, use Forgot Password on the sign-in page
+      </div>
+    </div>
+    <p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">
+      Questions about the platform? pulllist@mrcyberrick.us
+    </p>
+  </div>
+  <div style="background:#111;padding:16px 32px;font-size:0.72rem;color:#555;border-top:1px solid #222">
+    Sent via the PULLLIST platform
+  </div>
+</div>`
+}
