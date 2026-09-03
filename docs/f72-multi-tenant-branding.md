@@ -471,9 +471,28 @@ Add to the input block (after `location`, line 109):
 ```
 
 and change the insert body's `plan:     'free',` (line 148) to `plan,`. **Allowlist, not
-pass-through** — an unrecognized value must become `free`, never reach the column, and never error.
-The column is `NOT NULL` with **no CHECK constraint**, so a typo like `'Pro'` would otherwise
-persist and read as free forever while looking paid to an operator inspecting the row.
+pass-through** — the input is **trimmed and lowercased, then** matched against `{'pro'}`; anything
+else becomes `free`, never reaches the column, and never errors.
+
+**Measured on staging 2026-09-02, after deploy (V11s, 7/7):** `' PRO '` → `pro`, `'pro'` → `pro`,
+omitted → `free`, `'paid'` → `free`. **Case and whitespace are NORMALISED, not rejected** — that is
+deliberate: it honours the operator's evident intent while guaranteeing the column can only ever
+hold a value `Tier.isPaid()` matches exactly. *(An earlier draft of this section implied `'Pro'`
+should be **rejected to `free`**, and the first version of the test asserted exactly that and failed.
+The code was right and the assertion was wrong; corrected here rather than "fixing" working code to
+match a bad test.)*
+
+> ⚠️ **RESIDUAL — the function is not the only writer, and today it is not even the main one.**
+> `tenants.plan` is set **manually by Rick** (§ 6), and a hand-written
+> `UPDATE tenants SET plan = 'Pro'` bypasses this normalisation entirely. The column is `NOT NULL`
+> with **no CHECK constraint**, so `'Pro'` would persist and `Tier.isPaid()` — which tests
+> `=== 'pro'` exactly — would read it as **false**: the tenant silently renders free while the
+> operator believes they set it paid. **The fix is a CHECK constraint** so the database rejects it
+> loudly instead:
+> `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN ('free','pro'));`
+> Not applied — out of S0's scope as written, raised for Rick's call. Production's current values
+> were verified exact (`rjbookstop='pro'`, `comicstore='free'`, read 2026-09-02), so nothing is
+> wrong today; this is about the next hand-typed UPDATE, not this one.
 
 **(4) The Edge Function tier block — six identical copies, gated on byte-identity.** There is no
 `_shared/` folder in this repo and **zero cross-function imports exist today** (verified
@@ -824,15 +843,25 @@ gate, the generic-content definition, the link-by-tier rule — were answered 20
       EF copies gated by V10
 - [x] ~~**S0 written up as byte-exact steps**~~ — done 2026-09-02, § 4.0, re-read from disk against
       the post-Resend tree
-- [~] **S0 code complete on staging 2026-09-02** — V9/V11/V12 run post-deploy (below); **V13 is
-      Rick's data step and is still open.** `plan` in the authenticated select; `Tier` helper
-      in `app.js`; `register-tenant` accepting an allowlisted `plan`; runbook's three edits
-      (§ 4.0.3). **No rendered byte changes** (V9 is the gate that says so)
-- [ ] **`rjbookstop`'s `plan` corrected from `free` to `pro` on production** — real data bug found
-      2026-09-02, folded into S0 as § 4.0.2. **Safe to run before any code ships and it should be**
-      — inert until S1 lands
+- [x] ~~**S0 COMPLETE 2026-09-02**~~ — V9/V11/V12/V13 green, plus V11's server half (V11s, 7/7 on
+      staging). `plan` in the authenticated select; `Tier` helper in `app.js`; `register-tenant`
+      accepting an allowlisted `plan`; runbook's four edits (§ 4.0.3). **No rendered byte
+      changes** (V9 is the gate that says so). **`register-tenant` deployed to BOTH projects** at
+      Rick's explicit request (staging v19→v20, production v9→v10). `verify_jwt` measured **OFF by
+      behaviour** before and after each deploy — an unauthenticated POST returns the function's own
+      `{"error":"Unauthorized"}` rather than the gateway's `Missing authorization header` — and the
+      deployed source on both projects verified **byte-identical by sha256** to local, read back via
+      `functions download --workdir` into a scratch dir rather than inferred from the deploy output.
+- [x] ~~**`rjbookstop`'s `plan` corrected from `free` to `pro` on production**~~ — **DONE
+      2026-09-02 (Rick).** Independently verified by a service-role read afterwards rather than
+      taken on trust: `rjbookstop='pro'`, `comicstore='free'`, **both exact lowercase** — which
+      matters, because a hand-typed `'Pro'` would have read as free (§ 4.0.1 residual)
 - [ ] **A durable staging `free`/`pro` tenant pair** — the `pw-*` fixtures are ephemeral (§ 4.0.2),
       so V3/V4 have no vehicle without this
+- [ ] **A CHECK constraint on `tenants.plan`** — new, raised 2026-09-02 by V11s. Not applied;
+      Rick's call. `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN
+      ('free','pro'));` The function normalises, but **manual UPDATE is the primary path today**
+      and bypasses it entirely
 - [ ] § 4.1–§ 4.3 rewritten with explicit free/paid content per site — **still owed.** S0 is now
       byte-exact; S1/S2/S3 remain design-level and must not be executed from their current text
 - [ ] mylist.html and arrivals.html print outputs gain the tier-gated "View Online" link — new

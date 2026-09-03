@@ -43,6 +43,62 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
+**S0 CLOSED OUT 2026-09-02, later the same session — the data fix landed, `register-tenant` deployed
+to BOTH projects, and V11's server half found a real discrepancy that turned out to be in the TEST,
+not the code.**
+
+**V13 done (Rick):** `UPDATE public.tenants SET plan = 'pro' WHERE slug = 'rjbookstop'` on
+production. **Independently verified by a service-role read afterwards, not taken on trust:**
+`rjbookstop='pro'`, `comicstore='free'`, **both exact lowercase.** That exactness matters — see the
+residual below.
+
+**`register-tenant` deployed to BOTH projects at Rick's explicit request** (staging v19→v20,
+production v9→v10). Two things were measured rather than assumed:
+
+1. **`verify_jwt` was determined by BEHAVIOUR, not a dashboard label**, and the probe is reusable: an
+   unauthenticated POST to the function returns its **own** `{"error":"Unauthorized"}` body when
+   `verify_jwt` is OFF, versus the platform gateway's `{"code":401,"message":"Missing authorization
+   header"}` when ON. Both projects returned the function's body before **and** after each deploy ⇒
+   OFF, preserved. Deployed with `--no-verify-jwt` (the CLI defaults to JWT **on**, so a deploy that
+   ignores the current setting silently flips it — the F93 hazard, avoided by measurement).
+2. **The deployed artifact was read back**, not inferred from the CLI's success line:
+   `supabase functions download --workdir <scratch>` on both projects, then sha256 — both
+   `458f31b1c4f24ea0`, **byte-identical to local**. The repo tree was never touched by the download.
+
+**⚠️ `main`'s source is now BEHIND production's runtime.** Production runs S0's `register-tenant`
+while `main` still has the hardcoded `plan: 'free'`. This is the F99 M6 drift shape, entered
+knowingly: the deploy was explicitly requested and Edge Functions deploy from the working tree, not
+from a branch. **The promotion PR is owed** — the divergence is small and clean (`app.js` and
+`register-tenant` are the only code; the rest is docs, plus `config.js`'s expected per-branch
+difference and F125's `supabase/migrations/` asymmetry). Not opened unilaterally: CLAUDE.md requires
+production promotions be explicitly requested.
+
+**V11 server half (V11s) — 7/7 on staging, and the first run FAILED for the right reason.** Four
+throwaway tenants created through the real deployed function, read back service-role, then torn down
+FK-ordered per the runbook, with **zero orphaned auth users** confirmed by fresh read (F130's own
+failure mode, checked rather than assumed). Measured: `' PRO '` → `pro`, `'pro'` → `pro`, omitted →
+`free`, `'paid'` → `free`.
+
+**The first run asserted `'Pro'` should be REJECTED to `free`, and it failed.** The code lowercases
+*before* the allowlist, so it **normalises** case and whitespace rather than rejecting them. **The
+code was right and the test was wrong** — normalising honours the operator's evident intent while
+still guaranteeing the column can only hold a value `Tier.isPaid()` matches exactly. The assertion
+was corrected rather than "fixing" working code to satisfy a bad test; the plan doc's own § 4.0.1
+wording, which had implied rejection, was corrected too.
+
+**⚠️ RESIDUAL, and it is the more useful half of this result: `register-tenant` is not the only
+writer, and today it is not even the main one.** `tenants.plan` is set **manually** (§ 6), and a
+hand-written `UPDATE tenants SET plan = 'Pro'` bypasses normalisation entirely. The column is `NOT
+NULL` with **no CHECK constraint**, so `'Pro'` would persist and `Tier.isPaid()` — testing
+`=== 'pro'` exactly — would read it **false**: the tenant silently renders free while the operator
+believes they set it paid. Production's current values are exact, so nothing is wrong today; this is
+about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:**
+`ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN ('free','pro'));`
+
+**Three local-only harnesses** (gitignored playwright folder, `f149-maintenance-verify.mjs`
+convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
+`f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
+
 **Last completed work: F72 S0 — the tier mechanism, GREEN on STAGING, 2026-09-02** (`cadd35b`,
 merged `--ff-only`, pushed). Later the same day as the F99 promotion below, Rick's explicit
 direction to move toward *"a unique custom platform for new tenants… onboard new tenants based on
