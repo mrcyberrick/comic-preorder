@@ -1288,10 +1288,16 @@ function confirmDialog(message, okLabel = 'Remove') {
       : document.getElementById('nav-username').textContent;
 
     document.getElementById('print-title').textContent  = listOwner + "'s Pull List";
+    // F154: currentMonth is null for a tenant with no catalog rows yet (a normal
+    // state before their first import, not an error) — Catalog.getLatestMonth()
+    // returns null explicitly, and interpolating it unguarded prints the literal
+    // string "null". The non-print subtitle six lines below already guards this
+    // (`if (currentMonth)`); this print-only path never got the same guard.
+    const monthLabel = currentMonth || 'no catalog imported yet';
     document.getElementById('print-subtitle').textContent =
       AdminContext.isActive()
-        ? `Catalog for ${currentMonth} — printed by store admin`
-        : `Catalog for ${currentMonth}`;
+        ? `Catalog for ${monthLabel} — printed by store admin`
+        : `Catalog for ${monthLabel}`;
     document.getElementById('print-date').textContent   =
       'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 

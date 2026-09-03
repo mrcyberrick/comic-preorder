@@ -5731,7 +5731,37 @@ reasoning — only the disposition changed, not the diagnosis.
   orphaned-auth-user failure mode this fix's own teardown checked against). **F145** (the
   no-wildcard-DNS constraint this fix's link design respects).
 
-Next free finding ID: **F154**.
+#### F154 — `mylist.html`'s print header reads "Catalog for null" when a tenant has no catalog rows
+
+- **Status:** filed AND RESOLVED same session, 2026-09-03. Found live by Rick, printing My List for
+  a brand-new tenant (`riverside-comics`, created moments earlier via the walkthrough this session
+  — free tier, zero catalog rows seeded, a normal pre-first-import state, not an edge case anyone
+  had to contrive).
+- **What happened.** `Catalog.getLatestMonth()` (`app.js:702-710`) correctly returns `null` when a
+  tenant has no catalog rows. `mylist.html`'s print-button handler interpolated it unguarded:
+  `` `Catalog for ${currentMonth}` `` — JS stringifies `null` as the literal text `"null"`, so the
+  printed sheet read *"Catalog for null."* **Not a branding leak** — this would hit any tenant,
+  free or paid, printing before their first catalog import.
+- **The normal (non-print) page already had the fix, six lines away, and it just never got applied
+  to the print path.** `mylist.html:1546` guards the exact same value: `if (currentMonth) { ... }`.
+  The print handler was the one place that skipped it.
+- **Severity: Low.** Cosmetic, print-only, and only visible before a tenant's first catalog import —
+  a narrow, early-onboarding window. Not customer-facing in the sense of ongoing risk; a new
+  tenant's admin printing an empty list on day one is the only way to see it.
+- **Fixed same session.** `` `Catalog for ${currentMonth || 'no catalog imported yet'}` `` — same
+  `||`-fallback shape `getLatestMonth()` itself already uses. Minimal, single-location change; the
+  raw `YYYY-MM` (vs. a formatted "September 2026" label) the print subtitle also shows when
+  `currentMonth` **is** present is a separate, pre-existing, non-blocking cosmetic gap, not touched
+  here — out of this fix's scope.
+- **Verification:** `node --check` clean on the file's one inline `<script>` block. Not yet
+  re-verified against a live print of `riverside-comics` post-deploy — the fix is mechanically
+  correct (same guard pattern proven at line 1546) but the actual printed sheet has not been
+  re-checked by a human.
+- **Where:** staging only (`puoaiyezsreowpwxzxhj`). Not production.
+- **Related:** found while executing the tenant-onboarding walkthrough this session (F153's own
+  companion work), on the first tenant created through the newly-fixed invite flow.
+
+Next free finding ID: **F155**.
 
 ---
 
