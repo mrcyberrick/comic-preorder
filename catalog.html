@@ -263,7 +263,7 @@
 </div>
 
 <footer class="site-footer">
-  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
 </footer>
 
 <div id="toast-container"></div>
@@ -304,9 +304,13 @@
   const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
   const isBlocked = isPending || isPaused;
   const PAUSED_BTN_LABEL = '\uD83D\uDD12 Account paused';
-  const PAUSED_BANNER_BODY =
-    'You can still browse the catalog, but reservations are paused for now. ' +
-    'Give us a call and we can get you going again — (973)&nbsp;586-9182.';
+  // Free tier shows no phone/address (F72) — only a paid tenant's own contact info.
+  const _isPaidTenant = Tier.isPaid(TenantContext.current());
+  const PAUSED_BANNER_BODY = _isPaidTenant
+    ? 'You can still browse the catalog, but reservations are paused for now. ' +
+      'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+    : 'You can still browse the catalog, but reservations are paused for now. ' +
+      'Contact the shop to get going again.';
   if (isBlocked) {
     // Inject the pending banner below the page header
     const header = document.querySelector('.page-header');
@@ -327,6 +331,9 @@
           '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
             (isPaused
               ? PAUSED_BANNER_BODY
+              : !_isPaidTenant
+              ? 'You can browse the upcoming catalog while we confirm your details. ' +
+                'Reservations will be available once ' + (TenantContext.current().display_name || 'the shop') + ' approves your account.'
               : 'You can browse the upcoming catalog while we confirm your details. ' +
             'Reservations will be available once Ray\u0026nbsp;&amp;\u0026nbsp;Judy\u2019s Book Stop approves your account. ' +
             'Questions? Call us at (973)\u0026nbsp;586-9182.') +

@@ -309,7 +309,7 @@
 
     <button type="button" class="ax-authclose" data-signin-close aria-label="Close sign in">✕</button>
 
-    <div class="ax-when-tenant" style="display:flex;justify-content:center;margin-bottom:16px">
+    <div class="ax-when-tenant" data-paid-only style="display:flex;justify-content:center;margin-bottom:16px">
       <img data-tenant-logo src="bookstop_logo.png" alt="Ray &amp; Judy's Book Stop"
            style="height:72px;width:auto;object-fit:contain">
     </div>
@@ -334,7 +334,7 @@
       </div>
       <div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7">
         <span class="ax-when-apex">Your shop has set up an account for you.</span><span
-              class="ax-when-tenant">Ray &amp; Judy's Book Stop has set up an account for you.</span>
+              class="ax-when-tenant"><span data-tenant-name>Ray &amp; Judy's Book Stop</span> has set up an account for you.</span>
         Set your password below to get started —
         you can then browse the monthly catalog and reserve your titles.
       </div>
@@ -343,7 +343,7 @@
                   font-size:0.75rem;color:var(--text-muted)">
         <div>✓ &nbsp;This invite was sent personally by
           <span class="ax-when-apex">your shop</span><span
-                class="ax-when-tenant">Ray &amp; Judy's Book Stop</span></div>
+                class="ax-when-tenant"><span data-tenant-name>Ray &amp; Judy's Book Stop</span></span></div>
         <div>✓ &nbsp;Reservations only — you will never be charged through this site</div>
         <div>✓ &nbsp;Questions? Reply to the invite email or call the shop</div>
       </div>

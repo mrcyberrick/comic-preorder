@@ -192,6 +192,25 @@ const Branding = {
       if (b.logo_url) {
         document.querySelectorAll('img[data-tenant-logo]').forEach(img => { img.src = b.logo_url; });
       }
+
+      // Paid-only identity chrome (F72). A free tenant shows its NAME (a trust
+      // signal) but never a phone number, street address, locality or custom
+      // logo — those are the paid tier's identity. Marked up inline so the
+      // founding tenant renders byte-identically and an unresolved tenant
+      // hides rather than leaks.
+      // NB: this also hides on the anon path, where `plan` is never selected —
+      // that is the fail-closed direction (hide identity, never show the wrong shop's).
+      // Sets style.display, not just the `hidden` attribute/property: at least
+      // one target (index.html's tenant-logo wrapper) carries its own inline
+      // `style="display:flex"`, and an inline style always outranks the UA
+      // stylesheet's un-!important `[hidden]{display:none}` — `.hidden = true`
+      // alone would silently fail to hide it.
+      if (!Tier.isPaid(tenant)) {
+        document.querySelectorAll('[data-paid-only]').forEach(el => {
+          el.hidden = true;
+          el.style.display = 'none';
+        });
+      }
     } catch (err) { console.warn('Branding.apply failed; rendering defaults', err); }
   },
   _dim(hex) {                                   // #RRGGBB → rgba(r,g,b,0.15)
@@ -1652,7 +1671,7 @@ const WelcomeModal = {
         <div class="welcome-modal-logo">PULL<span>LIST</span></div>
         <h2>Welcome to PULLLIST</h2>
         <p>
-          Each month, Ray &amp; Judy's Book Stop loads the latest catalog from our distributors.
+          Each month, ${Tier.isPaid(TenantContext.current()) ? "Ray &amp; Judy's Book Stop" : (TenantContext.current().display_name || 'the shop')} loads the latest catalog from our distributors.
           Browse the Catalog, reserve what you want, and we'll order it specifically for you.
           Watch the <strong>order deadline</strong> at the top of the Catalog page — that's your
           cutoff to lock in picks for the month. Use <strong>Subscriptions</strong> to

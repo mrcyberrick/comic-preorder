@@ -324,7 +324,7 @@
 </div>
 
 <footer class="site-footer">
-  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
 </footer>
 
 <div id="toast-container"></div>
@@ -405,6 +405,8 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
   const isPending = !profile?.is_admin && profile?.status === 'pending';
   const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
   const isBlocked = isPending || isPaused;
+  // Free tier shows no phone/address (F72) — only a paid tenant's own contact info.
+  const _isPaidTenant = Tier.isPaid(TenantContext.current());
   const BLOCKED_TITLE = isPaused
     ? 'Your account is paused — call the store to resume'
     : 'Available once your account is approved';
@@ -426,8 +428,14 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
           '</div>' +
           '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
             (isPaused
-              ? 'You can still manage your existing subscriptions, but subscribing to new series is paused for now. ' +
-                'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+              ? _isPaidTenant
+                ? 'You can still manage your existing subscriptions, but subscribing to new series is paused for now. ' +
+                  'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+                : 'You can still manage your existing subscriptions, but subscribing to new series is paused for now. ' +
+                  'Contact the shop to get going again.'
+              : !_isPaidTenant
+              ? 'You can view your subscriptions while we confirm your details. ' +
+                'New subscriptions will be available once ' + (TenantContext.current().display_name || 'the shop') + ' approves your account.'
               : 'You can view your subscriptions while we confirm your details. ' +
                 'New subscriptions will be available once Ray&nbsp;&amp;&nbsp;Judy’s Book Stop approves your account. ' +
                 'Questions? Call us at (973)&nbsp;586-9182.') +

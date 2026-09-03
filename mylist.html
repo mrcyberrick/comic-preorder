@@ -559,7 +559,7 @@
   <!-- Pickup notice — always visible, hidden in admin impersonation context -->
   <div class="pickup-notice" id="pickup-notice">
     <span class="pickup-notice-icon">ℹ</span>
-    <span>Items on your pull list are ordered specifically for you. Please stop in to <strong>pick up and pay</strong> for your items when they arrive. Questions? Call us at <a href="tel:9735869182">973-586-9182</a>.</span>
+    <span>Items on your pull list are ordered specifically for you. Please stop in to <strong>pick up and pay</strong> for your items when they arrive.<span data-paid-only> Questions? Call us at <a href="tel:9735869182">973-586-9182</a>.</span></span>
   </div>
 
   <!-- Summary -->
@@ -663,7 +663,7 @@
 </div>
 
 <footer class="site-footer">
-  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
 </footer>
 
 <div id="toast-container"></div>
@@ -774,6 +774,8 @@ function confirmDialog(message, okLabel = 'Remove') {
   const isPending = !profile?.is_admin && profile?.status === 'pending';
   const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
   const isBlocked = isPending || isPaused;
+  // Free tier shows no phone/address (F72) — only a paid tenant's own contact info.
+  const _isPaidTenant = Tier.isPaid(TenantContext.current());
   const BLOCKED_TITLE = isPaused
     ? 'Your account is paused — call the store to resume'
     : 'Available once your account is approved';
@@ -795,8 +797,14 @@ function confirmDialog(message, okLabel = 'Remove') {
           '</div>' +
           '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
             (isPaused
-              ? 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
-                'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+              ? _isPaidTenant
+                ? 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
+                  'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+                : 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
+                  'Contact the shop to get going again.'
+              : !_isPaidTenant
+              ? 'You can view your reservations while we confirm your details. ' +
+                'Quantity changes will be available once ' + (TenantContext.current().display_name || 'the shop') + ' approves your account.'
               : 'You can view your reservations while we confirm your details. ' +
                 'Quantity changes will be available once Ray&nbsp;&amp;&nbsp;Judy’s Book Stop approves your account. ' +
                 'Questions? Call us at (973)&nbsp;586-9182.') +
