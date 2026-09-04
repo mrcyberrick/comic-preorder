@@ -258,7 +258,7 @@ of that doc's "Option A was rejected" line finds the follow-up rather than re-de
 | **V2** | ✅ **GREEN 2026-09-04** — PRH 1,308 rows and Lunar 17,490 both parsed, header detection correct on both |
 | **V3** | ⚠️ **SUPERSEDED, and honestly so.** It cannot be re-run as written: the 13 Lunar in-store drifts it names were already corrected by `fix-stale-dates-f155.js` before S2 existed, so the script now correctly finds **zero** Lunar in-store drift — which is itself an independent confirmation that the remediation landed. What it *did* find on the same files: **4 stranded PRH titles with open reservations** (Godzilla Vs. America ×2, The Horror of Godzilla ×2, moved 7 and 3 weeks) and **11 Lunar FOC-only** changes. Replace this gate with a staging fixture rather than pretending the original number is still reproducible |
 | **V4** | ✅ **GREEN** — `check-dates.js:61` requires `classifyReservedDateDrift` from `import.js`; no second date-diff implementation exists |
-| **V5** | ✅ **GREEN (`--no-write` half)** — the run reported 15 pending writes and applied none. The real-write half is untested until it is run with writes |
+| **V5** | ✅ **GREEN, both halves** — the `--no-write` run reported 15 pending writes and applied none; the real run applied 15/15, confirmed by the script's own fresh re-read **and** independently afterwards (4 Godzilla rows at 10-28/11-11, three FOC spot-checks correct). Only `on_sale_date`/`foc_date` were touched; no inserts |
 | **V6** | ⚠️ **IMPLEMENTED, NOT DEMONSTRATED through this script.** The `dirOf()` helper flags EARLIER vs later on stranded/corrected rows, and `fix-stale-dates-f155.js` did surface `0826DE0733` as `[EARLIER]`. But because Lunar in-store drift is now zero, `check-dates.js` has not yet printed an EARLIER in-store move on live data. Needs a staging fixture |
 | **V7** | Guard defers, never blocks | Unit test: no evidence + `on_sale_date + 15d` → fulfils. Same row at `+13d` → deferred |
 | **V8** | Guard preserves today's behaviour where evidence exists | Re-run against September's real import shape: the 212 arrived rows still fulfil |
@@ -369,3 +369,33 @@ one. Left unfixed, this would have cried wolf every week and trained the operato
 
 **15 corrections are pending and NOT applied** — 4 PRH in-store, 11 Lunar FOC. Production writes are
 Rick's to run.
+
+---
+
+## 12. S2's first real run — applied 2026-09-04, and it paid for itself immediately
+
+Rick applied the 15 corrections (4 PRH in-store, 11 Lunar FOC). Verified by the script's own fresh
+re-read **and** independently afterwards. **30 production date corrections total today**, across
+both scripts.
+
+**The finding that justifies the whole exercise, surfaced by correcting a FOC date nobody was
+watching:**
+
+```
+0826DE0733  FIRE AND ICE #5 CVR A JOSEPH MICHAEL LINSNER
+            FOC  2026-10-05 → 2026-09-07   (pulled FOUR WEEKS earlier)
+            NOT ORDERED — the window closes in 3 days
+```
+
+Before this correction the system believed there was a month of ordering runway. There were three
+days, and the title has no `order_submissions` row. Nothing in the app would have said so: the
+Order Follow-Up panels classify against `foc_date`, and `foc_date` was wrong. **This is the
+*earlier*-direction case (§ 1.1) doing real damage in the ordering lane rather than the arrival
+lane** — a class this plan identified but had not yet seen bite.
+
+Checked across all 11 FOC corrections: everything else is either already ordered or has 59 days of
+runway. FIRE AND ICE #5 is the only one at risk, and only because its FOC moved backwards.
+
+**Carry into S2's next iteration:** the report should rank FOC changes by *how much ordering runway
+is left after the correction*, and shout when a pulled-forward FOC lands inside the current ordering
+window on an unordered title. Today that had to be derived by hand after the run.
