@@ -1738,22 +1738,40 @@
     rows.forEach(p => {
       const c = p.catalog;
       const code = exportCode(c, c.distributor);
+      // ── F155 S3(b): THE ORDER OF THESE TESTS IS THE FIX ──────
+      // `ledgerNetQty > 0` used to run FIRST, so an ORDERED title was cleared
+      // from every follow-up panel before anything else was considered. That
+      // is how a released title with no arrival record sat completely
+      // invisible: ordered, so cleared here; still unfulfilled, so not picked
+      // up by neverArrivedFromFulfilled() either (it requires p.fulfilled).
+      // DNX #1 appeared on no panel at all, while Mark Ordered was correctly
+      // disabled — ledger 2 == reserved 2, nothing left to order — leaving the
+      // admin no control to reach for. Two correct behaviours, no surface.
+      //
+      // Settled outcomes still win and must stay first:
+      if (hasShipmentEvidence(c)) return;                        // arrived — cleared
+      // F129: a REJECTED code (ledgerRejected() — rows present, net <= 0) is a
+      // decided case, not an open one — the store has already recorded the
+      // supplier's rejection and F120 already surfaces it to the customer
+      // (My List / Bagging List). Nagging here forever after that is noise,
+      // not signal, so it clears the same as "arrived" does.
+      if (ledgerRejected(c.distributor, code)) return;           // rejected — already decided & surfaced (F129)
+
+      // Released with no arrival record. Now checked BEFORE the ordered exit:
+      // once the on-sale date has passed, having ordered a title is not
+      // evidence that it came — that is the exact false inference F115 exists
+      // to stop, and it was being made here on the unfulfilled path.
+      // These are also the rows S3(a)'s grace window holds back from
+      // auto-fulfilment, and they MUST be visible for that deferral to be
+      // safe rather than a silent stall (F115 Option A's original objection).
+      if (c.on_sale_date && c.on_sale_date < todayStr) { neverArrived.push({ p }); return; }
+
       // Signed ledger (F117/F108 § 4.4): a code only clears on POSITIVE net
       // quantity here — a code with ledger rows netting to <= 0 was never
       // actually ordered, so the mere presence of a row is not enough.
-      // F129: but a REJECTED code (ledgerRejected() — rows present, net <= 0)
-      // is a decided case, not an open one — the store has already recorded
-      // the supplier's rejection and F120 already surfaces it to the
-      // customer (My List / Bagging List). Nagging here forever after that
-      // is noise, not signal, so it clears the same as "arrived" does.
-      if (ledgerNetQty(c.distributor, code) > 0) return;         // ordered — cleared
-      if (ledgerRejected(c.distributor, code)) return;           // rejected — already decided & surfaced (F129)
-      if (hasShipmentEvidence(c)) return;                        // arrived — cleared
-
-      // Released with no arrival record. Deliberately checked before the FOC
-      // triage: once the on-sale date has passed, how the order window was
-      // missed stops mattering — the outcome is already settled.
-      if (c.on_sale_date && c.on_sale_date < todayStr) { neverArrived.push({ p }); return; }
+      // Reached only for a title that has NOT yet been released, where
+      // "we ordered it" genuinely does mean "not yet a failure".
+      if (ledgerNetQty(c.distributor, code) > 0) return;         // ordered, not yet released — cleared
 
       const past    = isFocPast(c.foc_date);
       const trigger = past || missesOrderCycle(c.foc_date);
