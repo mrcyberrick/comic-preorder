@@ -2,15 +2,19 @@
 
 **STATUS:** **IN PROGRESS — RESEQUENCED 2026-09-03, Rick: ship free-tier-only first for a demo.**
 **S0 EXECUTED 2026-09-02. S1a (free-tier web) + S2a (register-customer, free-tier email) EXECUTED
-2026-09-03, both on STAGING** (`d7669b0`, `efadbf0`) — see § 4.1a/§ 4.2a, the live record for this
-resequence. **A demo tenant exists on staging** (`demoshop`, `plan=free`, 2,288 catalog rows,
-reachable at `?t=demoshop` — no DNS needed). § 4.1/§ 4.2's original uniform-design text is
-SUPERSEDED for the parts S1a/S2a cover; still accurate in shape for what remains (the other five
-mail functions, S3 print). § 8 Q1–Q6 (2026-09-01) still hold for *what data exists*. **Q7–Q11**
-answered 2026-09-02 (see § 0.1). **§ 4.1–§ 4.3's remaining, NOT-yet-executed scope is still
+2026-09-03; S3 (print) EXECUTED 2026-09-04 — all on STAGING** (`d7669b0`, `efadbf0`, `b1e1445`) —
+see § 4.1a/§ 4.2a/§ 4.3a, the live record for this resequence. **A demo tenant exists on staging**
+(`demoshop`, `plan=free`, 2,288 catalog rows, reachable at `?t=demoshop` — no DNS needed). A
+free-tier prospect walkthrough — signup, browse, reserve, print, my list, arrivals, subscriptions —
+now carries **zero founding-tenant identity anywhere reachable in that flow.** § 4.1/§ 4.2/§ 4.3's
+original uniform-design text is SUPERSEDED for the parts S1a/S2a/S3 cover; still accurate in shape
+for what remains (the other five mail functions — `approve-customer`, `invite-customer`,
+`notify-customers`, `reset-password`, `send-my-list` — still unconditionally founding-branded). §
+8 Q1–Q6 (2026-09-01) still hold for *what data exists*. **Q7–Q11** answered 2026-09-02 (see § 0.1).
+**§ 4.1/§ 4.2's remaining, NOT-yet-executed scope (the other five mail functions) is still
 design-level** and owes the free/paid-content-per-site pass § 0.1's closing note describes — do not
-execute the untouched parts from their current text; S1a/S2a are the pattern to extend, not the
-original steps. | staging=2026-09-03 (S0,S1a,S2a) | prod=— | findings=F72,F99,F145,F151
+execute the untouched parts from their current text; S1a/S2a/S3 are the pattern to extend, not the
+original steps. | staging=2026-09-04 (S0,S1a,S2a,S3) | prod=— | findings=F72,F99,F145,F151
 
 **Owner finding:** F72 (`docs/technical-reference.md` § 13). This plan **widens F72's
 recorded scope** — it is filed as one email template in `register-customer`, and the
@@ -810,6 +814,67 @@ template literal and can be interpolated the same way, but **note the escape tra
 illegal legacy-octal escape and a hard `SyntaxError` for the whole inline script. Use
 literal characters.
 
+### 4.3a S3 — EXECUTED 2026-09-04, staging
+
+**Ships the last open item from this session's F72 work: paper.** Every print output a customer or
+staffer could hold in their hands now follows the same rule S1a/S2a already established — free tier
+shows no store identity at all, just an always-resolving `View Online: pulllist.app` line; paid
+tier keeps today's exact identity unchanged, now with a tier-gated `View Online` link that resolves
+to `<slug>.pulllist.app` instead of the hardcoded `rjbookstop.pulllist.app`.
+
+**Seven print surfaces across three files, re-measured from disk 2026-09-04** (line numbers in the
+2026-09-01 inventory had drifted, including from this session's own F154 fix to `mylist.html`):
+
+| Surface | File | Mechanism |
+|---|---|---|
+| Personal pull list print header | `mylist.html` | was fully static markup, unlike `print-title`/`print-subtitle` — converted to an empty `#print-store-info` container, populated via `textContent` at print-click time |
+| This Week customer print header | `arrivals.html` | identical structure/fix to the above |
+| Store poster ("Reserve online" CTA, printed in-store) | `arrivals.html` | name already dynamic (`[data-tenant-name]`); the two static phone spots wrapped in `data-paid-only` — **zero new JS**, reuses `Branding.apply()`'s existing S1a mechanism, which already runs at page load on every nav page |
+| Bagging List (per-customer cards) | `admin.html` | tier computed once per `renderThisWeek()` render, not per card |
+| Print Catalog — page-1 header + `@page` footer | `admin.html` | `buildCombinedCatalogHtml()`; literal characters used in the CSS `content:` string, not a unicode escape — the 2026-08-27 print-CTA session's own documented `\00b7` trap |
+| Reserved/order report — `@page` footer | `admin.html` | `buildReservedReportHtml()`; staff-only, never had a View Online CTA to begin with — not adding one (scope discipline), just tier-gating the website literal already there |
+
+**`rjbookstop.com` (the tenant's own website, distinct from their PULLLIST subdomain) still has no
+backing field** — Q2's `branding.website` remains unresolved, unchanged from the 2026-09-01
+inventory. Kept as a literal on the **paid** branch only (matches the one paid tenant's real value
+today); free tier shows nothing for it, consistent with every other identity field this session
+tier-gated. **Still open, same as before this step.**
+
+**Two stale doc-comments corrected in the same commit**, found while editing the exact code they
+described — one claimed `rjbookstop.com` still appeared in a header that no longer shows it at all
+(page-1 header now carries only the tier-gated View Online line).
+
+**Verification, and its honest boundary — stated precisely, not implied broader than it is.**
+Real-browser, deployed-bytes verification (`f72-s3-print-verify.mjs`, local, uncommitted) drove
+both a FREE customer (`demoshop`) and the PAID founding tenant through `mylist.html`'s print path:
+free correctly shows no phone/no founding name, `View Online: pulllist.app`; paid is **unchanged** —
+phone and store name both still present, `View Online: raysandjudys.pulllist.app`. `arrivals.html`'s
+free branch required a second pass: its print handler only *attaches* when the customer has at
+least one reservation whose `on_sale_date` falls in the current week — a **pre-existing, unrelated**
+early-return, confirmed by checking that even the *pre-existing* `print-title`/`print-subtitle`
+population (untouched by this work) also never fires without one. Not a bug this change introduced.
+Verified for real by temporarily shifting one `demoshop` catalog row's `on_sale_date` into the
+current week, reserving it, running the check, and restoring the original date — confirmed restored
+by an independent fresh read, not the harness's own claim.
+
+**Not independently live-clicked, and that gap is stated rather than implied covered:**
+`arrivals.html`'s **paid** branch, and all **three `admin.html` print surfaces** (Bagging List,
+Print Catalog, Reserved Report). Each uses the identical `Tier.isPaid()`/`Tier.publicUrl()` pattern
+already proven correct live elsewhere this session (S0's authed-verify, S1a's leak-audit, this
+step's own `mylist.html` paid check), and `node --check` confirms every touched file's inline
+`<script>` block is syntactically valid — but manufacturing a live "Bagging List has cards" /
+"Print Catalog has rows" scenario for each was judged disproportionate to the risk for simple
+ternary string construction using an already-proven mechanism. A negative control on the kept
+harness inverted two assertions and confirmed both went red before reverting.
+
+**Gates:** `node --check` clean on `admin.html`/`arrivals.html`/`mylist.html`'s inline `<script>`
+blocks. Unit suite 279/279 (unchanged — no import-script code touched). Full Playwright suite run
+post-push against deployed staging bytes — see the gate result recorded with the rest of this
+step's completion record.
+
+**Deployed:** staging only, `b1e1445`, merged `--ff-only`, pushed. **Not production** — separate
+explicit request per CLAUDE.md § Staging Only.
+
 ### 4.4 S4 — Docs
 
 - `docs/technical-reference.md` § 13 **F72**: correct the recorded scope (it reads as one
@@ -991,12 +1056,19 @@ gate, the generic-content definition, the link-by-tier rule — were answered 20
       Rick's call. `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN
       ('free','pro'));` The function normalises, but **manual UPDATE is the primary path today**
       and bypasses it entirely
-- [ ] § 4.1–§ 4.3 rewritten with explicit free/paid content per site — **still owed.** S0 is now
-      byte-exact; S1/S2/S3 remain design-level and must not be executed from their current text
-- [ ] mylist.html and arrivals.html print outputs gain the tier-gated "View Online" link — new
-      scope, these had none before (§ 0.1)
-- [ ] admin.html's existing `rjbookstop.pulllist.app` literals (§ 4.3) made tier-conditional,
-      falling back to `pulllist.app` for any non-`pro` tenant
+- [x] ~~§ 4.1–§ 4.3 rewritten with explicit free/paid content per site~~ — **S0, S1a (web), S2a
+      (register-customer email), and S3 (print) are all byte-exact and executed.** Still owed: the
+      OTHER five mail functions (§ 4.2's remaining scope) — see § 4.1a/§ 4.2a/§ 4.3a for what shipped
+- [x] ~~mylist.html and arrivals.html print outputs gain the tier-gated "View Online" link~~ —
+      **DONE 2026-09-04 (S3, `b1e1445`)** — free tier links to `pulllist.app`, paid tier to
+      `<slug>.pulllist.app`, live-verified against deployed bytes for both tenants on `mylist.html`
+      and for the free branch (with a real reservation) on `arrivals.html`
+- [x] ~~admin.html's existing `rjbookstop.pulllist.app` literals (§ 4.3) made tier-conditional,
+      falling back to `pulllist.app` for any non-`pro` tenant~~ — **DONE 2026-09-04 (S3)** across all
+      three of admin.html's print jobs (Bagging List, Print Catalog, Reserved Report). **Not
+      independently live-clicked** — verified by code trace + `node --check` + the same
+      `Tier.isPaid()`/`Tier.publicUrl()` pattern already proven live elsewhere; a real click-through
+      is still owed before treating this as fully closed
 - [ ] **`index.html:247-262` pricing copy edited to match what Q10 actually ships** — the "Branded"
       tier's *"customer emails from your shop"* claim is knowingly stale as of 2026-09-02
 

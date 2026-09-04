@@ -99,6 +99,57 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: F72 S3 — print outputs tier-gated, GREEN on STAGING, 2026-09-04** (`b1e1445`,
+merged `--ff-only`, pushed). Closes the last open item from this session's F72 work — every paper
+output a customer or staffer could hold now follows the same rule S1a/S2a already established.
+
+**Seven print surfaces across three files.** `mylist.html`'s personal-list header and
+`arrivals.html`'s This Week header were both fully static markup carrying the founding tenant's
+name and phone — unlike `print-title`/`print-subtitle`, nothing had ever made them dynamic.
+Converted both to an empty `#print-store-info` container, populated via `textContent` (never
+`innerHTML`) at print-click time, matching `Branding.apply()`'s own `[data-tenant-name]` convention
+so there's no new HTML-escaping surface. `arrivals.html`'s store poster needed **zero new JS** — its
+name was already dynamic, and the two static phone spots just needed `data-paid-only`, which
+`Branding.apply()` already applies to every nav page at load time. `admin.html` carried three
+separate print jobs — Bagging List, Print Catalog, and a staff-only Reserved Report — each now
+tier-gated the same way, with the tier computed once per render rather than per row.
+
+**`rjbookstop.com` (the tenant's own website) still has no backing field** — Q2 remains unresolved,
+unchanged from the original 2026-09-01 inventory. Kept as a paid-only literal, matching the one
+paid tenant's real value; free tier shows nothing for it.
+
+**Verified against DEPLOYED staging bytes, and a real gap surfaced along the way — not the tier
+logic, a test-fixture limitation.** `f72-s3-print-verify.mjs` drove both a FREE customer
+(`demoshop`) and the PAID founding tenant through `mylist.html`'s print path: free correctly shows
+no phone, no founding name, `View Online: pulllist.app`; paid is **unchanged** — phone and name
+both still present, `View Online: raysandjudys.pulllist.app`. `arrivals.html`'s free branch first
+came back empty, which traced to a **pre-existing, unrelated** early-return: the print handler only
+attaches when the customer has a reservation arriving in the current calendar week — confirmed by
+checking that even the *pre-existing* title/subtitle population (untouched by this work) also never
+fires without one. Verified for real by temporarily shifting one catalog row's `on_sale_date` into
+the current week, reserving it, checking, and restoring the original date — confirmed restored by
+an independent fresh read afterward, not the harness's own printed claim.
+
+**⚠️ Stated honestly, not glossed over: `arrivals.html`'s paid branch and all three `admin.html`
+print surfaces were not independently live-clicked.** Each uses the identical `Tier.isPaid()`/
+`Tier.publicUrl()` pattern already proven correct live elsewhere this session, and `node --check`
+confirms every file's inline script is syntactically valid — but manufacturing a live "Bagging List
+has cards" / "Print Catalog has rows" scenario for each was judged disproportionate to the risk for
+simple ternary string construction reusing an already-proven mechanism. Worth a real click-through
+before this is treated as fully closed.
+
+**Gates.** `node --check` clean on all three files. Unit suite 279/279 (unchanged). **Full
+Playwright suite: 143 passed, 0 failed, exit 0, 22.2 min** — run directly against deployed staging
+bytes post-push. Zero regressions from this step.
+
+**This closes F72's session-scoped work.** S1a (web), S2a (`register-customer` email), and now S3
+(print) together mean a free-tier prospect walkthrough — signup, browse, reserve, print, my list,
+arrivals, subscriptions — carries zero founding-tenant identity anywhere reachable in that flow.
+**Still open, deliberately deferred, not forgotten:** the other five mail functions
+(`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`)
+remain unconditionally founding-branded. **Production untouched. No finding ID consumed** — this
+advances F72, which already owns the work.
+
 **Last completed work: F72 S1a + S2a — free-tier-first resequence, GREEN on STAGING, 2026-09-03**
 (`d7669b0`, `efadbf0`, both merged `--ff-only`, pushed). Rick's direction: *"ship free-tier-only
 first — let's focus on this and get something we can leverage with potential customers."* Both
