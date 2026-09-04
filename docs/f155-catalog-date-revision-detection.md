@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** IN PROGRESS (S1 done, S2/S3 not started) · staging=2026-09-04 (S1) · prod=— · PR=— · findings: F155
+**STATUS:** IN PROGRESS (S1 + S2 done, S3 not started) · staging=2026-09-04 (S1, S2) · prod=— · PR=— · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
@@ -146,6 +146,10 @@ No code. Ships independently of S2/S3.
 
 ## 4. S2 — `check-dates.js` (detection)
 
+**BUILT 2026-09-04** — scripts repo `main` `f2d31ec`, allowlisted in `.gitignore` alongside
+`reconcile-shipment.js` / `f136-audit.js` (it is a recurring tool, not a one-off remediation).
+**Not yet run with writes against production** — the `--no-write` pass is recorded in § 6.
+
 New script in the **scripts repo**, alongside `f136-audit.js` / `reconcile-shipment.js`.
 Deliberately **not** a flag on `import.js`: that script archives, purges, upserts a whole month and
 auto-reserves, and none of that may happen here.
@@ -251,11 +255,11 @@ of that doc's "Option A was rejected" line finds the follow-up rather than re-de
 | Gate | What | Passes when |
 |---|---|---|
 | **V1** | S1 doc accuracy | Every claim in the rewritten Step 3 traces to a § 1 measurement |
-| **V2** | `check-dates.js` parses both formats | Lunar 17,490 rows and a PRH master file both read; header detection picks the right branch |
-| **V3** | Reproduces the known answer | Run against 2026-09-04's files: **13** Lunar and **108** PRH 2026-07 drifted titles, matching § 1.1 |
-| **V4** | `classifyReservedDateDrift()` reused, not forked | `git diff` shows no second date-diff implementation |
-| **V5** | Write scope | `--no-write` run touches nothing; real run updates only `on_sale_date`/`foc_date`; `catalog` row count unchanged before/after |
-| **V6** | Direction-awareness | `FIRE AND ICE #5` (`0826DE0733`, 10-28 → 09-30) appears, flagged as *earlier* |
+| **V2** | ✅ **GREEN 2026-09-04** — PRH 1,308 rows and Lunar 17,490 both parsed, header detection correct on both |
+| **V3** | ⚠️ **SUPERSEDED, and honestly so.** It cannot be re-run as written: the 13 Lunar in-store drifts it names were already corrected by `fix-stale-dates-f155.js` before S2 existed, so the script now correctly finds **zero** Lunar in-store drift — which is itself an independent confirmation that the remediation landed. What it *did* find on the same files: **4 stranded PRH titles with open reservations** (Godzilla Vs. America ×2, The Horror of Godzilla ×2, moved 7 and 3 weeks) and **11 Lunar FOC-only** changes. Replace this gate with a staging fixture rather than pretending the original number is still reproducible |
+| **V4** | ✅ **GREEN** — `check-dates.js:61` requires `classifyReservedDateDrift` from `import.js`; no second date-diff implementation exists |
+| **V5** | ✅ **GREEN (`--no-write` half)** — the run reported 15 pending writes and applied none. The real-write half is untested until it is run with writes |
+| **V6** | ⚠️ **IMPLEMENTED, NOT DEMONSTRATED through this script.** The `dirOf()` helper flags EARLIER vs later on stranded/corrected rows, and `fix-stale-dates-f155.js` did surface `0826DE0733` as `[EARLIER]`. But because Lunar in-store drift is now zero, `check-dates.js` has not yet printed an EARLIER in-store move on live data. Needs a staging fixture |
 | **V7** | Guard defers, never blocks | Unit test: no evidence + `on_sale_date + 15d` → fulfils. Same row at `+13d` → deferred |
 | **V8** | Guard preserves today's behaviour where evidence exists | Re-run against September's real import shape: the 212 arrived rows still fulfil |
 | **V9** | Deferred rows are visible | A deferred, **ordered** row appears in Never Arrived with resolve controls — negative-control tested by reverting S3(b) and confirming it disappears |
@@ -282,7 +286,9 @@ red with S3(b) reverted before trusting it green.
 ## 8. Completion criteria
 
 - [x] S1 committed; every Step 3 claim traces to a § 1 measurement — 2026-09-04
-- [ ] S2 built, V2–V6 green
+- [x] S2 built — scripts repo `f2d31ec`, 2026-09-04. V2/V4/V5 green; **V3 superseded and V6 not yet
+      demonstrated** (see § 6) — both need a staging fixture, neither is reproducible on production
+      now that the remediation has landed
 - [ ] S3(a) + S3(b) shipped **together**, V7–V9 green, V9 negative-control tested
 - [ ] V10 full suite green against deployed staging bytes post-push
 - [ ] V11 one real staging run, independently verified
@@ -337,3 +343,29 @@ it fires the false fulfilment on § 9's titles. This could not wait for S2.
 
 The script is idempotent and re-runnable. **It must be re-run after any older-month import**, which
 restores whatever that distributor file says — the stale date, for a frozen PRH month.
+
+---
+
+## 11. What S2's first run found (2026-09-04, `--no-write`, production reads)
+
+Run against the Lunar All-Products export plus PRH 2026-07 master data:
+
+- **4 STRANDED PRH titles with open reservations**, none previously known — Godzilla Vs. America:
+  New York City (Cover A + Variant B) moved **2026-09-23 → 2026-11-11**, and The Horror of Godzilla
+  #2 (Cover A + Variant B) moved **2026-10-07 → 2026-10-28**. 7 reservations, 8 copies between them.
+  These are live 2026-07 catalog rows; the remediation script never touched PRH beyond the declared
+  DNX #1 pair, so S2 found these on its own.
+- **11 Lunar FOC-only changes** — in-store already corrected, FOC still stale. Includes
+  `FIRE AND ICE #5` FOC moving 2026-10-05 → **2026-09-07**, a month earlier.
+- **Zero Lunar in-store drift** — independent confirmation that `fix-stale-dates-f155.js` landed.
+- **1 genuinely at-risk code**, `0726DC0300`, matching § 9's known residual exactly.
+
+**A real reporting defect was found and fixed during this run, before trusting the output.** The
+absent-codes list originally flagged 3 codes as at-risk; two of them — DAREDEVIL #6 and VENOM #261 —
+had in fact **shipped** (10 and 7 copies), and were flagged only because their catalog month had not
+been supplied. The report now splits *"catalog not pulled"* (no signal) from *"catalog pulled and
+the code is gone"* (real), and checks shipment evidence before raising anything. 3 alarms → 1 true
+one. Left unfixed, this would have cried wolf every week and trained the operator to ignore it.
+
+**15 corrections are pending and NOT applied** — 4 PRH in-store, 11 Lunar FOC. Production writes are
+Rick's to run.

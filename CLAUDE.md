@@ -99,7 +99,90 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
-**Last completed work: F72 S3 — print outputs tier-gated, GREEN on STAGING, 2026-09-04** (`b1e1445`,
+**Last completed work: F155 filed + S1 shipped + 15 PRODUCTION date corrections applied,
+2026-09-04** (`8700a65`, `0f4be33`, `2e2feac`, all doc-only on staging, pushed). **⚠️ PRODUCTION DATA
+WAS CHANGED** — 15 `catalog.on_sale_date` values, applied by Rick, independently re-verified by a
+fresh read afterwards, not taken from the write script's own output. No code, no schema, no deploy.
+
+**Found by Rick from a live symptom, not an audit.** A reserved title (DNX #1 [HIDDEN/DOUBLE COVER],
+PRH `75960621519500111`) had quietly stopped being visible to its two customers. Root cause: PRH
+revised its in-store date 2026-09-02 → **2026-09-16** and nothing we download carries that.
+
+**Three silent stages, in order — the first is the one that actually hurts.** Once the *stale* date
+passes, the title is in **neither** half of My List: it fails `mylist.html:937`'s current-month
+table filter *and* `:884`'s future-dated Upcoming Arrivals filter. Then it never matches a bagging
+week again. **Only then** does `auto_fulfill_past_on_sale()` mark it fulfilled and F115 surface it
+in Never Arrived — after the customer has been told "Order placed" for a book that never shipped.
+`classifyReservedDateDrift()` already computes this exact state (`import.js:517`, its `stranded`
+list carries a `hidden` flag whose comment reads *"the customer cannot see it at all"*) — it simply
+never ran, because nothing re-reads an older month.
+
+**Why no admin panel caught it, and it is two correct behaviours colliding.**
+`computeBackorderRisk()` (`admin.html:1749`) clears any code with `ledgerNetQty > 0` *before* every
+other test, so an **ordered** title is invisible to Order Follow-Up. And Mark Ordered was correctly
+`disabled` — ledger 2 = reserved 2, nothing left to order. Rick reported exactly this: "the title
+was in Ordered status which locked the button." Neither is a bug alone; together they leave no
+surface at all.
+
+**The finding proper is one sentence in a runbook.** `monthly-catalog-refresh.md` Step 3 item 4 read
+*"PRH's export omits withdrawn titles rather than revising dates in place (see F110), so this step
+matters most for Lunar."* **Measured false:** freshly-downloaded PRH master data carries **108**
+revised in-store dates in 2026-07 alone, plus 27 / 19 / 4 in 2026-06 / 08 / 09. That sentence is why
+PRH months had never been re-pulled. **S1 fixed it 2026-09-04** (old text preserved verbatim in the
+correction note, per convention).
+
+**⚠️ The larger result, and it is a hard limit, not a gap to close: for a FROZEN PRH catalog no data
+channel exists at all.** Measured four ways — (1) two downloads of 2026-05 master data 44 minutes
+apart are **byte-identical** (MD5 `438958a0b69b961ab140ab63c9b3f3bf`) and **0 of 1,078** rows differ
+from the May import; (2) May's Weekly Change Reports run 2026-04-24 → **2026-07-31 and stop**, and
+DNX #1 is absent from the final one; (3) **0 of 5,123** PRH `MainIdentifier`s ever appear in more
+than one monthly file, so F122's newest-listing logic cannot rescue one; (4) yet **84 May titles
+were still future-dated**. PRH abandons a catalog ~2 months before its last titles ship. Detection
+cannot solve this — only F155's S3 guard limits the damage. **Two new runbook items (5 and 6) record
+this**, item 6 being the trap that F146's own withdrawal-clearing backfill would silently revert any
+hand-correction, which nothing had said anywhere.
+
+**Lunar is the opposite, and better than the plan first assumed.** The *All Products CSV Order Form*
+export is **one file, 17,490 rows, every catalog month back to 2025**, with an `In-Store` column —
+covering **559 of 568 (98.4%)** codes holding open reservations in a single download. It surfaced
+**13** already-stale dates immediately, including `0826DE0733` FIRE AND ICE #5 moved 2026-10-28 →
+**2026-09-30**, i.e. a month *earlier* — the direction nothing watches, where a book arrives before
+the bagging list expects it. **It is a DIFFERENT schema and cannot be fed to `import.js`** (item 1
+now says so).
+
+**The remediation ran ahead of the plan because `auto_fulfill_past_on_sale()` runs WEEKLY** —
+measured 2026-08-07 / 08-14 / 08-20 / **08-28**, and the last run was a week overdue. Local one-off
+`scripts/fix-stale-dates-f155.js` (untracked, matching `clear-f147-withdrawn.js` and
+`f115-s6-backfill-unknown.js`, its two closest siblings): production-only guard, live re-derivation,
+before-state JSON written *before* any write, sanity band, single y/n, independent fresh re-read as
+the success check. 13 Lunar derived live + 2 PRH from a declared provenance table (PRH site +
+invoice, Rick's own read — there is no file). **9 Lunar codes reported and deliberately SKIPPED** —
+absent from the export because it lists *available* products (mostly 1:25–1:500 incentives); no
+authoritative date, so no guess.
+
+**⚠️ One known residual, not closed: `0726DC0300`** (DC CONNECT #76 bundle, on-sale 2026-09-02) is
+still stale and **will be falsely fulfilled at the next weekly run.** No source exists for it. Low
+impact (a free promotional bundle), but open rather than fixed.
+
+**S3 APPROVED by Rick, 2026-09-04, and it knowingly revisits a recorded decision.** F115 Option A —
+giving `auto_fulfill_past_on_sale()` an arrival check — was **rejected**, and `import.js`'s own
+`findUnverifiedFulfillments()` docblock states why: *"REPORTS, NEVER BLOCKS … gating fulfillment on
+this would trade a silent miss for a silent stall."* **That objection stands**, so S3 **defers,
+bounded** (14 days) rather than blocking, and ships together with the `computeBackorderRisk()`
+ordering fix that keeps deferred rows visible in Never Arrived. Without that second half S3 would
+recreate the exact stall F115 rejected. **When S3 lands, record the approval in
+`f115-arrival-truth-persistence.md` too**, so a reader of its "Option A was rejected" line finds the
+follow-up instead of re-deciding it.
+
+**Plan: `docs/f155-catalog-date-revision-detection.md`** (STATUS: IN PROGRESS — S1 done, S2/S3 not
+started). **Nothing in it depends on a catalog load; all of it can be built before October's
+import.** But the **2026-09-25 October gate already carries F146 and F147's first-ever live
+production exercise** — both have fired exactly once each and both fired wrong (519 and 16) — so
+**recommended, Rick's call: S1 + S2 to production before 09-25 (S2 actively de-risks it by cleaning
+stale dates going in), S3 to staging now with its production promotion held until October is
+verified green.** **F155 is the finding this consumed. F156 is the next free ID.**
+
+**Prior work (2026-09-04, earlier): F72 S3 — print outputs tier-gated, GREEN on STAGING** (`b1e1445`,
 merged `--ff-only`, pushed). Closes the last open item from this session's F72 work — every paper
 output a customer or staffer could hold now follows the same rule S1a/S2a already established.
 
