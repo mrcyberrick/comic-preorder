@@ -5761,7 +5761,65 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Related:** found while executing the tenant-onboarding walkthrough this session (F153's own
   companion work), on the first tenant created through the newly-fixed invite flow.
 
-Next free finding ID: **F155**.
+#### F155 — the monthly-refresh runbook tells the operator PRH does not revise dates in place, so PRH catalogs are never re-pulled and a revised in-store date is never detected
+
+- **Status:** filed 2026-09-04, **open, not started.** Owner doc:
+  `docs/f155-catalog-date-revision-detection.md`. Found by Rick from a live symptom, not an audit:
+  a reserved title that had quietly stopped being visible to its customers.
+- **The defect proper is one sentence.** `docs/monthly-catalog-refresh.md:130-132` reads *"PRH's
+  export omits withdrawn titles rather than revising dates in place (see F110), so this step
+  matters most for Lunar."* Measured false: comparing freshly-downloaded PRH master data against
+  live production `catalog` rows, **108** titles in 2026-07 carry a different `OnSaleDate` than the
+  DB, plus 27 in 2026-06, 19 in 2026-08 and 4 in 2026-09. PRH revises in place exactly as Lunar
+  does. Because the runbook says otherwise, the Step 3 Revision Sweep has never been run for PRH.
+- **The symptom.** DNX #1 [HIDDEN/DOUBLE COVER] (PRH `75960621519500111`), solicited 2026-05 with
+  in-store 2026-09-02, revised by PRH to **2026-09-16**. Two live reservations. Once the stale date
+  passed, the title fell out of `mylist.html`'s current-month table (`:937`) **and** out of its
+  future-dated Upcoming Arrivals section (`:884`) — the customers can see it nowhere — and the next
+  import would set `fulfilled = true` for a book that has not shipped.
+- **Why no panel caught it.** `computeBackorderRisk()` (`admin.html:1749`) clears any code with
+  `ledgerNetQty > 0` before every other test, so an **ordered** title is invisible to Order
+  Follow-Up. The Mark Ordered button was correctly `disabled` (ledger 2 = reserved 2 — nothing left
+  to order), leaving no control to reach for. Both behaviours are correct in isolation; together
+  they leave no surface.
+- **The larger finding, and the reason this is not just a doc fix: for a frozen PRH catalog no data
+  channel exists at all.** Measured three ways — (1) two downloads of May master data 44 minutes
+  apart are **byte-identical** (MD5 `438958a0b69b961ab140ab63c9b3f3bf`) and **0 of 1,078** rows
+  differ from what was imported in May; (2) May's Weekly Change Reports run 2026-04-24 → **2026-07-31
+  and stop**, and DNX #1 does not appear in the final one; (3) **0 of 5,123** PRH `MainIdentifier`s
+  appear in more than one monthly file, so F122's newest-listing logic can never rescue a PRH title.
+  PRH stops maintaining a catalog roughly three months past its catalog date, while **84 May titles
+  are still future-dated today.** DNX #1's real date is unreachable from any PRH export.
+- **Lunar is the opposite, and better than the plan assumed.** The All Products CSV Order Form is a
+  single 17,490-row file spanning catalog months back to 2025, with an `In-Store` column; it covers
+  **559 of 568 (98.4%)** distinct Lunar codes holding open reservations, in one download. It found
+  **13** already-stale dates immediately, including `FIRE AND ICE #5` (`0826DE0733`) moved
+  2026-10-28 → **2026-09-30**, i.e. a month *earlier* — a direction no existing surface watches,
+  and one where the book arrives before the bagging list expects it.
+- **Severity: Medium.** Small blast radius today — 3 ordered titles across 4 reservations are in the
+  exposed window on production, and the two DNX #1 rows are **still `fulfilled = false`**, so the
+  false fulfilment has not yet happened. But the failure is silent in all three of its stages, it
+  ends in telling a customer a book arrived when it did not, and PRH's half of it is undetectable
+  from any file.
+- **Verified live, read-only, 2026-09-04** (service-role reads against production; nothing written):
+  catalog row, both preorders, `order_submissions` net +2, zero `weekly_shipment` evidence.
+- **Fix direction** (see the owner doc for the plan): S1 correct the runbook line; S2 a weekly
+  `check-dates.js` reusing `classifyReservedDateDrift()` (`import.js:517`) against 2 downloaded
+  files; S3 a **bounded deferral** in `auto_fulfill_past_on_sale()` plus a `computeBackorderRisk()`
+  ordering change so deferred rows stay visible.
+- **S3 knowingly revisits a decision recorded as rejected.** F115 Option A was declined because
+  gating fulfilment on missing shipment evidence would "trade a silent miss for a silent stall"
+  (`findUnverifiedFulfillments()`'s own docblock). That objection stands, so S3 **defers, bounded**
+  rather than blocking, and ships together with the panel change that keeps deferred rows visible.
+  Flagged for Rick's explicit sign-off at the gate rather than assumed.
+- **Where:** neither environment — nothing has been changed. Production is where the symptom was
+  measured.
+- **Related:** F136 (the Revision Sweep this should have been part of), F122 (newest-listing
+  fulfilment, which cannot help PRH), F115 (arrival truth, whose Option A this revisits), F146
+  (older-month re-imports, which would revert any hand-corrected date), F110 (cited by the wrong
+  runbook sentence).
+
+Next free finding ID: **F156**.
 
 ---
 
