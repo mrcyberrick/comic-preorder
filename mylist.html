@@ -544,8 +544,8 @@
         <div id="print-subtitle" style="font-size:0.8rem;color:#666;margin-top:2px"></div>
       </div>
       <div style="text-align:right;font-size:0.8rem;color:#666">
-        <div style="font-weight:700;font-size:0.95rem;color:#111">Ray &amp; Judy's Book Stop</div>
-        <div style="margin-top:2px">973-586-9182</div>
+        <!-- F72 S3: populated by JS at print time, tier-gated — see btn-print handler -->
+        <div id="print-store-info"></div>
         <div style="margin-top:6px" id="print-date"></div>
       </div>
     </div>
@@ -1298,6 +1298,33 @@ function confirmDialog(message, okLabel = 'Remove') {
       AdminContext.isActive()
         ? `Catalog for ${monthLabel} — printed by store admin`
         : `Catalog for ${monthLabel}`;
+
+    // F72 S3: the store-identity block was fully static markup, never touched
+    // by JS — paid tenant is free tier's exact leak on paper. Built here via
+    // textContent (never innerHTML), matching Branding.apply()'s own
+    // [data-tenant-name] convention, so there is no HTML-escaping surface to
+    // maintain. Phone stays the hardcoded literal (contact_phone isn't in
+    // TenantContext yet — Q1/Q3's population work is still open); the name
+    // reads the tenant's own resolved display_name, which is already
+    // byte-identical to the literal for the one paid tenant that exists today.
+    const printTenant = TenantContext.current();
+    const printIsPaid = Tier.isPaid(printTenant);
+    const infoEl = document.getElementById('print-store-info');
+    infoEl.textContent = '';
+    if (printIsPaid) {
+      const nameDiv = document.createElement('div');
+      nameDiv.style.cssText = 'font-weight:700;font-size:0.95rem;color:#111';
+      nameDiv.textContent = printTenant.display_name || "Ray & Judy's Book Stop";
+      infoEl.appendChild(nameDiv);
+      const phoneDiv = document.createElement('div');
+      phoneDiv.style.cssText = 'margin-top:2px';
+      phoneDiv.textContent = '973-586-9182';
+      infoEl.appendChild(phoneDiv);
+    }
+    const linkDiv = document.createElement('div');
+    linkDiv.style.cssText = 'margin-top:6px';
+    linkDiv.textContent = 'View Online: ' + Tier.publicUrl(printTenant);
+    infoEl.appendChild(linkDiv);
     document.getElementById('print-date').textContent   =
       'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
