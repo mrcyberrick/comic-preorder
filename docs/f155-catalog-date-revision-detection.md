@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** NOT STARTED · staging=— · prod=— · PR=— · findings: F155
+**STATUS:** IN PROGRESS (S1 done, S2/S3 not started) · staging=2026-09-04 (S1) · prod=— · PR=— · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
@@ -121,7 +121,14 @@ proper.
 
 ## 3. S1 — runbook correction (doc-only, ship first)
 
-Rewrite `docs/monthly-catalog-refresh.md` Step 3 item 4 to state:
+**DONE, staging, 2026-09-04.** `docs/monthly-catalog-refresh.md` Step 3 rewritten: item 4 corrected
+(the wrong sentence is preserved verbatim inside the correction note, per this project's convention
+of recording what a doc used to claim); new item 5 records the PRH freeze; new item 6 records the
+re-import-reverts trap; the old item 5 renumbered to 7. Item 1 also gained Lunar's three-month
+publishing limit and an explicit warning that the All-Products export is a **different schema** and
+**cannot** be fed to `import.js` — it is `check-dates.js` input, not re-import input.
+
+What it now states:
 
 - PRH **does** revise `OnSaleDate` in place in master data, for as long as the catalog is live
   (§ 1.1) — and its website agrees with the file, confirmed by Rick 2026-09-04 against
@@ -274,12 +281,15 @@ red with S3(b) reverted before trusting it green.
 
 ## 8. Completion criteria
 
-- [ ] S1 committed; every Step 3 claim traces to a § 1 measurement
+- [x] S1 committed; every Step 3 claim traces to a § 1 measurement — 2026-09-04
 - [ ] S2 built, V2–V6 green
 - [ ] S3(a) + S3(b) shipped **together**, V7–V9 green, V9 negative-control tested
 - [ ] V10 full suite green against deployed staging bytes post-push
 - [ ] V11 one real staging run, independently verified
-- [ ] The 3 exposed titles (§ 9) corrected and confirmed
+- [x] The 3 exposed titles (§ 9) corrected and confirmed — **15/15 applied to production
+      2026-09-04** by Rick via `fix-stale-dates-f155.js`, verified by the script's own fresh re-read
+      **and** independently afterwards (DNX #1 pair both `2026-09-16`; `0826DE0733` `2026-09-30`).
+      `0726DC0300` deliberately **not** corrected — no authoritative source
 - [ ] `docs/technical-reference.md` § 13 F155 status updated
 - [ ] `CLAUDE.md` findings row updated
 - [ ] Production promotion **not** attempted without an explicit request
