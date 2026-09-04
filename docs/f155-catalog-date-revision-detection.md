@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** IN PROGRESS (S1 + S2 done, S3 not started) · staging=2026-09-04 (S1, S2) · prod=— · PR=— · findings: F155
+**STATUS:** IN PROGRESS (S1 + S2 done; S3 client shipped, SQL PENDING) · staging=2026-09-04 · prod=— · PR=— · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
@@ -195,6 +195,16 @@ every title passes through the 30-day window before its on-sale date.
 
 ## 5. S3 — bounded deferral (the guard)
 
+**CLIENT HALF SHIPPED to staging 2026-09-04** (`b5ad0e4`, merged `--ff-only`, pushed, new bytes
+confirmed served on the plain URL). **SQL HALF IS PENDING — Rick must apply
+`docs/sql/auto_fulfill_past_on_sale.sql` to staging.** The file's own `-- STATUS:` line says so, and
+production still runs the pre-F155 body.
+
+**Sequencing is client-first here, deliberately, and it is the reverse of F149's.** S3(b) calls
+nothing new, so it is safe standing alone — it only widens what the Never Arrived panel shows. S3(a)
+without S3(b) would defer rows that no panel displays, which is precisely the silent stall F115
+rejected. So the client change must land first, and the SQL file says as much in its own header.
+
 ### 5.1 This reverses a recorded decision. Deliberately, and here is the argument.
 
 `docs/f115-arrival-truth-persistence.md:209` records Option A — giving `auto_fulfill_past_on_sale()`
@@ -260,14 +270,30 @@ of that doc's "Option A was rejected" line finds the follow-up rather than re-de
 | **V4** | ✅ **GREEN** — `check-dates.js:61` requires `classifyReservedDateDrift` from `import.js`; no second date-diff implementation exists |
 | **V5** | ✅ **GREEN, both halves** — the `--no-write` run reported 15 pending writes and applied none; the real run applied 15/15, confirmed by the script's own fresh re-read **and** independently afterwards (4 Godzilla rows at 10-28/11-11, three FOC spot-checks correct). Only `on_sale_date`/`foc_date` were touched; no inserts |
 | **V6** | ⚠️ **IMPLEMENTED, NOT DEMONSTRATED through this script.** The `dirOf()` helper flags EARLIER vs later on stranded/corrected rows, and `fix-stale-dates-f155.js` did surface `0826DE0733` as `[EARLIER]`. But because Lunar in-store drift is now zero, `check-dates.js` has not yet printed an EARLIER in-store move on live data. Needs a staging fixture |
-| **V7** | Guard defers, never blocks | Unit test: no evidence + `on_sale_date + 15d` → fulfils. Same row at `+13d` → deferred |
-| **V8** | Guard preserves today's behaviour where evidence exists | Re-run against September's real import shape: the 212 arrived rows still fulfil |
-| **V9** | Deferred rows are visible | A deferred, **ordered** row appears in Never Arrived with resolve controls — negative-control tested by reverting S3(b) and confirming it disappears |
-| **V10** | No regression | `npm test` green; full Playwright suite 143 passed, 0 failed, against deployed staging bytes post-push |
+| **V7** | ✅ **MEASURED read-only pre-apply, both environments**, per the F122 precedent. Production: OLD body would fulfil **131**, NEW fulfils **124**, **7 deferred** — all on-sale 2026-09-02, two days old and well inside the 14-day window. Staging: 0/0/0, nothing pending. A synthetic `+15d` / `+13d` unit test is still owed once the SQL is applied |
+| **V8** | ✅ **MEASURED** — 124 of 131 (**95%**) are unaffected; the shipment-evidence path carries them, consistent with F115's own 212-of-218 September production numbers |
+| **V9** | ✅ **GREEN 3/3** — new local spec `23-f155-arrival-guard.spec.ts` (uncommitted, same convention as 21/22), run against deployed staging bytes. Positive: an ordered, released, evidence-free row renders with `data-state="neverArrived"` and its own resolve controls. **Two discriminating controls**: an ordered but *unreleased* title stays cleared (the ordered exit is still right pre-release), and an ordered+released title *with* shipment evidence stays cleared (settled outcomes still win). ⚠️ **Not observed RED** — see the caveat below the table |
+| **V10** | ✅ **GREEN** — `npm test` **279/279**; full Playwright **143 passed, 0 failed, 21.3 min, exit 0**, run directly (not via `run-smoke.ps1`, per the 2026-08-30 note) against deployed staging bytes post-push. Zero regressions from S3(b) |
 | **V11** | Live | One real `check-dates.js` run on staging, changes verified by an independent fresh DB read — not the script's own output |
 
-V3, V6 and V9 are the ones that can actually fail. V9 must be negative-control tested: assert it
-red with S3(b) reverted before trusting it green.
+**⚠️ V9's honest limit.** Its three assertions pass, and a first draft was **found weak and
+strengthened before being trusted**: it used `panel.locator('.arrival-resolve-actions').first()`,
+which staging's own real Never Arrived rows would have satisfied whether or not the seeded row had
+controls — an assertion that cannot fail is decoration (F105). It now scopes to
+`.backorder-risk-row` by seeded title, asserts `toHaveCount(1)` and `data-state="neverArrived"`, and
+both control tests carry a non-vacuity guard (the panel must contain the positive fixture before
+anything is asserted absent from it).
+
+**What is still missing is a genuine RED observation.** Seeing V9 fail requires briefly deploying
+the reverted `admin.html` to staging, running the spec, and re-deploying the fix — roughly two
+deploy cycles. **Not done: it was raised for Rick and no answer has been received.** Until then, the
+evidence is that the two controls discriminate a correctly-scoped fix from a blanket "show
+everything", which is strong but is not the same as having watched it go red.
+
+**Fixture hygiene verified rather than assumed** (F130's own failure mode): after the run, 0 F155
+catalog rows, 0 F155 ledger rows and **0 orphaned auth users** remained. One `TEST_PW_` row survives
+on staging from 2026-08-12 — a `PW-ISO-B` tenant-isolation fixture on a different tenant, F130's
+already-documented `pw-iso` bucket, pre-existing and deliberately not touched here.
 
 ---
 
@@ -289,8 +315,12 @@ red with S3(b) reverted before trusting it green.
 - [x] S2 built — scripts repo `f2d31ec`, 2026-09-04. V2/V4/V5 green; **V3 superseded and V6 not yet
       demonstrated** (see § 6) — both need a staging fixture, neither is reproducible on production
       now that the remediation has landed
-- [ ] S3(a) + S3(b) shipped **together**, V7–V9 green, V9 negative-control tested
-- [ ] V10 full suite green against deployed staging bytes post-push
+- [x] S3(b) client shipped to staging (`b5ad0e4`); V7/V8 measured read-only pre-apply
+- [ ] S3(a) SQL applied to staging by Rick — **still pending**
+- [x] V9 green 3/3 (`23-f155-arrival-guard.spec.ts`), assertions strengthened after a weak first
+      draft, teardown verified clean
+- [ ] V9 observed RED — **still owed**; needs a revert/redeploy cycle on staging, raised and unanswered
+- [x] V10 full suite green — 279 unit + 143 Playwright, 0 failed, 21.3 min, exit 0
 - [ ] V11 one real staging run, independently verified
 - [x] The 3 exposed titles (§ 9) corrected and confirmed — **15/15 applied to production
       2026-09-04** by Rick via `fix-stale-dates-f155.js`, verified by the script's own fresh re-read
