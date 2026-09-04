@@ -5811,7 +5811,19 @@ reasoning — only the disposition changed, not the diagnosis.
   gating fulfilment on missing shipment evidence would "trade a silent miss for a silent stall"
   (`findUnverifiedFulfillments()`'s own docblock). That objection stands, so S3 **defers, bounded**
   rather than blocking, and ships together with the panel change that keeps deferred rows visible.
-  Flagged for Rick's explicit sign-off at the gate rather than assumed.
+  **APPROVED by Rick, 2026-09-04**, on being shown the reversal explicitly rather than having it
+  assumed. When S3 lands, record the approval in `docs/f115-arrival-truth-persistence.md` too, so a
+  reader of that doc's "Option A was rejected" line finds the follow-up instead of re-deciding it.
+- **Remediation shipped ahead of the plan, 2026-09-04:** `scripts/fix-stale-dates-f155.js`.
+  `auto_fulfill_past_on_sale()` runs **weekly** (measured 2026-08-07 / 08-14 / 08-20 / 08-28) and
+  the last run was 2026-08-28, so the false fulfilment was due imminently and could not wait for S2.
+  Dry run found **15** corrections — 13 Lunar derived live from the All-Products export (incl.
+  `0826DE0733` FIRE AND ICE #5 moving *earlier*, 10-28 → 09-30) and the 2 PRH DNX #1 rows from a
+  declared provenance table. **9 Lunar codes reported and deliberately skipped** — absent from the
+  export because it lists *available* products (mostly 1:25–1:500 incentive variants); no
+  authoritative date, so no write. Same conventions as `clear-f147-withdrawn.js`: production-only
+  guard, live re-derivation, before-state JSON log written first, sanity band, single y/n,
+  independent fresh re-read as the success check.
 - **Where:** neither environment — nothing has been changed. Production is where the symptom was
   measured.
 - **Related:** F136 (the Revision Sweep this should have been part of), F122 (newest-listing

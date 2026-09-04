@@ -1,6 +1,7 @@
 # F155 — Catalog date-revision detection
 
 **STATUS:** NOT STARTED · staging=— · prod=— · PR=— · findings: F155
+**S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
 this doc is the execution plan.
@@ -223,6 +224,12 @@ existing F134/F143 resolve controls then apply unchanged.
 
 **Without S3(b), S3(a) recreates the exact silent stall F115 rejected.** They ship together.
 
+**APPROVED — Rick, 2026-09-04**, on being shown the reversal explicitly rather than having it
+assumed. F115 Option A's rejection stands as written for *blocking*; this is a bounded deferral with
+a guaranteed visibility surface, which is a different mechanism, not a reversal of the reasoning.
+Record this approval in `docs/f115-arrival-truth-persistence.md` when S3 lands, so a future reader
+of that doc's "Option A was rejected" line finds the follow-up rather than re-deciding it.
+
 ### 5.3 Files
 
 | File | Change |
@@ -293,3 +300,30 @@ Plus the **13 Lunar titles** in § 1.1 whose dates are already known-stale.
 
 **These do not need this plan.** They are hand-fixable now, and should be — the two DNX #1 rows are
 still `fulfilled = false`, so the false fulfilment has not happened yet. The next import fires it.
+
+---
+
+## 10. Remediation script (delivered 2026-09-04, pre-plan)
+
+`scripts/fix-stale-dates-f155.js` — a one-off, matching `clear-f147-withdrawn.js` /
+`f115-s6-backfill-unknown.js` conventions: production-only env guard, live re-derivation (never a
+stored snapshot), before-state JSON log written *before* any write, sanity band, single y/n, and an
+**independent fresh re-read** as the success check rather than its own status codes.
+
+**Why it exists before the plan does:** `auto_fulfill_past_on_sale()` runs **weekly** — measured
+2026-08-07 / 08-14 / 08-20 / 08-28 — and the last run was 2026-08-28. The next one is overdue, and
+it fires the false fulfilment on § 9's titles. This could not wait for S2.
+
+**Dry run, 2026-09-04 — 15 corrections across 1,068 catalog rows holding open reservations:**
+
+- **13 Lunar**, derived live from the All-Products export. Includes `0826DE0733` FIRE AND ICE #5
+  moving 2026-10-28 → **2026-09-30**, the *earlier* direction (§ 1.1).
+- **2 PRH**, from the declared `MANUAL_PRH` table — the DNX #1 pair, 2026-09-02 → 2026-09-16,
+  provenance recorded in the script (PRH site + invoice, Rick 2026-09-04). There is no downloadable
+  source; the table must never be extended from a guess.
+- **9 Lunar codes reported and deliberately skipped** — absent from the export because it lists
+  *available* products. Mostly 1:25–1:500 incentive variants, plus `0726DC0300`, the only one whose
+  on-sale date has passed. No authoritative date, so no write.
+
+The script is idempotent and re-runnable. **It must be re-run after any older-month import**, which
+restores whatever that distributor file says — the stale date, for a frozen PRH month.
