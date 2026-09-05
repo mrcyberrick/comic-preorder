@@ -176,12 +176,57 @@ anything. Both now scoped to `#lunar-list, #prh-list`. Two intermediate runs als
 transient network errors (a `Failed to fetch` inside the Supabase bundle during sign-in, and one
 30 s page-load timeout) — infrastructure, not this change; the passing run is the 18/18 above.
 
-**Honest limits.** The rejection has **no confirm step**, matching F143's own button exactly — a
-misclick is customer-visible via F120's badge, and the ledger is append-only, so a mistake is
-corrected with a further adjustment. Flagged deliberately rather than changed unilaterally; say so
-if you want one. And the F156 badge fix is **not verified end-to-end**, because the backfill has not
-been run — what is proven is that the badge sites read the column correctly and that the column is
-empty on 67 rows.
+**Two follow-ups from Rick landed the same session, both on staging** (`12942f9`, `74ea7ec`).
+
+**(1) The rejection write is now CONFIRMATION-GATED** — *"I do not think there is an in-app (UI)
+recovery from a misclick[;] a confirmation is needed."* Measured before building to it, and he is
+right where it counts: `arrivals.html`'s recon row offers nothing once it reads "Rejected —
+recorded", and while `admin.html`'s Status button becomes clickable again in the rejected state,
+what it opens is Mark Ordered — it records a **fresh** submission, it does not undo, and nothing
+announces itself as recovery. `confirmSupplierRejection()` lives in **`app.js`** because the
+*wording* is the safeguard and three copies would drift; it names the title, the adjustment
+quantity, the customer-visible effect (F120's badge, immediately), and states plainly that the
+ledger is append-only. Native `confirm()`, matching `admin.html`'s own convention for irreversible
+admin actions (`:3666` clear deadline, `:4376` decline account, `:4403` suspend) — the move away
+from native dialogs here was about `prompt()` for INPUT, not confirmation. Gated **inside the shared
+writer**, so all three entry points are covered including F143's original panel button: the
+reasoning holds identically there, and gating two of three would leave the same misclick
+unrecoverable on the third.
+
+**(2) Mark Ordered now unlocks until 7 days after fulfilment** — *"I would like to see the order
+button unlocked up to 7 days after fulfilment."* It was `disabled` for the entire life of a matched
+code, which is the greyed "✓ Ordered (1)" in his screenshot. **This directly retires a workaround
+§ 13 F143 already documented**: that entry records, against a real live case (PRH
+`75960621630700217`, 1 ordered / 1 reserved), that "there is nothing else to click on that row" and
+the only working route was four navigations through the Order Builder's cycle selector. Unlocking is
+a *real* correction path — the Mark Ordered modal already accepts 0 and **negative** quantities
+(F117/F108 § 4.4), and its suggested quantity is `Math.max(0, totalQty - priorQty)`, so a covered
+code defaults to 0 rather than nudging toward the F102 over-order the modal exists to prevent. The
+rule: not all fulfilled → unlocked (cycle live); fulfilled ≤ 7 days → unlocked; fulfilled > 7 days →
+locked; fulfilled with a NULL `fulfilled_at` → **locked**, preserving today's exact behaviour, so
+the change is strictly additive. **The window closing is what makes it safe** — an aged, settled
+cycle re-locks, so F102's guard still covers what it was built for.
+
+**Test impact swept, not assumed — three specs would have gone red or silently vacuous.**
+`15-order-export-ledger.spec.ts:421` and `:1292` both asserted `toBeDisabled()` on an **unfulfilled**
+matched code, which the new rule deliberately unlocks; both updated to `toBeEnabled()` with the
+reason inline, and the **locked** half is now covered for the first time in the harness (V22/V23,
+which backdates `fulfilled_at` — a service-role write spec 15 cannot do — and asserts 2 days
+unlocked / 10 days locked). `22-f143-f144-ordering-rejections.spec.ts:239` clicks the reject button:
+**Playwright auto-dismisses dialogs**, so without an explicit handler it would have clicked into a
+no-op and failed against an unchanged ledger.
+
+**Harness now 22/22**, and it stopped using magic links: three consecutive runs died inside
+`supabase.min.js`'s `_getSessionFromURL` with `TypeError: Failed to fetch` and landed on the apex
+marketing page — F107 pressure, worsened by the 146-test suite having just run. It now mints a
+session with a password grant and injects it via `addInitScript`, which touches that limiter not at
+all. **V19/V20/V21 are the ones that matter for the confirm**: the dialog appears with the right
+wording, and **Cancel writes nothing and leaves the button usable** — a confirm whose Cancel still
+writes is worse than none, because it reads as protection.
+
+**Honest limit, still open:** the F156 badge fix is **not verified end-to-end**, because the backfill
+has not been run — what is proven is that the badge sites read the column correctly and that the
+column is empty on 67 rows.
 
 **Last completed work: F155 filed + S1 shipped + 15 PRODUCTION date corrections applied,
 2026-09-04** (`8700a65`, `0f4be33`, `2e2feac`, all doc-only on staging, pushed). **⚠️ PRODUCTION DATA
@@ -2410,7 +2455,8 @@ the selected cycle is excluded **and** surfaced in the held-back panel (V3); an
 already-ordered code is flagged with its prior quantity and defaulted to the
 remainder, never auto-suppressed (V4); the Status-column button reflects
 ordered-vs-reserved (`Mark Ordered` / `Add (n of m)` / `Over (n of m)` /
-`Ordered (n)` disabled); the backorder-risk panel separates At risk,
+`Ordered (n)` — *disabled unconditionally until 2026-09-05; now disabled only once the 7-day
+correction window has closed, see § 13 F143*); the backorder-risk panel separates At risk,
 Backordered and cleared-by-ledger (V7); and My List shows "Order placed" driven
 by the ledger with `fulfilled` still false.
 **Writing specs against this path: staging carries 857 real backfilled ledger
