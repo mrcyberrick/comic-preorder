@@ -5830,6 +5830,17 @@ reasoning — only the disposition changed, not the diagnosis.
   fulfilment, which cannot help PRH), F115 (arrival truth, whose Option A this revisits), F146
   (older-month re-imports, which would revert any hand-corrected date), F110 (cited by the wrong
   runbook sentence).
+- **FOLLOW-ON SHIPPED 2026-09-05 (staging), no new finding ID.** The "no surface at all" half of
+  this finding now has controls. Rick hit the identical collision from the **shipment-reconciliation
+  side**: `0726IM0319` (SPAWN 77 CVR J, 1:500) carries one `monthly` ledger row of qty 1 against 1
+  reserved, so Mark Ordered is correctly `disabled` and `computeBackorderRisk()` clears it before
+  every other test — while `fulfilled=false` keeps it out of `neverArrivedFromFulfilled()` too. S3's
+  panel-ordering fix addresses this but only 14 days past on-sale; the reconciliation panel sees it
+  on the day the invoice is imported. F143's write (`recordSupplierRejection()`, one writer) is now
+  reachable from the admin distributor-table Status column and from `arrivals.html`'s exceptions
+  list, both guarded on `ledgerNetQty > 0` and, for the table, `!hasShipmentEvidence()`. Verified
+  18/18 against deployed staging (`playwright/f156-reject-surfaces-verify.mjs`, local-only); full
+  suite 146 passed / 0 failed. Recorded here so a reader of this finding does not re-derive it.
 
 #### F156 — Lunar restricted-variant ratios never reached `order_requirement` on rows imported before F132, so no restriction badge renders for them anywhere
 
@@ -5888,6 +5899,9 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Related:** F132 (introduced the column and the Lunar derivation; its rows-imported-before gap is
   this finding), F144 (the Order Builder badge that reads the same column), F155 (same
   never-re-pull-an-older-month assumption, different column).
+- **Found alongside a second, separate defect in the same screenshot**, filed under **F155** rather
+  than here because F155 already owns it: an ORDERED title absent from the invoice has no reachable
+  "record rejection" control anywhere. Fixed the same session — see F155's FOLLOW-ON bullet.
 
 Next free finding ID: **F157**.
 

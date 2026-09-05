@@ -429,3 +429,39 @@ runway. FIRE AND ICE #5 is the only one at risk, and only because its FOC moved 
 **Carry into S2's next iteration:** the report should rank FOC changes by *how much ordering runway
 is left after the correction*, and shout when a pulled-forward FOC lands inside the current ordering
 window on an unordered title. Today that had to be derived by hand after the run.
+
+---
+
+## 13. Follow-on — the "no surface" half now has controls (2026-09-05, staging)
+
+§ 0 records that no admin panel caught DNX #1 because `computeBackorderRisk()`
+(`admin.html:1749`) clears any code with `ledgerNetQty > 0` before every other test, while Mark
+Ordered was correctly `disabled`. **S3(b) fixes the test order. It does not give the admin a
+control, and its deferral is 14 days past on-sale** — so the earliest S3 can surface a title is
+about two weeks after the customer was told "Order placed."
+
+Rick hit the identical collision from a different direction on 2026-09-05: the **This Week
+reconciliation panel**, which lists titles reserved for the week and absent from the imported
+invoice. That is the *earliest* honest signal — it exists on the day the shipment is imported — and
+the panel's own footnote already told the operator to go "check the invoice for shorts, or a
+distributor rejection at order time" with nothing on the page to check against and no way to act.
+
+Measured on production, `0726IM0319` (SPAWN 77 #1 CVR J, 1:500):
+
+| | |
+|---|---|
+| ledger | one `monthly` row, qty 1, submitted 2026-07-26 → **net 1** |
+| reserved | 1 → `orderMatched` → **"✓ Ordered (1)", `disabled`** |
+| `fulfilled` | `false` → `neverArrivedFromFulfilled()` cannot see it |
+| `computeBackorderRisk()` | cleared by the `ledgerNetQty > 0` exit |
+
+**What shipped.** F143's write was split into `recordSupplierRejection(btn)` — one writer — and
+given two more entry points: the admin distributor-table **Status column** (offered when
+`ledgerNetQty > 0` **and** `!hasShipmentEvidence(c)`), and the **arrivals recon exceptions list**,
+which also now states each row's order state. The shipment-evidence guard is the load-bearing half:
+recording a rejection for a title that actually arrived would flip F120's customer-facing rejected
+badge on a book the customer can collect.
+
+**Verified** 18/18 against deployed staging (`playwright/f156-reject-surfaces-verify.mjs`,
+local-only; it must SEED, because every recon exception row on staging has ledger net 0), plus the
+full suite at 146 passed / 0 failed. **No finding ID consumed** — this advances F155.
