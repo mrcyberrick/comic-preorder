@@ -503,3 +503,33 @@ badge on a book the customer can collect.
 **Verified** 18/18 against deployed staging (`playwright/f156-reject-surfaces-verify.mjs`,
 local-only; it must SEED, because every recon exception row on staging has ledger net 0), plus the
 full suite at 146 passed / 0 failed. **No finding ID consumed** — this advances F155.
+
+---
+
+## 13. The production run of 2026-09-04 — the case S3 exists for, observed live
+
+Measured 2026-09-05, the day after. Production's weekly import ran on **2026-09-04** and
+auto-fulfilled **131** reservations — exactly the number § 6 V7 had predicted for the pre-F155 body.
+Seven of those had **no shipment evidence** and are precisely the rows S3(a) would have deferred:
+
+```
+75960621630700116  BLACK PANTHER/NAMOR: DOOMED #1 …          arrival_outcome=unknown
+75960621146301517  CAPTAIN AMERICA #15 AKA VARIANT [ARM]     arrival_outcome=unknown
+75960621146301516  CAPTAIN AMERICA #15 ALEX ROSS … (×2)      arrival_outcome=unknown
+75960621122701616  FANTASTIC FOUR #16 ALEX ROSS … (×2)       arrival_outcome=unknown
+0726DC0300         DC CONNECT #76 BUNDLES                    arrival_outcome=not_arrived
+```
+
+**F115's safety net held, and that is the honest framing.** Six carry `arrival_outcome = 'unknown'`,
+so `neverArrivedFromFulfilled()` surfaces them in Never Arrived with resolve controls; the seventh
+had already been resolved `not_arrived` by hand. Nothing was lost and nobody has to go looking.
+What did happen is that six customers were told "Order placed" for books with no arrival evidence,
+which is the state F115 exists to make *recoverable* and S3 exists to make *avoidable*.
+
+**This is why the October-gate sequencing recommendation was revised.** The earlier advice — hold S3
+until after 2026-09-25 so F146/F147 get a clean first exercise — was written before it was visible
+that this failure fires **weekly**, not monthly. Three more weekly runs land before the gate. And
+S3 is no longer the unproven change that reasoning assumed: it has a live 3/3 functional test whose
+fixture A fails against the old body, plus a genuine observed red on the panel half (§ 6). Promoting
+it now gives it three weeks of production soak *before* October rather than making October its first
+outing.
