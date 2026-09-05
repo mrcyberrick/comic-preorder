@@ -1,6 +1,6 @@
 # F99 — consolidate the transactional sending identity onto `pulllist.app`
 
-**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **PROVIDER DECIDED 2026-09-02: Resend — GREEN discovery, `pulllist.app` verified, flat `noreply@pulllist.app` addressing (§ 10, `docs/f99-resend-discovery.md`)**; **migration EXECUTED on staging, GREEN, same day — `docs/f99-resend-migration.md` M1–M5 complete** (S4/old-S3-equivalent cutover is done, on staging); **production not cut over — needs Rick's explicit separate request (M6)** | staging=`85ce9ce` (code) + RESEND_API_KEY/MAIL_FROM_EMAIL secrets set | prod=`mrcyberrick.us`/MailerSend (unchanged) | findings=F99,F72,F148,F145,F149
+**STATUS:** PLANNED — **S0 ANSWERED 2026-08-31**; **S1 DONE on staging 2026-08-31** (`eff9793`); **S2 DONE 2026-09-01** (DNS pre-published, SPF merged at cutover); **S3 ATTEMPTED 2026-09-01, ROLLED BACK, CAUSE UNRESOLVED — read § 4 S3 before retrying**; **Brevo transactional EVALUATED AND REJECTED 2026-09-02 (§ 9)**; **second free MailerSend account CLOSED — ToS violation (§ 8 Q9)**; **PROVIDER DECIDED 2026-09-02: Resend — GREEN discovery, `pulllist.app` verified, flat `noreply@pulllist.app` addressing (§ 10, `docs/f99-resend-discovery.md`)**; **migration EXECUTED, BOTH ENVIRONMENTS, COMPLETE — `docs/f99-resend-migration.md` M1–M7 all green, same day.** Production promoted via PR #148; a real production send authenticated perfectly but surfaced **F152** (Outlook spam placement, monitor-not-act) | staging=`85ce9ce` (code) + secrets set | prod=PR #148 merged (`4a4a475`) + secrets set — **now serving from `noreply@pulllist.app` via Resend** | findings=F99,F72,F148,F145,F149,F152
 
 **Status:** **S0 is CLOSED. The architecture is settled: verify `pulllist.app`, send per-tenant
 `noreply@<slug>.pulllist.app`, on the single free-tier domain slot.** F99's recorded per-tenant
@@ -903,12 +903,18 @@ measurement rather than guesswork (D7 forced it — see above), and `pulllist.ap
 MailerSend serving production throughout, zero downtime. **Result: GREEN.** Full record in that doc;
 the summary is above this subsection.
 
-**✅ Migration itself DONE on staging, same day: `docs/f99-resend-migration.md` M1–M5, GREEN.**
-All six functions cut over to Resend, `verify_jwt` preserved, two real sends confirmed clean from
-delivered headers, full regression suite green (279 unit + 143 Playwright). MailerSend was never
-touched — production keeps serving from it unmodified, exactly per this section's own "no
-parallel-run problem" finding. **Remaining: M6 (production promotion), Rick's explicit call, not
-started.** Full record in the migration doc itself.
+**✅ Migration DONE, BOTH ENVIRONMENTS, same day: `docs/f99-resend-migration.md` M1–M7, GREEN.**
+All six functions cut over to Resend on staging first, `verify_jwt` preserved, two real sends
+confirmed clean from delivered headers, full regression suite green (279 unit + 143 Playwright).
+**Promoted to production the same day, Rick's explicit request** ("start M6/M7") — PR #148
+(merge `4a4a475`); the merge conflicted on all six files because production's `main` had never
+received F99 S1's parameterization (every prior promotion deliberately restored them to hardcoded
+literals), resolved by taking staging's side wholesale. A real production send authenticated
+perfectly (`dkim=pass d=pulllist.app`, `spf=pass` aligned, `dmarc=pass`, `compauth=pass reason=100`)
+but landed in spam — filed as **F152**, a cold-start Microsoft-reputation read, not a technical
+defect; Rick's call is to monitor, not act. **Both environments now serving from
+`noreply@pulllist.app` via Resend.** MailerSend keeps both accounts' credentials as a dormant
+rollback path (M8, optional, not scoped). Full record in the migration doc itself.
 
 ---
 
@@ -990,3 +996,17 @@ native mail path exists), full regression suite green. MailerSend untouched thro
 serving production. `register-customer`'s live UI check accepted as a residual (Turnstile-gated, no
 real tenant-hostname URL on staging). **Production not cut over — M6 needs Rick's explicit separate
 request.** No finding ID consumed.
+
+**Eighteenth pass, 2026-09-02 (same day, Rick's explicit request "start M6/M7"): production
+promotion COMPLETE, GREEN. Both environments now on Resend.** PR #148 merged (`4a4a475`) — conflicted
+on all six Edge Functions because `main` had never received F99 S1 (every prior promotion had
+restored these files to hardcoded literals, matching `config.js`'s own preservation pattern);
+resolved by taking staging's side wholesale, verified byte-identical by hash before committing. F125
+tree-integrity checks green throughout. Secrets set (Rick reused staging's `RESEND_API_KEY` rather
+than a fresh one — his explicit choice this time); all six deployed with `verify_jwt` preserved and
+re-confirmed. Real production send authenticated fully clean (`dkim=pass d=pulllist.app` +
+`amazonses.com`, `spf=pass` aligned, `dmarc=pass`, `compauth=pass reason=100`) but landed in spam —
+filed as **F152**, read as Microsoft-specific cold-start reputation rather than a defect (Gmail and a
+third-party relay both delivered cleanly earlier this session), mitigated by an existing
+spam-folder prompt on `forgot-password.html`, Rick's call: monitor, don't act. Write-smoke skipped —
+this promotion never touches `app.js`/HTML or the reserve path, confirmed from the diff itself.

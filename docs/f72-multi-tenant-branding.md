@@ -1,6 +1,20 @@
 # F72 — multi-tenant branding: remove the founding tenant's identity from every tenant-facing surface
 
-**STATUS:** PLANNED — **§ 8 Q1–Q6 all ANSWERED 2026-09-01 (Rick); ready to execute** | staging=— | prod=— | findings=F72,F99,F145,F151
+**STATUS:** **IN PROGRESS — RESEQUENCED 2026-09-03, Rick: ship free-tier-only first for a demo.**
+**S0 EXECUTED 2026-09-02. S1a (free-tier web) + S2a (register-customer, free-tier email) EXECUTED
+2026-09-03; S3 (print) EXECUTED 2026-09-04 — all on STAGING** (`d7669b0`, `efadbf0`, `b1e1445`) —
+see § 4.1a/§ 4.2a/§ 4.3a, the live record for this resequence. **A demo tenant exists on staging**
+(`demoshop`, `plan=free`, 2,288 catalog rows, reachable at `?t=demoshop` — no DNS needed). A
+free-tier prospect walkthrough — signup, browse, reserve, print, my list, arrivals, subscriptions —
+now carries **zero founding-tenant identity anywhere reachable in that flow.** § 4.1/§ 4.2/§ 4.3's
+original uniform-design text is SUPERSEDED for the parts S1a/S2a/S3 cover; still accurate in shape
+for what remains (the other five mail functions — `approve-customer`, `invite-customer`,
+`notify-customers`, `reset-password`, `send-my-list` — still unconditionally founding-branded). §
+8 Q1–Q6 (2026-09-01) still hold for *what data exists*. **Q7–Q11** answered 2026-09-02 (see § 0.1).
+**§ 4.1/§ 4.2's remaining, NOT-yet-executed scope (the other five mail functions) is still
+design-level** and owes the free/paid-content-per-site pass § 0.1's closing note describes — do not
+execute the untouched parts from their current text; S1a/S2a/S3 are the pattern to extend, not the
+original steps. | staging=2026-09-04 (S0,S1a,S2a,S3) | prod=— | findings=F72,F99,F145,F151
 
 **Owner finding:** F72 (`docs/technical-reference.md` § 13). This plan **widens F72's
 recorded scope** — it is filed as one email template in `register-customer`, and the
@@ -16,7 +30,129 @@ per CLAUDE.md § Staging Only.
 
 ---
 
-## 0. Why this is worth doing now
+## 0.1 Tier-gated branding — 2026-09-02 revision (read this first)
+
+**This section changes the plan's premise. Everything below it (§ 1–§ 10) was written and approved
+2026-09-01 against a *uniform-for-everyone* branding model. That model is superseded — Rick's
+explicit direction, decided in a planning conversation 2026-09-02, after F99's own migration
+finished (both environments, same day): branding is now split by `tenants.plan`, and the split is
+the product's actual free-vs-paid lever, not an afterthought layered on top of a uniform fix.**
+
+### Why this changed
+
+F72 was originally framed as pure defect-fixing — "the software works for two tenants" (Phase 5)
+vs. "the software can be sold to a second tenant" (blocked by identity leaks). That framing produced
+a plan where every tenant, paid or free, gets full identity everywhere. But the live pricing page
+(`index.html:247-262`) already sells a "Branded" tier — *"your own `yourshop.pulllist.app` address,
+your logo and colors, and customer emails from your shop"* — and a uniform-for-everyone F72 would
+make that entire value proposition **disappear the moment F72 shipped**: two of its three claimed
+perks (subdomain, logo/colors) would already be free-tier baseline, and the third (branded sending
+address) isn't built by F72 at all (F99 kept the sending address flat for everyone, deliberately).
+Nobody had caught that collision before this conversation.
+
+### The mechanism: `tenants.plan` — already exists, already has live values, currently dead code
+
+No new schema needed. `tenants.plan` (`text NOT NULL DEFAULT 'free'`) has existed since before this
+plan was written (`docs/technical-reference.md` § 4.1) and is **read by zero lines of code anywhere**
+— confirmed by grep across `app.js` and every Edge Function, 2026-09-02.
+
+**Live values, checked 2026-09-02 (service-role read-only):**
+
+| Environment | Tenant | `plan` |
+|---|---|---|
+| staging | `raysandjudys` (test proxy for the founding tenant) | `pro` ✅ |
+| staging | all four `pw-*` Playwright fixtures | `free` (correct — none are paying) |
+| production | **`rjbookstop` — the real, paying, $50/mo Ray & Judy's Book Stop** | **`free` ❌ — a real data bug** |
+| production | `comicstore` (demo/test, never a real customer) | `free` ✅ correct |
+
+**Production's actual paying tenant is currently marked `free`.** This must be corrected
+(`UPDATE tenants SET plan = 'pro' WHERE slug = 'rjbookstop'`) as part of shipping this work, not
+left for later — shipping tier-gated branding without that fix would flip Ray & Judy's own
+production site to generic branding, which is exactly backwards. **New completion-criteria item**, see
+§ 9.
+
+### The surface-by-surface design (Rick, 2026-09-02)
+
+The balance being struck, stated explicitly so it isn't re-derived: **free tier needs enough
+identity to establish trust with a new customer** (a shop's own name, so the relationship reads as
+legitimate, not as a generic tool) **while paid tier needs enough held back to motivate upgrading**
+(full identity, custom visual branding, and a branded link). The four rows differ in how much of
+that identity shows, and the pattern is deliberate — web and email are where a free customer needs
+to trust the shop is real, so the name shows; print has the least trust-building need (handed over
+in person by a staffer the customer already trusts) and the most visible upgrade nudge (an owner
+sees their own pickup slips carry no name/phone and that's a concrete, tangible reason to pay):
+
+| Surface | Free tier | Paid tier |
+|---|---|---|
+| **Color / logo** — everywhere | PULLLIST apex defaults, always — `branding.primary_color`/`branding.logo_url` are **never** applied | Tenant's own `primary_color` / `logo_url` (existing `Branding.apply()` mechanism, § 1.3) |
+| **Web pages** (nav, footers, pending-approval messages, welcome modal) | Tenant's own `display_name` shown (trust signal) | `display_name` + `contact_phone` + `location` + `branding.website` shown wherever § 2.1 already identifies a site |
+| **Emails** (all six Edge Functions) | PULLLIST template chrome + tenant name in subject/greeting/`from` display-name; footer carries **no** shop phone/address; **link: `pulllist.app`** | Name + phone + address in the footer; PULLLIST chrome (color stays platform-default here too, same rule as web); **link: `<slug>.pulllist.app`** |
+| **Print-outs** (My List, pickup slips, bagging list, catalog print) | **Fully generic** — no name, no phone, no address; **link: `pulllist.app`** | Full identity — name + phone + street address, matching what's live today; **link: `<slug>.pulllist.app`** |
+
+### The link-by-tier requirement — new work, not a small addition
+
+**Every email and every print-out gets a "View Online" style link, and which URL it carries is
+itself tier-gated.** This is genuinely new scope in three ways:
+
+1. **It resolves § 4.3's blocked hostname item, but only for paid tenants.** § 4.3 (below, 2026-09-01)
+   correctly blocked deriving `<slug>.pulllist.app` unconditionally — F145 measured there is no
+   wildcard DNS, so an unprovisioned tenant's paper would carry a **non-resolving URL**. This
+   revision doesn't lift that block for everyone; it resolves it narrowly: **`<slug>.pulllist.app`
+   is only ever printed/emailed for a `plan = 'pro'` tenant, and provisioning that hostname becomes
+   a required, manual step of onboarding a tenant to paid** (same mechanism as `comicstore` today,
+   5.5's pattern) — not a self-serve or wildcard mechanism. A paid tenant without a provisioned
+   subdomain is a shipping error, not an edge case to handle gracefully.
+2. **Free tier's link is always safe** — `pulllist.app` is the apex, always resolves, needs no
+   per-tenant provisioning. This is also new: today's print-outs that already carry a "View Online"
+   link (`admin.html`'s Bagging List and Print Catalog, PR #140) hardcode
+   `rjbookstop.pulllist.app` unconditionally — that becomes tier-conditional too.
+3. **No email carries any such link today.** All six templates' only links are the specific
+   action URL (reset link, magic link, catalog CTA) — verified by re-reading all six in this same
+   session (F99 M2). A generic "View Online: `{link}`" line is new copy in every template's footer.
+
+### What this means for § 4's work breakdown
+
+**S1–S4 below (2026-09-01) still describe correct mechanics — the data plumbing, the `Branding.apply()`
+extension, the client hook pattern, the Edge Function tenant-row fetch — but every render decision
+in them needs a `plan === 'pro' ? tenantValue : genericDefault` branch, not the unconditional
+`tenantValue ?? foundingLiteral` fallback they currently describe.** Concretely:
+
+- **The `??`/`||` fallback content changes meaning.** Today's fallback literals
+  (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop" / the street address) exist so an
+  *unresolved* tenant renders safely. Under tier-gating, the **free-tier branch is not a fallback
+  for a broken lookup — it is the deliberately-shipped free experience**, and its content must be
+  genuinely generic (PULLLIST-only), never a specific tenant's literal identity. Re-using Ray &
+  Judy's info as the "default" would re-introduce F72's original defect for every free tenant.
+- **S1** (client) needs a `TenantContext.current().plan` (or equivalent) read available wherever
+  § 2.1's hooks render, gating name/phone/location/website/color/logo independently per the table
+  above — not a single flag, since web shows name-for-free but print does not.
+- **S2** (Edge Functions) needs each function's tenant-row fetch to include `plan`, and the
+  subject/body/footer construction to branch on it — including the new "View Online" line.
+- **S3** (print) needs the *existing* `rjbookstop.pulllist.app` literals in `admin.html` made
+  tier-conditional (§ 4.3 above), extended to **mylist.html and arrivals.html's print outputs**,
+  which today have no such link at all and were explicitly out of scope for PR #140.
+- **A new S0** (implied, not yet written up as steps): fix `rjbookstop`'s `plan` value; write the
+  shared `plan === 'pro'` check as one helper both client and server code call, rather than six
+  independent ternaries; decide and write the exact generic-tier copy (what a free-tier email
+  subject/footer/print header literally says).
+
+**This section is a design record, not a byte-exact implementation plan.** § 4's own steps need a
+real rewrite pass — re-reading every site in § 2.1 from disk and stating its free-tier and paid-tier
+content explicitly — before this is ready to execute. That pass has not happened yet.
+
+### New decisions (Q7–Q9), same numbering series as § 8
+
+| # | Question | ✅ DECISION |
+|---|---|---|
+| **Q7** | What gates the tier? | **`tenants.plan`** (`'free'` \| `'pro'`) — already exists, was dead code. `rjbookstop` must be corrected to `'pro'` before/as part of shipping (data bug, § 0.1 above) |
+| **Q8** | What does "generic" free-tier content actually say? | Web/email: tenant's own name, PULLLIST chrome, no phone/address, link to `pulllist.app`. Print: no identity at all beyond PULLLIST, link to `pulllist.app`. Color/logo: PULLLIST defaults on every surface, both tiers' emails, and paid-tier email chrome too — **the one thing that's never tenant-customized on email regardless of plan** |
+| **Q9** | Should `<slug>.pulllist.app` ever appear for a free tenant? | **No, never.** Only `plan = 'pro'` tenants get the subdomain link, and only once it's been manually provisioned as part of their paid onboarding — never derived/assumed (F145's own warning) |
+| **Q10** | The live pricing page (`index.html:247-262`) sells "Branded" as including *"customer emails from your shop"*, but F99 deliberately shipped a **flat `noreply@pulllist.app` sender for every tenant**. What does paid tier actually promise on email? | **Footer identity + branded link; edit the pricing copy to match.** Paid emails carry the shop's name as the `from` **display name**, name + phone + full postal address in the footer, and a `<slug>.pulllist.app` "View Online" link. **The sending address stays flat for both tiers** — no new DNS, no new domain slot, no reopening of F99's addressing decision. ⚠️ **Consequence: `index.html:247-262` is now knowingly stale copy and must be edited as part of this work** — see § 4.4 S4. Rejected alternative: per-tenant sending addresses, which Resend's own D7 probe makes expensive (a verified parent does **not** cover subdomains, so each paid tenant costs a domain slot — Resend Pro, $20/mo) |
+| **Q11** | § 9 requires the tier check be "written once … not six independent ternaries". There is no `_shared/` folder and **zero cross-function imports** in this repo (verified 2026-09-02); F99 S1 duplicated its `MAIL_FROM_*` constants six times instead. | **Six byte-identical copies, plus V10 — a grep gate that fails when they diverge.** Satisfies the criterion's intent (no *divergent* ad-hoc ternaries) with a property that is **checked** rather than assumed, and keeps the codebase's existing zero-import EF convention intact across six `verify_jwt`-sensitive deploys. Full reasoning and the canonical block: § 4.0.1 (4) |
+
+---
+
+## 0.2 Why this is worth doing now
 
 PULLLIST is being priced and sold to other shops (Founding Partner tiering). Today a
 second shop's customers would receive email and printed pickup slips carrying **Ray &
@@ -216,31 +352,358 @@ correct for every tenant. This plan parameterizes *store* identity only.
 
 ## 3. The separation that makes this shippable — F72 is not blocked by F99
 
-F99's § 13 entry says F99 *"must be designed together with F72, not sequenced ahead of
-it."* That constrains **F99**. It does not make F72 wait on F99, and it must not, because:
+> ⚠️ **Overtaken by events, kept for the record — F99 is done, both environments, 2026-09-02.**
+> The reasoning below was written 2026-09-01 while F99 S3 was genuinely stuck. It resolved the same
+> day this revision was written, via a different provider (Resend) rather than the blocked
+> MailerSend path — see `docs/f99-resend-migration.md`. The **conclusion** (F72 doesn't need to
+> wait on F99) still holds, for a stronger reason than the one below: there's no longer anything to
+> wait *for*. **The specific address** cited below is wrong — see the correction after the list.
 
-- **F99 S3 is stuck.** Attempted and rolled back 2026-09-01 at the cost of a ~50-minute
-  production outage, `#MS42207` **cause unresolved**, next attempt gated on buying a
-  month of MailerSend paid tier (§ 8 Q7 there).
-- **The From *name* is free text.** MailerSend takes a display name alongside a verified
-  From address, so `"Comic Shop X" <noreply@mrcyberrick.us>` needs **zero** DNS work.
-  F99 S1 already made that name a variable.
+F99's § 13 entry says F99 *"must be designed together with F72, not sequenced ahead of
+it."* That constrained **F99**. It never made F72 wait on F99, and by 2026-09-02 there's nothing
+left to wait on:
+
+- ~~**F99 S3 is stuck.**~~ **Resolved 2026-09-02** — not by unsticking S3, by replacing it. Both
+  environments now send via Resend, `noreply@pulllist.app`, cleanly authenticated on both
+  mechanisms. See `docs/f99-resend-migration.md`.
+- **The From *name* is free text**, same fact under either provider. Resend takes a display name
+  alongside a verified From address exactly like MailerSend did, so `"Comic Shop X"
+  <noreply@pulllist.app>` needs **zero** DNS work. F99 S1's parameterization survived the provider
+  swap unchanged in shape.
 - **Body, subject and footer are pure template code.** No vendor involvement at all.
 
-**What still leaks after this plan, and why it is acceptable:** mail arrives from
-`noreply@mrcyberrick.us`. That reads as an unbranded relay — odd, and worth fixing — not
-as a competitor's shop. **That is the whole difference between "odd" and "unsellable",
-and it is why F72 goes first.**
+**Corrected sending address:** mail now arrives from **`noreply@pulllist.app`**, not
+`noreply@mrcyberrick.us` — flat, for every tenant, any `plan` value, per § 0.1 Q8. If anything this
+argument is *stronger* now than the original "odd, not a competitor's shop" framing: `pulllist.app`
+reads as the platform's own domain, not as any one shop's (founding or otherwise), so there's no
+longer even a founding-tenant-flavored oddity to explain away.
 
-The one hard F99/F145 dependency is § 4.3's hostname half, which is scoped out.
+The one hard F145 dependency is § 4.3's hostname half — **resolved for paid tenants**, § 0.1 Q9.
 
 ---
 
 ## 4. Work breakdown
 
-Three steps, each independently shippable and independently revertible. **S1 and S2 do
-not depend on each other** and may be done in either order or in one branch; S3 depends
-on S1's helper existing.
+**Four steps** (S0 added 2026-09-02), each independently shippable and independently revertible.
+
+**S0 is now first and is a hard prerequisite for the other three** — every render decision in S1,
+S2 and S3 branches on the tier input S0 provides. **S1 and S2 still do not depend on each other**
+and may be done in either order or in one branch once S0 has landed; S3 depends on S1's helper
+existing.
+
+*(This paragraph read "Three steps" and described S1 as the entry point, from the 2026-09-01
+uniform-branding plan. § 0.1's tier revision made S0 load-bearing, and this pass wrote it up as
+§ 4.0.)*
+
+### 4.0 S0 — The tier mechanism (no render change anywhere)
+
+**Added 2026-09-02, Rick's explicit direction.** S0 did not exist as a step until this pass — § 0.1
+named it only as *"a new S0 (implied, not yet written up as steps)."* It is now the **first**
+shippable step, and it is deliberately the one step that changes **no rendered output on any
+surface**: it makes the system able to *identify* a paid tenant — the stated success criterion —
+without yet acting on that identity anywhere.
+
+**Why first.** Every render decision in S1, S2 and S3 needs a `plan === 'pro'` branch (§ 0.1). Ship
+that branch's *input* once, verifiably, and the three leak-closing steps each become a mechanical
+edit against a helper that already exists and is already proven. Ship it last and every S1 site
+gets reopened.
+
+**S0 touches zero leak sites.** All 18 Tier-A client sites, all 6 Tier-B footers and all six email
+templates render byte-identically before and after. That is what makes V6 cheap here, and it is the
+property to protect while editing.
+
+#### 4.0.1 Byte-exact edits — re-read from disk 2026-09-02
+
+**(1) `app.js` — widen the authenticated tenant read.** Line 84 today (verified 2026-09-02):
+
+```
+            .select('id, slug, display_name, branding')
+```
+
+becomes
+
+```
+            .select('id, slug, display_name, branding, plan')
+```
+
+RLS already permits it (§ 1.2) — row-level, no policy change, no RPC change. **Leave
+`lookupTenantBySlug()` and `resolve_tenant_by_slug` untouched** (§ 1.2 trap): `plan` deliberately
+does **not** reach the anon path, so no anon-reachable surface may branch on tier. See § 4.0.4.
+
+> ⚠️ **Sequencing note for S1.** § 4.1 step 1 describes this same line and was written against its
+> **pre-S0** text. After S0 the line reads `'id, slug, display_name, branding, plan'`, and S1's edit
+> adds `contact_phone, location` to *that* string. Re-read the line from disk before editing it —
+> do not apply § 4.1's `old_str` literally.
+
+**(2) `app.js` — add the `Tier` helper.** Insert immediately after `window.Branding = Branding;`
+(line 202 today) and before the `// ── Auth Helpers ──` banner. It reuses `TENANT_APEX`
+(`'pulllist.app'`, `app.js:37`) rather than restating the apex:
+
+```js
+// ── Plan Tier ────────────────────────────────────────────────
+// Reads tenants.plan. 'pro' ⇒ full identity; anything else ⇒ platform defaults.
+// Fails CLOSED: an unresolved tenant, a missing plan, or the anon path (which
+// never selects plan — § 1.2) all evaluate to free. A free render is always safe;
+// a wrong paid render puts an unprovisioned hostname on customer paper (F145).
+const Tier = {
+  isPaid(tenant) {
+    return !!(tenant && tenant.plan === 'pro');
+  },
+  // The "View Online" target. Paid ⇒ their provisioned subdomain; free ⇒ the apex.
+  publicUrl(tenant) {
+    return this.isPaid(tenant) && tenant.slug
+      ? `${tenant.slug}.${TENANT_APEX}`
+      : TENANT_APEX;
+  },
+};
+window.Tier = Tier;
+```
+
+**Fail-closed is the whole design, not a defensive nicety.** Free is the safe render: it shows less
+identity and links to an always-resolving apex. Paid is the *unsafe* default, because
+`publicUrl()`'s paid branch emits `<slug>.pulllist.app`, and F145 measured that there is **no
+wildcard DNS** — an unprovisioned slug puts a non-resolving URL on customer paper. Every ambiguous
+state must therefore land on free.
+
+**(3) `supabase/functions/register-tenant/index.ts` — accept a plan at create.** Today line 148
+hardcodes `plan: 'free'` and **no runbook step sets it afterwards**, so there is currently no
+supported path to create a paid tenant at all. *(Found 2026-09-02 during this pass; not previously
+recorded in this plan.)*
+
+Add to the input block (after `location`, line 109):
+
+```ts
+    const planRaw       = (body.plan as string | undefined)?.trim().toLowerCase() || 'free'
+    const plan          = planRaw === 'pro' ? 'pro' : 'free'
+```
+
+and change the insert body's `plan:     'free',` (line 148) to `plan,`. **Allowlist, not
+pass-through** — the input is **trimmed and lowercased, then** matched against `{'pro'}`; anything
+else becomes `free`, never reaches the column, and never errors.
+
+**Measured on staging 2026-09-02, after deploy (V11s, 7/7):** `' PRO '` → `pro`, `'pro'` → `pro`,
+omitted → `free`, `'paid'` → `free`. **Case and whitespace are NORMALISED, not rejected** — that is
+deliberate: it honours the operator's evident intent while guaranteeing the column can only ever
+hold a value `Tier.isPaid()` matches exactly. *(An earlier draft of this section implied `'Pro'`
+should be **rejected to `free`**, and the first version of the test asserted exactly that and failed.
+The code was right and the assertion was wrong; corrected here rather than "fixing" working code to
+match a bad test.)*
+
+> ⚠️ **RESIDUAL — the function is not the only writer, and today it is not even the main one.**
+> `tenants.plan` is set **manually by Rick** (§ 6), and a hand-written
+> `UPDATE tenants SET plan = 'Pro'` bypasses this normalisation entirely. The column is `NOT NULL`
+> with **no CHECK constraint**, so `'Pro'` would persist and `Tier.isPaid()` — which tests
+> `=== 'pro'` exactly — would read it as **false**: the tenant silently renders free while the
+> operator believes they set it paid. **The fix is a CHECK constraint** so the database rejects it
+> loudly instead:
+> `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN ('free','pro'));`
+> Not applied — out of S0's scope as written, raised for Rick's call. Production's current values
+> were verified exact (`rjbookstop='pro'`, `comicstore='free'`, read 2026-09-02), so nothing is
+> wrong today; this is about the next hand-typed UPDATE, not this one.
+
+**(4) The Edge Function tier block — six identical copies, gated on byte-identity.** There is no
+`_shared/` folder in this repo and **zero cross-function imports exist today** (verified
+2026-09-02); F99 S1 set the precedent by duplicating its `MAIL_FROM_*` constants across all six
+functions rather than sharing them. S0 follows that convention. **Not deployed in S0 itself** — no
+function reads a tenant row until S2 — but the block is *defined* here so S2 has one canonical text
+to paste and V10 has something to assert against:
+
+```ts
+// ── Plan Tier ── keep byte-identical across all six mail functions (F72 S0) ──
+const isPaidTenant = (t: { plan?: string } | null) => t?.plan === 'pro'
+const tenantPublicUrl = (t: { plan?: string; slug?: string } | null) =>
+  isPaidTenant(t) && t?.slug ? `${t.slug}.pulllist.app` : 'pulllist.app'
+```
+
+> **On § 9's "written once" criterion.** A `_shared/tier.ts` import would be *literally* once, but
+> it introduces a cross-function import convention this codebase has never used, and it changes what
+> `supabase functions deploy` bundles — across six deploys that each already carry F93 `verify_jwt`
+> discipline. Six byte-identical copies plus **V10, a grep that fails when they diverge**, satisfies
+> the criterion's intent (no six *independent, divergent* ternaries) with a property that is
+> *checked* rather than assumed. Recorded as **Q11**. If a later step needs genuinely shared EF code
+> for other reasons, revisit — this is a convention call, not a technical limit.
+
+#### 4.0.2 The data fix — `rjbookstop` is marked `free` on production
+
+**A real data bug, not a migration.** Production's paying tenant reads `plan = 'free'` (§ 0.1,
+measured 2026-09-02, service-role). Ship tier-gating without fixing it and Ray & Judy's own
+production site flips to generic branding — exactly backwards.
+
+```sql
+-- production only
+UPDATE public.tenants SET plan = 'pro' WHERE slug = 'rjbookstop';
+SELECT slug, display_name, plan FROM public.tenants ORDER BY slug;
+-- Expected: comicstore = free, rjbookstop = pro
+```
+
+**Run by Rick, not the agent** — the established pattern for anything touching live data
+(CLAUDE.md § Document Integrity). **Safe to run before any code ships, and it should be:** with
+`plan` read by zero lines today, the UPDATE is inert until S1 lands. Doing it early de-risks the
+sequence instead of making it a launch-day step.
+
+**Staging needs a durable `free`/`pro` pair for V3/V4.** `raysandjudys` is already `pro`; the only
+`free` tenants are the four `pw-*` Playwright fixtures, which are **ephemeral and torn down**
+(§ 1.7, F130) — not a vehicle to verify against. Create one purpose-made staging tenant via
+`register-tenant`; with S0's new `plan` input this is a single call rather than a create-then-UPDATE.
+
+#### 4.0.3 Onboarding — the runbook half of "identify a paid tenant"
+
+`docs/tenant-onboarding-runbook.md`, three edits. **These are what make paid onboarding a supported
+path rather than an undocumented manual UPDATE:**
+
+1. **Step 0/1 — `plan` becomes a collected input.** Add to Step 0's input table and Step 1's
+   `register-tenant` body. Default `free`; `pro` only for a tenant who is actually paying.
+2. **New Step 2b — a paid tenant's hostname must be provisioned.** § 0.1 Q9 puts
+   `<slug>.pulllist.app` on paid customers' paper and in their email. Step 3 already provisions the
+   Cloudflare custom hostname; make it **required, not optional, when `plan = 'pro'`**, and state
+   the consequence plainly: a paid tenant whose hostname is unprovisioned ships a non-resolving URL
+   to real customers. F145's warning, now load-bearing rather than advisory.
+3. **Step 2's SQL is wrong, re-confirmed live this pass.** Line 88 writes `display_name` into the
+   `branding` jsonb; `Branding.apply()` reads the `tenant.display_name` **column** (`app.js:186`)
+   and ignores the jsonb key entirely. Production's `comicstore` carries the ignored key today.
+   Already recorded as § 4.4 S4 fix 3 — **pull it forward into S0**, because S0 is the step an
+   operator follows to create the V3 test tenant, and following it as written seeds the wrong shape.
+
+#### 4.0.4 Explicitly NOT in S0
+
+- **Any render change.** No `data-tenant-*` hook, no template edit, no print change. If a diff
+  changes a rendered byte, it belongs in S1/S2/S3.
+- **Widening `resolve_tenant_by_slug`.** `plan` stays off the anon path (§ 1.2 trap, § 6). A
+  consequence worth stating: **no anon-reachable surface can tier-gate** — `index.html`'s landing
+  panel and `forgot-password.html` render platform-default for every tenant, which is correct and
+  needs no work (§ 1.4 confirms `forgot-password.html` carries no store identity at all).
+- **Billing, plan self-service, an upgrade flow.** `plan` is set by Rick at onboarding or by UPDATE
+  (§ 6). S0 adds an input to `register-tenant`; it does not add a way for a tenant to change their
+  own tier.
+- **Free-tier service restriction.** Rick's explicit sequencing, 2026-09-02: identity and branding
+  first, lockdown later. `Tier.isPaid()` is the hook a future restriction step would read, but S0
+  gates nothing functional — a free tenant keeps every capability they have today.
+
+### 4.1a S1a — Free-tier web fixes, EXECUTED 2026-09-03 (Rick's resequence)
+
+**Rick's direction, 2026-09-03: ship free-tier-only first**, to validate a demoable, sellable
+service — not the full tier-gated design in one pass. This section records what actually shipped,
+which differs from § 4.1's plan in two ways worth stating plainly:
+
+1. **§ 4.1 step 1 (widen the select to `contact_phone, location`) was NOT done.** This slice does
+   not need those columns — the founding tenant's phone/address stay as inline literals for the
+   PAID branch (§ 0.1's own design: *"the paid branch is a no-op — today's hardcoded literals
+   already ARE Ray & Judy's identity"*), and the FREE branch omits them entirely rather than reading
+   a column. Q1/Q3's `location` full-postal-address population is still not done on either
+   environment (production `rjbookstop` still NULL) — doing it now would have been premature.
+2. **The mechanism is a general-purpose `[data-paid-only]` hook in `Branding.apply()`, not the
+   per-field `[data-tenant-phone]`/`[data-tenant-location]` hooks step 2 describes.** Simpler,
+   and sufficient for "omit entirely on free" — it hides an element outright rather than filling a
+   value. Sets `el.hidden = true` **and** `el.style.display = 'none'` — one target
+   (`index.html`'s tenant-logo wrapper) carries its own inline `style="display:flex"`, and an inline
+   style outranks the UA stylesheet's un-`!important` `[hidden]{display:none}`; `.hidden` alone
+   would have silently failed to hide it. Worth carrying into any future `[hidden]`-based gate in
+   this codebase.
+
+**A demo tenant now exists on staging, reached with NO DNS work.** `demoshop` / "Capital City
+Comics", `plan = 'free'`, 2,288 real catalog rows (copied from the founding tenant's current month).
+`TenantContext` already resolves `?t=<slug>` and persists it in sessionStorage (`app.js:113-127`,
+pre-existing) — so `https://staging.pulllist.pages.dev/?t=demoshop` reaches it today. **This means
+F145's no-wildcard-DNS constraint does not block a free-tier demo at all** — it only blocks the
+*paid*-tier subdomain link (§ 0.1 Q9, unchanged). Local setup script (uncommitted, playwright
+folder): `f72-demo-tenant-setup.mjs`, idempotent.
+
+**Decided the same session, worth recording:** the apex marketing page (`data-front-door="apex"`)
+stays the free-tier front door — `?t=` does NOT flip it to the branded tenant sign-in. Free tier's
+own pricing copy already promises *"the shared `pulllist.app` front door"*; giving `?t=` a branded
+door would hand free tier one of the two things "Branded" currently sells, undermining the tier
+this plan exists to build. No code change was needed either way — confirmed via `f72-demo-leak-audit.mjs`
+that `data-front-door` stays `"apex"` on `?t=demoshop`.
+
+**A found-during-the-work leak, not in the original inventory:** `index.html:313`'s
+`<img data-tenant-logo src="bookstop_logo.png">` — the **default** `src` for ANY tenant without a
+custom `logo_url` is Ray & Judy's own actual logo file (18KB, distinctly branded), not a generic
+PULLLIST mark. This matters because it's reachable TODAY, not merely a future risk: `comicstore`
+is `plan = 'free'` **and** has an individually provisioned `comicstore.pulllist.app` hostname (F145),
+so it can hit this exact `ax-when-tenant` block. Fixed by marking the whole logo wrapper
+`data-paid-only` (image content, not text — a source grep would never have caught it; found by
+reasoning about what `Tier.isPaid()=false` actually reaches).
+
+**Verified against DEPLOYED staging bytes, not local files** (`f72-demo-leak-audit.mjs`, local,
+uncommitted, real-browser via Playwright): signed in as a real throwaway customer of `demoshop` in
+both `pending` and `active` states, scanned rendered `innerText` across catalog/mylist/arrivals/
+subscriptions for the founding tenant's name/phone/address/city. **Before the fix: 7 of 7 pages
+leaked.** **After: 0 of 7.** Re-ran `f72-s0-authed-verify.mjs` (S0's harness) and a new
+`f72-s1a-founding-verify.mjs` against the founding tenant to confirm the PAID branch is unaffected:
+the footer locality and mylist pickup-notice phone are both still **visible** for Ray & Judy's own
+signed-in customers.
+
+**Gates:** `node --check` clean on `app.js` and every inline `<script>` block across the seven
+touched HTML files (extracted and checked individually — `catalog/mylist/arrivals/subscriptions/
+admin/analytics.html` one block each, `index.html` three). Unit suite 279/279 (unchanged). **Full
+Playwright suite: 143 passed, 0 failed, exit 0, 22.0 min** — run against deployed bytes post-push,
+after both S1a and S2a had landed (one combined run covers both). Zero regressions.
+
+**Deployed:** staging only, `d7669b0`, merged `--ff-only`, pushed. **Not production** — separate
+explicit request per CLAUDE.md § Staging Only.
+
+**Explicitly NOT in S1a:** the six email templates (S2 — see § 4.2a below) and print outputs (S3,
+`admin.html` bagging/catalog print + `arrivals.html`/`mylist.html` print headers) — the print work
+is genuinely unreachable from a screen-share demo and was deliberately deferred, not forgotten.
+
+### 4.2a S2a — `register-customer` only, EXECUTED 2026-09-03
+
+**Ships the ONE email a prospect actually receives during a live demo signup first**, not all six
+functions at once — same free-tier-first sequencing as S1a. § 4.2's original design (widen every
+function's select to `display_name, contact_phone, location`, thread `??`-fallback literals) is
+correct in shape for a *uniform* design but was written before the tier revision; this slice
+diverges from it in the same way S1a diverged from § 4.1 (see above) — the free branch is generic
+omission, not a DB-driven contact string, and only `plan` was added to the select (not
+`contact_phone, location`, not needed yet).
+
+**What changed, and the one thing that isn't merely "free vs paid":** `storeName` (the tenant's own
+`display_name`) now appears in the **from-name, subject, and greeting for EVERY tenant, both
+tiers** — this was hardcoded to `"Ray & Judy's Book Stop"` for every signup regardless of which
+shop the customer actually signed up for, which is F72's real defect, not just a missing free/paid
+split. `isPaid` gates only the phone/address footer content (§ 0.1 Q8). A `MAIL_FROM_NAME`-shaped
+`??` fallback covers an unresolved `display_name` (empty string case).
+
+**A new, small, correctly-scoped addition:** `display_name` is admin-set, not user-submitted, but
+this change makes it reach an HTML email body for the first time via string interpolation — added a
+minimal `escapeHtml()` (`&`/`</>`) and applied it to `storeName` everywhere it's interpolated,
+closing a latent injection surface this change would otherwise have opened. Verified: a
+`display_name` of `Bob's <Comics> & Co` renders as `Bob's &lt;Comics&gt; &amp; Co`, not raw markup.
+
+**Verification, and its real limit stated plainly.** `register-customer` checks Turnstile **before**
+the tenant lookup (`index.ts`, unchanged), so a scripted signup cannot reach this logic via HTTP at
+all — the same limitation `native-signup-verify.mjs`'s own header comment already documents for this
+exact function. Built `f72-s2-template-verify.mjs` instead (local, uncommitted, playwright folder):
+extracts `buildPendingEmail()` from both the pre-edit original (`git show HEAD`) and the edited
+file, strips only TS type annotations from the signature (logic untouched), and runs both.
+**Result: the edited PAID-tier output is BYTE-IDENTICAL to the original's unconditional output —
+mechanically proven by string equality, not merely traced by eye (V6).** Free-tier output confirmed
+to contain the tenant's own name and the magic link, and to contain neither the founding tenant's
+name, phone, street address, nor city. One assertion negative-control tested (inverted, confirmed
+red, reverted).
+
+**Deployed to staging** with `--no-verify-jwt`, preserving what F93 requires: an unauthenticated
+POST returns the function's own body-validation error (`"email, name, and slug are required"`),
+not the platform gateway's rejection, both before and after deploy — confirms `verify_jwt` stayed
+OFF (correct for a public signup endpoint). **Deployed artifact read back and hashed** (`functions
+download --workdir` into a scratch dir, never touching the repo tree): identical to committed
+source, sha256 `bb0a3a51599a12f4`.
+
+**⚠️ Honest limit, not closed out: final delivered-inbox verification did not run this session.**
+Every prior email-header verification in this project (F99 M1–M7) read a REAL inbox — this session
+has none available. What's verified is that the function constructs and would send the correct
+payload (mechanically, via the extracted-function harness); what's NOT verified is how it actually
+renders in a real client or whether it lands in the inbox at all. **Needs Rick**, same as every
+prior instance of this exact gate.
+
+**Deployed:** staging only, `efadbf0`, merged `--ff-only`, pushed.
+
+**Explicitly NOT in S2a:** `approve-customer`, `invite-customer`, `notify-customers`,
+`reset-password`, `send-my-list` — all five still founding-branded for every tenant, unconditionally.
+None of these fire during a self-serve demo signup, so they don't block "show a prospect the app" —
+but `approve-customer` **would** fire the moment an admin approves the demo signup, and that email
+would say "Ray & Judy's Book Stop" to a prospect's own test account. **Worth doing next if the demo
+walkthrough includes the approval step.** The tier-gated "View Online" link (new scope per § 0.1) is
+also not in this slice, for any function.
 
 ### 4.1 S1 — Client surfaces (no DB change, no EF change)
 
@@ -326,20 +789,91 @@ compliant to non-compliant for every new tenant. See § 8 Q1.
 | Store name, `admin.html:3825` | `display_name` | ✅ yes |
 | Phone, `admin.html:3825` | `contact_phone` | ✅ yes |
 | `rjbookstop.com`, `:3825`, `:4966`, `:5354` | a tenant website — **no such field exists** | ⛔ needs `branding.website` (§ 8 Q2) |
-| `rjbookstop.pulllist.app`, `:3826`, `:4966`, `:5134` | a per-tenant hostname | ⛔ **F145 / Phase 6 S0** — see below |
+| `rjbookstop.pulllist.app`, `:3826`, `:4966`, `:5134` | a per-tenant hostname | ✅ **RESOLVED for `plan = 'pro'` tenants only — § 0.1 Q9, 2026-09-02.** Unconditional derivation is still ⛔ blocked (below); tier-gating it is what unblocks it |
 
-**Why the hostname half is genuinely blocked, not deferred by preference:** F145
-measured that **there is no wildcard DNS on `pulllist.app`**; `rjbookstop` and
+> **⚠️ 2026-09-02 update — narrower than a full unblock.** § 0.1 Q9 resolves this for *paid*
+> tenants specifically: `<slug>.pulllist.app` prints/emails only when `plan = 'pro'`, and only once
+> that hostname has been manually provisioned as a required step of paid onboarding (same 5.5
+> mechanism as `comicstore`) — never derived and assumed. **Free tenants still get the safe,
+> always-resolving `pulllist.app` apex link, per Q9** — the reasoning below (why an unconditional
+> derivation is dangerous) is exactly why the free-tier branch stays on the apex rather than
+> guessing at a subdomain. Phase 6 S0 (the wildcard spike) remains untouched and unneeded by this —
+> paid-tier provisioning stays manual, low-volume, per F145's own recorded pattern.
+
+**Why deriving the hostname unconditionally is genuinely dangerous, not deferred by preference:**
+F145 measured that **there is no wildcard DNS on `pulllist.app`**; `rjbookstop` and
 `comicstore` resolve only because each is an individually provisioned Cloudflare Pages
 custom hostname. Deriving `<slug>.pulllist.app` in print output would put a
 **non-resolving URL on customer paper** for any tenant not manually provisioned. That
-gate is Phase 6 S0.
+gate is Phase 6 S0 — **for a wildcard/self-serve mechanism.** It is not a gate on a manually-provisioned,
+paid-tenant-only link, which is what § 0.1 Q9 actually ships.
 
 `:4966` and `:5354` are CSS `@page` `content:` strings — they are built inside a JS
 template literal and can be interpolated the same way, but **note the escape trap** the
 2026-08-27 print-CTA session hit: a `\00b7` CSS escape inside a JS template literal is an
 illegal legacy-octal escape and a hard `SyntaxError` for the whole inline script. Use
 literal characters.
+
+### 4.3a S3 — EXECUTED 2026-09-04, staging
+
+**Ships the last open item from this session's F72 work: paper.** Every print output a customer or
+staffer could hold in their hands now follows the same rule S1a/S2a already established — free tier
+shows no store identity at all, just an always-resolving `View Online: pulllist.app` line; paid
+tier keeps today's exact identity unchanged, now with a tier-gated `View Online` link that resolves
+to `<slug>.pulllist.app` instead of the hardcoded `rjbookstop.pulllist.app`.
+
+**Seven print surfaces across three files, re-measured from disk 2026-09-04** (line numbers in the
+2026-09-01 inventory had drifted, including from this session's own F154 fix to `mylist.html`):
+
+| Surface | File | Mechanism |
+|---|---|---|
+| Personal pull list print header | `mylist.html` | was fully static markup, unlike `print-title`/`print-subtitle` — converted to an empty `#print-store-info` container, populated via `textContent` at print-click time |
+| This Week customer print header | `arrivals.html` | identical structure/fix to the above |
+| Store poster ("Reserve online" CTA, printed in-store) | `arrivals.html` | name already dynamic (`[data-tenant-name]`); the two static phone spots wrapped in `data-paid-only` — **zero new JS**, reuses `Branding.apply()`'s existing S1a mechanism, which already runs at page load on every nav page |
+| Bagging List (per-customer cards) | `admin.html` | tier computed once per `renderThisWeek()` render, not per card |
+| Print Catalog — page-1 header + `@page` footer | `admin.html` | `buildCombinedCatalogHtml()`; literal characters used in the CSS `content:` string, not a unicode escape — the 2026-08-27 print-CTA session's own documented `\00b7` trap |
+| Reserved/order report — `@page` footer | `admin.html` | `buildReservedReportHtml()`; staff-only, never had a View Online CTA to begin with — not adding one (scope discipline), just tier-gating the website literal already there |
+
+**`rjbookstop.com` (the tenant's own website, distinct from their PULLLIST subdomain) still has no
+backing field** — Q2's `branding.website` remains unresolved, unchanged from the 2026-09-01
+inventory. Kept as a literal on the **paid** branch only (matches the one paid tenant's real value
+today); free tier shows nothing for it, consistent with every other identity field this session
+tier-gated. **Still open, same as before this step.**
+
+**Two stale doc-comments corrected in the same commit**, found while editing the exact code they
+described — one claimed `rjbookstop.com` still appeared in a header that no longer shows it at all
+(page-1 header now carries only the tier-gated View Online line).
+
+**Verification, and its honest boundary — stated precisely, not implied broader than it is.**
+Real-browser, deployed-bytes verification (`f72-s3-print-verify.mjs`, local, uncommitted) drove
+both a FREE customer (`demoshop`) and the PAID founding tenant through `mylist.html`'s print path:
+free correctly shows no phone/no founding name, `View Online: pulllist.app`; paid is **unchanged** —
+phone and store name both still present, `View Online: raysandjudys.pulllist.app`. `arrivals.html`'s
+free branch required a second pass: its print handler only *attaches* when the customer has at
+least one reservation whose `on_sale_date` falls in the current week — a **pre-existing, unrelated**
+early-return, confirmed by checking that even the *pre-existing* `print-title`/`print-subtitle`
+population (untouched by this work) also never fires without one. Not a bug this change introduced.
+Verified for real by temporarily shifting one `demoshop` catalog row's `on_sale_date` into the
+current week, reserving it, running the check, and restoring the original date — confirmed restored
+by an independent fresh read, not the harness's own claim.
+
+**Not independently live-clicked, and that gap is stated rather than implied covered:**
+`arrivals.html`'s **paid** branch, and all **three `admin.html` print surfaces** (Bagging List,
+Print Catalog, Reserved Report). Each uses the identical `Tier.isPaid()`/`Tier.publicUrl()` pattern
+already proven correct live elsewhere this session (S0's authed-verify, S1a's leak-audit, this
+step's own `mylist.html` paid check), and `node --check` confirms every touched file's inline
+`<script>` block is syntactically valid — but manufacturing a live "Bagging List has cards" /
+"Print Catalog has rows" scenario for each was judged disproportionate to the risk for simple
+ternary string construction using an already-proven mechanism. A negative control on the kept
+harness inverted two assertions and confirmed both went red before reverting.
+
+**Gates:** `node --check` clean on `admin.html`/`arrivals.html`/`mylist.html`'s inline `<script>`
+blocks. Unit suite 279/279 (unchanged — no import-script code touched). Full Playwright suite run
+post-push against deployed staging bytes — see the gate result recorded with the rest of this
+step's completion record.
+
+**Deployed:** staging only, `b1e1445`, merged `--ff-only`, pushed. **Not production** — separate
+explicit request per CLAUDE.md § Staging Only.
 
 ### 4.4 S4 — Docs
 
@@ -361,6 +895,11 @@ literal characters.
      **`website`** (Q2). `display_name` should be **removed** from the list per fix 3.
 - `docs/phase-5.3-per-tenant-branding.md`: append a note that the `Branding.apply()`
   contract was extended, and that § 1.5's anon projection boundary was **preserved**.
+- **`index.html:247-262` — the live pricing page (new, Q10).** The "Branded" tier currently claims
+  *"customer emails from your shop"*; what ships is the shop's **name** as the From display-name
+  plus full identity in the footer and a branded "View Online" link, over a **flat**
+  `noreply@pulllist.app` sender for both tiers. Edit the copy to describe that. The "Free" tier's
+  *"shared pulllist.app front door"* line is already accurate and needs no change.
 - `CLAUDE.md`: § Current Migration Phase entry; § Key Business Logic branding line.
 
 ---
@@ -378,6 +917,18 @@ literal characters.
 | **V7** | Unresolved-tenant path: force `TenantContext` to fail and confirm every surface still renders the founding literal — no `undefined`, no empty node | absent-key no-op contract broke |
 | **V8** | `node --check` on `app.js` and every extracted inline `<script>` block (the S3 escape trap); full `run-smoke.ps1` — unit + Playwright, **0 failures**, run **after** push against deployed staging bytes | — |
 
+**S0's own gates — added 2026-09-02. S0 ships before S1/S2/S3, so it needs gates that do not
+depend on any render change existing yet:**
+
+| Gate | What | How it fails |
+|---|---|---|
+| **V9** | **S0 changes no rendered byte.** Load all six nav pages as the founding tenant before and after S0 and diff the rendered output; separately confirm `document.querySelectorAll('[data-tenant-name]')` text is unchanged. **This is S0's headline property** (§ 4.0) | a render moved — something in the diff belongs in S1/S2/S3, not S0 |
+| **V10** | **Tier-block byte-identity across the six mail functions.** `grep -c 'const isPaidTenant'` returns 1 in each of the six; the extracted blocks hash identically across all six. *(Applies from S2 — in S0 the block exists only in this doc.)* | the six copies diverged — the failure mode Q11's convention accepts and this gate exists to catch |
+| **V11** | **`Tier` fails closed, proven by test not by reading.** In a live console: `Tier.isPaid(null)`, `Tier.isPaid({})`, `Tier.isPaid({plan:'Pro'})`, `Tier.isPaid({plan:'FREE'})` all return `false`; `Tier.publicUrl({plan:'pro'})` (no slug) returns `pulllist.app`, **not** `undefined.pulllist.app`. Confirm the same for `register-tenant` by creating a throwaway tenant with `plan: 'Pro'` and reading back `free` | a mis-cased or absent plan reads as paid — the state that puts a non-resolving hostname on customer paper (F145) |
+| **V12** | **Anon path carries no tier.** Sign out, load `index.html` on a tenant subdomain, confirm `TenantContext.current()` has **no `plan` key** — the § 1.2 boundary held and no anon surface can branch on tier (§ 4.0.4) | `plan` leaked onto the anon RPC projection, breaking 5.3 § 1.5 |
+| **V13** | **The data fix landed.** `SELECT slug, plan FROM tenants` on production returns `rjbookstop = pro`, `comicstore = free`; staging holds a durable `free`/`pro` pair (§ 4.0.2) | the paying tenant is still marked free — shipping S1 would flip Ray & Judy's to generic branding |
+
+
 **Negative-control every new assertion** by temporarily inverting it and confirming it
 goes red — the discipline the F142 / single-catalog-print / F149 sessions all record.
 
@@ -390,16 +941,32 @@ print headers or pickup slips at all** — a green suite says nothing about this
 
 ## 6. Out of scope — stop and ask
 
-- **The sending domain.** `MAIL_FROM_EMAIL` stays `noreply@mrcyberrick.us`. That is F99
-  S3, blocked (§ 3).
+> ⚠️ **The sending-domain line below is stale — corrected 2026-09-02, kept for the record.** It
+> read "F99 S3, blocked" when F99 was written 2026-09-01; **F99 has since shipped in full, both
+> environments** (M1–M7, same day as this revision, via Resend rather than the blocked MailerSend
+> S3 path). `MAIL_FROM_EMAIL` is now `noreply@pulllist.app` — flat, for every tenant, any plan —
+> **not** `noreply@mrcyberrick.us`. This does not change § 0.1's design: the flat address stays flat
+> for both tiers (§ 0.1 Q8 — sender address is not a branding lever this plan uses), it's just no
+> longer the *founding tenant's* address either.
+
+- ~~**The sending domain.** `MAIL_FROM_EMAIL` stays `noreply@mrcyberrick.us`. That is F99
+  S3, blocked (§ 3).~~ **Superseded — see callout above.** F99 is done; the address is flat
+  `noreply@pulllist.app` for every tenant regardless of plan, by this plan's own § 0.1 design, not
+  because of a blocker.
 - **Widening `resolve_tenant_by_slug`.** Preserves 5.3 § 1.5. Needed only if a
   `[data-tenant-phone]` / `[data-tenant-location]` hook is ever wanted on an
   anon-reachable page (§ 1.2 trap).
-- **The per-tenant print hostname.** F145 / Phase 6 S0 (§ 4.3).
+- ~~**The per-tenant print hostname.** F145 / Phase 6 S0 (§ 4.3).~~ **Resolved for paid tenants —
+  see § 4.3's 2026-09-02 update and § 0.1 Q9.** Still out of scope: deriving it for a tenant with no
+  manually-provisioned subdomain, and anything wildcard/self-serve (that part is still Phase 6 S0).
 - **Per-tenant MailerSend sender identities**, `reply_to` (F99 § 8 Q6, declined),
-  bulk-send (F148).
+  bulk-send (F148). *(MailerSend itself is now dormant, not live — F99 — but the same "no
+  per-tenant sending identity" decision holds under Resend too, per § 0.1 Q8.)*
 - **Phase 6 self-service signup** and the wildcard spike.
 - **`tenants.settings` exposure.** Noted below as a discovery, deliberately not acted on.
+- **Billing / plan enforcement / an upgrade flow.** `tenants.plan` is set manually by Rick (same
+  operator-driven pattern as tenant onboarding itself, § 0.1 Q7) — this plan reads that column, it
+  does not build a way for a tenant to change it themselves.
 
 ### Discovered while measuring — both now dispositioned (§ 8 Q4, Q5)
 
@@ -424,6 +991,11 @@ print headers or pickup slips at all** — a green suite says nothing about this
 Each step is a separate commit with the finding ID in the message, and each is a clean
 revert:
 
+- **S0** — `git revert` for the two `app.js` edits; redeploy `register-tenant` from its pre-change
+  source, **preserving `verify_jwt`**. Reverting leaves `plan` unread by anything, which is exactly
+  today's state. **The `rjbookstop` data fix (§ 4.0.2) is deliberately NOT reverted** — it corrects a
+  wrong value, is inert while no code reads the column, and would have to be re-applied on the next
+  attempt anyway.
 - **S1** — `git revert`; the founding literals are still present as inline fallbacks
   throughout, so a revert restores today's behaviour exactly.
 - **S2** — redeploy each function from its pre-change source, **preserving `verify_jwt`**.
@@ -431,13 +1003,17 @@ revert:
   than an empty string.
 - **S3** — `git revert`; `admin.html` only.
 
-No DDL, no migration, no data write ⇒ **there is no database state to roll back.**
+No DDL and no migration in any step. **One data write exists — S0's `rjbookstop` plan correction
+(§ 4.0.2)** — and it is intentionally not part of any rollback, per the S0 bullet above. *(This line
+read "no data write" before S0 was written up; corrected 2026-09-02.)*
 
 ---
 
 ## 8. Decisions — all ANSWERED 2026-09-01 (Rick)
 
-**Every question below is settled. Do not re-litigate; execute against these.**
+**Every question below is settled. Do not re-litigate; execute against these.** *(Q7–Q9 — the tier
+gate, the generic-content definition, the link-by-tier rule — were answered 2026-09-02 and live in
+§ 0.1, not here. This section's numbering intentionally stops at Q6; it predates the tier revision.)*
 
 | # | Question | ✅ DECISION |
 |---|---|---|
@@ -452,14 +1028,62 @@ No DDL, no migration, no data write ⇒ **there is no database state to roll bac
 
 ## 9. Completion criteria
 
+**§ 0.1 items — new 2026-09-02, block execution start, not just close-out:**
+
+- [x] ~~Q7–Q9 answered~~ — settled 2026-09-02 (§ 0.1): `tenants.plan` is the gate, generic-tier
+      content defined per surface, hostname link resolved for paid tenants only
+- [x] ~~Q10–Q11 answered~~ — settled 2026-09-02 (§ 0.1): paid-tier email promise is footer identity
+      + branded link with a **flat sender for both tiers**; the tier check ships as six byte-identical
+      EF copies gated by V10
+- [x] ~~**S0 written up as byte-exact steps**~~ — done 2026-09-02, § 4.0, re-read from disk against
+      the post-Resend tree
+- [x] ~~**S0 COMPLETE 2026-09-02**~~ — V9/V11/V12/V13 green, plus V11's server half (V11s, 7/7 on
+      staging). `plan` in the authenticated select; `Tier` helper in `app.js`; `register-tenant`
+      accepting an allowlisted `plan`; runbook's four edits (§ 4.0.3). **No rendered byte
+      changes** (V9 is the gate that says so). **`register-tenant` deployed to BOTH projects** at
+      Rick's explicit request (staging v19→v20, production v9→v10). `verify_jwt` measured **OFF by
+      behaviour** before and after each deploy — an unauthenticated POST returns the function's own
+      `{"error":"Unauthorized"}` rather than the gateway's `Missing authorization header` — and the
+      deployed source on both projects verified **byte-identical by sha256** to local, read back via
+      `functions download --workdir` into a scratch dir rather than inferred from the deploy output.
+- [x] ~~**`rjbookstop`'s `plan` corrected from `free` to `pro` on production**~~ — **DONE
+      2026-09-02 (Rick).** Independently verified by a service-role read afterwards rather than
+      taken on trust: `rjbookstop='pro'`, `comicstore='free'`, **both exact lowercase** — which
+      matters, because a hand-typed `'Pro'` would have read as free (§ 4.0.1 residual)
+- [ ] **A durable staging `free`/`pro` tenant pair** — the `pw-*` fixtures are ephemeral (§ 4.0.2),
+      so V3/V4 have no vehicle without this
+- [ ] **A CHECK constraint on `tenants.plan`** — new, raised 2026-09-02 by V11s. Not applied;
+      Rick's call. `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN
+      ('free','pro'));` The function normalises, but **manual UPDATE is the primary path today**
+      and bypasses it entirely
+- [x] ~~§ 4.1–§ 4.3 rewritten with explicit free/paid content per site~~ — **S0, S1a (web), S2a
+      (register-customer email), and S3 (print) are all byte-exact and executed.** Still owed: the
+      OTHER five mail functions (§ 4.2's remaining scope) — see § 4.1a/§ 4.2a/§ 4.3a for what shipped
+- [x] ~~mylist.html and arrivals.html print outputs gain the tier-gated "View Online" link~~ —
+      **DONE 2026-09-04 (S3, `b1e1445`)** — free tier links to `pulllist.app`, paid tier to
+      `<slug>.pulllist.app`, live-verified against deployed bytes for both tenants on `mylist.html`
+      and for the free branch (with a real reservation) on `arrivals.html`
+- [x] ~~admin.html's existing `rjbookstop.pulllist.app` literals (§ 4.3) made tier-conditional,
+      falling back to `pulllist.app` for any non-`pro` tenant~~ — **DONE 2026-09-04 (S3)** across all
+      three of admin.html's print jobs (Bagging List, Print Catalog, Reserved Report). **Not
+      independently live-clicked** — verified by code trace + `node --check` + the same
+      `Tier.isPaid()`/`Tier.publicUrl()` pattern already proven live elsewhere; a real click-through
+      is still owed before treating this as fully closed
+- [ ] **`index.html:247-262` pricing copy edited to match what Q10 actually ships** — the "Branded"
+      tier's *"customer emails from your shop"* claim is knowingly stale as of 2026-09-02
+
+**§ 8 items — 2026-09-01, still valid for what data exists (not gated on tier):**
+
 - [x] ~~Q1–Q6 answered~~ — **all six settled 2026-09-01 (§ 8); Q4 applied, Q5 filed as F151**
 - [ ] Tenant data prepared (Q3 / § 1.7): prod `rjbookstop` `contact_phone` + `location`
       populated from NULL; staging `raysandjudys` `location` rewritten to a full postal
       address with `Rockaway, NJ` moved to `branding.location_short`; a staging second
-      tenant given distinct values for V3
-- [ ] S1 complete — V1, V3, V6, V7 green
-- [ ] S2 complete — V2, V4, V5, V6 green; all six deployed with `verify_jwt` preserved and each setting **read from the live dashboard, not from a doc**
-- [ ] S3 complete — name + phone parameterized; hostname/website halves explicitly deferred and recorded
+      tenant given distinct values for V3 — **and now also a distinct-`plan` tenant pair**,
+      one `free` and one `pro`, since V3/V4 need to prove both branches, not just "a second tenant"
+- [ ] S1 complete — V1, V3, V6, V7 green, **re-run against both a `free` and a `pro` tenant**
+- [ ] S2 complete — V2, V4, V5, V6 green, **both plans**; all six deployed with `verify_jwt` preserved and each setting **read from the live dashboard, not from a doc**
+- [ ] S3 complete — name + phone parameterized **per plan**; hostname link tier-gated (no longer
+      deferred, § 0.1 Q9); website half still explicitly deferred and recorded
 - [ ] V8 green — `node --check` clean, full suite 0 failures, run post-push against deployed staging bytes
 - [ ] S4 doc updates landed
 - [ ] § 13 F72 status updated with its corrected scope
@@ -473,12 +1097,20 @@ No DDL, no migration, no data write ⇒ **there is no database state to roll bac
 | Thing | Where |
 |---|---|
 | F72 (owner finding) | `docs/technical-reference.md` § 13 F72 |
+| **§ 0.1's tier design (2026-09-02)** | this doc, § 0.1 — the live record; nowhere else |
+| **S0 — the tier mechanism, byte-exact** | this doc, § 4.0 — the only executable step today |
+| `register-tenant`'s hardcoded `plan: 'free'` | `supabase/functions/register-tenant/index.ts:148` — why no paid-tenant create path exists today (§ 4.0.1) |
+| `TENANT_APEX` (`'pulllist.app'`) | `app.js:37` — reused by `Tier.publicUrl()`, not restated |
+| `tenants.plan` — the gate | `docs/technical-reference.md` § 4.1 (schema); § 0.1 (live values, the `rjbookstop` bug) |
+| Live pricing page this design must eventually match | `index.html:247-262` — currently describes the pre-tier-gating "Branded" perks, itself now stale, not yet updated |
 | `Branding.apply()` contract | `docs/phase-5.3-per-tenant-branding.md` § 1.1, § 1.5 |
 | `resolve_tenant_by_slug` contract | `docs/technical-reference.md` § 6; `docs/phase-5.2-slug-id-routing-rpc.md` |
 | `tenants` schema | `docs/technical-reference.md` § 4.1 |
-| Sender parameterization (F99 S1) | `docs/f99-sender-domain-consolidation.md` § 4 S1 |
-| Why the sending domain is blocked | `docs/f99-sender-domain-consolidation.md` § 4 S3 |
+| Sender parameterization (F99 S1, now on Resend) | `docs/f99-resend-migration.md`; `docs/f99-sender-domain-consolidation.md` § 4 S1 |
+| F99's own completion, both environments | `docs/f99-resend-migration.md` STATUS token |
 | No wildcard DNS (F145) | `docs/technical-reference.md` § 13 F145 |
+| Existing "View Online" pattern to extend | `admin.html:3826`, `:4966`, `:5134` (PR #140) |
 | Phase 6 S0 wildcard gate | `docs/phase-6-self-service-signup.md` |
 | Tenant onboarding metadata | `docs/tenant-onboarding-runbook.md` Step 1, Step 2 |
 | EF deploy discipline (`verify_jwt`) | CLAUDE.md § Supabase platform facts |
+| Founding Partner pricing this design should reconcile with | `hybrid_frontdoor_premium_tiering` memory; `docs/pre-phase-6-consolidation-wave-2.md` § 2.5 |

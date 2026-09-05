@@ -2203,28 +2203,32 @@ existing row's tenant_id.
 
 Nine Deno-based Edge Functions are deployed to staging (`register-tenant`
 added 5.4 S3). All are written in TypeScript, all use Supabase service-role
-for privileged operations. **Email provider now differs by environment as of
-2026-09-02: staging's six mail-sending functions call Resend
-(`api.resend.com/emails`); production still calls MailerSend
-(`api.mailersend.com/v1/email`), untouched.** See F99 migration below.
+for privileged operations. **As of 2026-09-02, both environments' six
+mail-sending functions call Resend** (`api.resend.com/emails`) — the F99
+migration below. MailerSend's credentials remain set on both projects as a
+dormant rollback path (not deleted), but no deployed code reads them.
 
-**Post-F99-S1 (2026-08-31, staging only):** the sender is no longer
-hardcoded. The six email-sending functions (§ 11.2) read `MAIL_FROM_EMAIL` /
-`MAIL_FROM_NAME` from Edge Function secrets, each with a `??` fallback to
-today's literal (`noreply@mrcyberrick.us` / "Ray & Judy's Book Stop") so an
-unset secret changes nothing. Staging had both secrets set to those same
-values from 2026-08-31 through the F99 Resend migration below.
+**Post-F99-S1 (2026-08-31, staging; carried to production 2026-09-02):** the
+sender is no longer hardcoded. The six email-sending functions (§ 11.2) read
+`MAIL_FROM_EMAIL` / `MAIL_FROM_NAME` from Edge Function secrets. Production's
+`main` did not actually receive this until the F99 Resend-migration
+promotion (PR #148) — every promotion between S1 and then had deliberately
+restored these six files to their pre-S1 hardcoded state, mirroring
+`config.js`'s own preservation pattern; that promotion's merge conflicted on
+all six files as a direct, measured consequence of this gap and was resolved
+by taking staging's already-tested code wholesale.
 
-**Post-F99-migration-M1–M5 (2026-09-02, staging only):** the six functions'
-mail-send block now targets Resend, not MailerSend — endpoint, auth header,
-`RESEND_API_KEY` secret (new), `from` as a string, `to` as a plain email
-string. Staging's `MAIL_FROM_EMAIL` secret now holds `noreply@pulllist.app`
-(the flat address, not a per-tenant subdomain — decided in
-`f99-sender-domain-consolidation.md` § 10); `MAIL_FROM_NAME`'s value is
-unchanged (the brand name doesn't depend on provider). The `MAIL_FROM_EMAIL
-?? 'noreply@mrcyberrick.us'` fallback literal in code is unchanged — it is
-S1's regression control, not part of this diff. Production is untouched
-(separate, explicitly-requested step per CLAUDE.md § Staging Only). See
+**Post-F99-migration-M1–M7 (2026-09-02, BOTH environments):** the six
+functions' mail-send block targets Resend, not MailerSend — endpoint, auth
+header, `RESEND_API_KEY` secret (new), `from` as a string, `to` as a plain
+email string. Both environments' `MAIL_FROM_EMAIL` secret holds
+`noreply@pulllist.app` (the flat address, not a per-tenant subdomain —
+decided in `f99-sender-domain-consolidation.md` § 10); `MAIL_FROM_NAME`'s
+value is unchanged (the brand name doesn't depend on provider). The
+`MAIL_FROM_EMAIL ?? 'noreply@mrcyberrick.us'` fallback literal in code is
+unchanged in both — it is S1's regression control, not part of this diff.
+Production's real post-cutover send authenticated fully clean but surfaced
+**F152** (Outlook spam placement, monitor-not-act — see § 13). See
 `docs/f99-resend-migration.md` and `docs/f99-sender-domain-consolidation.md`
 § 4 S1.
 
@@ -2263,10 +2267,10 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_URL` | all |
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
-| `MAILERSEND_API_KEY` | **production only** as of 2026-09-02 — every function that sends email there (all except claim-paper-customer). Still present in staging's secret store (dormant, unread by any deployed code since the F99 Resend migration; harmless, not yet cleaned up per the plan's optional M8) |
-| `RESEND_API_KEY` | **staging only** as of 2026-09-02 (F99 migration M1) — the same six functions, now calling `api.resend.com/emails`. Fresh dedicated key, not the discovery session's key (Rick's call). Not set on production |
-| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **staging value changed 2026-09-02 to `noreply@pulllist.app`** per the Resend migration's flat-addressing decision, confirmed via a changed `supabase secrets list` digest; **production still `noreply@mrcyberrick.us`**, unset explicitly, using the fallback) |
-| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on staging** to that same value — unchanged by the Resend migration, since the brand name doesn't depend on provider; not set on production) |
+| `MAILERSEND_API_KEY` | **dormant on both environments** as of 2026-09-02 — set, but no deployed code reads it since the F99 Resend migration cut all six functions over. Kept as an undeleted rollback path (plan's optional M8), not yet cleaned up |
+| `RESEND_API_KEY` | **both environments** as of 2026-09-02 (F99 migration M1/M6) — the same six functions, now calling `api.resend.com/emails`. Staging: fresh dedicated key (Rick's call at M1). Production: **the same key reused**, not a fresh one — a deliberate, different choice at M6 |
+| `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **both environments' value changed 2026-09-02 to `noreply@pulllist.app`** per the Resend migration's flat-addressing decision, confirmed via changed `supabase secrets list` digests on both projects) |
+| `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on both environments** to that same value — unchanged by the Resend migration, since the brand name doesn't depend on provider) |
 | `APP_BASE_URL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password (pre-existing, not new to F99 S1 — `??` fallback to `https://pulllist.app`; was missing from this table until 2026-08-31. **Confirmed present in staging's secret store** via `supabase secrets list`; actual value not readable from the CLI (digest only) and not independently verified here — production status unchecked) |
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
@@ -3357,7 +3361,21 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
 
 #### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
-- **Status:** filed 2026-06-16 (5.4 S2), open — disposition: deferred. Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist. **Re-confirmed deferred at Phase 5 close (5.5 S6, 2026-07-15)** — tenant 2 (`comicstore`) stayed pilot/seeded through the soak with no real `register-customer` customers, so F72 never surfaced live; it becomes a **prerequisite to evaluate at tenant-2's real-customer go-live** (post-Phase-5 operational step) per `docs/tenant-onboarding-runbook.md`.
+- **Status:** filed 2026-06-16 (5.4 S2). **NO LONGER DEFERRED — IN PROGRESS as of 2026-09-02;
+  S0 (the tier mechanism) is on STAGING.** ***This entry's recorded scope is too narrow and
+  always was:*** it names one email template in one function; the measured surface is **6 Edge
+  Functions plus 24 client line sites across 7 files**, and the work is now **tier-gated on
+  `tenants.plan`** rather than uniform for every tenant. ***`docs/f72-multi-tenant-branding.md`
+  is the live record — read its STATUS token first, not this entry.*** **S0 shipped to staging
+  2026-09-02** (`cadd35b`): `plan` plumbed into the authenticated `TenantContext` read, a
+  fail-closed `Tier` helper added to `app.js`, `register-tenant` given an allowlisted `plan`
+  input (it previously hardcoded `'free'`, so **no path to create a paid tenant existed at
+  all**), and the onboarding runbook corrected. **S0 deliberately changes no rendered byte** —
+  `Tier` has zero call sites; S1/S2/S3 consume it. **Not on production.** **Open sub-item
+  carried by S0 and not yet done: production's `rjbookstop` is marked `plan = 'free'` although
+  it is the real paying tenant** — must be corrected before S1 renders anything, or Ray &
+  Judy's own site flips to generic branding. *(Prior disposition, kept for the record:*
+  deferred.) Multi-tenant email branding / per-tenant MailerSend identities are explicitly OUT of Phase 5 (parent § Out of Scope); revisit when tenant 2's real email needs exist. **Re-confirmed deferred at Phase 5 close (5.5 S6, 2026-07-15)** — tenant 2 (`comicstore`) stayed pilot/seeded through the soak with no real `register-customer` customers, so F72 never surfaced live; it becomes a **prerequisite to evaluate at tenant-2's real-customer go-live** (post-Phase-5 operational step) per `docs/tenant-onboarding-runbook.md`.
 - **Severity:** Low (documented gap, not a defect) — the un-pin (F34 residual) is data-correct: a customer registered via a non-founding tenant's webhook secret lands in that tenant's `user_profiles` with the right `tenant_id`. But `buildPendingEmail()` (register-customer/index.ts ~line 215+) hardcodes "Ray & Judy's Book Stop" / PULLLIST founding copy and the `from` name, regardless of which tenant the customer resolved to.
 - **Where:** `supabase/functions/register-customer/index.ts` — `buildPendingEmail()` and the MailerSend `from`/`subject` fields in the main handler.
 - **Fix (deferred):** when multi-tenant email branding is in scope, parameterize the email template + `from` identity by the resolved tenant's `branding`/`display_name` (and per-tenant MailerSend sender identity if needed).
@@ -3752,10 +3770,34 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   check is an accepted residual** — no real tenant-hostname URL exists on staging (`*.pages.dev` is
   hard-coded to the apex bucket), same disposition F149 already gives this exact
   untestable-headlessly class of check; the two functions actually exercised share its identical
-  request shape. **Production untouched — M6 requires Rick's explicit separate promotion request**,
-  same as every other production promotion in this project. Full record:
-  `docs/f99-resend-migration.md` (STATUS: staging complete). No finding ID consumed.
-- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (transactional, still live in production — untouched), Brevo (marketing), **Resend (transactional — wired into all six Edge Functions on staging 2026-09-02; production not yet cut over)**.
+  request shape. Full record: `docs/f99-resend-migration.md`. No finding ID consumed.
+- **Migration PROMOTED TO PRODUCTION, GREEN — 2026-09-02, same day, Rick's explicit request ("start
+  M6/M7").** Code via PR #148 (merge `4a4a475`) — the merge conflicted on all six Edge Functions
+  because production's `main` had never actually received F99 S1's parameterization: every prior
+  promotion (F149's, explicitly recorded) deliberately restored these files to their pre-S1
+  hardcoded-literal state after merging, mirroring `config.js`'s own preservation step. Resolved by
+  taking staging's side wholesale (`git checkout --theirs`), verified byte-identical to
+  `origin/staging` by hash before committing — this promotion therefore carries S1 to production for
+  the first time too, not only the Resend cutover. F125 tree-integrity checks green (`supabase/
+  migrations/` still exactly 2 files, `config.js` still the prod ref, PR file list matched intent on
+  GitHub itself). Secrets set by Rick — `RESEND_API_KEY` **reused the same key as staging** (his
+  explicit choice this time, not a fresh dedicated one), `MAIL_FROM_EMAIL` → `noreply@pulllist.app`.
+  All six deployed with `verify_jwt` read live and preserved (identical to staging's pattern,
+  re-confirmed post-deploy). **Real production send: authentication fully clean** —
+  `dkim=pass header.d=pulllist.app` (verified) **+** `header.d=amazonses.com` (verified),
+  `spf=pass smtp.mailfrom=send.pulllist.app`, `dmarc=pass action=none`, and Microsoft's own
+  **`compauth=pass reason=100`** — but the message landed in the recipient's spam folder anyway.
+  **Filed as F152**, not treated as a gate failure (nothing this migration is responsible for is
+  wrong) — reads as a cold-start reputation cost specific to `pulllist.app`'s near-zero prior send
+  history with Microsoft, not confirmed as the sole cause; mitigated by `forgot-password.html`'s
+  pre-existing spam-folder prompt; Rick's call is to monitor real traffic, not act. Write-smoke
+  deliberately skipped — this promotion never touches `app.js`/HTML or the customer reserve path,
+  confirmed from the diff itself (12 files: the six functions + docs only). **Both environments now
+  serving from `noreply@pulllist.app` via Resend; MailerSend keeps both accounts as a dormant
+  rollback path (M8, optional, unscoped).** Full record: `docs/f99-resend-migration.md` (STATUS:
+  complete, both environments). No finding ID consumed for the migration itself; **F152** filed for
+  the spam-placement discovery.
+- **Where:** six `from:` sites — `supabase/functions/{approve-customer,invite-customer,notify-customers,register-customer,reset-password,send-my-list}/index.ts` — across **both** staging and production, **both now on Resend**. DNS: `pulllist.app` in Cloudflare, `mrcyberrick.us` in GoDaddy. Provider dashboards: MailerSend (dormant on both accounts — credentials retained as a rollback path, not deleted), Brevo (marketing, untouched), **Resend (transactional — live on both environments as of 2026-09-02)**.
 - **Related:** **F72** (multi-tenant email branding) — the coupling is the point of this finding; design them together. **F97** (resolved 2026-07-25) — fixing it produced the verified picture above. **F96** — the `SENDER_EMAIL` repoint to `previews@rjbookstop.pulllist.app` was effectively step one of this consolidation, done ad hoc under incident pressure rather than by design. **F148** — Resend's daily cap is emails-metered (not requests, unlike MailerSend), so F148 is not dissolved by this provider choice; see `f99-resend-discovery.md` § 4 D8.
 
 #### F100 — `weekly-pull-feed` publishes to GitHub Pages from two independent deployers with no ordering guarantee between them; this, not cancelled Actions runs, is what broke F98
@@ -3806,7 +3848,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Resolution (2026-08-03, staging) — a code-keyed ledger, exactly as § 2.6 required:** new table **`order_submissions`** (`docs/sql/order-submissions.sql`), keyed on the **distributor code** (`order_code`) so it survives a re-listing, with `tenant_id` FK CASCADE, CHECK constraints on `distributor` (`Lunar`/`PRH`) and `order_type` (`monthly`/`adhoc`), two indexes, and admin-only RLS (SELECT + INSERT, both `tenant_id = current_tenant_id() AND current_user_is_admin()`, explicit `TO authenticated`). **No unique constraint on `order_code`** — re-ordering is legitimate; the ledger records history and the export reasons over it. Append-only: no UPDATE/DELETE policy, matching `reservation_history`'s posture.
 - **Write path:** a **"Mark Ordered"** action on the By Distributor tab (modal: quantity, `monthly`/`adhoc`, submitted-on date), written **manually after ordering** — not on export click, since generating a file is not proof of submission. **Defaults to `adhoc`** (Rick, 2026-08-03).
 - **Duplicate surfacing (§ 4.3) — surfaces, never auto-suppresses.** At export time each code is looked up in the ledger; hits appear in an **"Already ordered"** panel with prior quantity, date, cycle and order type, each with an include/exclude checkbox and an editable quantity **pre-filled with the remaining amount** (reserved − already-ordered). On the live MIDNIGHT X-MEN shape this suggests **2**, which is the correct action — not 7 (what happened) and not 0 (what auto-suppression would have done). Gate **V4** asserts the row is flagged with prior qty and is *not* auto-suppressed.
-- **Per-title order state, added 2026-08-03 after Rick's real-browser review:** the By Distributor **Status column is a single button** whose label and colour carry the state — `Mark Ordered` (nothing on the ledger) → `◐ Add (n of m)` (ordered < reserved, amber) → `⚠ Over (n of m)` (ordered > reserved, red, **still clickable** — surface, never block) → `✓ Ordered (n)` (exact match, **disabled**). This is what makes the F102 failure mode visible *per title, at a glance*, rather than only inside the export flow. **The over-order state is the one this finding exists for** and it is now impossible to look at the tab and not see it.
+- **Per-title order state, added 2026-08-03 after Rick's real-browser review:** the By Distributor **Status column is a single button** whose label and colour carry the state — `Mark Ordered` (nothing on the ledger) → `◐ Add (n of m)` (ordered < reserved, amber) → `⚠ Over (n of m)` (ordered > reserved, red, **still clickable** — surface, never block) → `✓ Ordered (n)` (exact match — **was unconditionally `disabled`; since 2026-09-05 it is disabled only once the correction window has closed**, i.e. every reservation fulfilled and the latest `fulfilled_at` more than `ORDER_CORRECTION_DAYS` (7) days ago. See the F143 note below.). This is what makes the F102 failure mode visible *per title, at a glance*, rather than only inside the export flow. **The over-order state is the one this finding exists for** and it is now impossible to look at the tab and not see it.
 - **Ad-hoc exclusion (§ 4.4):** a ledger row with `order_type = 'adhoc'` excludes that code from the monthly export and lists it as excluded (gate **V5**) — closing the second, independent route to the same duplicate failure.
 - **Customer-facing consequence (scope extension, Rick 2026-08-03):** "Order placed" on **My List** is now driven by the ledger, **independent of `fulfilled`** — Rick's words: *"The fulfilled status is not relevant as Marked Ordered should show the Order placed status."* Because `order_submissions` is admin-only under RLS, a new SECURITY DEFINER RPC **`get_ordered_codes()`** (`docs/sql/get-ordered-codes-rpc.sql`) exposes only `(distributor, order_code)` pairs — no quantities, dates, or titles — tenant-scoped via `current_tenant_id()` internally, never a client parameter; `EXECUTE` to `authenticated` only. `Preorders.cancel()` gained a matching second guard refusing to cancel a code with any ledger row, and `exportCode()` moved from `admin.html`-local into `app.js` so the cancel guard, My List and the exports share one fallback chain. **Verified end-to-end** with real throwaway staging users: the RPC returns correct tenant-scoped rows for a non-admin session, and the guard refuses an ordered code while permitting a non-ordered one (positive *and* negative control).
 - **"Mark Fulfilled" removed (Rick, 2026-08-03):** rather than the § 4.6 relabel, Rick's call was that manual fulfillment tracking is meaningless without POS integration (out of scope), so the manual toggle and its handler are gone. **`fulfilled` itself is untouched** — same column, same RLS, still set automatically by `auto_fulfill_past_on_sale()` at import, and `Preorders.setFulfilledByCatalogId()` is left in `app.js` unused for a future POS path. This supersedes the § 4.6 decision gate, which had been answered "additive" earlier the same session.
@@ -5189,6 +5231,8 @@ reasoning — only the disposition changed, not the diagnosis.
   - **Panel → ledger does not.** The resolve control's three options — **Received · Didn't arrive · Damaged** (verified live on `main` 2026-08-26) — write `arrival_outcome` and nothing else. There is no option that records a rejection.
 - **Why that matters.** Marking a rejected title "Didn't arrive" clears the panel while leaving the ledger asserting the copies are on order. Four consequences: By Distributor keeps reading `✓ Ordered (n)`; the next cycle's remainder is computed against a phantom order; **the title is not re-offered for ordering**, though a rejected title is often precisely what one would re-order; and the customer is told "didn't arrive" rather than F120's more accurate "rejected by the supplier."
 - **The interim workaround, corrected 2026-08-26 against a live case (Rick, PRH UPC `75960621630700217`, exactly-matched 1-ordered/1-reserved).** This entry originally read "Ordering ▸ By Distributor ▸ find the title ▸ Mark Ordered ▸ *Adjustment (correction)* ▸ negative quantity" — **that path is unreachable for the common case this finding is about.** By Distributor's Mark Ordered button is disabled whenever the ledger exactly matches reservations (`admin.html`, `orderMatched ? 'disabled' : ''`), which is precisely the state a title is in once it has been ordered and is only later discovered rejected — there is nothing else to click on that row. The action that actually works: open the Order Builder for that distributor, tick the title's own FOC cycle in the cycle selector (it defaults to only the earliest future cycle, so a later-cycle title like this one is bucketed into the hidden `orderedOtherCycle` group otherwise), which surfaces it under **⚠ Already Ordered** with a qty field and an **Include in this export** checkbox; unticking Include and proceeding to the record step writes the zero/negative row. Still four navigations, just not these four. Correct, and deliberately still available on a closed cycle (2026-08-06 decision) — the defect this finding is about stands: the quick, wrong action (the Never Arrived resolve control's three options) sits in front of the operator and the right one is buried in a different tab entirely.
+
+  **SUPERSEDED IN PART, 2026-09-05 (staging).** The sentence above — "there is nothing else to click on that row" — is no longer true inside a bounded window. Rick: *"if the ad-hoc ordering process would allow a change after the order status is set these changes can be corrected if an error is made. I would like to see the order button unlocked up to 7 days after fulfilment."* `orderMatched ? 'disabled' : ''` is now `orderMatched && !correctionOpen ? 'disabled' : ''`, where `correctionOpen` is true while the cycle is still live (not all fulfilled) or the latest `fulfilled_at` is within `ORDER_CORRECTION_DAYS` (7). So on that exact live case — PRH `75960621630700217`, 1 ordered / 1 reserved — Mark Ordered is now clickable on the row itself, and the modal already accepts 0 and negative quantities (F117/F108 § 4.4). The Order Builder route remains valid and is the ONLY route once the window closes. **Two further routes were added the same day** (see F155's FOLLOW-ON note): the Status column and `arrivals.html`'s reconciliation exceptions list both now carry F143's own "Rejected by supplier" button, so the quick action in front of the operator is now the right one.
 - **Proposed fix:** a fourth option, **Rejected by supplier**, on the same control, writing the negative adjustment that nets the code to 0. Everything downstream is existing machinery: net ≤ 0 → `ledgerRejected()` → the row clears through F134 Part 1's exit (**no `arrival_outcome` write needed at all**), F120 surfaces the rejection to the customer, By Distributor corrects, and `classifyForExport()` routes the code back to `included` when its cycle is ticked — the re-offer behaviour F142's comment explicitly protects.
 - **Design decision, if built: do NOT also write `arrival_outcome`.** Leave it `'unknown'`. The ledger rejection is the fact; `arrival_outcome` records what the *import* judged about arrival. They are different statements, and writing both creates two records that can later disagree. The two production titles above already demonstrate the intended pattern.
 - **THE THREE ARTIFACTS — corrected 2026-08-26 by Rick, and this is the fact the whole finding rests on.** They are routinely conflated; they are not the same file:
@@ -5582,7 +5626,332 @@ reasoning — only the disposition changed, not the diagnosis.
   fixed" disposition, and the same GRANT-vs-RLS distinction at its core). **Phase 5.3 § 1.5** (the
   anon projection boundary that holds and is *not* the gap here).
 
-Next free finding ID: **F152**.
+#### F152 — a real Resend send to an Outlook/Microsoft recipient landed in spam despite fully clean authentication
+
+- **Status:** filed 2026-09-02, found during **F99 M7** — the migration's own post-cutover
+  production verification, immediately after the six Edge Functions were cut over to Resend on
+  `plgegklqtdjxeglvyjte`. **Open, not started — Rick's explicit call: monitor, don't act yet.**
+- **What happened, measured, not inferred.** A real `reset-password` send to
+  `rick.sedivec@outlook.com`, triggered right after M6's production deploy, delivered with **every
+  authentication check clean**, read from the actual delivered headers:
+  ```
+  spf=pass smtp.mailfrom=send.pulllist.app
+  dkim=pass header.d=pulllist.app   (verified)
+  dkim=pass header.d=amazonses.com  (verified)
+  dmarc=pass action=none
+  compauth=pass reason=100
+  From: Ray & Judy's Book Stop <noreply@pulllist.app>
+  ```
+  **It still landed in the recipient's spam folder.** This is not a K1–K6 kill-criterion trip — the
+  discovery session's kill criteria (`docs/f99-resend-discovery.md`) cover link rewriting, tracking
+  injection, and alignment, none of which are in play here; every one of those measured clean, both
+  in discovery and again in this send. This is a separate axis: deliverability/reputation, which the
+  plan's own V6 gate (dkim/spf/dmarc passing) does not and cannot measure.
+- **Likely cause, not confirmed as the sole one.** `pulllist.app` has essentially no prior send
+  history with Microsoft's mail graph specifically — before this migration it was only ever used for
+  Brevo's marketing newsletter subdomain (`rjbookstop.pulllist.app`), and the parent domain was only
+  Resend-verified days earlier in the discovery session. `mrcyberrick.us` (the outgoing MailerSend
+  sender this replaces) had years of accumulated history with every major receiver. A brand-new
+  sender/domain combination commonly lands in spam at first regardless of authentication correctness
+  — a cold-start reputation cost, not a technical defect — and this reads as that. **Not
+  independently verified**: no probe was run against Microsoft's postmaster/SNDS tools, and no second
+  Outlook/Hotmail/Live send was attempted to see if the result repeats.
+- **What this is NOT.** Gmail (twice, in earlier M4 staging tests) and a third-party relay
+  (`jellyfish.systems`/`privateemail.com`, also M4) both delivered `pulllist.app`-sent mail to the
+  inbox cleanly in this same session. Only the one Outlook send has been observed going to spam — one
+  data point, one receiver, not a broad pattern yet.
+- **Mitigating factor, verified in code, not assumed:** `forgot-password.html:194`'s existing
+  success-state copy already reads *"Didn't get it? Check your spam folder, or **send again**"* —
+  this exact failure mode already has a UX safety net, present before this finding and not added
+  because of it. The customer is not left guessing.
+- **Severity: Low.** Not a defect in the migration's own correctness — every technical check this
+  migration is responsible for passes. A real customer-facing deliverability risk for
+  Outlook/Hotmail/Live recipients specifically, during whatever reputation warm-up period follows a
+  sender-domain change, softened by the pre-existing spam-folder prompt.
+- **Fix direction: none proposed, deliberately.** Rick's call, 2026-09-02: monitor as real customer
+  traffic (not test sends) builds `pulllist.app`'s reputation with Microsoft over the following days
+  to weeks; escalate only if it does not self-resolve. No code change, no DNS change, no provider
+  change proposed here.
+- **Where:** production only (`plgegklqtdjxeglvyjte`) — this send was against production, post-M6.
+  Not tested against staging.
+- **Related:** **F99** (the migration this surfaced during — `docs/f99-resend-migration.md` M7).
+
+#### F153 — `register-tenant` created a new tenant's admin account with no way to sign in at all
+
+- **Status:** filed AND RESOLVED same session, 2026-09-03. Found while answering a plain question
+  ("how does first login work?") — not a scoping session, not a scheduled audit.
+- **What happened, measured, not inferred.** `register-tenant/index.ts` (259 lines, full file read)
+  created the first admin's `auth.users` row via `/auth/v1/admin/users` with `email_confirm: true`
+  and no password — then did **nothing else**. Zero hits for `generate_link`, `invite`, `RESEND`, or
+  any mail-sending code anywhere in the file. `docs/tenant-onboarding-runbook.md` Step 5 claimed
+  otherwise — *"The `register-tenant` function sends the magic link automatically to `admin_email`
+  at creation time (via Supabase Auth's invite flow)"* — which was false against the live code, not
+  merely stale. **There was no automated path into a brand-new tenant at all.** The only way in was
+  the doc's own "if the magic link has expired" fallback (Supabase dashboard → Users → Send magic
+  link) — undocumented as the actual, only, every-single-time path.
+- **Severity: Medium.** Not a security issue (the account was correctly scoped and gated) — an
+  onboarding-completeness gap. Every tenant created before this fix landed the same way: real
+  account, real data, no way for the operator to hand off access without going into the Supabase
+  dashboard by hand.
+- **Fixed same session.** `register-tenant` now generates a GoTrue link and sends a branded invite
+  via Resend after the tenant + admin profile are both written. A mail failure does not roll back
+  the tenant/admin — both are already real, and recoverable via the existing dashboard fallback or
+  the admin's own Forgot Password (proven separately to work on any existing account, § 13
+  `reset-password`'s `type: 'recovery'` pattern). The response gained `invite_sent: boolean` so an
+  operator can tell without reading logs whether the fallback is actually needed.
+- **A real platform-behavior claim was verified live, and the first attempt was wrong.** GoTrue's
+  `generate_link` `type: 'invite'` (the type `invite-customer` already uses successfully) only works
+  to *create* a user as a side effect — it does not work against a user who already exists, which
+  the admin here already does (this function creates them first). Confirmed directly: a live probe
+  against a fresh, already-confirmed throwaway user returned `422 email_exists`. Switched to
+  `type: 'recovery'` (`reset-password`'s own proven type for an existing account) and re-verified
+  live: a real throwaway tenant created through the deployed function came back `invite_sent: true`,
+  7/7 on the full check including a fresh-read teardown confirming **zero orphaned auth users**
+  (F130's own failure mode, checked rather than assumed).
+- **Sender identity is deliberately "PULLLIST"** — not `MAIL_FROM_NAME` (today's founding-tenant
+  literal; reusing it would have relocated F72's exact leak into a brand-new function) and not the
+  new tenant's own `display_name` either, since this is the platform inviting someone to a shop that
+  has no operating identity yet from the recipient's own point of view.
+- **The email always links to the apex `?t=<slug>` URL, never a `<slug>.pulllist.app` guess**, even
+  for `plan = 'pro'` — the paid hostname is a later, separate manual step (runbook Step 3, sequenced
+  *after* this one) that may not be provisioned yet when this email sends. F145's own warning against
+  printing an unprovisioned hostname anywhere, applied here deliberately.
+- **Runbook corrected in the same commit**, not left stale: Step 5 now describes what
+  `invite_sent` means, that everyone lands on `catalog.html` (not `admin.html` directly) after
+  setting a password and reaches Admin via the nav, and that a `free` tenant's real access URL is
+  `pulllist.app/?t=<slug>` — not the subdomain the old text implied every tenant had.
+- **Verification:** live end-to-end via the deployed function (real tenant created, `invite_sent`
+  checked, admin profile read back, full FK-ordered teardown verified by fresh read). Template
+  output separately verified mechanically (`f72-admin-invite-template-verify.mjs`, local,
+  uncommitted): the new shop's own name renders, the apex link is always used, no founding-tenant
+  literal appears anywhere, a hostile `display_name` is HTML-escaped rather than injected, one
+  assertion negative-control tested. Unit suite 279/279 (unchanged — no import-script code touched).
+- **Where:** staging only (`puoaiyezsreowpwxzxhj`). **Not production** — separate explicit request
+  per CLAUDE.md § Staging Only.
+- **Related:** **F72** (found while working through F72's own free-tier resequence, but scoped
+  separately — this is a missing onboarding mechanism, not a branding leak). **F130** (the
+  orphaned-auth-user failure mode this fix's own teardown checked against). **F145** (the
+  no-wildcard-DNS constraint this fix's link design respects).
+
+#### F154 — `mylist.html`'s print header reads "Catalog for null" when a tenant has no catalog rows
+
+- **Status:** filed AND RESOLVED same session, 2026-09-03. Found live by Rick, printing My List for
+  a brand-new tenant (`riverside-comics`, created moments earlier via the walkthrough this session
+  — free tier, zero catalog rows seeded, a normal pre-first-import state, not an edge case anyone
+  had to contrive).
+- **What happened.** `Catalog.getLatestMonth()` (`app.js:702-710`) correctly returns `null` when a
+  tenant has no catalog rows. `mylist.html`'s print-button handler interpolated it unguarded:
+  `` `Catalog for ${currentMonth}` `` — JS stringifies `null` as the literal text `"null"`, so the
+  printed sheet read *"Catalog for null."* **Not a branding leak** — this would hit any tenant,
+  free or paid, printing before their first catalog import.
+- **The normal (non-print) page already had the fix, six lines away, and it just never got applied
+  to the print path.** `mylist.html:1546` guards the exact same value: `if (currentMonth) { ... }`.
+  The print handler was the one place that skipped it.
+- **Severity: Low.** Cosmetic, print-only, and only visible before a tenant's first catalog import —
+  a narrow, early-onboarding window. Not customer-facing in the sense of ongoing risk; a new
+  tenant's admin printing an empty list on day one is the only way to see it.
+- **Fixed same session.** `` `Catalog for ${currentMonth || 'no catalog imported yet'}` `` — same
+  `||`-fallback shape `getLatestMonth()` itself already uses. Minimal, single-location change; the
+  raw `YYYY-MM` (vs. a formatted "September 2026" label) the print subtitle also shows when
+  `currentMonth` **is** present is a separate, pre-existing, non-blocking cosmetic gap, not touched
+  here — out of this fix's scope.
+- **Verification:** `node --check` clean on the file's one inline `<script>` block. Not yet
+  re-verified against a live print of `riverside-comics` post-deploy — the fix is mechanically
+  correct (same guard pattern proven at line 1546) but the actual printed sheet has not been
+  re-checked by a human.
+- **Where:** staging only (`puoaiyezsreowpwxzxhj`). Not production.
+- **Related:** found while executing the tenant-onboarding walkthrough this session (F153's own
+  companion work), on the first tenant created through the newly-fixed invite flow.
+
+#### F155 — the monthly-refresh runbook tells the operator PRH does not revise dates in place, so PRH catalogs are never re-pulled and a revised in-store date is never detected
+
+- **Status:** filed 2026-09-04, **open, not started.** Owner doc:
+  `docs/f155-catalog-date-revision-detection.md`. Found by Rick from a live symptom, not an audit:
+  a reserved title that had quietly stopped being visible to its customers.
+- **The defect proper is one sentence.** `docs/monthly-catalog-refresh.md:130-132` reads *"PRH's
+  export omits withdrawn titles rather than revising dates in place (see F110), so this step
+  matters most for Lunar."* Measured false: comparing freshly-downloaded PRH master data against
+  live production `catalog` rows, **108** titles in 2026-07 carry a different `OnSaleDate` than the
+  DB, plus 27 in 2026-06, 19 in 2026-08 and 4 in 2026-09. PRH revises in place exactly as Lunar
+  does. Because the runbook says otherwise, the Step 3 Revision Sweep has never been run for PRH.
+- **The symptom.** DNX #1 [HIDDEN/DOUBLE COVER] (PRH `75960621519500111`), solicited 2026-05 with
+  in-store 2026-09-02, revised by PRH to **2026-09-16**. Two live reservations. Once the stale date
+  passed, the title fell out of `mylist.html`'s current-month table (`:937`) **and** out of its
+  future-dated Upcoming Arrivals section (`:884`) — the customers can see it nowhere — and the next
+  import would set `fulfilled = true` for a book that has not shipped.
+- **Why no panel caught it.** `computeBackorderRisk()` (`admin.html:1749`) clears any code with
+  `ledgerNetQty > 0` before every other test, so an **ordered** title is invisible to Order
+  Follow-Up. The Mark Ordered button was correctly `disabled` (ledger 2 = reserved 2 — nothing left
+  to order), leaving no control to reach for. Both behaviours are correct in isolation; together
+  they leave no surface.
+- **The larger finding, and the reason this is not just a doc fix: for a frozen PRH catalog no data
+  channel exists at all.** Measured three ways — (1) two downloads of May master data 44 minutes
+  apart are **byte-identical** (MD5 `438958a0b69b961ab140ab63c9b3f3bf`) and **0 of 1,078** rows
+  differ from what was imported in May; (2) May's Weekly Change Reports run 2026-04-24 → **2026-07-31
+  and stop**, and DNX #1 does not appear in the final one; (3) **0 of 5,123** PRH `MainIdentifier`s
+  appear in more than one monthly file, so F122's newest-listing logic can never rescue a PRH title.
+  PRH stops maintaining a catalog roughly three months past its catalog date, while **84 May titles
+  are still future-dated today.** DNX #1's real date is unreachable from any PRH export.
+- **Lunar is the opposite, and better than the plan assumed.** The All Products CSV Order Form is a
+  single 17,490-row file spanning catalog months back to 2025, with an `In-Store` column; it covers
+  **559 of 568 (98.4%)** distinct Lunar codes holding open reservations, in one download. It found
+  **13** already-stale dates immediately, including `FIRE AND ICE #5` (`0826DE0733`) moved
+  2026-10-28 → **2026-09-30**, i.e. a month *earlier* — a direction no existing surface watches,
+  and one where the book arrives before the bagging list expects it.
+- **Severity: Medium.** Small blast radius today — 3 ordered titles across 4 reservations are in the
+  exposed window on production, and the two DNX #1 rows are **still `fulfilled = false`**, so the
+  false fulfilment has not yet happened. But the failure is silent in all three of its stages, it
+  ends in telling a customer a book arrived when it did not, and PRH's half of it is undetectable
+  from any file.
+- **Verified live, read-only, 2026-09-04** (service-role reads against production; nothing written):
+  catalog row, both preorders, `order_submissions` net +2, zero `weekly_shipment` evidence.
+- **Fix direction** (see the owner doc for the plan): S1 correct the runbook line; S2 a weekly
+  `check-dates.js` reusing `classifyReservedDateDrift()` (`import.js:517`) against 2 downloaded
+  files; S3 a **bounded deferral** in `auto_fulfill_past_on_sale()` plus a `computeBackorderRisk()`
+  ordering change so deferred rows stay visible.
+- **S3 knowingly revisits a decision recorded as rejected.** F115 Option A was declined because
+  gating fulfilment on missing shipment evidence would "trade a silent miss for a silent stall"
+  (`findUnverifiedFulfillments()`'s own docblock). That objection stands, so S3 **defers, bounded**
+  rather than blocking, and ships together with the panel change that keeps deferred rows visible.
+  **APPROVED by Rick, 2026-09-04**, on being shown the reversal explicitly rather than having it
+  assumed. When S3 lands, record the approval in `docs/f115-arrival-truth-persistence.md` too, so a
+  reader of that doc's "Option A was rejected" line finds the follow-up instead of re-deciding it.
+- **Remediation shipped ahead of the plan, 2026-09-04:** `scripts/fix-stale-dates-f155.js`.
+  `auto_fulfill_past_on_sale()` runs **weekly** (measured 2026-08-07 / 08-14 / 08-20 / 08-28) and
+  the last run was 2026-08-28, so the false fulfilment was due imminently and could not wait for S2.
+  Dry run found **15** corrections — 13 Lunar derived live from the All-Products export (incl.
+  `0826DE0733` FIRE AND ICE #5 moving *earlier*, 10-28 → 09-30) and the 2 PRH DNX #1 rows from a
+  declared provenance table. **9 Lunar codes reported and deliberately skipped** — absent from the
+  export because it lists *available* products (mostly 1:25–1:500 incentive variants); no
+  authoritative date, so no write. Same conventions as `clear-f147-withdrawn.js`: production-only
+  guard, live re-derivation, before-state JSON log written first, sanity band, single y/n,
+  independent fresh re-read as the success check.
+- **Where:** neither environment — nothing has been changed. Production is where the symptom was
+  measured.
+- **Related:** F136 (the Revision Sweep this should have been part of), F122 (newest-listing
+  fulfilment, which cannot help PRH), F115 (arrival truth, whose Option A this revisits), F146
+  (older-month re-imports, which would revert any hand-corrected date), F110 (cited by the wrong
+  runbook sentence).
+- **FOLLOW-ON SHIPPED 2026-09-05 (staging), no new finding ID.** The "no surface at all" half of
+  this finding now has controls. Rick hit the identical collision from the **shipment-reconciliation
+  side**: `0726IM0319` (SPAWN 77 CVR J, 1:500) carries one `monthly` ledger row of qty 1 against 1
+  reserved, so Mark Ordered is correctly `disabled` and `computeBackorderRisk()` clears it before
+  every other test — while `fulfilled=false` keeps it out of `neverArrivedFromFulfilled()` too. S3's
+  panel-ordering fix addresses this but only 14 days past on-sale; the reconciliation panel sees it
+  on the day the invoice is imported. F143's write (`recordSupplierRejection()`, one writer) is now
+  reachable from the admin distributor-table Status column and from `arrivals.html`'s exceptions
+  list, both guarded on `ledgerNetQty > 0` and, for the table, `!hasShipmentEvidence()`. Verified
+  22/22 against deployed staging (`playwright/f156-reject-surfaces-verify.mjs`, local-only).
+  Recorded here so a reader of this finding does not re-derive it.
+- **The write is CONFIRMATION-GATED as of 2026-09-05**, on all three entry points including F143's
+  original panel button. Rick: *"I do not think there is an in-app (UI) recovery from a misclick[;]
+  a confirmation is needed."* Measured, and correct where it counts — `arrivals.html`'s recon row
+  offers nothing once it reads "Rejected — recorded", and while `admin.html`'s Status button becomes
+  clickable again in the rejected state, what it opens is Mark Ordered: it records a **fresh**
+  submission, it does not undo, and nothing announces itself as recovery. The write is
+  customer-visible immediately (F120's Rejected badge). `confirmSupplierRejection()` lives in
+  `app.js` because the **wording** is the safeguard and three copies would drift; it names the
+  title, the adjustment quantity, the customer-visible effect, and states that the ledger is
+  append-only. Native `confirm()`, matching `admin.html`'s own convention for irreversible admin
+  actions (`:3666`, `:4376`, `:4403`). **Playwright auto-dismisses dialogs**, so
+  `22-f143-f144-ordering-rejections.spec.ts:239` would have silently clicked into a no-op and failed
+  against an unchanged ledger — it now accepts the dialog.
+
+#### F156 — Lunar restricted-variant ratios never reached `order_requirement` on rows imported before F132, so no restriction badge renders for them anywhere
+
+- **Status:** filed AND **fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-05** — backfill applied by Rick to staging (66 rows) and production (67 rows), each verified by an independent service-role read afterwards rather than from the write's own output. Found live by
+  Rick from a production screenshot of `arrivals.html`'s This Week reconciliation panel: five SPAWN
+  77 incentive variants sat in the "Not in shipment" list with no restriction badge, while every
+  PRH row in the same list carried one.
+- **`arrivals.html` is not the defect.** Both badge sites read `catalog.order_requirement` and
+  never parse the title, exactly as F144's own trap requires — the exceptions-list pill
+  (`arrivals.html:1278`) and the store-grid card badge (`arrivals.html:1339`). The column is simply
+  **empty** on those rows.
+- **Root cause: `order_requirement` is derived at IMPORT time and nothing ever re-derives it.**
+  `parseLunarVariantRestriction()` (`import.js:272`, added by F132 on 2026-08-20) reads Lunar's
+  ratio out of `variant_type` — Lunar has no separate OrderRequirement column. A catalog row
+  imported before that fix keeps `variant_type = '1:500'` and `order_requirement = null`
+  **permanently**, because older catalog months are never re-pulled. That is the same
+  never-re-pull assumption F155 is about, hitting a different column.
+- **Measured live on production 2026-09-05** (service-role read, `variant_type` matched against the
+  strict `^[0-9]+:[0-9]+$` pattern the import itself uses):
+
+  | Lunar `catalog_month` | rows with a true `N:M` `variant_type` | of those, `order_requirement` NULL |
+  |---|---|---|
+  | 2026-03 | 1 | **1** |
+  | 2026-04 | 3 | **3** |
+  | 2026-05 | 10 | 0 |
+  | 2026-06 | 36 | **5** |
+  | 2026-07 | 175 | **58** |
+  | 2026-08 | 166 | 0 |
+  | 2026-09 | 164 | 0 |
+  | **all months** | **555** | **67** |
+
+  ***Corrected 2026-09-05 from Rick's real production pre-check.** This table first listed only
+  2026-05..2026-09 and therefore showed 63 of the 67 — the total was right (an all-months query)
+  but the breakdown beside it was incomplete, because the month list was chosen by hand rather than
+  derived from the data, and the two were never reconciled. **The stale window reaches back to
+  2026-03, not 2026-06.** The four extra rows carry **zero** reservations (long-lead hardcovers and
+  bundles), so the "6 with live reservations" figure below is unaffected. 2026-05 sitting clean
+  between stale neighbours is unexplained, most likely a post-fix older-month re-import; it does not
+  affect the fix, which keys on the column being NULL rather than on any month.*
+
+  Staging has the same shape: 554 true-ratio rows, **66** with NULL. 2026-08 and 2026-09 are clean
+  because both were imported after the fix; 2026-05 is clean for an unrecovered reason (most likely
+  a post-fix older-month re-import), which is why the stale set is 2026-06/07 rather than
+  "everything before 2026-08-20."
+- **The reverse direction is clean, and that is what makes the backfill safe.** **0** Lunar rows
+  carry `order_requirement` without a matching ratio in `variant_type`, so restoring the column from
+  `variant_type` applies the identical rule `parseLunarVariantRestriction()` already applies — it is
+  a replay of the import's own normalizer, not a guess.
+- **6 of the 67 carry live, unfulfilled reservations**, and they are exactly the unbadged rows in
+  the screenshot: `0626DE0825` (1:10, VAMPIRELLA VS RED SONJA RED CITY #1 CVR G),
+  `0726IM0315`/`0316`/`0317`/`0318`/`0319` (1:25 / 1:50 / 1:100 / 1:250 / 1:500, SPAWN 77 #1 CVR
+  F–J). `0726AC0632` (LIFE WITH ARCHIE #1) sits in the same list unbadged and is **correct** — its
+  `variant_type` is null, so there is no ratio anywhere to surface.
+- **Severity: Medium, and it is wider than the admin report Rick was looking at.** The same column
+  drives the **customer-facing** restriction warning — `app.js:1906`'s `.restriction-badge` on the
+  catalog card and `catalog.html:1261`'s detail-modal notice. So those six titles were reserved with
+  **no "restricted variant" warning shown to the customer at all**, which is the exact signal F132
+  was built to give. It also silently under-counts the Order Builder's per-cycle "restricted" tally
+  (`admin.html:1126`).
+- **Fix: a one-time data backfill, no code change.**
+  `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql` — sets
+  `order_requirement = variant_type` for Lunar rows where `variant_type ~ '^[0-9]+:[0-9]+$'` and
+  `order_requirement IS NULL`. Every future import is already correct, so this closes the gap
+  permanently rather than needing a recurring sweep. Every consumer of the column is read-only
+  display, so the only behavioural change is that the badge starts appearing.
+- **Where:** both environments — **both applied and verified 2026-09-05.** Production 488 → 555
+  (`still_null` 67 → 0), staging 488 → 554 for the founding tenant plus `demoshop`'s 164. The
+  invariant, not just the count, was re-read fresh: **all 555 production ratio rows now satisfy
+  `order_requirement === variant_type`, 0 mismatched**, all six reserved titles carry their ratio,
+  and PRH is unchanged at 724 (guaranteed by the UPDATE's own `distributor` filter, confirmed rather
+  than assumed).
+- **Related:** F132 (introduced the column and the Lunar derivation; its rows-imported-before gap is
+  this finding), F144 (the Order Builder badge that reads the same column), F155 (same
+  never-re-pull-an-older-month assumption, different column).
+- **Found alongside a second, separate defect in the same screenshot**, filed under **F155** rather
+  than here because F155 already owns it: an ORDERED title absent from the invoice has no reachable
+  "record rejection" control anywhere. Fixed the same session — see F155's FOLLOW-ON bullet.
+- **STAGING RUN, 2026-09-05 (Rick), and it exposed a defect in this file's own post-check.** The
+  result was `still_null = 0, inconsistent = 0, lunar_with_requirement = 718` against a stated
+  expectation of **554**. The run was perfect; **the expectation was wrong.** 554 is the
+  *founding-tenant* count, and the post-check query carries **no tenant filter** — staging's second
+  tenant `demoshop` (F72's demo, catalog copied from the founding tenant) holds 164 Lunar rows of
+  its own. 554 + 164 = 718. The founding tenant moved 488 → 554, i.e. **+66, exactly the predicted
+  number**. Corrected in the SQL file: an expected value that disagrees with its own query is the
+  same class of defect as a verification step that cannot fail — it manufactures a false alarm
+  rather than hiding a real one. **Production is not affected by the ambiguity**: its second tenant
+  (`comicstore`) holds no Lunar ratio rows, so DB-wide and founding-tenant figures coincide there
+  (before: `still_null = 67`, `lunar_with_requirement = 488`; expect 0 / 555 after).
+- **Verified END-TO-END on staging, not inferred from the column.** The honest limit recorded at
+  filing — "what is proven is that the badge sites read the column correctly and that the column is
+  empty" — is now closed. A live browser check (`playwright/f156-reject-surfaces-verify.mjs`, V24)
+  seeded a reservation on `0726DC0016` (LEGION OF SUPER-HEROES #1 CVR I INC 1:25, `catalog_month`
+  **2026-07** — one of the two stale months) and read **`⚠ 1:25`** back out of `arrivals.html`'s
+  "Not in shipment" list: the exact surface and the exact missing badge that was reported.
+
+Next free finding ID: **F157**.
 
 ---
 

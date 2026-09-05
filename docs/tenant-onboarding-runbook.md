@@ -23,6 +23,7 @@ Collect from the operator before writing any SQL or running any curl:
 | `admin_email` | a real, reachable mailbox the tenant admin controls |
 | `branding` (optional) | jsonb: `{ "primary_color": "#xxxxxx", "display_name": "...", "logo_url": "..." }` — may be set at create or updated after |
 | `contact_email`, `contact_phone`, `location` (optional) | tenant metadata; passed in the `register-tenant` body |
+| `plan` | **`free` (default) or `pro`.** Set `pro` only for a tenant who is actually paying. Gates how much of the tenant's identity appears on customer-facing web, email and print surfaces (F72). Allowlisted in `register-tenant` — any other value silently becomes `free`, so check the read-back in Step 1 |
 
 **Reserved slug denylist** (hard-coded in `register-tenant`): `www`, `app`, `api`, `admin`, `staging`, `prod`, `mail`, `ftp`, `blog`, `dev`, `test`, `canary`, `pulllist`, `raysandjudys`, `rjbookstop`.
 
@@ -47,6 +48,7 @@ $tmpBody = "$env:TEMP\new-tenant.json"
   "display_name": "<display_name>",
   "admin_email": "<admin_email>",
   "location": "<optional>",
+  "plan": "free",
   "branding": { "primary_color": "#xxxxxx" }
 }
 '@)
@@ -65,10 +67,12 @@ curl.exe -s -X POST "https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/regis
 **Expected response (`200`):**
 
 ```json
-{ "tenant_id": "...", "admin_user_id": "...", "slug": "...", "webhook_secret": "..." }
+{ "tenant_id": "...", "admin_user_id": "...", "slug": "...", "webhook_secret": "...", "invite_sent": true }
 ```
 
-**Save all four values to a local scratch file. Do not paste `webhook_secret` into chat.**
+**Save the first four values to a local scratch file. Do not paste `webhook_secret` into chat.**
+**Check `invite_sent`** — `false` means the tenant and admin were created correctly but the
+invite email failed to send; see Step 5 for the fallback.
 
 Error responses:
 - `401` — operator secret wrong or not loaded; re-check `.env`
@@ -82,19 +86,41 @@ Error responses:
 
 If branding was included in the `register-tenant` body it is already seeded. If not, or if you want to update it after creation:
 
+> ⚠️ **`display_name` is a COLUMN, not a `branding` key.** `Branding.apply()` reads
+> `tenant.display_name` (`app.js:186`) and **ignores** `branding.display_name` entirely.
+> This step's SQL used to write the name into the jsonb, which does nothing — production's
+> `comicstore` still carries that ignored key today. Corrected 2026-09-02 (F72 S0).
+
 ```sql
 -- Prod SQL Editor
+-- Name: the COLUMN. Colour/logo/banner: the jsonb.
 UPDATE public.tenants
-  SET branding = '{"primary_color":"#xxxxxx","display_name":"<display_name>"}'::jsonb
+  SET display_name = '<display_name>',
+      branding     = '{"primary_color":"#xxxxxx","logo_url":"<optional>"}'::jsonb
   WHERE slug = '<slug>';
-SELECT id, slug, display_name, branding FROM public.tenants WHERE slug = '<slug>';
+SELECT id, slug, display_name, plan, branding FROM public.tenants WHERE slug = '<slug>';
 ```
 
-Expected: one row with the correct branding.
+Expected: one row with the correct name, plan and branding.
+
+**Recognised `branding` keys** (anything else is inert): `primary_color`, `logo_url`,
+`promo_banner` (`catalog.html:508`). **`display_name` is NOT one of them** — see the warning
+above.
 
 ---
 
 ## Step 3 — Add the Cloudflare custom domain
+
+> ⚠️ **REQUIRED, not optional, for any `plan = 'pro'` tenant** (F72 S0, 2026-09-02).
+> A paid tenant's own `<slug>.pulllist.app` is printed on their customers' pickup slips and
+> bagging lists and is emailed as the "View Online" link. **There is no wildcard DNS on
+> `pulllist.app`** — every hostname is individually provisioned here (F145, measured). So a
+> paid tenant whose hostname is not provisioned ships a **non-resolving URL to real
+> customers, on paper**. Free tenants are unaffected: they always link to the `pulllist.app`
+> apex, which needs no provisioning.
+
+> **Order matters:** provision the hostname *before* setting `plan = 'pro'`, or before the
+> tenant's first print/email run if the plan was set at create.
 
 **Rick — Cloudflare dashboard (Pages project for `pulllist.app`):**
 
@@ -199,12 +225,33 @@ than find a gap in the numbering.*
 
 ## Step 5 — Admin handoff
 
-Deliver the magic link to the tenant admin's mailbox. The `register-tenant` function sends the magic link automatically to `admin_email` at creation time (via Supabase Auth's invite flow). Confirm with the admin that they can:
+**`register-tenant` sends a real invite email automatically to `admin_email` at creation time**
+(added 2026-09-03 — before this, the function created the admin's auth user with no password, no
+email, and no automated way in at all; the only path was this section's own dashboard fallback,
+run every time). Check the function's JSON response for `invite_sent: true` — if it came back
+`false`, the tenant and admin account are still real and correctly created, but the email failed
+(check `RESEND_API_KEY` is set) and you need the fallback below.
 
-1. Sign in via the link at `https://<slug>.pulllist.app/admin.html`
-2. See an **empty, scoped** admin surface (0 customers, no founding data visible)
+**What the admin actually sees:** the email links to a page where they set a password. Once set,
+**they land on `catalog.html`, not `admin.html` directly** — from there they use the nav's Admin
+link (visible because their profile has `is_admin = true`) to reach the admin surface. Confirm with
+them that they can:
 
-If the magic link has expired (links expire; re-invitation may be needed), use the Supabase Auth dashboard → **Users** → find `admin_email` → **Send magic link**.
+1. Follow the emailed link and set a password
+2. Reach `admin.html` via the nav and see an **empty, scoped** admin surface (0 customers, no
+   founding data visible)
+
+**The access URL depends on `plan`, and this matters for what you tell the admin.** A `free`
+tenant has **no provisioned hostname** (Step 3 is paid-only, § above) — their shop, and their own
+admin panel, live at `https://pulllist.app/?t=<slug>` (the invite email itself says this). Do
+**not** tell a free-tier admin to expect `<slug>.pulllist.app` — it will not resolve (F145). A
+`pro` tenant's hostname should already be live from Step 3, run before this step for a paid tenant.
+
+If the invite email didn't arrive or the link has expired (links expire; re-invitation may be
+needed), use the Supabase Auth dashboard → **Users** → find `admin_email` → **Send magic link**.
+(Note: a **magic link** signs them straight into `catalog.html` with no password-setup step at
+all — different from the emailed **recovery** link, which prompts them to set one. Either gets
+them in; only the recovery-style link also gets them a password for next time.)
 
 ---
 
@@ -243,6 +290,7 @@ If any count is unexpected, investigate before announcing the new tenant. File a
   ```
 
   If the result does **not** contain `tenant_id`, F9 has regressed: **do not run a shipment import for this tenant.** (**Prod and staging state as of 2026-07-28: fixed** — `weekly_shipment_tenant_unique` on `(tenant_id, distributor, upc, on_sale_date)`, with the old `weekly_shipment_unique` constraint dropped on both. The check is kept as a standing guard, not because it is currently failing.) See `docs/technical-reference.md` § 13 F9.
+- [ ] **Plan tier is correct and matches reality** (F72 S0): `SELECT slug, plan FROM public.tenants WHERE slug = '<slug>';` returns the intended value. A paying tenant left on `free` renders generic identity everywhere; a `pro` tenant whose `<slug>.pulllist.app` is unprovisioned puts a non-resolving URL on customer paper (Step 3). **Check the column, not the invoice.**
 - [ ] **F72 email-branding decision:** `register-customer` sends founding-branded confirmation emails regardless of tenant. Confirm this is acceptable for the tenant's launch, OR wait for a dedicated multi-tenant email branding sub-deploy (Phase 6 / follow-on). Surfacing this to the tenant admin before go-live is required.
 - [x] ~~**MailerLite webhook configured** (Step 4)~~ — **N/A since 2026-08-30.** The webhook path was removed from `register-customer` platform-wide; there is nothing to configure. Customers arrive via admin **Invite Customer** / **Add Paper Customer**, or via native self-registration — and native signup is gated on **F72** (founding-branded confirmation email), which is the item that actually matters before a real-customer go-live.
 - [ ] **Isolation spot-check green** (Step 6) against the pilot/seeded data.
