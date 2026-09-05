@@ -5859,7 +5859,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F156 — Lunar restricted-variant ratios never reached `order_requirement` on rows imported before F132, so no restriction badge renders for them anywhere
 
-- **Status:** filed 2026-09-05. **RESOLVED on staging 2026-09-05** (backfill applied by Rick, verified end-to-end). **Production still PENDING — 67 rows.** Found live by
+- **Status:** filed AND **fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-05** — backfill applied by Rick to staging (66 rows) and production (67 rows), each verified by an independent service-role read afterwards rather than from the write's own output. Found live by
   Rick from a production screenshot of `arrivals.html`'s This Week reconciliation panel: five SPAWN
   77 incentive variants sat in the "Not in shipment" list with no restriction badge, while every
   PRH row in the same list carried one.
@@ -5921,7 +5921,12 @@ reasoning — only the disposition changed, not the diagnosis.
   `order_requirement IS NULL`. Every future import is already correct, so this closes the gap
   permanently rather than needing a recurring sweep. Every consumer of the column is read-only
   display, so the only behavioural change is that the badge starts appearing.
-- **Where:** both environments (67 production rows, 66 staging). Neither applied yet.
+- **Where:** both environments — **both applied and verified 2026-09-05.** Production 488 → 555
+  (`still_null` 67 → 0), staging 488 → 554 for the founding tenant plus `demoshop`'s 164. The
+  invariant, not just the count, was re-read fresh: **all 555 production ratio rows now satisfy
+  `order_requirement === variant_type`, 0 mismatched**, all six reserved titles carry their ratio,
+  and PRH is unchanged at 724 (guaranteed by the UPDATE's own `distributor` filter, confirmed rather
+  than assumed).
 - **Related:** F132 (introduced the column and the Lunar derivation; its rows-imported-before gap is
   this finding), F144 (the Order Builder badge that reads the same column), F155 (same
   never-re-pull-an-older-month assumption, different column).

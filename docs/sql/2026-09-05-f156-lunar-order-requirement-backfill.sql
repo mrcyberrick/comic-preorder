@@ -1,4 +1,6 @@
--- STATUS: staging=APPLIED 2026-09-05 (Rick) | prod=PENDING (F156, written 2026-09-05)
+-- STATUS: staging=APPLIED 2026-09-05 (Rick) | prod=APPLIED 2026-09-05 (Rick) (F156)
+--         Both environments verified by an INDEPENDENT service-role read afterwards,
+--         not from the post-check output alone. Nothing further owed on this file.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.
@@ -161,10 +163,14 @@ SELECT
 --                            too, which is intended: the derivation is a
 --                            property of Lunar's data format, not of a tenant)
 --
---   PRODUCTION, measured before the run (2026-09-05, still pending):
---     still_null = 67, inconsistent = 0, lunar_with_requirement = 488
---     Expect afterwards: still_null = 0, inconsistent = 0,
---                        lunar_with_requirement = 555.
+--   PRODUCTION, before -> after (2026-09-05, RUN AND VERIFIED):
+--     before: still_null = 67, inconsistent = 0, lunar_with_requirement = 488
+--     after:  still_null =  0, inconsistent = 0, lunar_with_requirement = 555  ✓
+--     Independently re-read afterwards, not taken from the post-check alone:
+--     all 555 ratio rows now satisfy order_requirement === variant_type (0
+--     mismatches), all 6 reserved titles carry their ratio, and PRH is
+--     unchanged at 724 — guaranteed by the UPDATE's own distributor filter,
+--     and confirmed rather than assumed.
 --     Production's second tenant (comicstore) holds no Lunar rows with a
 --     ratio, so DB-wide and founding-tenant figures coincide there. That is
 --     precisely why the mismatch only showed up on staging.
