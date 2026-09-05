@@ -1,4 +1,4 @@
--- STATUS: staging=PENDING | prod=PENDING (F156, written 2026-09-05)
+-- STATUS: staging=APPLIED 2026-09-05 (Rick) | prod=PENDING (F156, written 2026-09-05)
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.
@@ -114,6 +114,38 @@ SELECT
   FROM public.catalog
  WHERE distributor = 'Lunar';
 
--- Expected after a correct run:
---   production: still_null = 0, inconsistent = 0, lunar_with_requirement = 555
---   staging:    still_null = 0, inconsistent = 0, lunar_with_requirement = 554
+-- ⚠ CORRECTED 2026-09-05, after the staging run. The two lines that stood here
+-- quoted the FOUNDING-TENANT counts (555 / 554) against a query that carries NO
+-- tenant filter, so the real staging result came back 718 and looked like a
+-- failure when the run was in fact perfect. An expected value that disagrees
+-- with its own query is the same class of defect as a check that cannot fail:
+-- it manufactures a false alarm instead of hiding a real one. Both are stated
+-- explicitly now.
+--
+-- still_null and inconsistent MUST be 0 on both environments — those are the
+-- assertions. lunar_with_requirement is a scale reading, not a pass/fail, and
+-- it is DB-WIDE because this query is:
+--
+--   STAGING, measured after the run (2026-09-05):
+--     still_null = 0, inconsistent = 0, lunar_with_requirement = 718
+--       = raysandjudys 554  (488 before the run, +66 — exactly as predicted)
+--       + demoshop     164  (the F72 demo tenant, whose catalog was copied
+--                            from the founding tenant — it carries Lunar rows
+--                            of its own and the unscoped UPDATE fixed those
+--                            too, which is intended: the derivation is a
+--                            property of Lunar's data format, not of a tenant)
+--
+--   PRODUCTION, measured before the run (2026-09-05, still pending):
+--     still_null = 67, inconsistent = 0, lunar_with_requirement = 488
+--     Expect afterwards: still_null = 0, inconsistent = 0,
+--                        lunar_with_requirement = 555.
+--     Production's second tenant (comicstore) holds no Lunar rows with a
+--     ratio, so DB-wide and founding-tenant figures coincide there. That is
+--     precisely why the mismatch only showed up on staging.
+--
+-- Verified end-to-end on staging after the run, not inferred: a live browser
+-- check (playwright/f156-reject-surfaces-verify.mjs, V24) seeded a reservation
+-- on 0726DC0016 (LEGION OF SUPER-HEROES #1 CVR I INC 1:25, catalog_month
+-- 2026-07 — one of the stale months) and read "⚠ 1:25" back out of
+-- arrivals.html's "Not in shipment" list: the exact surface, and the exact
+-- missing badge, that was reported.

@@ -5859,7 +5859,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F156 — Lunar restricted-variant ratios never reached `order_requirement` on rows imported before F132, so no restriction badge renders for them anywhere
 
-- **Status:** filed 2026-09-05, **open — data backfill written, not yet applied.** Found live by
+- **Status:** filed 2026-09-05. **RESOLVED on staging 2026-09-05** (backfill applied by Rick, verified end-to-end). **Production still PENDING — 67 rows.** Found live by
   Rick from a production screenshot of `arrivals.html`'s This Week reconciliation panel: five SPAWN
   77 incentive variants sat in the "Not in shipment" list with no restriction badge, while every
   PRH row in the same list carried one.
@@ -5917,6 +5917,23 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Found alongside a second, separate defect in the same screenshot**, filed under **F155** rather
   than here because F155 already owns it: an ORDERED title absent from the invoice has no reachable
   "record rejection" control anywhere. Fixed the same session — see F155's FOLLOW-ON bullet.
+- **STAGING RUN, 2026-09-05 (Rick), and it exposed a defect in this file's own post-check.** The
+  result was `still_null = 0, inconsistent = 0, lunar_with_requirement = 718` against a stated
+  expectation of **554**. The run was perfect; **the expectation was wrong.** 554 is the
+  *founding-tenant* count, and the post-check query carries **no tenant filter** — staging's second
+  tenant `demoshop` (F72's demo, catalog copied from the founding tenant) holds 164 Lunar rows of
+  its own. 554 + 164 = 718. The founding tenant moved 488 → 554, i.e. **+66, exactly the predicted
+  number**. Corrected in the SQL file: an expected value that disagrees with its own query is the
+  same class of defect as a verification step that cannot fail — it manufactures a false alarm
+  rather than hiding a real one. **Production is not affected by the ambiguity**: its second tenant
+  (`comicstore`) holds no Lunar ratio rows, so DB-wide and founding-tenant figures coincide there
+  (before: `still_null = 67`, `lunar_with_requirement = 488`; expect 0 / 555 after).
+- **Verified END-TO-END on staging, not inferred from the column.** The honest limit recorded at
+  filing — "what is proven is that the badge sites read the column correctly and that the column is
+  empty" — is now closed. A live browser check (`playwright/f156-reject-surfaces-verify.mjs`, V24)
+  seeded a reservation on `0726DC0016` (LEGION OF SUPER-HEROES #1 CVR I INC 1:25, `catalog_month`
+  **2026-07** — one of the two stale months) and read **`⚠ 1:25`** back out of `arrivals.html`'s
+  "Not in shipment" list: the exact surface and the exact missing badge that was reported.
 
 Next free finding ID: **F157**.
 
