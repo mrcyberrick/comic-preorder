@@ -2003,6 +2003,15 @@
       return;
     }
 
+    // Confirmation gate (Rick, 2026-09-05). Placed inside the shared writer,
+    // AFTER the net is recomputed so the dialog can state the real quantity,
+    // and BEFORE the button is disabled so a cancel leaves the row exactly as
+    // it was. Covers all three entry points — the Order Follow-Up panel's
+    // original F143 button included: the "no in-app recovery" reasoning holds
+    // identically there, and gating two of three would leave the same misclick
+    // unrecoverable on the third.
+    if (!confirmSupplierRejection(btn.dataset.title, netQty)) return;
+
     btn.disabled = true;
     btn.textContent = 'Recording…';
 

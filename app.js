@@ -1806,6 +1806,41 @@ function exportCode(c, distributor) {
     : (c.item_code || c.upc || c.isbn || '');
 }
 
+// Confirmation gate for the supplier-rejection write (F143), shared by every
+// surface that offers it — admin.html's Order Follow-Up panel and distributor
+// table, and arrivals.html's reconciliation exceptions list. Lives here rather
+// than being duplicated per page because the WORDING is the safeguard: three
+// copies would drift, and a confirm that understates the consequence is worse
+// than none.
+//
+// Rick, 2026-09-05: "I do not think there is an in-app (UI) recovery from a
+// misclick[;] a confirmation is needed." Measured, and he is right where it
+// counts: arrivals.html's recon row offers nothing at all once it reads
+// "Rejected — recorded", and while admin.html's Status button does become
+// clickable again in the rejected state, what it opens is Mark Ordered — it
+// records a FRESH submission, it does not undo. Nothing anywhere announces
+// itself as recovery, and the write is customer-visible immediately (F120's
+// Rejected badge on My List and the Bagging List).
+//
+// Native confirm() deliberately, matching admin.html's own convention for
+// irreversible admin actions (decline account, suspend, clear order deadline —
+// admin.html:3666/4376/4403). The move away from native dialogs in this
+// codebase was about prompt() for INPUT (the F139-era Edit Account modal), not
+// about confirmation.
+function confirmSupplierRejection(title, netQty) {
+  return confirm(
+    `Record "${title || 'this title'}" as rejected by the supplier?
+
+` +
+    `This writes a ${-netQty} adjustment, netting the order to 0. The customer ` +
+    `sees a "Rejected" badge on My List straight away.
+
+` +
+    `The order ledger is append-only, so there is no undo — correcting a mistake ` +
+    `means recording a fresh order for this code.`
+  );
+}
+
 // Every (distributor, order_code) pair the store has ever submitted, for the
 // caller's own tenant — via a SECURITY DEFINER RPC, since order_submissions
 // itself is admin-only under RLS (docs/sql/get-ordered-codes-rpc.sql).
