@@ -417,6 +417,16 @@ watching:**
             NOT ORDERED — the window closes in 3 days
 ```
 
+**✅ ORDERED AND CLOSED OUT by Rick, 2026-09-05** — verified by an independent ledger read, not
+taken on report: `order_submissions` now carries qty **2**, `order_type = 'adhoc'`, `submitted_on`
+2026-09-05, filed against `foc_date` **2026-09-07** — i.e. against the *corrected* date. Rick:
+*"It was a real miss that we caught."*
+
+**This is the first end-to-end proof of the whole F155 chain**, and it is worth more than any of the
+gates: a revision nobody could see (S2's detection) → a corrected date (S2's write) → a surface that
+made the consequence legible → a real order placed inside a window that had two days left. Every
+prior piece of evidence in this doc is a measurement; this is an outcome.
+
 Before this correction the system believed there was a month of ordering runway. There were three
 days, and the title has no `order_submissions` row. Nothing in the app would have said so: the
 Order Follow-Up panels classify against `foc_date`, and `foc_date` was wrong. **This is the
@@ -424,7 +434,8 @@ Order Follow-Up panels classify against `foc_date`, and `foc_date` was wrong. **
 lane** — a class this plan identified but had not yet seen bite.
 
 Checked across all 11 FOC corrections: everything else is either already ordered or has 59 days of
-runway. FIRE AND ICE #5 is the only one at risk, and only because its FOC moved backwards.
+runway. FIRE AND ICE #5 was the only one at risk, and only because its FOC moved backwards — and it
+is now ordered. **No FOC-driven exposure remains from this batch.**
 
 **Carry into S2's next iteration:** the report should rank FOC changes by *how much ordering runway
 is left after the correction*, and shout when a pulled-forward FOC lands inside the current ordering
