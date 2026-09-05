@@ -1430,6 +1430,11 @@
         return;
       }
 
+      // Same confirmation gate as admin.html's writer, same shared wording.
+      // This is the surface with NO recovery at all: once the row reads
+      // "Rejected — recorded" there is nothing here to click.
+      if (!confirmSupplierRejection(btn.dataset.title, netQty)) return;
+
       const originalLabel = btn.textContent;
       btn.disabled = true;
       btn.textContent = 'Recording…';
