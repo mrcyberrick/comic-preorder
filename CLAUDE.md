@@ -99,6 +99,55 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: PROMOTED TO PRODUCTION — supplier-rejection surfaces + confirmation gate +
+7-day order-correction window, 2026-09-05 (PR #149, merge `1212f04`).** Rick's explicit request, and
+a **cherry-pick** promotion rather than a merge: staging carries a large amount of unpromoted work
+(F72 S0/S1a/S2a/S3, F153, F154, F155 S1–S3, `register-customer` + `register-tenant`), none of which
+went. Staging commits `37d1383` / `12942f9` / `74ea7ec` (code) plus this session's doc commits.
+**`admin.html`, `arrivals.html`, `app.js` only — no schema, no RLS, no Edge Function.**
+
+**⚠️ THE CHERRY-PICK SILENTLY DROPPED `app.js`, AND IT WOULD HAVE SHIPPED BROKEN.** `.gitattributes`
+sets `app.js merge=ours`; a cherry-pick is a 3-way merge, so the driver kept `main`'s copy and
+discarded `confirmSupplierRejection()`. **The tell was a stat line** — staging's `12942f9` was
+*"3 files changed, 49 insertions"*, the cherry-picked `ed42925` landed as *"2 files changed, 14
+insertions"*. The branch then had **two call sites and zero definitions**, which on production would
+have made "Rejected by supplier" a **silent no-op** on all three entry points (the confirm runs
+before the button is disabled, so a click would simply do nothing rather than error). Restored with
+`git apply` — not subject to merge drivers — as its own commit `9204f2b` so it was visible in
+review. **This is exactly the failure F59 is named for, and why `/promote-prod` step 2 asserts the
+MERGE RESULT rather than comparing branch tips: a tip comparison reports "ok: differs" in precisely
+this case.** Anyone doing another cherry-pick promotion should compare stat lines commit by commit.
+
+**Verified against the bytes `pulllist.app` actually serves, positively AND negatively.** Present:
+`app.js` `confirmSupplierRejection` ×1; `admin.html` `recordSupplierRejection` ×3,
+`arrival-reject-btn` ×4, `ORDER_CORRECTION_DAYS` ×4, `correctionOpen` ×3; `arrivals.html`
+`recon-reject-btn` ×3, `recon-row-order` ×7, `recon-row-restriction` ×1. **Absent, confirming the
+excluded staging work did not ride along:** `print-store-info` ×0 (F72 S3), `Tier.isPaid` ×0 and
+`data-paid-only` ×0 (F72 S0/S1a), `F155 S3(b)` ×0. `config.js` still carries the prod ref
+`plgegklqtdjxeglvyjte` and **zero** occurrences of the staging ref. PR file list re-checked **on
+GitHub itself** — 13 files, `config.js` absent, `supabase/` absent, no other client page touched,
+`supabase/migrations/` still 2 files (F125).
+
+**Write-smoke deliberately skipped**, same disposition PR #141/#145/#147 record: the diff is
+`admin.html` / `arrivals.html` / `app.js` and never touches the customer reserve path — confirmed
+from the diff itself before deciding, not assumed.
+
+**The real post-deploy proof is Rick's own use, not a synthetic check.** He cleaned up live data
+through **both** new surfaces the same day. Read back service-role afterwards: **six rejections
+recorded**, all well-formed `order_type = 'adjustment'` rows netting their code to exactly 0 — the
+five SPAWN 77 covers (`0726IM0315`–`0319`, −1 each) and PRH `82771403592600151` (−2), which are
+precisely the titles from the screenshot that opened this session. One `adhoc` **+2** was also
+recorded for `0826DE0733` (FIRE AND ICE #5 — F155's own pulled-forward title), i.e. the Mark Ordered
+path working as a correction tool. **`arrival_outcome` is NULL on every affected reservation**,
+confirming F143's design held: the ledger rejection and the arrival judgement stay separate
+statements. The six titles' customers now correctly see F120's Rejected badge on My List.
+
+**No finding ID consumed.** This advances **F155** (whose "two correct behaviours, no surface"
+collision the new surfaces close) and **F143** (whose § 13 entry documented the four-navigation
+workaround the 7-day window retires). Both already own the work. **F156 is unrelated to this PR's
+code** — it was a pure data fix, already applied and verified on both environments earlier the same
+day. **F157 remains the next free finding ID.**
+
 **Last completed work: F156 filed + the supplier-rejection write reached from two more surfaces,
 GREEN on STAGING, 2026-09-05** (`482778d` doc-only, `37d1383` code, merged `--ff-only`, pushed).
 Both halves of a single live report from Rick, a production screenshot of `arrivals.html`'s This
