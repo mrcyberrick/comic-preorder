@@ -5878,12 +5878,23 @@ reasoning — only the disposition changed, not the diagnosis.
 
   | Lunar `catalog_month` | rows with a true `N:M` `variant_type` | of those, `order_requirement` NULL |
   |---|---|---|
+  | 2026-03 | 1 | **1** |
+  | 2026-04 | 3 | **3** |
   | 2026-05 | 10 | 0 |
   | 2026-06 | 36 | **5** |
   | 2026-07 | 175 | **58** |
   | 2026-08 | 166 | 0 |
   | 2026-09 | 164 | 0 |
   | **all months** | **555** | **67** |
+
+  ***Corrected 2026-09-05 from Rick's real production pre-check.** This table first listed only
+  2026-05..2026-09 and therefore showed 63 of the 67 — the total was right (an all-months query)
+  but the breakdown beside it was incomplete, because the month list was chosen by hand rather than
+  derived from the data, and the two were never reconciled. **The stale window reaches back to
+  2026-03, not 2026-06.** The four extra rows carry **zero** reservations (long-lead hardcovers and
+  bundles), so the "6 with live reservations" figure below is unaffected. 2026-05 sitting clean
+  between stale neighbours is unexplained, most likely a post-fix older-month re-import; it does not
+  affect the fix, which keys on the column being NULL rather than on any month.*
 
   Staging has the same shape: 554 true-ratio rows, **66** with NULL. 2026-08 and 2026-09 are clean
   because both were imported after the fix; 2026-05 is clean for an unrecovered reason (most likely

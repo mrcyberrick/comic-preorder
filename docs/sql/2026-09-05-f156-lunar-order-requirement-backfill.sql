@@ -62,10 +62,36 @@ SELECT t.slug,
  GROUP BY t.slug, c.catalog_month
  ORDER BY t.slug, c.catalog_month;
 
--- Expected 2026-09-05, founding tenant only, no other tenant affected:
---   production (rjbookstop): 2026-06 = 5, 2026-07 = 58   -- total 67
---   staging (raysandjudys):  total 66
--- Of production's 67, exactly 6 carry live unfulfilled reservations:
+-- ⚠ CORRECTED 2026-09-05, from Rick's real production pre-check. The block
+-- that stood here read "2026-06 = 5, 2026-07 = 58 -- total 67". Those two sum
+-- to 63, not 67: the TOTAL was right (it came from an all-months query) but the
+-- per-month breakdown beside it was incomplete, because the survey that
+-- produced it swept 2026-05..2026-09 by hand instead of deriving the months
+-- from the data. Two numbers written side by side that contradict each other,
+-- and neither was reconciled against the other. Re-derived below with no month
+-- filter at all.
+--
+-- PRODUCTION (rjbookstop), measured 2026-09-05 — matches Rick's pre-check exactly:
+--   2026-03 =  1   (of   1 ratio rows)
+--   2026-04 =  3   (of   3)
+--   2026-05 =  0   (of  10)
+--   2026-06 =  5   (of  36)
+--   2026-07 = 58   (of 175)
+--   2026-08 =  0   (of 166)
+--   2026-09 =  0   (of 164)
+--   TOTAL   = 67   (of 555)  ->  after the run, lunar_with_requirement = 555
+--
+-- STAGING (raysandjudys): total 66. APPLIED 2026-09-05; per-month split never
+-- measured there and is not restated here rather than guessed.
+--
+-- The stale window is therefore OLDER than "2026-06/07": it reaches back to
+-- 2026-03. 2026-05 sitting clean between stale neighbours is unexplained and
+-- most likely a post-fix older-month re-import; it does not affect the fix,
+-- which keys on the column being NULL rather than on any month.
+--
+-- Of production's 67, exactly 6 carry live unfulfilled reservations — all in
+-- 2026-06/07, unchanged by this correction (the four 2026-03/04 rows carry
+-- ZERO reservations; they are long-lead hardcovers and bundles):
 --   0626DE0825 (1:10)  VAMPIRELLA VS RED SONJA RED CITY #1 CVR G
 --   0726IM0315 (1:25)  SPAWN 77 #1 (OF 3) CVR F
 --   0726IM0316 (1:50)  SPAWN 77 #1 (OF 3) CVR G
