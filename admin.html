@@ -898,6 +898,12 @@
     orderLedger = data || [];
   }
 
+  // Rick, 2026-09-05 — how long Mark Ordered stays unlocked after a title is
+  // fulfilled, so a mis-recorded order can still be corrected. Named rather
+  // than inlined because the label, the hint and the disabled test all have
+  // to agree; a bare 7 in three places is how they drift apart.
+  const ORDER_CORRECTION_DAYS = 7;
+
   function ledgerMatchesFor(distributor, code) {
     if (!code) return [];
     return orderLedger.filter(r => r.distributor === distributor && r.order_code === code);
@@ -2215,10 +2221,17 @@
       items.forEach(p => {
         const id = p.catalog?.id;
         if (!id) return;
-        if (!map[id]) map[id] = { catalog: p.catalog, customers: [], totalQty: 0, fulfilledCount: 0 };
+        if (!map[id]) map[id] = { catalog: p.catalog, customers: [], totalQty: 0, fulfilledCount: 0, lastFulfilledAt: null };
         map[id].customers.push({ name: p.customer_name, qty: p.quantity || 1, fulfilled: !!p.fulfilled });
         map[id].totalQty      += (p.quantity || 1);
         if (p.fulfilled) map[id].fulfilledCount++;
+        // Latest fulfilment across the whole group, for the correction window
+        // below. ISO timestamps sort lexically, so a string compare is safe
+        // and avoids constructing a Date per row.
+        if (p.fulfilled && p.fulfilled_at &&
+            (!map[id].lastFulfilledAt || p.fulfilled_at > map[id].lastFulfilledAt)) {
+          map[id].lastFulfilledAt = p.fulfilled_at;
+        }
       });
       return Object.values(map).sort((a, b) => (a.catalog?.foc_date || '').localeCompare(b.catalog?.foc_date || ''));
     }
@@ -2261,8 +2274,40 @@
             </tr>
           </thead>
           <tbody>
-            ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
+            ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount, lastFulfilledAt }) => {
               const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
+              // ── Correction window (Rick, 2026-09-05) ────────────────────
+              // "I would like to see the order button unlocked up to 7 days
+              // after fulfilment." Mark Ordered used to be `disabled` for the
+              // whole life of a matched code, which is what left an operator
+              // with no way to fix a wrong quantity or a rejection recorded
+              // late — the state his screenshot showed ("✓ Ordered (1)",
+              // greyed, ledger 1 == reserved 1).
+              //
+              // Unlocking is a real correction path, not a token one: the
+              // Mark Ordered modal already accepts 0 and NEGATIVE quantities
+              // (F117/F108 § 4.4 — "0 records a supplier rejection, negative
+              // records a downward correction"), and its suggested quantity
+              // is Math.max(0, totalQty - priorQty), so a covered code
+              // defaults to 0 rather than nudging toward the F102 over-order
+              // this modal exists to prevent.
+              //
+              // The window CLOSES rather than staying open forever, which is
+              // what makes this safe to add: an old, settled, fulfilled cycle
+              // goes back to being locked, so the F102 guard still covers the
+              // case it was built for.
+              //
+              // Deliberately conservative on unknown dates: a fulfilled row
+              // with a NULL fulfilled_at cannot be proven to be inside the
+              // window, so it stays LOCKED — exactly today's behaviour. The
+              // change is strictly additive; nothing that is unlocked today
+              // becomes locked.
+              const daysSinceFulfilled = lastFulfilledAt
+                ? (Date.now() - new Date(lastFulfilledAt).getTime()) / 86400000
+                : null;
+              const correctionOpen = !allFulfilled
+                ? true                                        // cycle still live
+                : (daysSinceFulfilled !== null && daysSinceFulfilled <= ORDER_CORRECTION_DAYS);
               const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
               const ledgerQty     = ledgerMatches.reduce((s, m) => s + (m.quantity || 0), 0);
               // Signed ledger (F117/F108 § 4.4) — ledgerQty can now be zero
@@ -2325,7 +2370,10 @@
                         : orderRejected           ? 'color:#888;border-color:rgba(136,136,136,0.5)'
                         : orderPartial            ? 'color:var(--warning,#eab308);border-color:rgba(245,158,11,0.5)'
                         :                           '';
-                      const hint = orderMatched   ? 'Ordered quantity matches reservations'
+                      const hint = orderMatched
+                        ? (correctionOpen
+                            ? 'Ordered quantity matches reservations -- click to CORRECT it. The ledger is signed, so 0 records a supplier rejection and a negative records a downward correction. Locks ' + ORDER_CORRECTION_DAYS + ' days after fulfilment.'
+                            : 'Ordered quantity matches reservations -- locked, more than ' + ORDER_CORRECTION_DAYS + ' days after fulfilment')
                         : orderOver               ? 'Ordered ' + ledgerQty + ' against ' + totalQty + ' reserved -- surplus already submitted to the distributor (F102)'
                         : orderRejected           ? 'Submitted but net quantity on order is ' + ledgerQty + ' -- the supplier rejected it, or it was corrected away. Click to record a fresh submission (F108/F117)'
                         : orderPartial            ? 'Ordered ' + ledgerQty + ' of ' + totalQty + ' reserved -- click to record the rest'
@@ -2369,7 +2417,7 @@
                           class="btn btn-sm mark-ordered-btn"
                           data-catalog-id="${c.id}"
                           style="white-space:nowrap;${colour}"
-                          ${orderMatched ? 'disabled' : ''}
+                          ${orderMatched && !correctionOpen ? 'disabled' : ''}
                           title="${hint}">${label}</button>${rejectBtn}
                       </div>`;
                     })()}
