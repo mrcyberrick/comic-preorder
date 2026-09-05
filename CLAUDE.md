@@ -43,8 +43,583 @@ marks today, so there is nothing for it to act on until marking runs again). Bot
 only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
 freeze for that window.
 
-**Last completed work: F99 Resend MIGRATION — M1–M5 GREEN on staging, 2026-09-02.** Same day as the
-discovery below, later. `docs/f99-resend-migration.md` executed end to end: `RESEND_API_KEY` set
+**S0 CLOSED OUT 2026-09-02, later the same session — the data fix landed, `register-tenant` deployed
+to BOTH projects, and V11's server half found a real discrepancy that turned out to be in the TEST,
+not the code.**
+
+**V13 done (Rick):** `UPDATE public.tenants SET plan = 'pro' WHERE slug = 'rjbookstop'` on
+production. **Independently verified by a service-role read afterwards, not taken on trust:**
+`rjbookstop='pro'`, `comicstore='free'`, **both exact lowercase.** That exactness matters — see the
+residual below.
+
+**`register-tenant` deployed to BOTH projects at Rick's explicit request** (staging v19→v20,
+production v9→v10). Two things were measured rather than assumed:
+
+1. **`verify_jwt` was determined by BEHAVIOUR, not a dashboard label**, and the probe is reusable: an
+   unauthenticated POST to the function returns its **own** `{"error":"Unauthorized"}` body when
+   `verify_jwt` is OFF, versus the platform gateway's `{"code":401,"message":"Missing authorization
+   header"}` when ON. Both projects returned the function's body before **and** after each deploy ⇒
+   OFF, preserved. Deployed with `--no-verify-jwt` (the CLI defaults to JWT **on**, so a deploy that
+   ignores the current setting silently flips it — the F93 hazard, avoided by measurement).
+2. **The deployed artifact was read back**, not inferred from the CLI's success line:
+   `supabase functions download --workdir <scratch>` on both projects, then sha256 — both
+   `458f31b1c4f24ea0`, **byte-identical to local**. The repo tree was never touched by the download.
+
+**⚠️ `main`'s source is now BEHIND production's runtime.** Production runs S0's `register-tenant`
+while `main` still has the hardcoded `plan: 'free'`. This is the F99 M6 drift shape, entered
+knowingly: the deploy was explicitly requested and Edge Functions deploy from the working tree, not
+from a branch. **The promotion PR is owed** — the divergence is small and clean (`app.js` and
+`register-tenant` are the only code; the rest is docs, plus `config.js`'s expected per-branch
+difference and F125's `supabase/migrations/` asymmetry). Not opened unilaterally: CLAUDE.md requires
+production promotions be explicitly requested.
+
+**V11 server half (V11s) — 7/7 on staging, and the first run FAILED for the right reason.** Four
+throwaway tenants created through the real deployed function, read back service-role, then torn down
+FK-ordered per the runbook, with **zero orphaned auth users** confirmed by fresh read (F130's own
+failure mode, checked rather than assumed). Measured: `' PRO '` → `pro`, `'pro'` → `pro`, omitted →
+`free`, `'paid'` → `free`.
+
+**The first run asserted `'Pro'` should be REJECTED to `free`, and it failed.** The code lowercases
+*before* the allowlist, so it **normalises** case and whitespace rather than rejecting them. **The
+code was right and the test was wrong** — normalising honours the operator's evident intent while
+still guaranteeing the column can only hold a value `Tier.isPaid()` matches exactly. The assertion
+was corrected rather than "fixing" working code to satisfy a bad test; the plan doc's own § 4.0.1
+wording, which had implied rejection, was corrected too.
+
+**⚠️ RESIDUAL, and it is the more useful half of this result: `register-tenant` is not the only
+writer, and today it is not even the main one.** `tenants.plan` is set **manually** (§ 6), and a
+hand-written `UPDATE tenants SET plan = 'Pro'` bypasses normalisation entirely. The column is `NOT
+NULL` with **no CHECK constraint**, so `'Pro'` would persist and `Tier.isPaid()` — testing
+`=== 'pro'` exactly — would read it **false**: the tenant silently renders free while the operator
+believes they set it paid. Production's current values are exact, so nothing is wrong today; this is
+about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:**
+`ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN ('free','pro'));`
+
+**Three local-only harnesses** (gitignored playwright folder, `f149-maintenance-verify.mjs`
+convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
+`f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
+
+**Last completed work: F156 filed + the supplier-rejection write reached from two more surfaces,
+GREEN on STAGING, 2026-09-05** (`482778d` doc-only, `37d1383` code, merged `--ff-only`, pushed).
+Both halves of a single live report from Rick, a production screenshot of `arrivals.html`'s This
+Week reconciliation panel. **Production untouched. The F156 data backfill is written and NOT
+applied — Rick's step, both environments.**
+
+**Half 1 — F156, and `arrivals.html` was NOT the defect.** Five SPAWN 77 incentive variants
+(1:25–1:500) sat in "Not in shipment" with no restriction badge while every PRH row beside them had
+one. Both badge sites read `catalog.order_requirement` and never parse the title, exactly as F144
+requires; the column is **empty**. Root cause: it is derived at *import* time by
+`parseLunarVariantRestriction()` (`import.js:272`), added by F132 on **2026-08-20**, and Lunar keeps
+the ratio in `variant_type` rather than a column of its own — so a row imported earlier keeps the
+ratio and carries NULL forever, because an older catalog month is never re-pulled. **The same
+never-re-pull assumption F155 is about, hitting a different column.**
+
+**Measured live, service-role: 67 production rows** (2026-07 = 58, 2026-06 = 5; 05/08/09 clean),
+**66 on staging**, out of 555/554 true-ratio rows. **6 carry live unfulfilled reservations** and are
+exactly the unbadged rows in the screenshot. **Wider than the admin report** — the same column
+drives the *customer's* catalog badge (`app.js:1906`) and modal notice (`catalog.html:1261`), so
+those six were reserved with no restricted-variant warning shown at all. **The backfill is a replay,
+not a guess: 0 Lunar rows carry `order_requirement` without a matching `^[0-9]+:[0-9]+$`**, so the
+UPDATE applies the import's own predicate. `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql`.
+
+**The "1:500" Rick circled in the admin panel is `variant_type`** (`admin.html:2285`, warning
+colour, its own line) — **not** a restriction badge. Admin and arrivals never disagreed; neither was
+showing the F144 badge.
+
+**Half 2 — no reachable control, which advances F155 rather than consuming an ID.** Measured on
+production: `0726IM0319` has one `monthly` ledger row of qty 1 from 2026-07-26 against 1 reserved →
+Mark Ordered reads "✓ Ordered (1)" and is **correctly `disabled`** (nothing left to order), while
+`computeBackorderRisk()` clears any code with `ledgerNetQty > 0` before every other test → it is on
+**no** Order Follow-Up panel either. `fulfilled=false`, so `neverArrivedFromFulfilled()` cannot see
+it. **Two correct behaviours, no surface** — F155's own recorded collision, reached from the
+shipment-reconciliation side instead of a customer complaint. F155 S3 fixes the panel *ordering* but
+defers 14 days past on-sale, so it would surface this ~2026-09-23, after the fact.
+
+**F143's write now has three entry points, and one writer.** `recordSupplierRejection(btn)` was
+split out of `wireArrivalRejectActions()` so the payload cannot drift; the button's label is now
+captured and restored on the error path instead of being hardcoded to the panel's wording.
+(1) The **admin distributor-table Status column**, offered when `ledgerNetQty > 0` **and**
+`!hasShipmentEvidence(c)` — the evidence guard is deliberate, since recording a rejection for a book
+on the shelf would flip F120's customer-facing rejected badge on a title the customer can collect;
+`allFulfilled` is **not** the guard, because a fulfilled row with no arrival evidence is exactly
+F115's never-arrived case, where a rejection *should* be offered. Wired through the container's
+existing delegated handler, because `renderByDistributor()` replaces the node every render.
+(2) The **arrivals recon exceptions list**, which now also states each row's order state — answering
+in place the question its own footnote sent the admin elsewhere to answer. Keyed on `exportCode()`,
+not the display code (the display chain is `item_code → upc`; the ledger uses the export's PRH
+isbn-first chain, so a PRH title with an ISBN would silently read "no order recorded"). Ledger loaded
+via `fetchAllRows` — **paged, not a bare select**: production held 857 rows against PostgREST's
+1,000 cap, F82/F113/F139/F140's shape a fifth time. A rejected row **stays** in the exceptions list
+reading "Rejected — recorded": it is still absent from the invoice, which is a fact about the
+shipment and does not change because the ledger did. **"No order recorded", never "never ordered"** —
+the ledger's history starts at the May 2026 cycle.
+
+**Gates.** Unit suite **279/279** (unchanged — no import-script code touched). **Full Playwright
+suite: 146 passed, 0 failed, exit 0, 24.7 min**, run directly against the deployed staging bytes
+post-push, confirmed served on the plain URL first. **Targeted harness 18/18** —
+`playwright/f156-reject-surfaces-verify.mjs`, local-only, same convention as
+`f149-maintenance-verify.mjs`.
+
+**⚠️ The harness had to SEED, and that is a finding about the environment, not a detail.** Measured
+across staging's ten most recent shipment weeks: **every** recon exception row has ledger net 0, so
+the new button would never render against staging's natural data and a green run would have proved
+nothing — the same fixture-limitation trap F72 S3 hit. It seeds a throwaway admin, reservations and
+one ledger row, then tears down FK-ordered with **zero orphaned auth users** confirmed by fresh read.
+
+**Two assertions went red for real along the way, and both were worth it.** (1) The control-row
+lookup keyed on `title.slice(0, 30)`, and "…CVR A" / "…CVR B" of the same issue are identical for 42
+characters — `.first()` returned the target's row and reported a genuine pass as a failure. Exactly
+the shared-prefix trap the spec-15 note warns about; re-keyed on the item code. (2) **V18 failing
+exposed a vacuous V7**: an unscoped `.arrival-reject-btn` count also matches the Order Follow-Up
+panel's own F143 buttons on the same page, so V7 could have passed without the Status column gaining
+anything. Both now scoped to `#lunar-list, #prh-list`. Two intermediate runs also failed on
+transient network errors (a `Failed to fetch` inside the Supabase bundle during sign-in, and one
+30 s page-load timeout) — infrastructure, not this change; the passing run is the 18/18 above.
+
+**Two follow-ups from Rick landed the same session, both on staging** (`12942f9`, `74ea7ec`).
+
+**(1) The rejection write is now CONFIRMATION-GATED** — *"I do not think there is an in-app (UI)
+recovery from a misclick[;] a confirmation is needed."* Measured before building to it, and he is
+right where it counts: `arrivals.html`'s recon row offers nothing once it reads "Rejected —
+recorded", and while `admin.html`'s Status button becomes clickable again in the rejected state,
+what it opens is Mark Ordered — it records a **fresh** submission, it does not undo, and nothing
+announces itself as recovery. `confirmSupplierRejection()` lives in **`app.js`** because the
+*wording* is the safeguard and three copies would drift; it names the title, the adjustment
+quantity, the customer-visible effect (F120's badge, immediately), and states plainly that the
+ledger is append-only. Native `confirm()`, matching `admin.html`'s own convention for irreversible
+admin actions (`:3666` clear deadline, `:4376` decline account, `:4403` suspend) — the move away
+from native dialogs here was about `prompt()` for INPUT, not confirmation. Gated **inside the shared
+writer**, so all three entry points are covered including F143's original panel button: the
+reasoning holds identically there, and gating two of three would leave the same misclick
+unrecoverable on the third.
+
+**(2) Mark Ordered now unlocks until 7 days after fulfilment** — *"I would like to see the order
+button unlocked up to 7 days after fulfilment."* It was `disabled` for the entire life of a matched
+code, which is the greyed "✓ Ordered (1)" in his screenshot. **This directly retires a workaround
+§ 13 F143 already documented**: that entry records, against a real live case (PRH
+`75960621630700217`, 1 ordered / 1 reserved), that "there is nothing else to click on that row" and
+the only working route was four navigations through the Order Builder's cycle selector. Unlocking is
+a *real* correction path — the Mark Ordered modal already accepts 0 and **negative** quantities
+(F117/F108 § 4.4), and its suggested quantity is `Math.max(0, totalQty - priorQty)`, so a covered
+code defaults to 0 rather than nudging toward the F102 over-order the modal exists to prevent. The
+rule: not all fulfilled → unlocked (cycle live); fulfilled ≤ 7 days → unlocked; fulfilled > 7 days →
+locked; fulfilled with a NULL `fulfilled_at` → **locked**, preserving today's exact behaviour, so
+the change is strictly additive. **The window closing is what makes it safe** — an aged, settled
+cycle re-locks, so F102's guard still covers what it was built for.
+
+**Test impact swept, not assumed — three specs would have gone red or silently vacuous.**
+`15-order-export-ledger.spec.ts:421` and `:1292` both asserted `toBeDisabled()` on an **unfulfilled**
+matched code, which the new rule deliberately unlocks; both updated to `toBeEnabled()` with the
+reason inline, and the **locked** half is now covered for the first time in the harness (V22/V23,
+which backdates `fulfilled_at` — a service-role write spec 15 cannot do — and asserts 2 days
+unlocked / 10 days locked). `22-f143-f144-ordering-rejections.spec.ts:239` clicks the reject button:
+**Playwright auto-dismisses dialogs**, so without an explicit handler it would have clicked into a
+no-op and failed against an unchanged ledger.
+
+**Harness now 22/22**, and it stopped using magic links: three consecutive runs died inside
+`supabase.min.js`'s `_getSessionFromURL` with `TypeError: Failed to fetch` and landed on the apex
+marketing page — F107 pressure, worsened by the 146-test suite having just run. It now mints a
+session with a password grant and injects it via `addInitScript`, which touches that limiter not at
+all. **V19/V20/V21 are the ones that matter for the confirm**: the dialog appears with the right
+wording, and **Cancel writes nothing and leaves the button usable** — a confirm whose Cancel still
+writes is worse than none, because it reads as protection.
+
+**That honest limit is now CLOSED, both environments (2026-09-05, later the same session).** Rick ran
+the backfill on staging then production. Staging was verified end-to-end with a real browser
+(harness V24): a reservation seeded on `0726DC0016` (LEGION OF SUPER-HEROES #1 CVR I INC 1:25,
+`catalog_month` **2026-07** — one of the stale months) rendered **`⚠ 1:25`** in `arrivals.html`'s
+"Not in shipment" list, the exact surface and exact missing badge that was reported. Production:
+`still_null 67 → 0`, `lunar_with_requirement 488 → 555`, independently re-read — all 555 ratio rows
+satisfy `order_requirement === variant_type`, 0 mismatched.
+
+**Two of this session's own artifacts were wrong and were corrected by Rick's real output, not by
+review.** (1) The post-check's expected `lunar_with_requirement` quoted the *founding-tenant* count
+against a query carrying **no tenant filter**, so staging's correct 718 (554 + `demoshop`'s 164) read
+as a failure. (2) The pre-check's per-month breakdown listed 2026-06=5 and 2026-07=58 beside a stated
+total of 67 — those sum to **63**; the months had been surveyed by hand (2026-05..09) rather than
+derived from the data, and **the stale window actually reaches back to 2026-03**. Both corrected in
+the file. The lesson is the cheap one: a total and a breakdown written side by side must be
+reconciled against each other, and an expected value must come from the same query it will be
+compared against.
+
+**Last completed work: F155 filed + S1 shipped + 15 PRODUCTION date corrections applied,
+2026-09-04** (`8700a65`, `0f4be33`, `2e2feac`, all doc-only on staging, pushed). **⚠️ PRODUCTION DATA
+WAS CHANGED** — 15 `catalog.on_sale_date` values, applied by Rick, independently re-verified by a
+fresh read afterwards, not taken from the write script's own output. No code, no schema, no deploy.
+
+**Found by Rick from a live symptom, not an audit.** A reserved title (DNX #1 [HIDDEN/DOUBLE COVER],
+PRH `75960621519500111`) had quietly stopped being visible to its two customers. Root cause: PRH
+revised its in-store date 2026-09-02 → **2026-09-16** and nothing we download carries that.
+
+**Three silent stages, in order — the first is the one that actually hurts.** Once the *stale* date
+passes, the title is in **neither** half of My List: it fails `mylist.html:937`'s current-month
+table filter *and* `:884`'s future-dated Upcoming Arrivals filter. Then it never matches a bagging
+week again. **Only then** does `auto_fulfill_past_on_sale()` mark it fulfilled and F115 surface it
+in Never Arrived — after the customer has been told "Order placed" for a book that never shipped.
+`classifyReservedDateDrift()` already computes this exact state (`import.js:517`, its `stranded`
+list carries a `hidden` flag whose comment reads *"the customer cannot see it at all"*) — it simply
+never ran, because nothing re-reads an older month.
+
+**Why no admin panel caught it, and it is two correct behaviours colliding.**
+`computeBackorderRisk()` (`admin.html:1749`) clears any code with `ledgerNetQty > 0` *before* every
+other test, so an **ordered** title is invisible to Order Follow-Up. And Mark Ordered was correctly
+`disabled` — ledger 2 = reserved 2, nothing left to order. Rick reported exactly this: "the title
+was in Ordered status which locked the button." Neither is a bug alone; together they leave no
+surface at all.
+
+**The finding proper is one sentence in a runbook.** `monthly-catalog-refresh.md` Step 3 item 4 read
+*"PRH's export omits withdrawn titles rather than revising dates in place (see F110), so this step
+matters most for Lunar."* **Measured false:** freshly-downloaded PRH master data carries **108**
+revised in-store dates in 2026-07 alone, plus 27 / 19 / 4 in 2026-06 / 08 / 09. That sentence is why
+PRH months had never been re-pulled. **S1 fixed it 2026-09-04** (old text preserved verbatim in the
+correction note, per convention).
+
+**⚠️ The larger result, and it is a hard limit, not a gap to close: for a FROZEN PRH catalog no data
+channel exists at all.** Measured four ways — (1) two downloads of 2026-05 master data 44 minutes
+apart are **byte-identical** (MD5 `438958a0b69b961ab140ab63c9b3f3bf`) and **0 of 1,078** rows differ
+from the May import; (2) May's Weekly Change Reports run 2026-04-24 → **2026-07-31 and stop**, and
+DNX #1 is absent from the final one; (3) **0 of 5,123** PRH `MainIdentifier`s ever appear in more
+than one monthly file, so F122's newest-listing logic cannot rescue one; (4) yet **84 May titles
+were still future-dated**. PRH abandons a catalog ~2 months before its last titles ship. Detection
+cannot solve this — only F155's S3 guard limits the damage. **Two new runbook items (5 and 6) record
+this**, item 6 being the trap that F146's own withdrawal-clearing backfill would silently revert any
+hand-correction, which nothing had said anywhere.
+
+**Lunar is the opposite, and better than the plan first assumed.** The *All Products CSV Order Form*
+export is **one file, 17,490 rows, every catalog month back to 2025**, with an `In-Store` column —
+covering **559 of 568 (98.4%)** codes holding open reservations in a single download. It surfaced
+**13** already-stale dates immediately, including `0826DE0733` FIRE AND ICE #5 moved 2026-10-28 →
+**2026-09-30**, i.e. a month *earlier* — the direction nothing watches, where a book arrives before
+the bagging list expects it. **It is a DIFFERENT schema and cannot be fed to `import.js`** (item 1
+now says so).
+
+**The remediation ran ahead of the plan because `auto_fulfill_past_on_sale()` runs WEEKLY** —
+measured 2026-08-07 / 08-14 / 08-20 / **08-28**, and the last run was a week overdue. Local one-off
+`scripts/fix-stale-dates-f155.js` (untracked, matching `clear-f147-withdrawn.js` and
+`f115-s6-backfill-unknown.js`, its two closest siblings): production-only guard, live re-derivation,
+before-state JSON written *before* any write, sanity band, single y/n, independent fresh re-read as
+the success check. 13 Lunar derived live + 2 PRH from a declared provenance table (PRH site +
+invoice, Rick's own read — there is no file). **9 Lunar codes reported and deliberately SKIPPED** —
+absent from the export because it lists *available* products (mostly 1:25–1:500 incentives); no
+authoritative date, so no guess.
+
+**⚠️ One known residual, not closed: `0726DC0300`** (DC CONNECT #76 bundle, on-sale 2026-09-02) is
+still stale and **will be falsely fulfilled at the next weekly run.** No source exists for it. Low
+impact (a free promotional bundle), but open rather than fixed.
+
+**S3 APPROVED by Rick, 2026-09-04, and it knowingly revisits a recorded decision.** F115 Option A —
+giving `auto_fulfill_past_on_sale()` an arrival check — was **rejected**, and `import.js`'s own
+`findUnverifiedFulfillments()` docblock states why: *"REPORTS, NEVER BLOCKS … gating fulfillment on
+this would trade a silent miss for a silent stall."* **That objection stands**, so S3 **defers,
+bounded** (14 days) rather than blocking, and ships together with the `computeBackorderRisk()`
+ordering fix that keeps deferred rows visible in Never Arrived. Without that second half S3 would
+recreate the exact stall F115 rejected. **When S3 lands, record the approval in
+`f115-arrival-truth-persistence.md` too**, so a reader of its "Option A was rejected" line finds the
+follow-up instead of re-deciding it.
+
+**Plan: `docs/f155-catalog-date-revision-detection.md`** (STATUS: IN PROGRESS — S1 done, S2/S3 not
+started). **Nothing in it depends on a catalog load; all of it can be built before October's
+import.** But the **2026-09-25 October gate already carries F146 and F147's first-ever live
+production exercise** — both have fired exactly once each and both fired wrong (519 and 16) — so
+**recommended, Rick's call: S1 + S2 to production before 09-25 (S2 actively de-risks it by cleaning
+stale dates going in), S3 to staging now with its production promotion held until October is
+verified green.** **F155 is the finding this consumed. F156 is the next free ID.**
+
+**Prior work (2026-09-04, earlier): F72 S3 — print outputs tier-gated, GREEN on STAGING** (`b1e1445`,
+merged `--ff-only`, pushed). Closes the last open item from this session's F72 work — every paper
+output a customer or staffer could hold now follows the same rule S1a/S2a already established.
+
+**Seven print surfaces across three files.** `mylist.html`'s personal-list header and
+`arrivals.html`'s This Week header were both fully static markup carrying the founding tenant's
+name and phone — unlike `print-title`/`print-subtitle`, nothing had ever made them dynamic.
+Converted both to an empty `#print-store-info` container, populated via `textContent` (never
+`innerHTML`) at print-click time, matching `Branding.apply()`'s own `[data-tenant-name]` convention
+so there's no new HTML-escaping surface. `arrivals.html`'s store poster needed **zero new JS** — its
+name was already dynamic, and the two static phone spots just needed `data-paid-only`, which
+`Branding.apply()` already applies to every nav page at load time. `admin.html` carried three
+separate print jobs — Bagging List, Print Catalog, and a staff-only Reserved Report — each now
+tier-gated the same way, with the tier computed once per render rather than per row.
+
+**`rjbookstop.com` (the tenant's own website) still has no backing field** — Q2 remains unresolved,
+unchanged from the original 2026-09-01 inventory. Kept as a paid-only literal, matching the one
+paid tenant's real value; free tier shows nothing for it.
+
+**Verified against DEPLOYED staging bytes, and a real gap surfaced along the way — not the tier
+logic, a test-fixture limitation.** `f72-s3-print-verify.mjs` drove both a FREE customer
+(`demoshop`) and the PAID founding tenant through `mylist.html`'s print path: free correctly shows
+no phone, no founding name, `View Online: pulllist.app`; paid is **unchanged** — phone and name
+both still present, `View Online: raysandjudys.pulllist.app`. `arrivals.html`'s free branch first
+came back empty, which traced to a **pre-existing, unrelated** early-return: the print handler only
+attaches when the customer has a reservation arriving in the current calendar week — confirmed by
+checking that even the *pre-existing* title/subtitle population (untouched by this work) also never
+fires without one. Verified for real by temporarily shifting one catalog row's `on_sale_date` into
+the current week, reserving it, checking, and restoring the original date — confirmed restored by
+an independent fresh read afterward, not the harness's own printed claim.
+
+**⚠️ Stated honestly, not glossed over: `arrivals.html`'s paid branch and all three `admin.html`
+print surfaces were not independently live-clicked.** Each uses the identical `Tier.isPaid()`/
+`Tier.publicUrl()` pattern already proven correct live elsewhere this session, and `node --check`
+confirms every file's inline script is syntactically valid — but manufacturing a live "Bagging List
+has cards" / "Print Catalog has rows" scenario for each was judged disproportionate to the risk for
+simple ternary string construction reusing an already-proven mechanism. Worth a real click-through
+before this is treated as fully closed.
+
+**Gates.** `node --check` clean on all three files. Unit suite 279/279 (unchanged). **Full
+Playwright suite: 143 passed, 0 failed, exit 0, 22.2 min** — run directly against deployed staging
+bytes post-push. Zero regressions from this step.
+
+**This closes F72's session-scoped work.** S1a (web), S2a (`register-customer` email), and now S3
+(print) together mean a free-tier prospect walkthrough — signup, browse, reserve, print, my list,
+arrivals, subscriptions — carries zero founding-tenant identity anywhere reachable in that flow.
+**Still open, deliberately deferred, not forgotten:** the other five mail functions
+(`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`)
+remain unconditionally founding-branded. **Production untouched. No finding ID consumed** — this
+advances F72, which already owns the work.
+
+**Last completed work: F72 S1a + S2a — free-tier-first resequence, GREEN on STAGING, 2026-09-03**
+(`d7669b0`, `efadbf0`, both merged `--ff-only`, pushed). Rick's direction: *"ship free-tier-only
+first — let's focus on this and get something we can leverage with potential customers."* Both
+sub-steps are now doc'd byte-exact in `docs/f72-multi-tenant-branding.md` § 4.1a/§ 4.2a.
+
+**A demo tenant exists on staging, reachable today with NO DNS work.** `demoshop` / "Capital City
+Comics", `plan = 'free'`, 2,288 real catalog rows copied from the founding tenant's current month.
+`TenantContext` already resolves `?t=<slug>` (pre-existing, `app.js:113-127`) — so
+**`https://staging.pulllist.pages.dev/?t=demoshop`** reaches it. This means F145's no-wildcard-DNS
+finding does **not** block a free-tier demo at all — only the *paid*-tier subdomain link does (§ 0.1
+Q9, unchanged). **Decided the same session:** the apex marketing page stays the free-tier front
+door — `?t=` does not flip to the branded sign-in — because free tier's own pricing copy already
+promises *"the shared `pulllist.app` front door,"* and giving `?t=` a branded door would hand free
+tier one of the two things "Branded" currently sells.
+
+**S1a — every screen-flow page a prospect walks through is now clean.** `Branding.apply()` gained a
+general `[data-paid-only]` hook (simpler than § 4.1's per-field design — omits entirely rather than
+filling a value) applied to: the six nav-page footer localities, `mylist.html`'s pickup-notice
+phone, and `index.html`'s tenant-logo block. The three JS-built pending/paused banners
+(catalog/mylist/subscriptions) and the welcome modal now branch on `Tier.isPaid()` — free tier shows
+the tenant's own resolved name and drops the phone; paid keeps today's exact copy. Two unwrapped
+`index.html` literals (invite-banner greeting, trust-signal line) wrapped in the existing
+`[data-tenant-name]` pattern.
+
+**A found-during-the-work leak, not in the original inventory: `index.html`'s default tenant logo
+IS Ray & Judy's actual logo file**, not a generic PULLLIST mark — and it's reachable *today* via
+`comicstore.pulllist.app` (free tier, individually provisioned per F145). Image content, so a text
+grep would never have caught it; found by reasoning about what `Tier.isPaid()=false` actually
+reaches. Fixed by marking the whole logo wrapper `data-paid-only`.
+
+**A real CSS trap found and fixed in the same mechanism:** `[hidden]` alone would have silently
+failed on `index.html`'s logo wrapper, because that element carries its own inline
+`style="display:flex"`, and an inline style outranks the UA stylesheet's un-`!important`
+`[hidden]{display:none}`. `Branding.apply()`'s paid-only gate now sets `style.display = 'none'`
+explicitly, not just `.hidden`.
+
+**Verified against DEPLOYED staging bytes with a real browser, not a source grep — before: 7 of 7
+demo-tenant pages leaked; after: 0 of 7.** Local uncommitted harness `f72-demo-leak-audit.mjs`
+signed in as a real throwaway customer in both `pending` and `active` states and scanned rendered
+`innerText` across catalog/mylist/arrivals/subscriptions for the founding tenant's identity. A
+second harness (`f72-s1a-founding-verify.mjs`) confirmed the PAID branch is unaffected — Ray &
+Judy's own footer locality and pickup-notice phone are both still **visible**.
+
+**S2a — `register-customer` (the one email a demo prospect actually receives) is now
+tenant-aware.** The tenant's own `display_name` now appears in the **from-name, subject and
+greeting for every tenant, both tiers** — this was hardcoded to "Ray & Judy's Book Stop" for every
+signup regardless of which shop the customer signed up for, which is F72's actual defect, not
+merely a missing free/paid split. `isPaid` gates only the phone/address footer. A minimal
+`escapeHtml()` was added — `display_name` is admin-set, not user-submitted, but this change is the
+first time it reaches an HTML email body via interpolation, and closing that latent injection
+surface cost four lines.
+
+**Verification hit a real, documented limit and was rerouted rather than skipped.**
+`register-customer` checks Turnstile **before** the tenant lookup, so a scripted signup cannot
+reach this logic via HTTP — the same limitation `native-signup-verify.mjs` already records for this
+exact function. Built `f72-s2-template-verify.mjs` instead: extracts `buildPendingEmail()` from
+both the pre-edit original (`git show HEAD`) and the edited file, strips only the TS type
+annotations, and runs both. **Result: the edited PAID-tier output is BYTE-IDENTICAL to the
+original's unconditional output — proven by string equality, not eyeballed** (V6). Free-tier output
+confirmed to carry the tenant's own name and the magic link, and none of the founding tenant's
+name/phone/address/city. A hostile display_name (`Bob's <Comics> & Co`) confirmed HTML-escaped.
+Negative-control tested.
+
+**Deployed to staging with `--no-verify-jwt`, F93-preserved and hash-verified** — an unauthenticated
+POST returns the function's own body-validation error before and after deploy (`verify_jwt` OFF,
+confirmed by behaviour, correct for a public endpoint); deployed source read back via `functions
+download --workdir` and hashed identical to committed source (`bb0a3a51599a12f4`).
+
+**⚠️ Honest limit, left open rather than closed out: final delivered-inbox verification did not run
+this session.** Every prior F99 email-header check in this project read a real inbox; this session
+has none available. What's verified is that the function *constructs and would send* the correct
+payload; what's *not* verified is real-client rendering or actual delivery. **Needs Rick** — same
+gate every prior instance of this check required.
+
+**Gates, both sub-steps.** `node --check` clean on `app.js` and every inline `<script>` block across
+all seven touched HTML files. Unit suite 279/279 (unchanged — no import-script code touched). **Full
+Playwright suite: 143 passed, 0 failed, exit 0, 22.0 min** — run directly (not through an agent
+PowerShell tool, per the 2026-08-30 note), against deployed staging bytes post-push, after BOTH S1a
+and S2a had landed. Zero regressions from either change.
+
+**⚠️ Answering Rick's actual question directly: is the demo ready to show a prospect right now?**
+**Yes, for a self-guided or screen-share walkthrough of signup → browse → reserve → my list →
+arrivals → subscriptions**, all on `?t=demoshop`, zero founding-tenant leaks. **Not yet safe for:**
+(1) the admin **approving** the demo signup — `approve-customer` is still unconditionally
+founding-branded, so that email would say "Ray & Judy's Book Stop" to the prospect; (2) any of the
+other four mail functions (`invite-customer`, `notify-customers`, `reset-password`,
+`send-my-list`); (3) any print output (bagging list, catalog print, pickup slips) — unreachable from
+a screen-share demo, but real if a physical handout is ever part of the pitch.
+
+**Two things carried forward, both deliberate deferrals, not gaps found late:** `admin.html`'s print
+outputs and the other five Edge Functions remain founding-branded — S1a/S2a intentionally shipped
+the narrowest slice that makes a *screen-flow* demo clean, not the full S1/S2. **Production
+untouched. No finding ID consumed** — this advances F72, which already owns the work. **F153
+remains the next free finding ID.**
+
+**Last completed work: F72 S0 — the tier mechanism, GREEN on STAGING, 2026-09-02** (`cadd35b`,
+merged `--ff-only`, pushed). Later the same day as the F99 promotion below, Rick's explicit
+direction to move toward *"a unique custom platform for new tenants… onboard new tenants based on
+their branding and identify for a paid tier environment."*
+
+**The plan was resequenced first, in the same session** (`9a87b73`, doc-only).
+`docs/f72-multi-tenant-branding.md` went from three steps to four: **S0 is new and now first.**
+§ 0.1 had named it only as *"implied, not yet written up as steps."* Two decisions were taken and
+recorded as **Q10/Q11** — see that doc, which is the live record for all of F72. **Q10:** paid-tier
+email means footer identity + a branded "View Online" link over a **flat sender for both tiers** —
+no new DNS, no domain slot, F99's addressing decision untouched; its consequence is that
+`index.html:247-262`'s *"customer emails from your shop"* pricing claim is now knowingly stale and
+is an S4 edit. **Q11:** the tier check ships as six byte-identical Edge Function copies gated by a
+grep (V10) rather than a new cross-function import convention — there is no `_shared/` folder and
+**zero cross-function imports exist**, and F99 S1 set the precedent by duplicating its
+`MAIL_FROM_*` constants six times.
+
+**S0 deliberately changes no rendered byte on any surface**, and that is its headline property, not
+a caveat: it makes the system able to *identify* a paid tenant without acting on that identity
+anywhere. All 18 Tier-A client sites, 6 Tier-B footers and 6 email templates are untouched. **`Tier`
+has zero call sites** — S1/S2/S3 are what consume it. Shipping the branch's *input* first turns
+those three into mechanical edits against a proven helper; shipping it last would have meant
+reopening every S1 site.
+
+**What landed.** `app.js`: the authenticated tenant read widened to include `plan` (RLS already
+permits it — row-level, no policy change, no RPC change), plus a new `Tier` helper (`isPaid`,
+`publicUrl`) reusing the existing `TENANT_APEX`. **`resolve_tenant_by_slug` was deliberately NOT
+widened**, so `plan` never reaches the anon path and no anon-reachable surface can tier-gate —
+5.3 § 1.5's projection boundary preserved, and confirmed live (V12: an anon-resolved tenant's keys
+are `id`/`slug`/`display_name`, with no `plan`).
+
+**`Tier` fails CLOSED, and the direction is the whole design.** Unresolved tenant, missing `plan`,
+mis-cased `'Pro'`, `'paid'`, `''`, and the anon path all read as **free**. Free is the safe render;
+a wrong *paid* render emits `<slug>.pulllist.app`, and **F145 measured there is no wildcard DNS
+behind that name** — an unprovisioned paid tenant would put a non-resolving URL on customer paper.
+
+**A real gap found during the work, not previously recorded anywhere:**
+`register-tenant/index.ts:148` hardcoded `plan: 'free'` and no runbook step set it afterwards — so
+**there was no supported path to create a paid tenant at all.** It now takes an allowlisted `plan`
+input (`'free'` default, `'pro'`); **allowlist, not pass-through**, because the column is `NOT NULL`
+with **no CHECK constraint**, so a typo like `'Pro'` would persist and read as free forever while
+looking paid to an operator inspecting the row.
+
+**`tenant-onboarding-runbook.md` — four edits, one of which is a live bug fix.** `plan` added to
+Step 0 inputs and the Step 1 body; Step 3's hostname provisioning marked **REQUIRED for
+`plan = 'pro'`** with the consequence stated plainly; a plan-verification line added to the go-live
+checklist. **Step 2's SQL was wrong** — it told operators to write `display_name` into the
+`branding` jsonb, but `Branding.apply()` reads the `display_name` **column** (`app.js:186`) and
+ignores the jsonb key entirely; production's `comicstore` still carries that ignored key today.
+
+**Gates.** `node --check` clean; unit suite **279/279, exit 0** (unchanged — no import-script code
+touched); **zero HTML files in the diff**; the only deletion in the entire `app.js` diff is the
+select line it replaces. **V9/V11/V12 green — 11/11** in a local, uncommitted harness
+(`playwright/f72-s0-tier-verify.mjs`, same convention as `f149-maintenance-verify.mjs`) run against
+the **deployed staging bytes**, confirmed served on the plain URL first (not a cache-busted one).
+**Three assertions were negative-control tested** by inverting them and observing red, then
+reverted.
+
+**V8 — the full suite came back 139 passed / 1 flaky / 3 FAILED (30.1m), and the three were run
+down rather than waved through.** All three are **timeouts**, two of them explicitly `while setting
+up "authenticatedPage"` — the fixture's own documented signature for magic-link pressure (**F107**)
+— not assertion failures: `21-arrival-resolution:225`, `:254`, and
+`22-f143-f144-ordering-rejections:203`. **A targeted re-run of both specs passed 10/10 in 1.8m.**
+
+**S0 was exonerated positively, not by assuming it was innocent.** The only mechanism by which S0
+could break an authenticated page is the widened `tenants` select — if `plan` were not readable by
+the `authenticated` role that query would 400, and `TenantContext` would silently degrade. **The
+first verification pass never tested this**: V9/V11/V12 all ran on the **anon** path, which never
+selects `plan` — a real gap in the gate design, found only by taking the failures seriously instead
+of pattern-matching them to a known-flaky story. A second local harness
+(`playwright/f72-s0-authed-verify.mjs`) drove a real magic-link sign-in and measured it: **both
+`/rest/v1/tenants` requests returned 200**, the authenticated tenant carries `plan`, zero console
+errors, throwaway user torn down clean. **Staging's founding tenant is `plan = 'pro'`**, so
+`Tier.publicUrl()` returns `raysandjudys.pulllist.app`.
+
+**⚠️ Worth carrying into S3:** `raysandjudys.pulllist.app` is **not a provisioned hostname** — only
+`rjbookstop` and `comicstore` are (F145). Harmless today (zero call sites), but the moment S3 prints
+that link, staging's own founding tenant would emit a non-resolving URL. Decide there whether
+staging gets a provisioned hostname or is treated as an explicit exception.
+
+**Honest limit on the F107 attribution:** no 429 was observed directly. What is demonstrated is that
+the failures are timeouts rather than assertions, that they do not reproduce on a targeted run, and
+that S0's only causal mechanism is measured working. The failures are **not attributed to this
+change**; the underlying full-suite fragility is test-infra, same bucket as F107/F130/F133.
+
+**⚠️ OPEN, and it gates S1 rather than this step: production's `rjbookstop` is marked
+`plan = 'free'` although it is the real paying tenant.** `UPDATE public.tenants SET plan = 'pro'
+WHERE slug = 'rjbookstop';` — **Rick's step, not the agent's.** Safe to run now and it should be:
+with `plan` read by zero lines on production, the UPDATE is inert until S1 lands, so doing it early
+de-risks the sequence instead of making it a launch-day step. **Staging also needs a durable
+`free`/`pro` tenant pair** for V3/V4 — the only `free` tenants today are the ephemeral `pw-*`
+fixtures (F130). **`register-tenant` has NOT been redeployed** — its `plan` input is code-only until
+Rick deploys it, and per F93 discipline its live `verify_jwt` must be **read from the dashboard
+first** (the in-file docblock claims OFF; CLAUDE.md's own platform-facts line was wrong about
+`verify_jwt` once already).
+
+**S1/S2/S3 remain design-level and must NOT be executed from their current text** — they still owe
+the free/paid-content-per-site pass. **Production untouched. No finding ID consumed** — S0 advances
+F72, which already owns this work. **F153 remains the next free finding ID.**
+
+
+**Last completed work: F99 Resend MIGRATION — M6/M7 GREEN on PRODUCTION, 2026-09-02.** Same day as
+M1–M5 below, later, **Rick's explicit request** ("start M6/M7"). Promoted via **PR #148** (staging
+`85ce9ce`/`162fd40`/`d5e6ea1` → production merge `4a4a475`, `/promote-prod` skill used end to end).
+
+**A real surprise surfaced during the merge, not a formality: production's `main` had never actually
+received F99 S1's parameterization.** Every prior promotion since 2026-08-31 (F149's, explicitly
+recorded — "F99 S1's Edge Function changes deliberately excluded, confirmed byte-identical to
+`main`" — and by the same pattern presumably the others) had deliberately restored the six mail
+functions to their pre-S1 hardcoded-literal state after merging, mirroring `config.js`'s own
+preservation step. So the merge conflicted on all six files — production still had
+`{ email: 'noreply@mrcyberrick.us', name: "..." }` object literals, staging had moved through both
+S1 (parameterized secrets) and this migration's M2 (Resend request shape). Resolved by taking
+staging's side wholesale (`git checkout --theirs`), verified byte-identical to `origin/staging` by
+hash before committing — this promotion is therefore the one that finally carries S1 to production
+too, not only the Resend cutover. F125 tree-integrity checks all green: `supabase/migrations/` still
+exactly 2 files, `config.js` still the prod ref, PR file list matched intent on GitHub itself (12
+files — six functions + `CLAUDE.md` + 5 docs; no `config.js`, no migrations).
+
+**Secrets set by Rick, one deliberate difference from staging:** `RESEND_API_KEY` **reused the same
+key as staging** rather than a fresh dedicated one (staging's M1 had used a fresh key; production's
+M6 didn't — his explicit call both times, digest-confirmed). `MAIL_FROM_EMAIL` →
+`noreply@pulllist.app`, `MAIL_FROM_NAME` unchanged. All six functions deployed with `verify_jwt` read
+live pre-deploy and preserved exactly (`approve-customer`/`send-my-list` ON, other four OFF — matches
+staging and this doc's own record), re-confirmed identical post-deploy.
+
+**M7 — real production send, authentication fully clean, but a real finding surfaced anyway.** A
+`reset-password` send to a real Outlook address: `dkim=pass header.d=pulllist.app` (verified) **+**
+`header.d=amazonses.com` (verified), `spf=pass smtp.mailfrom=send.pulllist.app`, `dmarc=pass
+action=none`, and Microsoft's own **`compauth=pass reason=100`** — every technical check this gate
+asks for passed. **The message landed in spam anyway.** Not a K1–K6 kill-criterion trip and not a
+gate failure — filed as **F152** rather than either ignored or treated as blocking: reads as a
+cold-start reputation cost specific to `pulllist.app`'s near-zero prior send history with Microsoft
+(unlike `mrcyberrick.us`'s years of it), not confirmed as the sole cause. Gmail and a third-party
+relay (`jellyfish.systems`/`privateemail.com`) both delivered cleanly earlier this session — only
+this one Outlook send has been observed going to spam. Mitigated by `forgot-password.html:194`'s
+**pre-existing** "Didn't get it? Check your spam folder, or send again" copy, verified in code, not
+assumed — Rick's own read, confirmed accurate before accepting it. **Rick's explicit call: monitor
+real customer traffic over the following days/weeks, do not act unless it doesn't self-resolve.**
+
+**Write-smoke deliberately skipped** — this promotion's entire diff is six Edge Functions plus docs,
+never `app.js`/HTML, never the customer reserve path; confirmed from the diff itself before deciding,
+not assumed. **Both environments now fully cut over, serving from `noreply@pulllist.app` via
+Resend.** MailerSend's credentials remain set on both projects, undeleted, as a dormant rollback path
+(plan's optional M8, not scoped this session). **No finding ID consumed for the migration itself —
+F152 is a separate, related discovery, filed not fixed.** See § 13 F99 and F152.
+
+**Prior work (2026-09-02, earlier the same day): F99 Resend MIGRATION — M1–M5 GREEN on staging.**
+`docs/f99-resend-migration.md` executed end to end: `RESEND_API_KEY` set
 (fresh dedicated key, Rick's call over reusing the discovery session's key), all six Edge Functions
 (`approve-customer`, `invite-customer`, `notify-customers`, `register-customer`, `reset-password`,
 `send-my-list`) rewritten to Resend's exact request shape (endpoint, auth header, `from` as a
@@ -947,7 +1522,31 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F152**. **F151 filed 2026-09-01** (`tenants.settings` still stores
+**Next free finding ID:** **F157**. **F156 filed 2026-09-05** (Lunar restricted-variant ratios never reached `catalog.order_requirement` on rows imported before F132 added the derivation 2026-08-20 — the ratio stays in `variant_type`, the derived column stays NULL forever because an older catalog month is never re-pulled, and **every** restriction surface therefore renders nothing: the customer's catalog badge (`app.js:1906`) and modal notice (`catalog.html:1261`), the Order Builder's restricted count (`admin.html:1126`), and both arrivals badges (`:1278`/`:1339`). Measured live: **67 production rows** (58 in `2026-07`, 5 in `2026-06`; staging 66), **6 with live unfulfilled reservations** — the exact unbadged rows Rick screenshotted. The reverse direction is clean (**0** Lunar rows carry `order_requirement` without a ratio), so the backfill replays the import's own rule rather than guessing. Backfill written, **not yet applied**: `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql`. See § 13 F156.) **F155 filed 2026-09-04** (the monthly-refresh runbook tells the operator PRH does not revise in-store dates in place, so PRH catalogs are never re-pulled and a revised date is never detected — measured false: **108** PRH 2026-07 titles carry a different `OnSaleDate` than the DB, plus 27/19/4 in 06/08/09. Found live by Rick: DNX #1 `75960621519500111`, in-store revised 2026-09-02 → **2026-09-16**, invisible to its two customers on every surface and about to be falsely fulfilled. **The larger result: for a FROZEN PRH catalog no data channel exists at all** — May master data is byte-identical across downloads, its change reports stop 2026-07-31, and 0 of 5,123 ids ever re-list. Lunar is the opposite: **one** All-Products file (17,490 rows) covers 98.4% of open codes and found 13 stale dates immediately. Filed not fixed — plan doc `docs/f155-catalog-date-revision-detection.md`, NOT STARTED. See § 13 F155.) **F154 filed AND RESOLVED, same session, 2026-09-03**
+(`mylist.html`'s print header read *"Catalog for null"* for a tenant with zero catalog rows —
+`Catalog.getLatestMonth()` correctly returns `null` pre-first-import, but the print handler
+interpolated it unguarded while the normal page, six lines away, already guarded the identical
+value. Found live by Rick, printing My List for `riverside-comics` — the first tenant created
+through this session's newly-fixed invite flow, moments after creation. Not a branding leak; would
+hit any tenant printing before their first import. Fixed with the same `||`-fallback shape
+`getLatestMonth()` itself uses. See § 13 F154.) **F153 filed AND RESOLVED, same session, 2026-09-03**
+(`register-tenant` created a new tenant's admin account with no password, no invite, no email of
+any kind — zero automated way in, ever, despite `tenant-onboarding-runbook.md` Step 5 claiming
+otherwise. Found while answering a plain question about first login, not a scoping session. Fixed
+same session: the function now generates a GoTrue `recovery`-type link and sends a branded,
+platform-identity ("PULLLIST", not the founding-tenant literal) invite via Resend, gated correctly
+by `plan` for the link it prints — always the apex `?t=<slug>` URL, never an unprovisioned
+`<slug>.pulllist.app` guess. A first attempt used `type: 'invite'`, matching `invite-customer`'s own
+pattern; live-verified WRONG for this case (`422 email_exists`, since the admin user already exists
+here) before landing on `recovery`. Response gained `invite_sent: boolean`. Runbook Step 5 corrected
+in the same commit. See § 13 F153.) **F152 filed 2026-09-02** (a real production `reset-password`
+send to an Outlook recipient landed in spam despite fully clean `dkim`/`spf`/`dmarc`/`compauth` —
+found during F99 M7's post-cutover verification, right after production's Resend cutover. Not a
+K1–K6 trip; likely a cold-start reputation cost for the brand-new `pulllist.app` sender identity with
+Microsoft specifically, not confirmed as the sole cause. Gmail and a third-party relay both delivered
+cleanly in this session; only this one Outlook send has been observed going to spam. Mitigated by
+`forgot-password.html`'s pre-existing "check your spam folder" copy. Low severity — **Rick's call:
+monitor, don't act.** See § 13 F152). **F151 filed 2026-09-01** (`tenants.settings` still stores
 `mailerlite_webhook_secret` on **all three real tenant rows** — staging `raysandjudys`, production
 `rjbookstop` and `comicstore`; only the four `pw-*` Playwright fixture tenants are clean. Measured
 service-role, key names only — the value was never read. The secret is **inert** (the `?secret=`
@@ -1035,6 +1634,11 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F156 | **Medium, filed AND fully RESOLVED both environments 2026-09-05** — Lunar stores its allocation ratio in `variant_type`; `parseLunarVariantRestriction()` (`import.js:272`) derives `order_requirement` from it, but only since **2026-08-20**. Rows imported before that keep the ratio and carry a NULL derived column **permanently** — older months are never re-pulled (F155's own assumption, different column). So no restriction signal renders anywhere: not the customer's badge (`app.js:1906`) or modal notice (`catalog.html:1261`), not the Order Builder count (`admin.html:1126`), not either arrivals badge (`:1278`/`:1339`). **`arrivals.html` is not the defect** — it reads the column and never parses the title, exactly as F144 requires | Owner: § 13 F156 + `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql`. **Measured live 2026-09-05:** prod **67** rows (2026-07=58, 2026-06=5, 2026-04=3, 2026-03=1), staging **66**; **6 carry live unfulfilled reservations** — `0626DE0825` plus SPAWN 77 CVR F–J (`0726IM0315`–`0319`), i.e. every unbadged row in Rick's screenshot. `0726AC0632` is unbadged **correctly** (`variant_type` null — no ratio anywhere). **Safe because the reverse direction is empty:** 0 Lunar rows hold `order_requirement` without a `^[0-9]+:[0-9]+$` match, so the UPDATE replays the import's own predicate. Every consumer is read-only display — no schema, no RLS, no deploy. **Staging APPLIED 2026-09-05 by Rick and verified end-to-end** — founding tenant 488 → 554 (**+66, exactly as predicted**); a live browser check read **`⚠ 1:25`** off `0726DC0016` (`catalog_month` 2026-07) in the very panel that was reported. **The post-check's own expected value was wrong and is corrected:** it quoted the founding-tenant count against a query with no tenant filter, so staging returned **718** (554 + `demoshop`'s 164) and looked like a failure. Production is unaffected by that ambiguity — `comicstore` holds no Lunar ratio rows, so expect `still_null 0 / lunar_with_requirement 555` there. **PRODUCTION APPLIED 2026-09-05 by Rick: `still_null 67 → 0`, `lunar_with_requirement 488 → 555`**, matching the prediction exactly. Independently re-read afterwards rather than trusting the post-check: **all 555 ratio rows now satisfy `order_requirement === variant_type` (0 mismatched)**, all six reserved titles carry their ratio, PRH unchanged at 724. **Nothing further owed on this finding** |
+| F155 | **Medium, filed 2026-09-04, open, not started** — `monthly-catalog-refresh.md:130-132` states PRH "omits withdrawn titles rather than revising dates in place… this step matters most for Lunar." **Measured false** (108 PRH 2026-07 titles differ from the DB), so the Revision Sweep has never run for PRH and a revised in-store date is never detected. Found live: DNX #1 `75960621519500111` revised 09-02 → **09-16**; once the stale date passed it left BOTH `mylist.html`'s current-month table (`:937`) and its future-dated Upcoming Arrivals (`:884`) — invisible to its two customers — and the next import marks it fulfilled. No panel caught it because `computeBackorderRisk()` (`admin.html:1749`) clears any code with `ledgerNetQty > 0` first, so an **ordered** title is invisible, and Mark Ordered was correctly `disabled` | Owner: `docs/f155-catalog-date-revision-detection.md` (STATUS: NOT STARTED) + § 13 F155. **The pivot: for a FROZEN PRH catalog there is NO channel** — May master data byte-identical across two downloads (MD5 `438958a0…`), 0 of 1,078 rows differ from the May import, change reports stop **2026-07-31**, **0 of 5,123** ids ever re-list (so F122 cannot help), yet **84 May titles are still future-dated**. Lunar inverts this: **one** All-Products file (17,490 rows, back to 2025) covers **559/568 (98.4%)** open codes and surfaced **13** stale dates at once — incl. `FIRE AND ICE #5` moved a month *earlier*, the direction nothing watches. Plan: S1 fix the doc, S2 weekly `check-dates.js` (2 files, 3 actions, Fri/Sat) reusing `classifyReservedDateDrift()`, S3 **bounded deferral** in `auto_fulfill_past_on_sale()` + panel-ordering fix. **S3 revisits F115 Option A** (rejected as "a silent miss for a silent stall") — hence *defer*, never block; needs Rick's explicit sign-off. **3 titles exposed on production today; the 2 DNX #1 rows are still `fulfilled=false`**. **FOLLOW-ON SHIPPED 2026-09-05 (staging), no new ID:** the "no surface" half now has controls — F143's write, split into one `recordSupplierRejection()`, is reachable from the admin distributor-table Status column and from `arrivals.html`'s recon exceptions list, guarded on `ledgerNetQty > 0` and (for the table) `!hasShipmentEvidence()`. S3(b) fixes the panel *ordering* but only 14 days past on-sale; the recon panel sees it on invoice day. 18/18 targeted, 146/0 full suite |
+| F154 | **Low, fully RESOLVED, staging, 2026-09-03** — `mylist.html`'s print header read literal *"Catalog for null"* for a tenant with zero catalog rows (a normal pre-first-import state). `Catalog.getLatestMonth()` correctly returns `null`; the print handler interpolated it unguarded while the same file's normal-page code, six lines away, already guarded the identical value. Found live by Rick printing `riverside-comics`' My List moments after creating it | Owner: § 13 F154. **Fixed same session**: `` `Catalog for ${currentMonth \|\| 'no catalog imported yet'}` `` — same fallback shape `getLatestMonth()` itself uses. `node --check` clean. **Not yet re-verified against a live print post-deploy** |
+| F153 | **Medium, fully RESOLVED, staging, 2026-09-03** — `register-tenant` created a new tenant's admin auth user with `email_confirm:true` and **no password, no invite, no email of any kind** — zero automated first-login path ever existed, despite the onboarding runbook's Step 5 claiming an invite sent automatically. Found by answering a plain question, not a scoped audit | Owner: § 13 F153. **Fixed same session**: generates a GoTrue `recovery`-type link (a first attempt used `type:'invite'`, live-verified WRONG — `422 email_exists`, since the admin already exists here — before landing on `recovery`, matching `reset-password`'s own proven type) and sends a branded, platform-identity ("PULLLIST") invite via Resend. Response gained `invite_sent`. Link always points at the apex `?t=<slug>`, never an unprovisioned subdomain. Runbook Step 5 corrected in the same commit. Verified live end-to-end (7/7, zero orphaned auth users) and mechanically (template harness, 10/10) |
+| F152 | **Low** — a real production `reset-password` send to an Outlook recipient landed in spam despite fully clean `dkim=pass d=pulllist.app`/`spf=pass`/`dmarc=pass`/`compauth=pass reason=100` — found during F99 M7's post-cutover production verification, right after the Resend cutover. Not a K1–K6 trip (link rewriting/tracking/alignment all clean); reads as a cold-start reputation cost for the brand-new `pulllist.app` sender identity specifically with Microsoft, not confirmed as the sole cause. Gmail and a third-party relay both delivered cleanly in this same session — only this one Outlook send has gone to spam so far | Owner: § 13 F152. **Open — Rick's explicit call: monitor, don't act.** Mitigated by `forgot-password.html:194`'s pre-existing "Didn't get it? Check your spam folder, or send again" copy — not added because of this finding. Watch real customer traffic (not test sends) over the following days/weeks as `pulllist.app` builds reputation with Microsoft; escalate only if it doesn't self-resolve |
 | F151 | **Low, both environments** — `tenants.settings` still stores `mailerlite_webhook_secret` on all three **real** tenant rows (staging `raysandjudys`, prod `rjbookstop` + `comicstore`; the four `pw-*` fixture tenants are clean). Inert since 2026-08-30 (the `?secret=` path was removed platform-wide) and the read is **tenant-scoped** — a customer could read their *own* shop's dead secret, never another tenant's. The real point: `resolve_tenant_by_slug`'s deliberate "never return `settings`" projection (5.3 § 1.5) is **bypassed** by the authenticated path, which reads `tenants` directly at `app.js:82-86` — RLS filters rows, not columns | Owner: § 13 F151. **Open, not started — Rick's call (F72 plan § 8 Q5): file now, fix later.** **Verify first:** no probe was run with a real user JWT; a column-level GRANT on `tenants`, if one exists, flips the conclusion entirely. Fix direction: `UPDATE public.tenants SET settings = settings - 'mailerlite_webhook_secret';` on both environments — **no rotation needed**, the value authorizes nothing. Found while planning **F72** |
 | F150 | **Low today, confirmed by a live test not inferred.** Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER) — staging grants `anon` nothing on the same table (hard 401). Found by F149's own migration pre-flight, which halted exactly as designed. A live anon read against production returns `200, []` — RLS still filters every row (only SELECT policy is `TO authenticated`), so no data is actually exposed today, just a thinner defense-in-depth layer than staging | Owner: § 13 F150. **Open, not started — Rick's call: file now, fix later.** Still unconfirmed: whether RLS is actually *enabled* (`pg_class.relrowsecurity`) on this table vs. merely having zero anon-applicable policies (both give the same empty-read symptom); writes were not probed against production. Not investigated: how the divergence arose, or whether other tables share it |
 | F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-01.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`, `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` — staging `ca8c481`, **production PR #147 `36b79ff`**. **Verified staging**: 12/12 checks in a local Playwright harness — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON, full suite 142 passed/1 skipped (unrelated)/0 failed. **Verified production post-deploy**: served bytes confirmed carrying the fix, RPC re-confirmed live (`200/false`), `config.js` still prod ref, PR file list matched intent on GitHub itself (F99 S1's Edge Function changes deliberately excluded, confirmed byte-identical to `main`). Write-smoke skipped (doesn't touch the reserve path, same disposition as PR #141/#145/#133). Surfaced **F150** during the promotion's own pre-flight (filed, not fixed) |
@@ -1049,7 +1653,7 @@ residual to another finding as open until that other finding demonstrably absorb
 | F130 | **Low, but the number was wrong — re-measured 2026-08-30 as 893, not 197**, with explicit pagination (the 197 was taken by an unrecorded method; GoTrue's admin list defaults to a small page size, the same unpaginated-read class as F82/F113/F139/F140 — five times now). **Classification done**, which is what the finding asked for: 5 prefixes hold 737/893, and `10-post-reserve-prompt` + `11-reserved-suggestions` each call `createUser` 9× against `deleteUser` 2× — users made *inside* tests are never torn down (383 orphans, the fix target). `pw-iso` (207) is balanced 2×/2× and is a **different, undiagnosed** cause. `pw-pending` (70) must NOT be bulk-deleted — those survivors are intended (F64 item 5 Option A). Read-only pass; nothing deleted. Old text follows: 197 orphaned GoTrue **auth users** in staging from Playwright fixtures. **Measured 2026-08-24: the auth DELETE works (6/6 deleted, 0 remained) — these are deletes never *attempted*, not failed ones**, and 7 of 11 same-day orphans are `pw-pending-*` where a surviving auth row is *intended* (F64 item 5 Option A). Test-infra only, no live app impact | deferred — dedicated test-infra session. **The bulk-delete-after-date-bucketing plan is invalid as stated**: bucketing cannot tell an intended decline survivor from a teardown miss. Classify by originating spec/prefix first, fix the teardowns that skip the auth call, then delete only what remains. See § 13 F130 |
 | F133 | **Low — variant (a) RESOLVED 2026-08-30; variant (b) re-dispositioned, its diagnosis does not match the code.** (a) fixed by `ensureDeadlineCovers()`/`restoreDeadline()` in the Playwright fixtures — the describe block that depends on the At-risk classification now **owns** `order_deadline` instead of hoping the ambient value cooperates. Reproduced **deterministically** first (forced past deadline → `06:148 toContainText(atRiskTitle)` fails), then negative-control tested (guard removed → 1 failed; restored → 9 passed). (b) **does not reproduce**: spec 21 passes targeted 6/6, its assertions all target unique stamped titles, and the panel has no row cap — so “assumes the panel holds only its fixture” is not what they do. **Its claim that targeted runs are untrustworthy is not currently demonstrable.** Needs a real captured failure before anyone “fixes” it. Original entry retained — the date-dependence was real | Owner: § 13 F133. Old text follows: date-dependent specs flip red with zero code involved, via the live `order_deadline` (2026-08-21). **Two variants, not one:** (a) a fixture FOC crossing *past* the deadline (2026-08-20, three specs); (b) **the deadline having LAPSED** re-admits *real* catalog rows into `#backorder-risk-panel`, breaking any spec that assumes the panel holds only its fixture — **recurred 2026-08-24 in a fourth spec** (`21-arrival-resolution:136`) — **but only in a TARGETED run; it passes in the full suite**, because spec 15 runs first and leaves the state it needs. Test-infra only | deferred — no plan doc. **The entry's prediction that a lapse would end this was wrong — a lapse started variant (b).** Also exposes an **undeclared spec-order dependency**: spec 21 is green by ordering luck, so **targeted runs of these specs are not trustworthy**. Fix: deadline-aware helper closes (a) only; (b) needs panel assertions scoped to the seeded row. See § 13 F133 |
 | F72 | `register-customer` email template stays founding-branded post-un-pin | design together with F99 — needs a scoping interview |
-| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **Plan doc: `docs/f99-sender-domain-consolidation.md`. S0 ANSWERED 2026-08-31** — MailerSend signs a subdomain `From` under its one verified parent domain, so `pulllist.app` verified once covers every `<slug>.pulllist.app`; F99's per-tenant-subdomain direction is viable on the free tier. **S1 DONE on staging 2026-08-31 (`eff9793`)** — the six sender-email `from:` literals are now `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` secrets with a `??` fallback to today's values (zero behavior change); staging's secrets set to those same values and proven via two live `reset-password` sends, `From` byte-identical both times. **Surfaced during S1, code left as-is, doc corrected:** `approve-customer` and `send-my-list` actually run `verify_jwt` **ON** on staging — CLAUDE.md § Supabase platform facts claimed universal JWT-off and was wrong; the deploy preserved the live setting rather than matching the doc (S1's job is no behavior change), and the platform-facts line itself was corrected the same session (2026-08-31) to state the real, non-universal pattern. **S2 (DNS) DONE 2026-09-01** — DKIM + Return-Path CNAMEs published in Cloudflare and externally verified; SPF merged at cutover time with the real MailerSend value (`include:_spf.mailersend.net`, generic — not the per-domain hash originally expected), confirmed 2 DNS lookups, well under the 10-lookup ceiling. **S3 (cutover) ATTEMPTED 2026-09-01, ROLLED BACK — full production cutover run for real** (Maintenance Mode ON, domain swapped, fully verified in MailerSend's dashboard) but blocked by two MailerSend platform behaviors neither the plan nor MailerSend's own docs anticipated: API tokens are domain-scoped (fixed, generated a new one) and `#MS42207` rejected every send — for the bare verified domain as well as the subdomain — **cause UNRESOLVED**. Ruled out with reasons: Sender Identities (agency feature, not required for your own verified domain) and any subdomain/free-tier restriction (S0's probe already sent from a subdomain on this same free account). Top live hypothesis: **token↔domain binding, never checked**. Rolled back cleanly, verified via real delivered headers — production unchanged, back to `noreply@mrcyberrick.us`. **Total real outage: ~50–55 min.** No finding ID consumed — external platform behavior, not a defect in our code/DNS/plan. ~~**Next attempt should buy one month of paid tier first (§ 8 Q7)**~~ — **SUPERSEDED 2026-09-02.** **S3-B: Brevo transactional EVALUATED and REJECTED 2026-09-02 (§ 9)** — three live sends, zero downtime, production untouched. Transactional is active and domain auth covers arbitrary addresses with **strict DKIM alignment**, but Brevo rewrites **every link, password-reset links included**, through its own `sendibt2.com` click redirector and declines to disable it (one root cause: it does not separate transactional from marketing on the API, so it also injects a one-click `List-Unsubscribe` and a tracking pixel). `reset-password`'s `hashed_token` design still holds — a trust/credential-handling problem, not a functional break, still disqualifying. **A second free MailerSend account is CLOSED — an explicit ToS violation** (§ 11.1/11.2; the exposure is the *existing* account). **Key reframe: a swap to a DIFFERENT provider needs no paid tier at all** — the single-domain-slot constraint exists only within one provider. **DIRECTION SET (Rick, 2026-09-02): Resend** — a direction, not a commitment; nothing probed live, no code changed (§ 10). **Repriced:** Hobby ($7) is still ONE domain; Starter ($35) is the real parallel-run price. **Next step is the probe, not code** — **discovery session PLANNED 2026-09-02, not started: `docs/f99-resend-discovery.md`.** Kill criteria (K1–K6) stated up front; sequenced so Resend's sandbox sender tests the disqualifiers — link rewriting, unsubscribe injection, tracking pixel — **before any DNS is published**, so Phase 1 can disqualify it in ~10 min with nothing to roll back. Production untouched at every step; **Maintenance Mode is NOT needed** (S3 needed it because the cutover removed the working sender; this adds a second, unused provider alongside). **S4 not started.** Read `docs/f99-sender-domain-consolidation.md` § 4 S3, § 9 and § 10 before retrying. Design together with F72. **✅ RESEND DISCOVERY COMPLETE — GREEN, 2026-09-02, same day.** `docs/f99-resend-discovery.md` ran both phases against a real account: `pulllist.app` verified, K1–K6 all clear on our own domain (an early sandbox K1/K3 trip traced to `resend.dev`'s own pre-configured tracking subdomain, confirmed clean on ours before concluding anything), alignment **stronger than Brevo** (DKIM exact-match + SPF aligned, not DKIM-only), apex SPF confirmed untouched throughout. **D7 (parent-covers-subdomain) came back negative** — opposite of MailerSend's S0 — forcing the addressing decision immediately: **flat `noreply@pulllist.app` DECIDED** (not per-tenant subdomains), per "prioritize the free tier." **Provider selection is now DECIDED, not a direction** — see `docs/f99-sender-domain-consolidation.md` § 10. **Migration plan written, not started: `docs/f99-resend-migration.md`** — six Edge Functions, mechanical `from`/`to` shape diff measured from live code. F148 measured (D8): not dissolved (~100/day unchanged), monthly ceiling improves 500→3,000; paid-tier pay-as-you-go overage ($0.90/1,000) confirmed real but Free-tier-inapplicable. No finding ID consumed. **✅ MIGRATION M1–M5 COMPLETE ON STAGING, GREEN, 2026-09-02, same day.** `docs/f99-resend-migration.md` executed end to end: `RESEND_API_KEY` set (fresh key), all six functions cut to Resend's exact request shape, `verify_jwt` preserved per function, `MAIL_FROM_EMAIL` flipped to `noreply@pulllist.app` on staging (landed with M1, before the code deploy). Two real sends (`reset-password`, `invite-customer`) confirmed clean from delivered headers at two different receiving MTAs — `dkim=pass d=pulllist.app` exact match, `spf=pass` aligned, `dmarc=pass`, no rewritten links, no tracking pixel. `register-customer`'s live check is an accepted residual (Turnstile-gated, no real tenant-hostname URL exists on staging). Magic-link auth confirmed fully covered by this migration (no separate Supabase-native mail path exists in the app). Full suite green: 279 unit + 143 Playwright. **Production untouched — M6 needs Rick's explicit separate request.** No finding ID consumed |
+| F99 | transactional (MailerSend/GoDaddy) and marketing (Brevo/Cloudflare) mail split across two sender domains | **Plan doc: `docs/f99-sender-domain-consolidation.md`. S0 ANSWERED 2026-08-31** — MailerSend signs a subdomain `From` under its one verified parent domain, so `pulllist.app` verified once covers every `<slug>.pulllist.app`; F99's per-tenant-subdomain direction is viable on the free tier. **S1 DONE on staging 2026-08-31 (`eff9793`)** — the six sender-email `from:` literals are now `MAIL_FROM_EMAIL`/`MAIL_FROM_NAME` secrets with a `??` fallback to today's values (zero behavior change); staging's secrets set to those same values and proven via two live `reset-password` sends, `From` byte-identical both times. **Surfaced during S1, code left as-is, doc corrected:** `approve-customer` and `send-my-list` actually run `verify_jwt` **ON** on staging — CLAUDE.md § Supabase platform facts claimed universal JWT-off and was wrong; the deploy preserved the live setting rather than matching the doc (S1's job is no behavior change), and the platform-facts line itself was corrected the same session (2026-08-31) to state the real, non-universal pattern. **S2 (DNS) DONE 2026-09-01** — DKIM + Return-Path CNAMEs published in Cloudflare and externally verified; SPF merged at cutover time with the real MailerSend value (`include:_spf.mailersend.net`, generic — not the per-domain hash originally expected), confirmed 2 DNS lookups, well under the 10-lookup ceiling. **S3 (cutover) ATTEMPTED 2026-09-01, ROLLED BACK — full production cutover run for real** (Maintenance Mode ON, domain swapped, fully verified in MailerSend's dashboard) but blocked by two MailerSend platform behaviors neither the plan nor MailerSend's own docs anticipated: API tokens are domain-scoped (fixed, generated a new one) and `#MS42207` rejected every send — for the bare verified domain as well as the subdomain — **cause UNRESOLVED**. Ruled out with reasons: Sender Identities (agency feature, not required for your own verified domain) and any subdomain/free-tier restriction (S0's probe already sent from a subdomain on this same free account). Top live hypothesis: **token↔domain binding, never checked**. Rolled back cleanly, verified via real delivered headers — production unchanged, back to `noreply@mrcyberrick.us`. **Total real outage: ~50–55 min.** No finding ID consumed — external platform behavior, not a defect in our code/DNS/plan. ~~**Next attempt should buy one month of paid tier first (§ 8 Q7)**~~ — **SUPERSEDED 2026-09-02.** **S3-B: Brevo transactional EVALUATED and REJECTED 2026-09-02 (§ 9)** — three live sends, zero downtime, production untouched. Transactional is active and domain auth covers arbitrary addresses with **strict DKIM alignment**, but Brevo rewrites **every link, password-reset links included**, through its own `sendibt2.com` click redirector and declines to disable it (one root cause: it does not separate transactional from marketing on the API, so it also injects a one-click `List-Unsubscribe` and a tracking pixel). `reset-password`'s `hashed_token` design still holds — a trust/credential-handling problem, not a functional break, still disqualifying. **A second free MailerSend account is CLOSED — an explicit ToS violation** (§ 11.1/11.2; the exposure is the *existing* account). **Key reframe: a swap to a DIFFERENT provider needs no paid tier at all** — the single-domain-slot constraint exists only within one provider. **DIRECTION SET (Rick, 2026-09-02): Resend** — a direction, not a commitment; nothing probed live, no code changed (§ 10). **Repriced:** Hobby ($7) is still ONE domain; Starter ($35) is the real parallel-run price. **Next step is the probe, not code** — **discovery session PLANNED 2026-09-02, not started: `docs/f99-resend-discovery.md`.** Kill criteria (K1–K6) stated up front; sequenced so Resend's sandbox sender tests the disqualifiers — link rewriting, unsubscribe injection, tracking pixel — **before any DNS is published**, so Phase 1 can disqualify it in ~10 min with nothing to roll back. Production untouched at every step; **Maintenance Mode is NOT needed** (S3 needed it because the cutover removed the working sender; this adds a second, unused provider alongside). **S4 not started.** Read `docs/f99-sender-domain-consolidation.md` § 4 S3, § 9 and § 10 before retrying. Design together with F72. **✅ RESEND DISCOVERY COMPLETE — GREEN, 2026-09-02, same day.** `docs/f99-resend-discovery.md` ran both phases against a real account: `pulllist.app` verified, K1–K6 all clear on our own domain (an early sandbox K1/K3 trip traced to `resend.dev`'s own pre-configured tracking subdomain, confirmed clean on ours before concluding anything), alignment **stronger than Brevo** (DKIM exact-match + SPF aligned, not DKIM-only), apex SPF confirmed untouched throughout. **D7 (parent-covers-subdomain) came back negative** — opposite of MailerSend's S0 — forcing the addressing decision immediately: **flat `noreply@pulllist.app` DECIDED** (not per-tenant subdomains), per "prioritize the free tier." **Provider selection is now DECIDED, not a direction** — see `docs/f99-sender-domain-consolidation.md` § 10. **Migration plan written, not started: `docs/f99-resend-migration.md`** — six Edge Functions, mechanical `from`/`to` shape diff measured from live code. F148 measured (D8): not dissolved (~100/day unchanged), monthly ceiling improves 500→3,000; paid-tier pay-as-you-go overage ($0.90/1,000) confirmed real but Free-tier-inapplicable. No finding ID consumed. **✅ MIGRATION M1–M5 COMPLETE ON STAGING, GREEN, 2026-09-02, same day.** `docs/f99-resend-migration.md` executed end to end: `RESEND_API_KEY` set (fresh key), all six functions cut to Resend's exact request shape, `verify_jwt` preserved per function, `MAIL_FROM_EMAIL` flipped to `noreply@pulllist.app` on staging (landed with M1, before the code deploy). Two real sends (`reset-password`, `invite-customer`) confirmed clean from delivered headers at two different receiving MTAs — `dkim=pass d=pulllist.app` exact match, `spf=pass` aligned, `dmarc=pass`, no rewritten links, no tracking pixel. `register-customer`'s live check is an accepted residual (Turnstile-gated, no real tenant-hostname URL exists on staging). Magic-link auth confirmed fully covered by this migration (no separate Supabase-native mail path exists in the app). Full suite green: 279 unit + 143 Playwright. **✅ MIGRATION PROMOTED TO PRODUCTION, GREEN, 2026-09-02, same day, Rick's explicit request.** PR #148 (merge `4a4a475`) — conflicted on all six functions because production had never received S1 (every prior promotion restored them to hardcoded literals, matching `config.js`'s preservation pattern), resolved by taking staging's tested code wholesale, verified byte-identical by hash; F125 checks green. Secrets set (Rick reused staging's `RESEND_API_KEY` rather than a fresh one), `verify_jwt` preserved and reconfirmed. Real production send: authentication fully clean (`dkim=pass d=pulllist.app` + `amazonses.com`, `spf=pass` aligned, `dmarc=pass`, `compauth=pass reason=100`) but landed in spam — filed **F152** (cold-start Microsoft reputation, not a defect; mitigated by an existing spam-folder prompt; Rick's call: monitor, don't act). Write-smoke skipped (never touches the reserve path). **Both environments now serving from `noreply@pulllist.app` via Resend.** No finding ID consumed for the migration itself |
 | F89 | paper→app conversion is unmeasurable — claim deletes the paper rows, nothing logs it | deferred — future instrumentation session |
 | F90 | `usage_events` 90-day purge forecloses adoption-trend analytics | deferred — future schema + import-script session |
 | F126 | profile email-editing unreachable outside the Supabase console (needs an Edge Function, F25); paused-customer reservation handling undecided | deferred — Rick's call to schedule |
@@ -1437,9 +2041,9 @@ C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\
 - **Frontend:** Vanilla HTML/CSS/JS — no build step, no npm for the web app
 - **Backend:** Supabase (PostgreSQL + Auth + Edge Functions + RLS)
 - **Hosting:** Cloudflare Pages (static files only; migrated from GitHub Pages in 5.1)
-- **Email:** production = MailerSend; staging = Resend (F99 migration, 2026-09-02 — see § Current
-  Migration Phase; environments diverge until M6 production promotion), both via Supabase Edge
-  Functions
+- **Email:** Resend, both environments (F99 migration M1–M7, 2026-09-02 — see § Current Migration
+  Phase), via Supabase Edge Functions. MailerSend's credentials remain set on both projects, dormant,
+  as an undeleted rollback path (M8, optional, not scoped)
 - **Import:** Node.js script run locally each month
 
 Cloudflare Pages serves static files only — no SSR. All dynamic behavior is client-side
@@ -1865,7 +2469,8 @@ the selected cycle is excluded **and** surfaced in the held-back panel (V3); an
 already-ordered code is flagged with its prior quantity and defaulted to the
 remainder, never auto-suppressed (V4); the Status-column button reflects
 ordered-vs-reserved (`Mark Ordered` / `Add (n of m)` / `Over (n of m)` /
-`Ordered (n)` disabled); the backorder-risk panel separates At risk,
+`Ordered (n)` — *disabled unconditionally until 2026-09-05; now disabled only once the 7-day
+correction window has closed, see § 13 F143*); the backorder-risk panel separates At risk,
 Backordered and cleared-by-ledger (V7); and My List shows "Order placed" driven
 by the ledger with `fulfilled` still false.
 **Writing specs against this path: staging carries 857 real backfilled ledger

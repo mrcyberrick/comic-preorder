@@ -898,6 +898,12 @@
     orderLedger = data || [];
   }
 
+  // Rick, 2026-09-05 — how long Mark Ordered stays unlocked after a title is
+  // fulfilled, so a mis-recorded order can still be corrected. Named rather
+  // than inlined because the label, the hint and the disabled test all have
+  // to agree; a bare 7 in three places is how they drift apart.
+  const ORDER_CORRECTION_DAYS = 7;
+
   function ledgerMatchesFor(distributor, code) {
     if (!code) return [];
     return orderLedger.filter(r => r.distributor === distributor && r.order_code === code);
@@ -1956,57 +1962,81 @@
   // it 'unknown' is the point (§ 13 F143's design decision). Everything
   // downstream is existing machinery: net ≤ 0 → ledgerRejected() → the row
   // clears through F134 Part 1's exit with no further code needed here.
+  //
+  // F156 follow-on (2026-09-05): split into a wiring half and a WRITE half so
+  // a second entry point can reuse the identical write. The distributor
+  // table's Status column now offers the same action (an ordered title that
+  // never arrived is invisible to every Order Follow-Up panel while
+  // `ledgerNetQty > 0` — F155's own collision), and it wires by event
+  // DELEGATION, not per-button listeners, so it cannot use the loop below.
+  // One writer, two callers: the payload can never drift between surfaces.
+  async function recordSupplierRejection(btn) {
+    const distributor = btn.dataset.distributor;
+    const code        = btn.dataset.code;
+    // Restored verbatim on failure. Captured rather than hardcoded to
+    // 'Rejected by supplier' because callers label the button to fit
+    // their own surface; hardcoding it silently relabels the caller's
+    // button on the error path.
+    const originalLabel = btn.textContent;
+    // Recomputed at click time, not read off a data-attribute captured
+    // at render time — the ledger may have changed since (another
+    // admin, or a concurrent action in this same session), and a stale
+    // net quantity would write a wrong adjustment.
+    const netQty = ledgerNetQty(distributor, code);
+    if (netQty <= 0) {
+      toast('Nothing to reject — the order ledger already changed. Refreshing…', 'error');
+      await loadOrderLedger();
+      renderByDistributor();
+      renderBackorderRiskPanel();
+      return;
+    }
+
+    // Confirmation gate (Rick, 2026-09-05). Placed inside the shared writer,
+    // AFTER the net is recomputed so the dialog can state the real quantity,
+    // and BEFORE the button is disabled so a cancel leaves the row exactly as
+    // it was. Covers all three entry points — the Order Follow-Up panel's
+    // original F143 button included: the "no in-app recovery" reasoning holds
+    // identically there, and gating two of three would leave the same misclick
+    // unrecoverable on the third.
+    if (!confirmSupplierRejection(btn.dataset.title, netQty)) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Recording…';
+
+    const { error } = await db.from('order_submissions').insert({
+      tenant_id:     TenantContext.current().id,
+      distributor,
+      order_code:    code,
+      item_code:     btn.dataset.itemCode || null,
+      title:         btn.dataset.title || null,
+      quantity:      -netQty,
+      order_type:    'adjustment',
+      foc_date:      btn.dataset.foc || null,
+      catalog_month: btn.dataset.catalogMonth || currentCatalogMonth,
+      submitted_on:  DateUtils.todayLocal(),
+    });
+
+    if (error) {
+      toast(`Failed to record rejection: ${error.message}`, 'error');
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      return;
+    }
+
+    // Narrower reload than wireArrivalResolveActions()'s loadData() —
+    // only the ledger changed, so this is the same trio ob-record-save
+    // uses (§ 5.2). Confirm the row actually disappears: a re-render
+    // reading a stale orderLedger would leave it on screen and look
+    // like the write failed.
+    await loadOrderLedger();
+    renderByDistributor();
+    renderBackorderRiskPanel();
+    toast('Recorded as rejected — order corrected', 'success');
+  }
+
   function wireArrivalRejectActions(panel) {
     panel.querySelectorAll('.arrival-reject-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const distributor = btn.dataset.distributor;
-        const code        = btn.dataset.code;
-        // Recomputed at click time, not read off a data-attribute captured
-        // at render time — the ledger may have changed since (another
-        // admin, or a concurrent action in this same session), and a stale
-        // net quantity would write a wrong adjustment.
-        const netQty = ledgerNetQty(distributor, code);
-        if (netQty <= 0) {
-          toast('Nothing to reject — the order ledger already changed. Refreshing…', 'error');
-          await loadOrderLedger();
-          renderByDistributor();
-          renderBackorderRiskPanel();
-          return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Recording…';
-
-        const { error } = await db.from('order_submissions').insert({
-          tenant_id:     TenantContext.current().id,
-          distributor,
-          order_code:    code,
-          item_code:     btn.dataset.itemCode || null,
-          title:         btn.dataset.title || null,
-          quantity:      -netQty,
-          order_type:    'adjustment',
-          foc_date:      btn.dataset.foc || null,
-          catalog_month: btn.dataset.catalogMonth || currentCatalogMonth,
-          submitted_on:  DateUtils.todayLocal(),
-        });
-
-        if (error) {
-          toast(`Failed to record rejection: ${error.message}`, 'error');
-          btn.disabled = false;
-          btn.textContent = 'Rejected by supplier';
-          return;
-        }
-
-        // Narrower reload than wireArrivalResolveActions()'s loadData() —
-        // only the ledger changed, so this is the same trio ob-record-save
-        // uses (§ 5.2). Confirm the row actually disappears: a re-render
-        // reading a stale orderLedger would leave it on screen and look
-        // like the write failed.
-        await loadOrderLedger();
-        renderByDistributor();
-        renderBackorderRiskPanel();
-        toast('Recorded as rejected — order corrected', 'success');
-      });
+      btn.addEventListener('click', () => recordSupplierRejection(btn));
     });
   }
 
@@ -2191,10 +2221,17 @@
       items.forEach(p => {
         const id = p.catalog?.id;
         if (!id) return;
-        if (!map[id]) map[id] = { catalog: p.catalog, customers: [], totalQty: 0, fulfilledCount: 0 };
+        if (!map[id]) map[id] = { catalog: p.catalog, customers: [], totalQty: 0, fulfilledCount: 0, lastFulfilledAt: null };
         map[id].customers.push({ name: p.customer_name, qty: p.quantity || 1, fulfilled: !!p.fulfilled });
         map[id].totalQty      += (p.quantity || 1);
         if (p.fulfilled) map[id].fulfilledCount++;
+        // Latest fulfilment across the whole group, for the correction window
+        // below. ISO timestamps sort lexically, so a string compare is safe
+        // and avoids constructing a Date per row.
+        if (p.fulfilled && p.fulfilled_at &&
+            (!map[id].lastFulfilledAt || p.fulfilled_at > map[id].lastFulfilledAt)) {
+          map[id].lastFulfilledAt = p.fulfilled_at;
+        }
       });
       return Object.values(map).sort((a, b) => (a.catalog?.foc_date || '').localeCompare(b.catalog?.foc_date || ''));
     }
@@ -2237,8 +2274,40 @@
             </tr>
           </thead>
           <tbody>
-            ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount }) => {
+            ${grouped.map(({ catalog: c, customers, totalQty, fulfilledCount, lastFulfilledAt }) => {
               const allFulfilled  = customers.length > 0 && fulfilledCount === customers.length;
+              // ── Correction window (Rick, 2026-09-05) ────────────────────
+              // "I would like to see the order button unlocked up to 7 days
+              // after fulfilment." Mark Ordered used to be `disabled` for the
+              // whole life of a matched code, which is what left an operator
+              // with no way to fix a wrong quantity or a rejection recorded
+              // late — the state his screenshot showed ("✓ Ordered (1)",
+              // greyed, ledger 1 == reserved 1).
+              //
+              // Unlocking is a real correction path, not a token one: the
+              // Mark Ordered modal already accepts 0 and NEGATIVE quantities
+              // (F117/F108 § 4.4 — "0 records a supplier rejection, negative
+              // records a downward correction"), and its suggested quantity
+              // is Math.max(0, totalQty - priorQty), so a covered code
+              // defaults to 0 rather than nudging toward the F102 over-order
+              // this modal exists to prevent.
+              //
+              // The window CLOSES rather than staying open forever, which is
+              // what makes this safe to add: an old, settled, fulfilled cycle
+              // goes back to being locked, so the F102 guard still covers the
+              // case it was built for.
+              //
+              // Deliberately conservative on unknown dates: a fulfilled row
+              // with a NULL fulfilled_at cannot be proven to be inside the
+              // window, so it stays LOCKED — exactly today's behaviour. The
+              // change is strictly additive; nothing that is unlocked today
+              // becomes locked.
+              const daysSinceFulfilled = lastFulfilledAt
+                ? (Date.now() - new Date(lastFulfilledAt).getTime()) / 86400000
+                : null;
+              const correctionOpen = !allFulfilled
+                ? true                                        // cycle still live
+                : (daysSinceFulfilled !== null && daysSinceFulfilled <= ORDER_CORRECTION_DAYS);
               const ledgerMatches = ledgerMatchesFor(c.distributor, exportCode(c, c.distributor));
               const ledgerQty     = ledgerMatches.reduce((s, m) => s + (m.quantity || 0), 0);
               // Signed ledger (F117/F108 § 4.4) — ledgerQty can now be zero
@@ -2301,17 +2370,56 @@
                         : orderRejected           ? 'color:#888;border-color:rgba(136,136,136,0.5)'
                         : orderPartial            ? 'color:var(--warning,#eab308);border-color:rgba(245,158,11,0.5)'
                         :                           '';
-                      const hint = orderMatched   ? 'Ordered quantity matches reservations'
+                      const hint = orderMatched
+                        ? (correctionOpen
+                            ? 'Ordered quantity matches reservations -- click to CORRECT it. The ledger is signed, so 0 records a supplier rejection and a negative records a downward correction. Locks ' + ORDER_CORRECTION_DAYS + ' days after fulfilment.'
+                            : 'Ordered quantity matches reservations -- locked, more than ' + ORDER_CORRECTION_DAYS + ' days after fulfilment')
                         : orderOver               ? 'Ordered ' + ledgerQty + ' against ' + totalQty + ' reserved -- surplus already submitted to the distributor (F102)'
                         : orderRejected           ? 'Submitted but net quantity on order is ' + ledgerQty + ' -- the supplier rejected it, or it was corrected away. Click to record a fresh submission (F108/F117)'
                         : orderPartial            ? 'Ordered ' + ledgerQty + ' of ' + totalQty + ' reserved -- click to record the rest'
                         :                           'Record that this title was submitted to a distributor';
-                      return `<button
-                        class="btn btn-sm mark-ordered-btn"
-                        data-catalog-id="${c.id}"
-                        style="white-space:nowrap;${colour}"
-                        ${orderMatched ? 'disabled' : ''}
-                        title="${hint}">${label}</button>`;
+                      // F156 follow-on (2026-09-05) — the second entry point
+                      // for F143's rejection write, and the one Rick asked
+                      // for: a title the store ORDERED that never arrived has
+                      // no reachable control anywhere. Mark Ordered is
+                      // correctly `disabled` here (ledger == reserved,
+                      // nothing left to order) and computeBackorderRisk()
+                      // clears the same code before every other test, so it
+                      // appears on no follow-up panel either -- two correct
+                      // behaviours, no surface (§ 13 F155's own collision,
+                      // reached from the shipment-reconciliation side).
+                      //
+                      // Offered only when there is a real order to negate
+                      // (ledgerQty > 0 -- Rick's own § 5.1 rule for the
+                      // F143 panel button) AND nothing shows the title
+                      // actually arrived. The shipment-evidence guard is the
+                      // stricter half and it is deliberate: recording a
+                      // supplier rejection for a book sitting on the shelf
+                      // would flip F120's customer-facing rejected badge on
+                      // a title the customer can collect. `allFulfilled` is
+                      // NOT used as the guard -- a fulfilled row with no
+                      // arrival evidence is exactly F115's never-arrived
+                      // case, which is where a rejection SHOULD be offered.
+                      const rejectCode = exportCode(c, c.distributor);
+                      const rejectBtn = (ledgerQty > 0 && !hasShipmentEvidence(c)) ? `
+                        <button type="button" class="btn btn-ghost btn-sm arrival-reject-btn"
+                          data-distributor="${escapeHtml(c.distributor || '')}"
+                          data-code="${escapeHtml(rejectCode)}"
+                          data-item-code="${escapeHtml(c.item_code || '')}"
+                          data-title="${escapeHtml(c.title || '')}"
+                          data-foc="${escapeHtml(c.foc_date || '')}"
+                          data-catalog-month="${escapeHtml(c.catalog_month || '')}"
+                          style="font-size:0.62rem;padding:2px 8px;white-space:nowrap"
+                          title="Record that the supplier rejected this order — writes the negative ledger adjustment that nets the code to 0 (F143)"
+                          >Rejected by supplier</button>` : '';
+                      return `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px">
+                        <button
+                          class="btn btn-sm mark-ordered-btn"
+                          data-catalog-id="${c.id}"
+                          style="white-space:nowrap;${colour}"
+                          ${orderMatched && !correctionOpen ? 'disabled' : ''}
+                          title="${hint}">${label}</button>${rejectBtn}
+                      </div>`;
                     })()}
                 </td>
               </tr>
@@ -2410,6 +2518,12 @@
         // next render.
         const header = e.target.closest('.customer-group-header');
         if (header) { header.closest('.customer-group')?.classList.toggle('open'); return; }
+        // F156 follow-on — same write as the Order Follow-Up panel's button,
+        // reached through this container's delegated handler because
+        // renderByDistributor() replaces the node on every render and
+        // per-button listeners would not survive it.
+        const rejectBtn = e.target.closest('.arrival-reject-btn');
+        if (rejectBtn) { recordSupplierRejection(rejectBtn); return; }
         const markOrderedBtn = e.target.closest('.mark-ordered-btn');
         if (markOrderedBtn) openMarkOrderedModal(markOrderedBtn.dataset.catalogId);
       });

@@ -115,6 +115,13 @@ documented recurring one, feeding S1's widened drift report (F136 Part C(1)
    file(s) from the Lunar portal (a month is "still open" if any of its
    titles have an `on_sale_date` still in the future — check via the "Months
    currently in the catalog" query under § Useful SQL Queries below).
+   **Lunar publishes only THREE monthly files** (measured 2026-09-04, F155:
+   the Resources page listed September, August and July only), so anything
+   older than that cannot be re-pulled in this format at all. Lunar's
+   *All Products CSV Order Form* export does cover every month — 17,490 rows
+   back to 2025 — but it is a **different schema** (`Code` / `In-Store`, not
+   the Product Data layout) and **cannot be fed to `import.js`**. It is the
+   input to F155's `check-dates.js`, not to this step.
 2. Re-import them **oldest-to-newest**, one month at a time, confirming the
    correct historical `YYYY-MM` at the prompt (not the new month) and passing
    `--skip-autoreserve` so subscribers aren't re-reserved into a past month:
@@ -127,11 +134,43 @@ documented recurring one, feeding S1's widened drift report (F136 Part C(1)
    not exist before S1. If a change looks surprising, cross-check the title
    against the distributor's own site the way Rick did for SPAWN SCORCHED #54
    before trusting it.
-4. Repeat for PRH's still-open months if its active-export file has been
-   re-downloaded; PRH's export omits withdrawn titles rather than revising
-   dates in place (see F110), so this step matters most for Lunar.
+4. **Repeat for PRH's still-open months — this step matters for BOTH
+   distributors.** Download **Master Data** for each still-open PRH catalog
+   (each catalog is its own navigation in PRH Self-Service) and re-import as in
+   steps 1–2. PRH's own website agrees with its master data — spot-checked
+   2026-09-04 against `82771403586500111` and `82771403545200211` — so for a
+   **live** catalog, master data is authoritative.
 
-**5. This same step is also how you clear a false withdrawal flag (F146) — and it is the *only*
+   *(Corrected 2026-09-04 — **F155**. This item previously read "PRH's export
+   omits withdrawn titles rather than revising dates in place (see F110), so
+   this step matters most for Lunar." **Measured false:** comparing
+   freshly-downloaded PRH master data against live production rows found **108**
+   revised in-store dates in 2026-07 alone, plus 27 / 19 / 4 in 2026-06 / 08 /
+   09. That one sentence is why PRH months had never been re-pulled, and it is
+   how DNX #1's revision went undetected until a customer-visible symptom
+   surfaced it.)*
+
+5. **⚠️ A PRH catalog FREEZES roughly three months after its catalog date, and
+   after that NO file carries a revision — this step cannot help.** Measured
+   2026-09-04 (F155): two downloads of 2026-05 master data 44 minutes apart are
+   **byte-identical** (MD5 `438958a0b69b961ab140ab63c9b3f3bf`) and **0 of its
+   1,078 rows** differ from what was imported back in May; its Weekly Change
+   Reports run 2026-04-24 → **2026-07-31 and stop**; and **0 of 5,123** PRH
+   `MainIdentifier`s ever appear in more than one monthly file, so F122's
+   newest-listing logic cannot rescue one either. Meanwhile **84 of that
+   month's titles were still future-dated.** A revision made after the freeze —
+   DNX #1 moving 2026-09-02 → 2026-09-16 is the live case — is unreachable from
+   every PRH endpoint. Nothing in this runbook recovers it; only F155's arrival
+   guard limits the damage.
+
+6. **⚠️ Re-importing a month RESTORES whatever that file says — including a
+   stale date.** Any hand-correction (`fix-stale-dates-f155.js`, or a manual
+   `UPDATE`) is silently reverted by a later re-import of that month, **including
+   the F146 withdrawal-clearing backfill in step 7 below**, because the upsert
+   key is `(tenant_id, item_code, distributor, catalog_month)` and the file wins.
+   Re-run the correction after any older-month import.
+
+**7. This same step is also how you clear a false withdrawal flag (F146) — and it is the *only*
 way, for a Lunar-coded one.** A title wrongly marked "Withdrawn — cannot be ordered" clears when it
 **reappears in an imported file**. The instinct is to re-pull the *new* month fresher and re-run.
 **For a Lunar code that can never work, at any freshness, ever:**
