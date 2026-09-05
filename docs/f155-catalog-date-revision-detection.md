@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** IN PROGRESS (S1 + S2 done; S3 client shipped, SQL PENDING) · staging=2026-09-04 · prod=— · PR=— · findings: F155
+**STATUS:** STAGING COMPLETE (S1 + S2 + S3 both halves) · staging=2026-09-05 · prod=— · PR=— · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
@@ -270,7 +270,7 @@ of that doc's "Option A was rejected" line finds the follow-up rather than re-de
 | **V4** | ✅ **GREEN** — `check-dates.js:61` requires `classifyReservedDateDrift` from `import.js`; no second date-diff implementation exists |
 | **V5** | ✅ **GREEN, both halves** — the `--no-write` run reported 15 pending writes and applied none; the real run applied 15/15, confirmed by the script's own fresh re-read **and** independently afterwards (4 Godzilla rows at 10-28/11-11, three FOC spot-checks correct). Only `on_sale_date`/`foc_date` were touched; no inserts |
 | **V6** | ⚠️ **IMPLEMENTED, NOT DEMONSTRATED through this script.** The `dirOf()` helper flags EARLIER vs later on stranded/corrected rows, and `fix-stale-dates-f155.js` did surface `0826DE0733` as `[EARLIER]`. But because Lunar in-store drift is now zero, `check-dates.js` has not yet printed an EARLIER in-store move on live data. Needs a staging fixture |
-| **V7** | ✅ **MEASURED read-only pre-apply, both environments**, per the F122 precedent. Production: OLD body would fulfil **131**, NEW fulfils **124**, **7 deferred** — all on-sale 2026-09-02, two days old and well inside the 14-day window. Staging: 0/0/0, nothing pending. A synthetic `+15d` / `+13d` unit test is still owed once the SQL is applied |
+| **V7** | ✅ **VERIFIED LIVE 3/3 on staging, 2026-09-05**, after Rick applied the SQL — not merely predicted. Three discriminating fixtures, then a real `auto_fulfill_past_on_sale()` call: **A** (on-sale −2d, no evidence) stayed `fulfilled=false` — **the old body would have fulfilled it**; **B** (−20d, no evidence) fulfilled, grace elapsed; **C** (−2d, with evidence) fulfilled, path unchanged. **The RPC returned `2`, not `3`** — that number is the whole proof. Pre-flight confirmed 0 real staging rows were in scope, so it acted on the fixtures alone. Teardown verified: 0 fixture rows, 0 orphaned auth users. Also measured read-only pre-apply per the F122 precedent: production OLD **131** / NEW **124** / **7 deferred**; staging 0/0/0 |
 | **V8** | ✅ **MEASURED** — 124 of 131 (**95%**) are unaffected; the shipment-evidence path carries them, consistent with F115's own 212-of-218 September production numbers |
 | **V9** | ✅ **GREEN 3/3** — new local spec `23-f155-arrival-guard.spec.ts` (uncommitted, same convention as 21/22), run against deployed staging bytes. Positive: an ordered, released, evidence-free row renders with `data-state="neverArrived"` and its own resolve controls. **Two discriminating controls**: an ordered but *unreleased* title stays cleared (the ordered exit is still right pre-release), and an ordered+released title *with* shipment evidence stays cleared (settled outcomes still win). ⚠️ **Not observed RED** — see the caveat below the table |
 | **V10** | ✅ **GREEN** — `npm test` **279/279**; full Playwright **143 passed, 0 failed, 21.3 min, exit 0**, run directly (not via `run-smoke.ps1`, per the 2026-08-30 note) against deployed staging bytes post-push. Zero regressions from S3(b) |
@@ -284,7 +284,12 @@ controls — an assertion that cannot fail is decoration (F105). It now scopes t
 both control tests carry a non-vacuity guard (the panel must contain the positive fixture before
 anything is asserted absent from it).
 
-**What is still missing is a genuine RED observation.** Seeing V9 fail requires briefly deploying
+**V7, by contrast, now HAS a red-capable assertion.** Fixture A is the case where the two SQL
+bodies disagree: under the pre-F155 body it fulfils, under this one it defers. It came back
+deferred, and the RPC's own return value (`2`, where the old body returns `3`) is independent
+corroboration. That is an assertion that can fail, and did not.
+
+**What is still missing is a genuine RED observation for V9 specifically.** Seeing V9 fail requires briefly deploying
 the reverted `admin.html` to staging, running the spec, and re-deploying the fix — roughly two
 deploy cycles. **Not done: it was raised for Rick and no answer has been received.** Until then, the
 evidence is that the two controls discriminate a correctly-scoped fix from a blanket "show
@@ -316,7 +321,7 @@ already-documented `pw-iso` bucket, pre-existing and deliberately not touched he
       demonstrated** (see § 6) — both need a staging fixture, neither is reproducible on production
       now that the remediation has landed
 - [x] S3(b) client shipped to staging (`b5ad0e4`); V7/V8 measured read-only pre-apply
-- [ ] S3(a) SQL applied to staging by Rick — **still pending**
+- [x] S3(a) SQL applied to staging by Rick, 2026-09-05 — **functionally verified live 3/3**, not taken on report
 - [x] V9 green 3/3 (`23-f155-arrival-guard.spec.ts`), assertions strengthened after a weak first
       draft, teardown verified clean
 - [ ] V9 observed RED — **still owed**; needs a revert/redeploy cycle on staging, raised and unanswered
