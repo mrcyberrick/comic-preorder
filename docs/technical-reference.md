@@ -5831,7 +5831,65 @@ reasoning — only the disposition changed, not the diagnosis.
   (older-month re-imports, which would revert any hand-corrected date), F110 (cited by the wrong
   runbook sentence).
 
-Next free finding ID: **F156**.
+#### F156 — Lunar restricted-variant ratios never reached `order_requirement` on rows imported before F132, so no restriction badge renders for them anywhere
+
+- **Status:** filed 2026-09-05, **open — data backfill written, not yet applied.** Found live by
+  Rick from a production screenshot of `arrivals.html`'s This Week reconciliation panel: five SPAWN
+  77 incentive variants sat in the "Not in shipment" list with no restriction badge, while every
+  PRH row in the same list carried one.
+- **`arrivals.html` is not the defect.** Both badge sites read `catalog.order_requirement` and
+  never parse the title, exactly as F144's own trap requires — the exceptions-list pill
+  (`arrivals.html:1278`) and the store-grid card badge (`arrivals.html:1339`). The column is simply
+  **empty** on those rows.
+- **Root cause: `order_requirement` is derived at IMPORT time and nothing ever re-derives it.**
+  `parseLunarVariantRestriction()` (`import.js:272`, added by F132 on 2026-08-20) reads Lunar's
+  ratio out of `variant_type` — Lunar has no separate OrderRequirement column. A catalog row
+  imported before that fix keeps `variant_type = '1:500'` and `order_requirement = null`
+  **permanently**, because older catalog months are never re-pulled. That is the same
+  never-re-pull assumption F155 is about, hitting a different column.
+- **Measured live on production 2026-09-05** (service-role read, `variant_type` matched against the
+  strict `^[0-9]+:[0-9]+$` pattern the import itself uses):
+
+  | Lunar `catalog_month` | rows with a true `N:M` `variant_type` | of those, `order_requirement` NULL |
+  |---|---|---|
+  | 2026-05 | 10 | 0 |
+  | 2026-06 | 36 | **5** |
+  | 2026-07 | 175 | **58** |
+  | 2026-08 | 166 | 0 |
+  | 2026-09 | 164 | 0 |
+  | **all months** | **555** | **67** |
+
+  Staging has the same shape: 554 true-ratio rows, **66** with NULL. 2026-08 and 2026-09 are clean
+  because both were imported after the fix; 2026-05 is clean for an unrecovered reason (most likely
+  a post-fix older-month re-import), which is why the stale set is 2026-06/07 rather than
+  "everything before 2026-08-20."
+- **The reverse direction is clean, and that is what makes the backfill safe.** **0** Lunar rows
+  carry `order_requirement` without a matching ratio in `variant_type`, so restoring the column from
+  `variant_type` applies the identical rule `parseLunarVariantRestriction()` already applies — it is
+  a replay of the import's own normalizer, not a guess.
+- **6 of the 67 carry live, unfulfilled reservations**, and they are exactly the unbadged rows in
+  the screenshot: `0626DE0825` (1:10, VAMPIRELLA VS RED SONJA RED CITY #1 CVR G),
+  `0726IM0315`/`0316`/`0317`/`0318`/`0319` (1:25 / 1:50 / 1:100 / 1:250 / 1:500, SPAWN 77 #1 CVR
+  F–J). `0726AC0632` (LIFE WITH ARCHIE #1) sits in the same list unbadged and is **correct** — its
+  `variant_type` is null, so there is no ratio anywhere to surface.
+- **Severity: Medium, and it is wider than the admin report Rick was looking at.** The same column
+  drives the **customer-facing** restriction warning — `app.js:1906`'s `.restriction-badge` on the
+  catalog card and `catalog.html:1261`'s detail-modal notice. So those six titles were reserved with
+  **no "restricted variant" warning shown to the customer at all**, which is the exact signal F132
+  was built to give. It also silently under-counts the Order Builder's per-cycle "restricted" tally
+  (`admin.html:1126`).
+- **Fix: a one-time data backfill, no code change.**
+  `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql` — sets
+  `order_requirement = variant_type` for Lunar rows where `variant_type ~ '^[0-9]+:[0-9]+$'` and
+  `order_requirement IS NULL`. Every future import is already correct, so this closes the gap
+  permanently rather than needing a recurring sweep. Every consumer of the column is read-only
+  display, so the only behavioural change is that the badge starts appearing.
+- **Where:** both environments (67 production rows, 66 staging). Neither applied yet.
+- **Related:** F132 (introduced the column and the Lunar derivation; its rows-imported-before gap is
+  this finding), F144 (the Order Builder badge that reads the same column), F155 (same
+  never-re-pull-an-older-month assumption, different column).
+
+Next free finding ID: **F157**.
 
 ---
 
