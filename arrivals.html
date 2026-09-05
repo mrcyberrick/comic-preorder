@@ -315,6 +315,23 @@
       min-width: 42px;
       text-align: right;
     }
+    /* F156 follow-on — order state + the rejection action. Sits at the end of
+       the row so the title/code/qty columns keep the alignment staff already
+       scan. `.recon-row` wraps rather than squeezing, so a narrow screen
+       drops this onto its own line instead of crushing the title. */
+    .recon-row { flex-wrap: wrap; }
+    .recon-row-order {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      margin-left: auto;
+    }
+    .recon-row-order .recon-order-state { color: var(--text-muted); }
+    .recon-row-order .recon-order-state.on-order { color: var(--accent); }
+    .recon-row-order .recon-order-state.rejected { color: #ff8070; }
+    .recon-reject-btn { font-size: 0.62rem; padding: 2px 8px; }
     .recon-clear {
       padding: 12px 16px;
       border-top: 1px solid var(--border);
@@ -976,6 +993,57 @@
     let currentShipment = [];
     let currentStoreQuery = '';
 
+    // ── Order ledger (F156 follow-on, 2026-09-05) ──────────────
+    // The exceptions list below tells the admin a reserved title is absent
+    // from the imported invoice, and its own footnote then sends them off to
+    // "check the invoice for shorts, or a distributor rejection at order
+    // time" — with nothing on the page to check against and no way to act.
+    //
+    // This is the surface Rick was actually looking at when the gap showed
+    // up, and it is the earliest one: absence from the invoice is visible on
+    // the day the shipment is imported. The same title is unreachable
+    // everywhere else — `computeBackorderRisk()` clears any code with
+    // `ledgerNetQty > 0` before every other test, and Mark Ordered is
+    // correctly disabled once the ledger matches what is reserved, so an
+    // ORDERED title that never came appears on no admin panel at all
+    // (§ 13 F155's collision, reached from the shipment side).
+    //
+    // `order_submissions` is admin-only under RLS ("admins read tenant
+    // order_submissions" / "admins insert tenant order_submissions"), which
+    // this whole function already satisfies — runStoreManagerView() runs only
+    // for `profile.is_admin && !AdminContext.isActive()`.
+    //
+    // Paged, not a bare select: production held 857 ledger rows against
+    // PostgREST's 1,000-row cap in August and grows by a cycle each month.
+    // An unbounded select here would silently truncate and report an ordered
+    // title as never ordered — F82/F113/F139/F140's shape, a fifth time.
+    let orderLedger = [];
+    async function loadOrderLedger() {
+      const { data, error } = await fetchAllRows(() => db
+        .from('order_submissions')
+        .select('distributor, order_code, quantity, order_type')
+        .order('id', { ascending: false }));
+      if (error) {
+        console.error('order_submissions load failed:', error.message);
+        orderLedger = [];
+        return;
+      }
+      orderLedger = data || [];
+    }
+
+    // Signed ledger (F117/F108 § 4.4) — "a row exists" does not mean "on
+    // order". Sum, never count. Same rule admin.html's ledgerNetQty() uses,
+    // deliberately re-stated rather than imported: admin.html's copy is
+    // scoped inside its own IIFE and nothing shared exists to reuse.
+    const ledgerNetQty = (distributor, code) => {
+      if (!code) return 0;
+      return orderLedger
+        .filter(r => r.distributor === distributor && r.order_code === code)
+        .reduce((s, r) => s + (r.quantity || 0), 0);
+    };
+    const ledgerHasRows = (distributor, code) => !!code && orderLedger
+      .some(r => r.distributor === distributor && r.order_code === code);
+
     function renderStoreGrid() {
       const filtered = currentStoreQuery
         ? currentShipment.filter(r => (r.catalog?.title || r.title || '').toLowerCase().includes(currentStoreQuery))
@@ -1062,8 +1130,8 @@
           .select(`
             id, user_id, quantity,
             catalog!inner (
-              id, distributor, item_code, upc, title, price_usd, on_sale_date, catalog_month,
-              order_requirement
+              id, distributor, item_code, upc, isbn, title, price_usd, on_sale_date, catalog_month,
+              foc_date, order_requirement
             )
           `)
           .gte('catalog.on_sale_date', start)
@@ -1258,6 +1326,44 @@
                       padding:1px 6px;border-radius:2px;background:rgba(245,158,11,0.16);color:var(--warning);
                       white-space:nowrap;cursor:help;margin-left:8px">⚠ ${escapeHtml(c.order_requirement)}</span>`
           : '';
+        // F156 follow-on — the order state, and the action that settles it.
+        //
+        // Answers the question this panel's own footnote asks the admin to go
+        // and answer somewhere else: was this actually ordered? A title with a
+        // positive ledger net that is absent from the invoice is a supplier
+        // rejection, and until now there was no control for it anywhere —
+        // Mark Ordered is correctly disabled once the ledger matches what is
+        // reserved, and every Order Follow-Up panel clears the same code.
+        //
+        // The order code is exportCode()'s, not the display `code` above:
+        // `code` falls back item_code -> upc for display, while the ledger is
+        // keyed on the export's own chain (PRH isbn-first). Using the display
+        // code would look up the wrong key for a PRH title carrying an ISBN,
+        // and silently report "no order recorded" for one that was ordered.
+        const orderCode = exportCode(c, c.distributor);
+        const net       = ledgerNetQty(c.distributor, orderCode);
+        const hasRows   = ledgerHasRows(c.distributor, orderCode);
+        // "No order recorded", never "never ordered": the ledger's history
+        // starts at the May 2026 cycle, so an older order legitimately leaves
+        // no row (admin.html's own shipment-evidence note records the same
+        // limitation). Stating absence of a record is true; stating absence
+        // of an order is not.
+        const orderCell = net > 0
+          ? `<span class="recon-row-order">
+               <span class="recon-order-state on-order">On order &times;&nbsp;${net}</span>
+               <button type="button" class="btn btn-ghost btn-sm recon-reject-btn"
+                       data-distributor="${escapeHtml(c.distributor || '')}"
+                       data-code="${escapeHtml(orderCode)}"
+                       data-item-code="${escapeHtml(c.item_code || '')}"
+                       data-title="${escapeHtml(c.title || '')}"
+                       data-foc="${escapeHtml(c.foc_date || '')}"
+                       data-catalog-month="${escapeHtml(c.catalog_month || '')}"
+                       title="Record that the supplier rejected this order — writes the negative ledger adjustment that nets the code to 0 (F143)"
+                       >Rejected by supplier</button>
+             </span>`
+          : hasRows
+            ? `<span class="recon-row-order"><span class="recon-order-state rejected">Rejected &mdash; recorded</span></span>`
+            : `<span class="recon-row-order"><span class="recon-order-state">No order recorded</span></span>`;
         return `
           <div class="recon-row">
             <div class="recon-row-title">
@@ -1266,6 +1372,7 @@
             </div>
             ${code ? `<span class="recon-row-code">${escapeHtml(code)}</span>` : ''}
             <span class="recon-row-qty">&times;&nbsp;${qty}</span>
+            ${orderCell}
           </div>`;
       }).join('');
 
@@ -1288,6 +1395,77 @@
       panel.innerHTML = stats + body;
     }
 
+    // ── F156 follow-on — the rejection action ──────────────────
+    // Delegated on the panel itself, wired ONCE: renderReconciliation()
+    // replaces #recon-panel's innerHTML on every week change, so per-button
+    // listeners would be discarded on the next Prev/Next click. The panel
+    // element itself is never replaced.
+    //
+    // The write is byte-for-byte the payload F143 established in admin.html
+    // (`order_submissions`, `order_type: 'adjustment'`, quantity `-net`),
+    // deliberately NOT reimplemented from the schema: the two must never
+    // drift. It writes the ledger only — never `arrival_outcome`. Those are
+    // different statements (§ 13 F143), and writing both would let them
+    // disagree.
+    //
+    // No confirm step, matching F143's own button. Recording a rejection is
+    // customer-visible (F120's rejected badge on My List), but the ledger is
+    // append-only and a mistake is corrected the same way any other ledger
+    // error is — with a further adjustment, not a delete.
+    document.getElementById('recon-panel').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.recon-reject-btn');
+      if (!btn) return;
+
+      const distributor = btn.dataset.distributor;
+      const code        = btn.dataset.code;
+      // Recomputed at click time, never read off a render-time attribute:
+      // another admin (or the Order Builder in another tab) may have moved
+      // the ledger since this row was drawn, and a stale net would write a
+      // wrong adjustment.
+      const netQty = ledgerNetQty(distributor, code);
+      if (netQty <= 0) {
+        toast('Nothing to reject — the order ledger already changed. Refreshing…', 'error');
+        await loadOrderLedger();
+        await loadStoreWeek(selectedMonday || new Date());
+        return;
+      }
+
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Recording…';
+
+      const { error } = await db.from('order_submissions').insert({
+        tenant_id:     TenantContext.current().id,
+        distributor,
+        order_code:    code,
+        item_code:     btn.dataset.itemCode || null,
+        title:         btn.dataset.title || null,
+        quantity:      -netQty,
+        order_type:    'adjustment',
+        foc_date:      btn.dataset.foc || null,
+        catalog_month: btn.dataset.catalogMonth || null,
+        submitted_on:  DateUtils.todayLocal(),
+      });
+
+      if (error) {
+        toast(`Failed to record rejection: ${error.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        return;
+      }
+
+      // Re-read the ledger and redraw the week. The row deliberately STAYS in
+      // the exceptions list — it is still absent from the invoice, which is a
+      // fact about the shipment and does not change because the ledger did.
+      // What changes is its state cell, which now reads "Rejected — recorded".
+      // Making the row vanish would hide the very thing the panel exists to
+      // show, and would read as "handled" rather than "explained".
+      await loadOrderLedger();
+      await loadStoreWeek(selectedMonday || new Date());
+      toast('Recorded as rejected — order corrected', 'success');
+    });
+
+    await loadOrderLedger();
     await loadStoreWeek(new Date());
   }
 
