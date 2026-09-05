@@ -272,7 +272,7 @@ of that doc's "Option A was rejected" line finds the follow-up rather than re-de
 | **V6** | ⚠️ **IMPLEMENTED, NOT DEMONSTRATED through this script.** The `dirOf()` helper flags EARLIER vs later on stranded/corrected rows, and `fix-stale-dates-f155.js` did surface `0826DE0733` as `[EARLIER]`. But because Lunar in-store drift is now zero, `check-dates.js` has not yet printed an EARLIER in-store move on live data. Needs a staging fixture |
 | **V7** | ✅ **VERIFIED LIVE 3/3 on staging, 2026-09-05**, after Rick applied the SQL — not merely predicted. Three discriminating fixtures, then a real `auto_fulfill_past_on_sale()` call: **A** (on-sale −2d, no evidence) stayed `fulfilled=false` — **the old body would have fulfilled it**; **B** (−20d, no evidence) fulfilled, grace elapsed; **C** (−2d, with evidence) fulfilled, path unchanged. **The RPC returned `2`, not `3`** — that number is the whole proof. Pre-flight confirmed 0 real staging rows were in scope, so it acted on the fixtures alone. Teardown verified: 0 fixture rows, 0 orphaned auth users. Also measured read-only pre-apply per the F122 precedent: production OLD **131** / NEW **124** / **7 deferred**; staging 0/0/0 |
 | **V8** | ✅ **MEASURED** — 124 of 131 (**95%**) are unaffected; the shipment-evidence path carries them, consistent with F115's own 212-of-218 September production numbers |
-| **V9** | ✅ **GREEN 3/3** — new local spec `23-f155-arrival-guard.spec.ts` (uncommitted, same convention as 21/22), run against deployed staging bytes. Positive: an ordered, released, evidence-free row renders with `data-state="neverArrived"` and its own resolve controls. **Two discriminating controls**: an ordered but *unreleased* title stays cleared (the ordered exit is still right pre-release), and an ordered+released title *with* shipment evidence stays cleared (settled outcomes still win). ⚠️ **Not observed RED** — see the caveat below the table |
+| **V9** | ✅ **GREEN 3/3** — new local spec `23-f155-arrival-guard.spec.ts` (uncommitted, same convention as 21/22), run against deployed staging bytes. Positive: an ordered, released, evidence-free row renders with `data-state="neverArrived"` and its own resolve controls. **Two discriminating controls**: an ordered but *unreleased* title stays cleared (the ordered exit is still right pre-release), and an ordered+released title *with* shipment evidence stays cleared (settled outcomes still win). ✅ **Observed RED against the pre-fix code, 2026-09-05** — see below the table |
 | **V10** | ✅ **GREEN** — `npm test` **279/279**; full Playwright **143 passed, 0 failed, 21.3 min, exit 0**, run directly (not via `run-smoke.ps1`, per the 2026-08-30 note) against deployed staging bytes post-push. Zero regressions from S3(b) |
 | **V11** | Live | One real `check-dates.js` run on staging, changes verified by an independent fresh DB read — not the script's own output |
 
@@ -289,11 +289,33 @@ bodies disagree: under the pre-F155 body it fulfils, under this one it defers. I
 deferred, and the RPC's own return value (`2`, where the old body returns `3`) is independent
 corroboration. That is an assertion that can fail, and did not.
 
-**What is still missing is a genuine RED observation for V9 specifically.** Seeing V9 fail requires briefly deploying
-the reverted `admin.html` to staging, running the spec, and re-deploying the fix — roughly two
-deploy cycles. **Not done: it was raised for Rick and no answer has been received.** Until then, the
-evidence is that the two controls discriminate a correctly-scoped fix from a blanket "show
-everything", which is strong but is not the same as having watched it go red.
+**V9 WAS OBSERVED RED, 2026-09-05 — and staging never carried the reverted code.**
+
+`staging.pulllist.pages.dev` is a Cloudflare Pages **branch alias**, so any pushed branch gets its
+own preview at `<branch>.pulllist.pages.dev`. A throwaway branch `f155red` carrying only the
+pre-F155 `computeBackorderRisk()` ordering was pushed, Playwright's `baseURL` temporarily repointed
+at `f155red.pulllist.pages.dev`, spec 23 run against it, then the config restored and the branch
+deleted from both remote and local. **`staging`'s tip never moved** (`bb1eb05` before and after) and
+its served bytes were re-confirmed carrying the fix afterwards. This is a reusable technique for any
+future negative control: it costs one branch push and needs no window where staging is wrong.
+
+**The failure was the right one, checked from the artifact rather than inferred from "3 failed":**
+
+```
+V9 — Error: expect(locator).toHaveCount(expected) failed
+     locator('#backorder-risk-panel').locator('.backorder-risk-row')
+       .filter({ hasText: 'PW F155 Ordered Released NoEvidence …' })
+     Expected: 1
+     Received: 0
+```
+
+The seeded ordered / released / evidence-free row is **absent from the panel entirely** under the
+old ordering — DNX #1's exact symptom, reproduced deterministically rather than argued.
+
+**All three tests went red, and that is correct, not collateral.** Controls A and B each open with
+the non-vacuity guard `expect(panel).toContainText(positiveTitle)`; under the pre-fix code the panel
+does not contain it, so the guard fires first. The guards are doing precisely what they were added
+for. Re-run against staging afterwards: **3/3 green**.
 
 **Fixture hygiene verified rather than assumed** (F130's own failure mode): after the run, 0 F155
 catalog rows, 0 F155 ledger rows and **0 orphaned auth users** remained. One `TEST_PW_` row survives
@@ -324,7 +346,7 @@ already-documented `pw-iso` bucket, pre-existing and deliberately not touched he
 - [x] S3(a) SQL applied to staging by Rick, 2026-09-05 — **functionally verified live 3/3**, not taken on report
 - [x] V9 green 3/3 (`23-f155-arrival-guard.spec.ts`), assertions strengthened after a weak first
       draft, teardown verified clean
-- [ ] V9 observed RED — **still owed**; needs a revert/redeploy cycle on staging, raised and unanswered
+- [x] V9 observed RED against pre-fix code, 2026-09-05, via a CF Pages preview branch — staging never carried the revert
 - [x] V10 full suite green — 279 unit + 143 Playwright, 0 failed, 21.3 min, exit 0
 - [ ] V11 one real staging run, independently verified
 - [x] The 3 exposed titles (§ 9) corrected and confirmed — **15/15 applied to production
