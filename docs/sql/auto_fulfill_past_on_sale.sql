@@ -1,6 +1,17 @@
--- STATUS: staging=PENDING (F155 S3a, written 2026-09-04) | prod=APPLIED 2026-08-08 (pre-F155 body)
---         F122 Option 1. Prod returned 0 where the old body returned 3.
---         ⚠️ Production still runs the PRE-F155 body. Do not assume parity.
+-- STATUS: staging=APPLIED 2026-09-05 (F155 S3a body) | prod=PENDING (F155 S3a body)
+--         Staging verified live 3/3 by seeding three discriminating fixtures and
+--         calling the function: the RPC returned 2, not 3 -- the no-evidence,
+--         recently-released row was held back, which the pre-F155 body fulfils.
+--         Production still runs the 2026-08-08 F122 body (which IS applied and is
+--         correct for what it does; it simply predates this change).
+--
+--         ⚠️ CORRECTED 2026-09-05. This line previously read
+--         "prod=APPLIED 2026-08-08 (pre-F155 body)" with the caveat in prose
+--         underneath. /promote-prod step 0 matches on `prod=(APPLIED|N/A)`, so it
+--         returned CLEAN while production was missing this body entirely -- the
+--         exact "gate that lives only in prose" failure F105 is named for,
+--         reproduced by the very file that documents it. A qualifier the regex
+--         cannot see is not a qualifier. Say PENDING until the new body is run.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.

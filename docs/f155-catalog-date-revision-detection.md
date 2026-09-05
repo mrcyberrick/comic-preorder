@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** IN PROGRESS (S1 + S2 done; S3 client shipped, SQL PENDING) · staging=2026-09-04 · prod=— · PR=— · findings: F155
+**STATUS:** STAGING COMPLETE (S1 + S2 + S3 both halves) · staging=2026-09-05 · prod=— · PR=— · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
@@ -270,9 +270,9 @@ of that doc's "Option A was rejected" line finds the follow-up rather than re-de
 | **V4** | ✅ **GREEN** — `check-dates.js:61` requires `classifyReservedDateDrift` from `import.js`; no second date-diff implementation exists |
 | **V5** | ✅ **GREEN, both halves** — the `--no-write` run reported 15 pending writes and applied none; the real run applied 15/15, confirmed by the script's own fresh re-read **and** independently afterwards (4 Godzilla rows at 10-28/11-11, three FOC spot-checks correct). Only `on_sale_date`/`foc_date` were touched; no inserts |
 | **V6** | ⚠️ **IMPLEMENTED, NOT DEMONSTRATED through this script.** The `dirOf()` helper flags EARLIER vs later on stranded/corrected rows, and `fix-stale-dates-f155.js` did surface `0826DE0733` as `[EARLIER]`. But because Lunar in-store drift is now zero, `check-dates.js` has not yet printed an EARLIER in-store move on live data. Needs a staging fixture |
-| **V7** | ✅ **MEASURED read-only pre-apply, both environments**, per the F122 precedent. Production: OLD body would fulfil **131**, NEW fulfils **124**, **7 deferred** — all on-sale 2026-09-02, two days old and well inside the 14-day window. Staging: 0/0/0, nothing pending. A synthetic `+15d` / `+13d` unit test is still owed once the SQL is applied |
+| **V7** | ✅ **VERIFIED LIVE 3/3 on staging, 2026-09-05**, after Rick applied the SQL — not merely predicted. Three discriminating fixtures, then a real `auto_fulfill_past_on_sale()` call: **A** (on-sale −2d, no evidence) stayed `fulfilled=false` — **the old body would have fulfilled it**; **B** (−20d, no evidence) fulfilled, grace elapsed; **C** (−2d, with evidence) fulfilled, path unchanged. **The RPC returned `2`, not `3`** — that number is the whole proof. Pre-flight confirmed 0 real staging rows were in scope, so it acted on the fixtures alone. Teardown verified: 0 fixture rows, 0 orphaned auth users. Also measured read-only pre-apply per the F122 precedent: production OLD **131** / NEW **124** / **7 deferred**; staging 0/0/0 |
 | **V8** | ✅ **MEASURED** — 124 of 131 (**95%**) are unaffected; the shipment-evidence path carries them, consistent with F115's own 212-of-218 September production numbers |
-| **V9** | ✅ **GREEN 3/3** — new local spec `23-f155-arrival-guard.spec.ts` (uncommitted, same convention as 21/22), run against deployed staging bytes. Positive: an ordered, released, evidence-free row renders with `data-state="neverArrived"` and its own resolve controls. **Two discriminating controls**: an ordered but *unreleased* title stays cleared (the ordered exit is still right pre-release), and an ordered+released title *with* shipment evidence stays cleared (settled outcomes still win). ⚠️ **Not observed RED** — see the caveat below the table |
+| **V9** | ✅ **GREEN 3/3** — new local spec `23-f155-arrival-guard.spec.ts` (uncommitted, same convention as 21/22), run against deployed staging bytes. Positive: an ordered, released, evidence-free row renders with `data-state="neverArrived"` and its own resolve controls. **Two discriminating controls**: an ordered but *unreleased* title stays cleared (the ordered exit is still right pre-release), and an ordered+released title *with* shipment evidence stays cleared (settled outcomes still win). ✅ **Observed RED against the pre-fix code, 2026-09-05** — see below the table |
 | **V10** | ✅ **GREEN** — `npm test` **279/279**; full Playwright **143 passed, 0 failed, 21.3 min, exit 0**, run directly (not via `run-smoke.ps1`, per the 2026-08-30 note) against deployed staging bytes post-push. Zero regressions from S3(b) |
 | **V11** | Live | One real `check-dates.js` run on staging, changes verified by an independent fresh DB read — not the script's own output |
 
@@ -284,11 +284,38 @@ controls — an assertion that cannot fail is decoration (F105). It now scopes t
 both control tests carry a non-vacuity guard (the panel must contain the positive fixture before
 anything is asserted absent from it).
 
-**What is still missing is a genuine RED observation.** Seeing V9 fail requires briefly deploying
-the reverted `admin.html` to staging, running the spec, and re-deploying the fix — roughly two
-deploy cycles. **Not done: it was raised for Rick and no answer has been received.** Until then, the
-evidence is that the two controls discriminate a correctly-scoped fix from a blanket "show
-everything", which is strong but is not the same as having watched it go red.
+**V7, by contrast, now HAS a red-capable assertion.** Fixture A is the case where the two SQL
+bodies disagree: under the pre-F155 body it fulfils, under this one it defers. It came back
+deferred, and the RPC's own return value (`2`, where the old body returns `3`) is independent
+corroboration. That is an assertion that can fail, and did not.
+
+**V9 WAS OBSERVED RED, 2026-09-05 — and staging never carried the reverted code.**
+
+`staging.pulllist.pages.dev` is a Cloudflare Pages **branch alias**, so any pushed branch gets its
+own preview at `<branch>.pulllist.pages.dev`. A throwaway branch `f155red` carrying only the
+pre-F155 `computeBackorderRisk()` ordering was pushed, Playwright's `baseURL` temporarily repointed
+at `f155red.pulllist.pages.dev`, spec 23 run against it, then the config restored and the branch
+deleted from both remote and local. **`staging`'s tip never moved** (`bb1eb05` before and after) and
+its served bytes were re-confirmed carrying the fix afterwards. This is a reusable technique for any
+future negative control: it costs one branch push and needs no window where staging is wrong.
+
+**The failure was the right one, checked from the artifact rather than inferred from "3 failed":**
+
+```
+V9 — Error: expect(locator).toHaveCount(expected) failed
+     locator('#backorder-risk-panel').locator('.backorder-risk-row')
+       .filter({ hasText: 'PW F155 Ordered Released NoEvidence …' })
+     Expected: 1
+     Received: 0
+```
+
+The seeded ordered / released / evidence-free row is **absent from the panel entirely** under the
+old ordering — DNX #1's exact symptom, reproduced deterministically rather than argued.
+
+**All three tests went red, and that is correct, not collateral.** Controls A and B each open with
+the non-vacuity guard `expect(panel).toContainText(positiveTitle)`; under the pre-fix code the panel
+does not contain it, so the guard fires first. The guards are doing precisely what they were added
+for. Re-run against staging afterwards: **3/3 green**.
 
 **Fixture hygiene verified rather than assumed** (F130's own failure mode): after the run, 0 F155
 catalog rows, 0 F155 ledger rows and **0 orphaned auth users** remained. One `TEST_PW_` row survives
@@ -316,10 +343,10 @@ already-documented `pw-iso` bucket, pre-existing and deliberately not touched he
       demonstrated** (see § 6) — both need a staging fixture, neither is reproducible on production
       now that the remediation has landed
 - [x] S3(b) client shipped to staging (`b5ad0e4`); V7/V8 measured read-only pre-apply
-- [ ] S3(a) SQL applied to staging by Rick — **still pending**
+- [x] S3(a) SQL applied to staging by Rick, 2026-09-05 — **functionally verified live 3/3**, not taken on report
 - [x] V9 green 3/3 (`23-f155-arrival-guard.spec.ts`), assertions strengthened after a weak first
       draft, teardown verified clean
-- [ ] V9 observed RED — **still owed**; needs a revert/redeploy cycle on staging, raised and unanswered
+- [x] V9 observed RED against pre-fix code, 2026-09-05, via a CF Pages preview branch — staging never carried the revert
 - [x] V10 full suite green — 279 unit + 143 Playwright, 0 failed, 21.3 min, exit 0
 - [ ] V11 one real staging run, independently verified
 - [x] The 3 exposed titles (§ 9) corrected and confirmed — **15/15 applied to production
@@ -417,6 +444,16 @@ watching:**
             NOT ORDERED — the window closes in 3 days
 ```
 
+**✅ ORDERED AND CLOSED OUT by Rick, 2026-09-05** — verified by an independent ledger read, not
+taken on report: `order_submissions` now carries qty **2**, `order_type = 'adhoc'`, `submitted_on`
+2026-09-05, filed against `foc_date` **2026-09-07** — i.e. against the *corrected* date. Rick:
+*"It was a real miss that we caught."*
+
+**This is the first end-to-end proof of the whole F155 chain**, and it is worth more than any of the
+gates: a revision nobody could see (S2's detection) → a corrected date (S2's write) → a surface that
+made the consequence legible → a real order placed inside a window that had two days left. Every
+prior piece of evidence in this doc is a measurement; this is an outcome.
+
 Before this correction the system believed there was a month of ordering runway. There were three
 days, and the title has no `order_submissions` row. Nothing in the app would have said so: the
 Order Follow-Up panels classify against `foc_date`, and `foc_date` was wrong. **This is the
@@ -424,7 +461,8 @@ Order Follow-Up panels classify against `foc_date`, and `foc_date` was wrong. **
 lane** — a class this plan identified but had not yet seen bite.
 
 Checked across all 11 FOC corrections: everything else is either already ordered or has 59 days of
-runway. FIRE AND ICE #5 is the only one at risk, and only because its FOC moved backwards.
+runway. FIRE AND ICE #5 was the only one at risk, and only because its FOC moved backwards — and it
+is now ordered. **No FOC-driven exposure remains from this batch.**
 
 **Carry into S2's next iteration:** the report should rank FOC changes by *how much ordering runway
 is left after the correction*, and shout when a pulled-forward FOC lands inside the current ordering
@@ -465,3 +503,33 @@ badge on a book the customer can collect.
 **Verified** 18/18 against deployed staging (`playwright/f156-reject-surfaces-verify.mjs`,
 local-only; it must SEED, because every recon exception row on staging has ledger net 0), plus the
 full suite at 146 passed / 0 failed. **No finding ID consumed** — this advances F155.
+
+---
+
+## 13. The production run of 2026-09-04 — the case S3 exists for, observed live
+
+Measured 2026-09-05, the day after. Production's weekly import ran on **2026-09-04** and
+auto-fulfilled **131** reservations — exactly the number § 6 V7 had predicted for the pre-F155 body.
+Seven of those had **no shipment evidence** and are precisely the rows S3(a) would have deferred:
+
+```
+75960621630700116  BLACK PANTHER/NAMOR: DOOMED #1 …          arrival_outcome=unknown
+75960621146301517  CAPTAIN AMERICA #15 AKA VARIANT [ARM]     arrival_outcome=unknown
+75960621146301516  CAPTAIN AMERICA #15 ALEX ROSS … (×2)      arrival_outcome=unknown
+75960621122701616  FANTASTIC FOUR #16 ALEX ROSS … (×2)       arrival_outcome=unknown
+0726DC0300         DC CONNECT #76 BUNDLES                    arrival_outcome=not_arrived
+```
+
+**F115's safety net held, and that is the honest framing.** Six carry `arrival_outcome = 'unknown'`,
+so `neverArrivedFromFulfilled()` surfaces them in Never Arrived with resolve controls; the seventh
+had already been resolved `not_arrived` by hand. Nothing was lost and nobody has to go looking.
+What did happen is that six customers were told "Order placed" for books with no arrival evidence,
+which is the state F115 exists to make *recoverable* and S3 exists to make *avoidable*.
+
+**This is why the October-gate sequencing recommendation was revised.** The earlier advice — hold S3
+until after 2026-09-25 so F146/F147 get a clean first exercise — was written before it was visible
+that this failure fires **weekly**, not monthly. Three more weekly runs land before the gate. And
+S3 is no longer the unproven change that reasoning assumed: it has a live 3/3 functional test whose
+fixture A fails against the old body, plus a genuine observed red on the panel half (§ 6). Promoting
+it now gives it three weeks of production soak *before* October rather than making October its first
+outing.
