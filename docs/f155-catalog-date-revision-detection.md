@@ -533,3 +533,25 @@ S3 is no longer the unproven change that reasoning assumed: it has a live 3/3 fu
 fixture A fails against the old body, plus a genuine observed red on the panel half (§ 6). Promoting
 it now gives it three weeks of production soak *before* October rather than making October its first
 outing.
+
+---
+
+## 14. Production verification of the SQL half (2026-09-05)
+
+Rick applied `docs/sql/auto_fulfill_past_on_sale.sql` to production immediately after PR #150 merged,
+client-first per § 5.2. **Verified independently rather than taken on report** — the whole finding
+exists about a stale claim nobody checked, so accepting one here would have been the wrong ending.
+
+- **`pg_get_functiondef()` on production returns the F155 body.** Both new clauses present: the
+  three-key `weekly_shipment` `EXISTS` and `OR s.on_sale_date < CURRENT_DATE - 14`.
+- **Signature is still single-argument.** § 5.1 flagged the risk that adding a `GRACE_DAYS`
+  parameter would leave a second overload behind while `import.js` kept calling the one-arg version;
+  keeping it a literal avoided that, and the live definition confirms it.
+- **`SECURITY DEFINER` and `SET search_path TO 'public'` survived the replace.**
+- **Grants verified behaviourally, because `pg_get_functiondef()` does not show them (F124).** An
+  anon POST to `/rest/v1/rpc/auto_fulfill_past_on_sale` returns **`42501 permission denied`**. Nil
+  risk to run: production held 0 eligible rows, so the call would have been a no-op even if it had
+  been permitted.
+
+**F155 is closed, both environments.** The only residual is `0726DC0300` (DC CONNECT #76 bundle) —
+no date source exists for it, so S3's guard is what now holds it rather than a correction.

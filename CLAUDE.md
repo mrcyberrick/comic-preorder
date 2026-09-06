@@ -118,6 +118,17 @@ rejected for trading "a silent miss for a silent stall", and that objection is p
 that stall. **Sequencing was therefore client-first, the reverse of F149's** — PR merged, then Rick
 applied the SQL.
 
+**The SQL half was verified on production independently, not taken on report** — which matters,
+because this whole finding exists about a stale claim nobody checked. `pg_get_functiondef()` on
+production returns the F155 body: the grace predicate `OR s.on_sale_date < CURRENT_DATE - 14` and
+the three-key `weekly_shipment` EXISTS are both present, `SECURITY DEFINER` and
+`SET search_path TO 'public'` survived, and the signature is still **single-argument** — so
+`CREATE OR REPLACE` left no stray overload behind while `import.js` calls the one-arg version.
+**Grants checked behaviourally, since the definition cannot show them (F124):** an anon POST to
+`/rest/v1/rpc/auto_fulfill_past_on_sale` returns **`42501 permission denied`**, so the
+REVOKE-from-`anon`/`authenticated` hardening survived the replace. Nil-risk to run — production held
+0 eligible rows at the time.
+
 **Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — `/admin.html`
 302s to `/admin` and without `-L` the empty body reads as a stale build): `admin.html` returns
 `THE ORDER OF THESE TESTS IS THE FIX` ×1 and `ordered, not yet released` ×1; **negative assertions
