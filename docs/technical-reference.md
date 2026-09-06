@@ -5765,8 +5765,11 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F155 — the monthly-refresh runbook tells the operator PRH does not revise dates in place, so PRH catalogs are never re-pulled and a revised in-store date is never detected
 
-- **Status:** filed 2026-09-04, **open, not started.** Owner doc:
-  `docs/f155-catalog-date-revision-detection.md`. Found by Rick from a live symptom, not an audit:
+- **Status:** filed 2026-09-04, **fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-05.** S1 (runbook),
+  S2 (`check-dates.js` + 30 production date corrections) and S3 (bounded deferral + panel ordering)
+  all shipped. Production promotion **PR #150**, merge `787b0ee`; SQL applied by Rick the same day,
+  client-first. Owner doc: `docs/f155-catalog-date-revision-detection.md` (STATUS: COMPLETE, both
+  environments). Found by Rick from a live symptom, not an audit:
   a reserved title that had quietly stopped being visible to its customers.
 - **The defect proper is one sentence.** `docs/monthly-catalog-refresh.md:130-132` reads *"PRH's
   export omits withdrawn titles rather than revising dates in place (see F110), so this step

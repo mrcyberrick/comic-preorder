@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** STAGING COMPLETE (S1 + S2 + S3 both halves) · staging=2026-09-05 · prod=— · PR=— · findings: F155
+**STATUS:** COMPLETE, BOTH ENVIRONMENTS · staging=2026-09-05 · prod=2026-09-05 · PR=#150 (merge `787b0ee`) · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;

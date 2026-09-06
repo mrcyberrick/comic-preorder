@@ -1,9 +1,10 @@
--- STATUS: staging=APPLIED 2026-09-05 (F155 S3a body) | prod=PENDING (F155 S3a body)
+-- STATUS: staging=APPLIED 2026-09-05 (F155 S3a body) | prod=APPLIED 2026-09-05 (F155 S3a body)
 --         Staging verified live 3/3 by seeding three discriminating fixtures and
 --         calling the function: the RPC returned 2, not 3 -- the no-evidence,
 --         recently-released row was held back, which the pre-F155 body fulfils.
---         Production still runs the 2026-08-08 F122 body (which IS applied and is
---         correct for what it does; it simply predates this change).
+--         Production applied 2026-09-05 by Rick, immediately after PR #150 merged
+--         (client-first sequencing -- see the F155 S3(a) block below for why that
+--         order is the reverse of the usual).
 --
 --         ⚠️ CORRECTED 2026-09-05. This line previously read
 --         "prod=APPLIED 2026-08-08 (pre-F155 body)" with the caveat in prose
