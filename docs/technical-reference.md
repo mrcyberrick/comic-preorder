@@ -5954,7 +5954,77 @@ reasoning — only the disposition changed, not the diagnosis.
   **2026-07** — one of the two stale months) and read **`⚠ 1:25`** back out of `arrivals.html`'s
   "Not in shipment" list: the exact surface and the exact missing badge that was reported.
 
-Next free finding ID: **F157**.
+#### F157 — a catalog file that normalises to zero rows is accepted silently, aiming the new-month set-difference steps at the distributor that is missing
+
+- **Status:** **filed 2026-09-07, OPEN — fix designed, not applied.** Code defect in both
+  `import.js` and `import-staging.js` (scripts repo), so both environments. **Not found from a live
+  incident** — found while designing a browser-based import for non-technical tenants, by asking
+  what the two-mandatory-catalog-arguments rule actually guarantees. It guarantees less than it
+  looks like it does.
+- **The gap, in one sentence:** nothing asserts that either supplied catalog file produced any
+  records, so a wrong, empty, or re-formatted distributor export becomes an empty contribution to a
+  set-difference that is then read as "the distributor dropped everything."
+- **Why the existing checks do not cover it.** `main()`'s usage check is `args.length < 2` — it
+  verifies a file was **named**, never that it parsed or normalised to anything. The month-mismatch,
+  Lunar item-code (F136 A2) and cross-month collision (F136 A3) guards all reason about *records
+  that exist*; none of them fires on records that are simply absent.
+- **⚠️ The printed row counts do not reveal it either, and this is the sharp part.**
+  `import.js:1903-1904` prints `Lunar catalog: N rows` / `PRH catalog: N rows` from the **raw**
+  parse, *before* normalisation. A file with changed headers parses into plausible-looking raw rows
+  and then normalises to **zero** records, because the normalisers filter on required fields. The
+  only post-normalisation figure printed is the **combined** `Total catalog records`, which merely
+  looks low with nothing to compare it against. **A per-distributor normalised count is never
+  printed at all.**
+- **Effect 1 — the absent distributor's just-imported month is deleted.** On a new-month import
+  (`import.js:763-771`) `refreshCatalog()` calls `delete_dropped_catalog_items` with
+  `newItemCodes = records.map(r => r.item_code)` — the codes of the **whole** import. The function
+  is `DELETE FROM catalog WHERE tenant_id = … AND catalog_month = … AND item_code != ALL(p_item_codes)`
+  and takes **no distributor parameter** (definition read at
+  `docs/phase-1-schema-migration.md:671-689` — a Phase 1 snapshot; **read the live definition before
+  relying on this**, per § Document Integrity). So a Lunar-only record set deletes every PRH row in
+  that month.
+- **Effect 2 — and this is the one that actually reaches customers.**
+  `computeWithdrawalCandidates()` (`import.js:1015`) builds `currentPairs` as
+  `distributor||item_code` across the whole import and flags every prior-month row not in it. With
+  a distributor absent, its entire prior month becomes candidate. `narrowWithdrawalCandidates()`
+  (`import.js:1045`) then requires an unfulfilled reservation, a future `on_sale_date` and a passed
+  `foc_date` — which bounds the blast radius but does not empty it. What survives is
+  **reserved titles falsely marked "Withdrawn — cannot be ordered"**, showing F120's customer-facing
+  badge and unlocking irreversible self-cancellation on books that are genuinely still coming.
+  **That is F147's damage shape exactly**, reached by a different cause.
+- **What this is NOT, stated because the obvious reading is wrong.** `preorders.catalog_id` is
+  `ON DELETE CASCADE` (`schema-prod-4.8.sql:809`, local snapshot 2026-06-10), so deleting catalog
+  rows *does* delete reservations. **But Effect 1 cannot reach live reservations**, because
+  `delete_dropped_catalog_items` is scoped to the month **just imported**, and on a genuinely new
+  month no reservation exists yet — auto-reserve (Step 5) runs *after* `refreshCatalog()` (Step 4).
+  The month's rows were inserted moments earlier. Effect 1 is therefore **recoverable by re-importing
+  the correct file** (a same-month upsert, which does not re-run `delete_dropped`), and its real cost
+  is a distributor's titles silently missing from a new catalog. Effect 2 is the durable harm.
+  *Recorded so nobody re-derives a worse conclusion than the evidence supports — the CASCADE is a
+  latent amplifier if the `isNewMonth` gate is ever widened, not an active one today.*
+- **It also blocks single-distributor tenants outright**, which is why this was found. A shop
+  holding only a Lunar account has one catalog file, every month — not a partial import but their
+  complete one. `args.length < 2` refuses to start, and the shipment path likewise requires both
+  invoices. **Relevant to Phase 6:** distributor-scoping the two steps above is what makes such a
+  tenant possible at all, and is tracked separately from this finding.
+- **Fix (this finding): refuse to proceed when a supplied catalog file normalises to zero records.**
+  A handful of lines, fail-closed, no design decisions, and independent of the scoping work. Print
+  the **normalised** count per distributor alongside the raw count so the two can be compared. An
+  explicit override flag is deliberately *not* proposed — a legitimate zero-record catalog file does
+  not exist.
+- **Sequencing (2026-09-07):** land before the **2026-09-25 October catalog import**, with soak
+  across the 09-08 and 09-15 weekly runs. It sits in parse-time code, touches no withdrawal logic,
+  and can only ever stop an import — so it does not blur that gate's purpose as F146/F147's first
+  live exercise. It also protects the runbook's **Step 3 revision sweep**, the highest
+  file-handling-density step in the cycle, which runs immediately before that import. The
+  distributor-scoping fix must wait until **after** 09-25, because it modifies the very code the
+  gate exists to observe.
+- **Related:** F147 (same customer-facing damage — 519 false withdrawal marks — different cause),
+  F146 (the clear-half counterpart), F136 (the entry guards this one sits beside, and does not
+  duplicate), F131 (single-operator import; the tenant-facing motivation), F155 (the
+  never-re-pull assumption that makes older months fragile).
+
+Next free finding ID: **F158**.
 
 ---
 
