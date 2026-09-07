@@ -5956,11 +5956,31 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F157 — a catalog file that normalises to zero rows is accepted silently, aiming the new-month set-difference steps at the distributor that is missing
 
-- **Status:** **filed 2026-09-07, OPEN — fix designed, not applied.** Code defect in both
-  `import.js` and `import-staging.js` (scripts repo), so both environments. **Not found from a live
-  incident** — found while designing a browser-based import for non-technical tenants, by asking
-  what the two-mandatory-catalog-arguments rule actually guarantees. It guarantees less than it
-  looks like it does.
+- **Status:** filed AND **FIXED 2026-09-07, same session** — scripts repo `main` **`9d9aa40`**,
+  committed and pushed (`git log origin/main` confirmed, not assumed). Code defect in both
+  `import.js` and `import-staging.js`, so both environments; the fix landed in both together.
+  **Not found from a live incident** — found while designing a browser-based import for
+  non-technical tenants, by asking what the two-mandatory-catalog-arguments rule actually
+  guarantees. It guarantees less than it looks like it does.
+- **The fix.** A new pure `classifyEmptyCatalogSources()`, exported from both scripts and wired
+  into `main()` after normalisation — **before** `normalized_catalog.json` is written and before any
+  RPC — aborting with exit 1. It also prints the **normalised** count per distributor beside the raw
+  count, which is the comparison that did not exist. Fails closed: a missing, non-finite or negative
+  count counts as empty. **No override flag, deliberately.**
+- **Verification.** Unit suite **295/295, exit 0** (up from 279 — 8 new tests × 2 modules, in
+  `test/empty-catalog-source-guard.test.mjs`, run against **both** scripts per the 2026-05-08
+  hot-patch drift convention). **Negative-control tested:** neutering the guard to `return []` turns
+  V2/V3/V4/V5 red (`ERR_ASSERTION, actual 0, expected 1`); restoring it returns 295/295.
+  `builders.test.mjs`'s export-set parity assertion still holds, both scripts changed together.
+  **Wiring proven live, not inferred from the unit tests** — two `--no-write` dry runs against
+  staging: a real Lunar file paired with a re-formatted PRH file (**3 raw rows, 0 normalised**)
+  aborted with exit 1 before any write, and the genuine Lunar + PRH 2026-05 pair passed clean at
+  **1202/1202 and 1078/1078 — no false positive**, the property that actually matters for a guard.
+- **Not fixed here, and deliberately:** the distributor-scoping of `delete_dropped_catalog_items`
+  and `computeWithdrawalCandidates()` (Effects 1 and 2 below). This guard closes the *reachable*
+  path — a bad file — without touching withdrawal logic; the scoping work changes the very code the
+  2026-09-25 October import exists to observe, and is therefore held until after that gate. **The
+  two set-difference steps are still distributor-blind.**
 - **The gap, in one sentence:** nothing asserts that either supplied catalog file produced any
   records, so a wrong, empty, or re-formatted distributor export becomes an empty contribution to a
   set-difference that is then read as "the distributor dropped everything."
