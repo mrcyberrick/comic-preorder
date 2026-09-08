@@ -139,8 +139,12 @@ catalog URL.
 
 #### S1's honest limit, and why it still ships on its own
 
-`Auth.requireAuth()` (`app.js:264`) redirects an unauthenticated visitor to `index.html` and
-**discards the requested URL** — there is no `?next=` return path. And no page in the app reads a
+**The gate is `initNav()` (`app.js:508-511`), not `Auth.requireAuth()`** — corrected 2026-09-08 by
+reading the code: `catalog.html` never calls `requireAuth` at all, and `Auth.requireAuth()`
+(`app.js:264`) has exactly one caller, `requireAdmin`. Every nav page is gated by `initNav()`'s own
+`const user = await Auth.getUser(); if (!user) { window.location.href = 'index.html'; }` — a bare
+redirect that **discards the requested URL**. Same effect, different function; S4 must patch the
+right one. And no page in the app reads a
 title parameter: `app.js:115` is the *only* `URLSearchParams` call in the entire client, and it
 reads `?t=` alone.
 
