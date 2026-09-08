@@ -91,7 +91,7 @@ now. Nothing is lost by deciding it later; changing it is a one-line follow-up.
 | V5 | Date-normalised diff: **136 changed lines, all of them href lines**; `rss.xml` byte-identical |
 | V6 | `npm test` **295/295** |
 | **V4** | **NOT met — see S1x below. Deliberately not guessed.** |
-| **V7** | **Owed — Rick's step, a real Brevo test send.** |
+| **V7** | **Owed — Rick's step. Deferred by decision to after the Fri 2026-09-11 import** (§ 5a), when the new links are live and the page can be checked as published rather than as a local build. |
 
 **The data is already there.** `weekly_shipment` carries `item_code`, `upc` and `catalog_id` (read
 live from production 2026-09-08). `fetchWeekRows()` simply does not select them:
@@ -272,18 +272,28 @@ demonstrated not to be costing signups at Gmail.
 
 ---
 
-## 5a. ⚠️ S1 goes live at the next import, not at a separate deploy step
+## 5a. S1 goes live at the next import — DECIDED: let it land naturally
 
-There is no deploy button here. `build-pull-feed.js` is invoked by `import.js`, so **the next
-shipment import republishes `newsletter.html` and `newsletter-email.html` carrying the new links**,
-and the Brevo cron then sends from them.
+There is no deploy button here. `build-pull-feed.js` is invoked by `import.js`, so **a shipment
+import republishes `newsletter.html` and `newsletter-email.html` carrying the new links**, and the
+Brevo cron then sends from them.
 
-**So V7 should happen before the next weekly import if practical.** The risk is low — the change is
-href-only and every automated gate passed — but a real inbox is the only place the clip question and
-the click destination get answered, and it is cheap to do first.
+**Decision (Rick, 2026-09-08): the Tue 2026-09-08 send goes as-is — no pre-publish, no rush.**
+That send therefore carried the **old** CDN links, from the feed stamped `2026-09-04`. Deliberate,
+not an oversight.
 
-If a send is imminent and V7 has not run, the revert is one commit (`git revert 8836380`); nothing
-in the app, the database or Brevo needs touching.
+**The new links land at the Fri 2026-09-11 weekly import**, which republishes all three artifacts.
+Rick verifies the browser page after that import.
+
+**A `--publish` was explicitly NOT run to preview.** It writes the live `weekly-pull-feed` Pages
+repo — three artifacts plus thumbnail adds and orphan purges in one commit — and re-stamps the
+`pull-feed-generated:` freshness marker the Brevo send script reads. That is the **F135** hazard.
+`--local` produces byte-identical artifacts with none of it, and `pull-feed-out/newsletter.html`
+was reviewed that way instead.
+
+**Revert, if the published result is wrong:** `git revert 8836380` in the scripts repo, then the
+following import republishes the old links. Nothing in the app, the database or Brevo needs
+touching.
 
 ---
 
