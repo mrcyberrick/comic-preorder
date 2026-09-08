@@ -168,7 +168,7 @@ assertion on the built file's size is gate V4 below.
 |---|---|
 | **S4** — catalog deep-link plus a `requireAuth()` return path, so a click survives signup and lands on the actual comic | A PULLLIST client change and a deploy. This is what unlocks the real conversion; sequence it after S1 proves the link change is safe. |
 | **S5** — app-side capture of `?ref=` so signups attribute to the newsletter | Client change, likely a `usage_events` row. Needed to answer "did this work", but S3's Brevo-side data is the cheaper first read. |
-| Double opt-in confirmation deliverability | **Do this first anyway — a 2-minute manual check, not a code change.** See § 5. |
+| Double opt-in confirmation deliverability | **✅ CHECKED AND CLEAN, 2026-09-08 — not a live concern.** See § 5. Outlook half still unchecked, minor. |
 | SPF alignment on `rjbookstop.pulllist.app` (20 of 20 sends unaligned) | Real, cheap, and not the bottleneck. Brevo custom Return-Path; `mail.rjbookstop.pulllist.app` is NXDOMAIN today. Verify plan availability first. |
 | Growing the subscriber list from in-store traffic | Not a code change. The newsletter can only recruit people who already found `/news/`. |
 | Inviting the existing 29 app customers onto the list | **Explicitly rejected** — they are already converted, so it would lift the open-rate number without serving the goal. |
@@ -195,26 +195,50 @@ V7 is the gate that matters most and the easiest to skip. Do not skip it.
 
 ---
 
-## 5. Do this before the session — it is free
+## 5. Pre-session check — DONE, and it came back CLEAN
 
-**Sign up at `rjbookstop.com/news/` with a Gmail address and an Outlook address, and confirm the
-double opt-in email actually reaches the inbox.**
+**✅ CLEARED 2026-09-08 (Rick): the double opt-in confirmation arrives, and NOT in Gmail spam.**
 
-The form's success state reads *"Almost there — check your inbox to confirm."* If that confirmation
-lands in spam, every signup dies silently — no bounce, no error, no list entry, no signal. That
-failure mode alone would produce a 10-person list.
+This was the highest-risk unknown, because the failure would have been invisible: the form's success
+state reads *"Almost there — check your inbox to confirm."* A confirmation landing in spam kills
+every signup silently — no bounce, no error, no list entry, no signal — and would on its own have
+produced a 10-person list. **It is not happening.** Gmail is also the dominant provider on this
+list (DMARC counts across the two observed sends: Gmail 6 and 9, versus 1 each for Yahoo and 1–2 for
+Outlook), so this covers most of the audience.
 
-It is plausible here: **F152** records a real production send from the sibling `pulllist.app` domain
-landing in Microsoft's spam folder, and the newsletter's sending domain has even less reputation
-history.
+**What this rules out, and what it therefore narrows to.** The signup mechanism works end to end.
+So the list is small because **too few people reach the form**, not because the form or its
+confirmation is broken. That moves the constraint upstream, to § 3's traffic item — see § 6.
 
-**Keep double opt-in either way** — with a domain this new, a clean list is protective. Just confirm
-the confirmation arrives.
+**Residual, minor and not blocking:** the Outlook half was not checked. **F152** records a real
+production send from the sibling `pulllist.app` domain landing in Microsoft's spam folder, so that
+provider remains the plausible one. It is a small slice of this list, so this is worth a check when
+convenient rather than before the session.
+
+**Keep double opt-in** — with a sending domain this new, a clean list is protective, and it is now
+demonstrated not to be costing signups at Gmail.
 
 ---
 
-## 6. Sequencing
+## 6. Sequencing, and an expectation worth setting
 
 S1–S3 are one session and are independent of the October catalog import gate (2026-09-25). They
 touch no import-path code, no withdrawal logic and no catalog write, so they neither help nor
 endanger that gate and can land before or after it without interaction.
+
+**Set the expectation honestly before doing the work.** App signups from this channel are the
+product of two factors:
+
+```
+   signups  =  subscribers  ×  conversion per subscriber
+                  (10)            (~0 today — clicks exit to a CDN)
+```
+
+**S1–S3 fix the right-hand factor only.** They are worth doing — a funnel that leaks 65 clicks an
+issue to a distributor's image server cannot convert anyone, and § 5 has now shown the signup path
+itself works. But 10 subscribers times a good conversion rate is still a small number.
+
+The left-hand factor is **not a code change** and is the larger multiplier: getting store traffic to
+`/news/` at all — in-store signage, a QR code at the register, the `rjbookstop.pulllist.app` CTA
+already printed on bagging lists. Both factors matter; only one of them is in this plan. Do not read
+a modest post-S3 result as S1–S3 having failed.
