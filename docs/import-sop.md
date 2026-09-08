@@ -153,7 +153,21 @@ Comment out this line in `scripts\.env`:
 the current week's thumbnails, and the Tuesday mailout sends the stale issue. This has happened
 for real (2026-08-11).
 
-Skip this step for a normal current-week shipment.
+> **How to tell, and it is NOT about how many shipments you have this week.** Open the invoice and
+> look at the on-sale dates. The publish targets the **most common** on-sale date in the file.
+> - Most dates in the **current** week → skip this step.
+> - Most dates in a week that has **already passed** → do this step.
+>
+> **A second shipment in the current week is safe** and needs no `.env` edit — it just rebuilds the
+> current week's feed with more titles. **A single catch-up shipment is the dangerous one**, even
+> though it is the only shipment that week. Count of shipments is irrelevant; the dates decide.
+>
+> A stray late row inside an otherwise-current shipment is also fine — the "most common date" rule
+> was adopted on 2026-08-11 precisely to stop one straggler dragging the publish backwards.
+
+> **A `--no-write` dry run will not answer this for you.** Under `--no-write` the script prints
+> `[no-write] would publish weekly pull feed` and never works out which week it would target, so
+> you cannot dry-run first to decide. Read the dates off the invoice instead.
 
 ### 3. Run the import with all four files
 ```powershell
