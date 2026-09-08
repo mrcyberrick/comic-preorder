@@ -1,6 +1,7 @@
 # Weekly newsletter — acquisition funnel repair
 
-**STATUS:** NOT STARTED 2026-09-08 | staging=— | prod=— | findings=none (feature build)
+**STATUS:** IN PROGRESS — S1 DONE 2026-09-08 (scripts repo `main` `8836380`, pushed); S1x pending a real
+measurement; S2/S3 not started | staging=n/a (scripts repo) | prod=n/a | findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
@@ -60,7 +61,37 @@ locked; the email simply rarely points at it.
 All three are edits to `build-pull-feed.js` in the scripts repo. Nothing here touches the PULLLIST
 web app, its schema, its Edge Functions, or either Supabase project's data.
 
-### S1 — cover links point at the app, not the distributor CDN
+### S1 — cover links point at the app, not the distributor CDN — ✅ DONE 2026-09-08
+
+**Shipped:** scripts repo `main` `8836380`, pushed and verified on `origin/main`. Six functional
+lines plus comment; `build-pull-feed.js` only.
+
+**Two things were measured during execution that this plan had assumed wrongly, and both changed
+the implementation:**
+
+1. **The key is `item_code || upc`, not `item_code`.** Measured on the 2026-09-07 week: `item_code`
+   covers only **40 of 68** rows — **PRH carries none at all** — so the plan's original `c=item_code`
+   would have silently degraded 41% of covers to a bare catalog link. `item_code || upc` covers
+   **68/68**, and is the project's own existing display chain rather than a new convention.
+   `catalog_id` was the other candidate and was rejected: 64/68 coverage and 36 chars per link
+   against a message already close to the clip line.
+2. **The separator must be `&amp;`, not a bare `&`.** `MAPS_URL` (~line 1234) is the only other
+   multi-param URL in these templates and already uses `&amp;` in production sends. Matching it.
+
+**`buildRssXml` was left unchanged** — the § 2 table's open decision, resolved conservatively for
+now. Nothing is lost by deciding it later; changing it is a one-line follow-up.
+
+**Gates, run against a pre-change `--local` baseline (68 titles, production data, read-only):**
+
+| Gate | Result |
+|---|---|
+| V1 | `node --check` clean, `--local` build completes |
+| V2 | **0** CDN hrefs in both HTML surfaces — was **68 each** |
+| V3 | 68/68 covers resolve to `rjbookstop.pulllist.app`, carry `ref=newsletter`, and every `c=` traces to a source row; 0 bare-`&` links |
+| V5 | Date-normalised diff: **136 changed lines, all of them href lines**; `rss.xml` byte-identical |
+| V6 | `npm test` **295/295** |
+| **V4** | **NOT met — see S1x below. Deliberately not guessed.** |
+| **V7** | **Owed — Rick's step, a real Brevo test send.** |
 
 **The data is already there.** `weekly_shipment` carries `item_code`, `upc` and `catalog_id` (read
 live from production 2026-09-08). `fetchWeekRows()` simply does not select them:
@@ -139,7 +170,28 @@ cannot disturb `TenantContext` resolution or any page's init.
 This makes Brevo's click report per-title and per-placement. **It does not close the loop to
 signups** — that needs app-side capture, which is **S5** (§ 3).
 
-### S1x — the size guard, shipped WITH S1, not after
+### S1x — the size guard — ⏸ OPEN, and deliberately not guessed
+
+**Measured after S1:** the built email is **89,909 bytes (87.8 KB)** with 72 tracked links. S1 added
+**+800 bytes** to a pre-existing 87 KB problem, so it made the situation 0.9% worse rather than
+creating it.
+
+Against the ~102 KB clip line, the outcome depends entirely on how long Brevo's rewritten URLs are —
+which is estimated here, never measured:
+
+| assumed rewritten link length | resulting size | verdict |
+|---|---|---|
+| 180 chars | 95.1 KB | OK |
+| 220 chars | 97.9 KB | OK |
+| 260 chars | 100.7 KB | **over the 80 KB target, close to the clip line** |
+
+**This plan originally said to cap the cover count and ship that with S1. That was not done, on
+purpose.** Picking a cap now means choosing how many comics Rick shows his customers on the strength
+of a guess about a third party's URL format. **V7 answers it for real in one send** — the true
+rewritten length, and whether Gmail actually shows "[Message clipped]". Size the cap from that
+measurement.
+
+The original reasoning, still valid:
 
 This is not optional housekeeping; S1 makes it worse.
 
@@ -217,6 +269,21 @@ convenient rather than before the session.
 
 **Keep double opt-in** — with a sending domain this new, a clean list is protective, and it is now
 demonstrated not to be costing signups at Gmail.
+
+---
+
+## 5a. ⚠️ S1 goes live at the next import, not at a separate deploy step
+
+There is no deploy button here. `build-pull-feed.js` is invoked by `import.js`, so **the next
+shipment import republishes `newsletter.html` and `newsletter-email.html` carrying the new links**,
+and the Brevo cron then sends from them.
+
+**So V7 should happen before the next weekly import if practical.** The risk is low — the change is
+href-only and every automated gate passed — but a real inbox is the only place the clip question and
+the click destination get answered, and it is cheap to do first.
+
+If a send is imminent and V7 has not run, the revert is one commit (`git revert 8836380`); nothing
+in the app, the database or Brevo needs touching.
 
 ---
 
