@@ -1,8 +1,8 @@
 # Weekly newsletter — acquisition funnel repair
 
 **STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S6a DONE (`f0189a8`)**, superseding S1's destination;
-**S6b LIVE ON PRODUCTION (PR #151, merge `4548fc4`)**; S6c not started; S1x open |
-staging=2026-09-08 | prod=2026-09-08 (S6b only — S6a publishes at the Fri 2026-09-11 import) |
+**S6b LIVE ON PRODUCTION (PR #151, merge `4548fc4`)**; **S6c DONE ON STAGING (`aaa6ca8`), not promoted**;
+S1x open | staging=2026-09-08 | prod=2026-09-08 (S6b only — S6a publishes at the Fri 2026-09-11 import) |
 findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
@@ -380,16 +380,66 @@ That failure forced a measurement worth keeping: **1,470 of staging's 3,287 seri
 from the current catalog month.** That is the scale of what the catalog destination could never have
 shown, and it is now recorded in the harness.
 
-### S6c — the return path (PULLLIST, the fiddly half)
+### S6c — the return path — ✅ DONE ON STAGING 2026-09-08 (`aaa6ca8`)
 
-`initNav()` (`app.js:508-511`) redirects an unauthenticated visitor to `index.html` and **discards
-the URL**; `index.html` then hardcodes `window.location.href = 'catalog.html'` in **four** places
-after successful auth (`:601`, `:661`, `:807`, `:852`). A newcomer's intent must be stashed before
-the redirect and honoured at all four sites.
+`initNav()` redirected a signed-out visitor to `index.html` and **discarded the requested URL** —
+there was no `?next=` — so a newsletter or social link carrying `?series=` lost its intent at the
+sign-in wall. New **`PostAuthRedirect`** helper in `app.js` (one implementation, shared, so
+`initNav()` and `index.html` cannot drift): `initNav()` stashes the intended path, and the **four**
+places `index.html` hardcoded `catalog.html` after a successful auth now honour it — already-signed-in
+landing, magic-link completion, password-setup completion, email+password sign-in.
 
-**This is what makes the acquisition case work end to end** — sign up, and land on the series that
-made you sign up. It was not worth building when the destination was a catalog that could not show
-the title. It is worth building now.
+**`localStorage`, NOT `sessionStorage`** — a magic link opened from a mail client frequently lands
+in a **new tab**, which starts with an empty `sessionStorage` and would silently lose the intent,
+i.e. the exact failure this exists to fix.
+
+#### ⚠️ Scope decision: account creation is deliberately NOT covered (Rick, 2026-09-08)
+
+Rick's framing: *"S6c allows an authenticated user to logon and get the subscribe search results and
+the link survives the logon. A new user is presented with a logon screen and encouraged to follow
+the standard onboarding process."*
+
+**The code makes that more than a simplification.** A new signup lands `status: 'pending'`
+(`register-customer:121`) awaiting admin approval, and a pending profile makes
+`subscriptions.html`'s `isBlocked` true (`:405-407`) — which **disables the search input**. So
+carrying the intent through a signup form, an email round trip and an approval delay would deposit
+the newcomer on a page they **cannot act on**. The machinery would buy nothing.
+
+| Who clicks a cover | Behaviour |
+|---|---|
+| Signed in | Straight to the series (S6b) |
+| **Has an account, signed out** | Sign-in → **lands on the series** ← S6c |
+| No account | Sign-in screen with **Create Account**, then standard onboarding. The cover was the hook; onboarding is the conversion |
+
+#### Gates — `playwright/s6c-post-auth-return-verify.mjs`, 11/11
+
+| Gate | Result |
+|---|---|
+| V1 | Signed-out visitor bounced to sign-in, and the intended path **stashed** — `/subscriptions?ref=newsletter&series=Absolute%20Batman` |
+| V2 | Sign-in **returns them to that link**, search prefilled; stash is **one-shot**, cleared after use |
+| **V3** | **Regression guard** — with no stash, sign-in still lands on `catalog.html`. The default is unchanged |
+| **V4** | A **2h-old stash is ignored** (1h TTL) — a stale intent cannot hijack a later unrelated login |
+| **V5** | **Open redirect rejected**, three ways: `//evil.example.com/`, `https://evil.example.com/`, `javascript:alert(1)` — all fell back to `/catalog`. A stashed post-auth redirect is precisely where an open redirect hides, so `take()` accepts only same-origin absolute paths |
+| V6 | Teardown clean — zero orphaned auth users |
+
+**V2a was negative-control tested** — inverted to the pre-S6c expectation (land on the catalog) and
+confirmed to go **red**, so it genuinely discriminates rather than passing vacuously.
+
+**Full Playwright suite: 146 passed, 0 failed, exit 0, 23.6 min.** That matters more than usual
+here: `initNav()` is called by every nav page and the suite drives `index.html`'s auth path
+constantly, so this is the real regression evidence.
+
+**Storage access is `try/catch`'d throughout**, so a private-mode or storage-disabled browser
+degrades to today's `catalog.html` behaviour rather than breaking sign-in.
+
+#### Social-media use, and the caveat that goes with it
+
+The `?series=` link is now shareable — *"Love INGLORIOUS X-FORCE? Subscribe →"*. Two things to
+carry: **use the tenant hostname** (`rjbookstop.pulllist.app/subscriptions.html?series=…`), because
+a bare apex link resolves no tenant slug and renders the platform marketing page instead of the
+branded sign-in; and **a social audience is colder than a newsletter one** — a stranger hits an auth
+wall with no preview of what they are subscribing to. A public series page would fix that and is the
+anon-RPC work in § 3, not built.
 
 ### What S6 does NOT do
 
