@@ -99,6 +99,84 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: PROMOTED TO PRODUCTION — newsletter S6b, the `?series=` deep link,
+2026-09-08 (PR #151, merge `4548fc4`; staging `68e3144`, cherry-pick `ead8df9`).** Rick's explicit
+`/promote-prod` request. **One file, `subscriptions.html`, +28/−0. No schema, no RLS, no Edge
+Function, no `config.js`.**
+
+**What shipped.** `subscriptions.html` now reads a `?series=` query param, prefills its search box
+and runs the existing `searchSeries()`, so a cover clicked in the weekly newsletter lands on that
+series with its Subscribe button. It drives the **same** code path a typed query uses — no second
+query, no separate rendering — so deep-linked and typed results cannot diverge. It honours
+`isBlocked`, so a pending/paused account's deliberately-disabled search is not routed around.
+
+**Why this page and not the catalog, which is the whole finding.** The weekly newsletter is built
+from `weekly_shipment` — what *arrives* this Wednesday, solicited two to three months ago — while
+`catalog.html` hard-scopes to the current `catalog_month` (`:634`). **Measured on production
+2026-09-08: 0 of that week's 68 arriving titles existed in the current catalog month** (55 sat in
+2026-07, 9 in 2026-06, 4 had no catalog row). The two surfaces are disjoint by design, so a catalog
+deep link could never have shown the clicked title. `arrivals.html` was the next guess and Rick
+rejected it correctly — it renders the same week the email already shows, so the click returns the
+reader to the covers they just looked at. `searchSeries()` has **no** month filter (its own comment
+reads *"across all catalog months"*), which is exactly why subscribing works where the catalog could
+not. On production, **10 of this week's 30 shipment series are absent from the current month**.
+
+**A cherry-pick, not a merge, and the scope decision was real.** `staging` is **54 commits ahead**
+of `main`, carrying F72 S0/S1a/S2a/S3, F153, F154, F156, `register-customer`, `register-tenant` and
+9 client files. **None of it went.**
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — the documented
+302 trap): `subscriptions.html` returns `deepLinkSeries` ×4, `get('series')` ×1,
+`searchSeries(deepLinkSeries)` ×1, `scrollIntoView` ×1. **Negative assertions hold** — the excluded
+staging work did not ride along: `data-paid-only` ×**0**, `Tier.isPaid` ×**0**, `print-store-info`
+×**0**. `config.js` carries the prod ref `plgegklqtdjxeglvyjte` with **zero** staging ref. PR file
+list re-checked **on GitHub itself** — 1 file, +28/−0, `config.js` and `supabase/` both absent.
+**`catalog_month` came back ×3 where ×2 was predicted; run down rather than waved through** — the
+third is this change's own explanatory comment (comments ship in the HTML). The `searchSeries()`
+query in the served bytes carries **no** `catalog_month` filter, confirmed by reading it directly.
+
+**Two cherry-pick-specific checks worth reusing.** (1) **Stat lines matched** — staging `68e3144`
+*"1 file changed, 28 insertions(+)"*, picked `ead8df9` identical; that is the PR #149 tell, and
+`.gitattributes` carries `merge=ours` only on `app.js`/`config.js`, so `subscriptions.html` was never
+at risk of the silent drop. (2) **A cherry-pick can apply cleanly and still break at runtime**, so
+every identifier the new code references (`isBlocked`, `BLOCKED_TITLE`, `searchInput`,
+`resultsPanel`, `searchSeries`) was confirmed defined in **`main`'s** copy, all before the insertion
+point — and `searchSeries()` was confirmed **byte-identical between `main` and `staging`**, so
+production behaves exactly as tested.
+
+**Staging verification that earned it.** Targeted harness `s6b-series-deeplink-verify.mjs` **11/11**
+against deployed staging bytes in a real browser (password grant + `addInitScript`, not a magic link
+— F107), including a Subscribe click that **wrote the row** with the correct `user_id`, a negative
+control (no param → no search), an unknown series degrading to "No series found", zero console
+errors, and teardown with **zero orphaned auth users** confirmed by fresh read. **Full Playwright
+suite 146 passed, 0 failed, exit 0, 24.9 min.** **⚠️ V2 failed on its first run and the FIXTURE was
+wrong, not the code** — *Absolute Green Lantern* is an ongoing series present in every month
+including the current one, so it discriminated nothing; re-keyed to *Absolute Batman*. That failure
+forced a measurement worth keeping: **1,470 of staging's 3,287 series (45%) are absent from the
+current catalog month.** **Rick confirmed it in his own browser: *"The URL works as expected when I
+signin first."***
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150 record: the diff
+is `subscriptions.html` only and never touches the customer reserve path, confirmed from the diff
+itself before deciding.
+
+**⚠️ KNOWN LIMIT, shipped knowingly: this works only for a SIGNED-IN customer.** A logged-out
+visitor is bounced to the front door by `initNav()` (`app.js:508-511`), which **discards the
+requested URL** — there is no `?next=` return path, and `index.html` hardcodes
+`window.location.href = 'catalog.html'` in four places after auth (`:601`, `:661`, `:807`, `:852`).
+So a newcomer's intent is lost, and **that is the half that serves acquisition**, since a newcomer is
+by definition logged out. Tracked as **S6c**, scoped and not started.
+
+**⚠️ The producer half (S6a) is NOT in this repo and lands separately.** `build-pull-feed.js` lives
+in the scripts repo (`main` `f0189a8`, pushed) and is invoked by `import.js`, so the cover links
+themselves publish at the **next shipment import**, expected **Fri 2026-09-11**. Until then
+production's live newsletter still carries the old links.
+
+**No finding ID consumed (feature build, not a defect).** The prior behaviour — covers linking to a
+distributor's cover image — was not miscalculating or hiding anything; this is different behaviour,
+wanted for an acquisition goal Rick stated 2026-09-08. Plan doc:
+`docs/newsletter-acquisition-funnel.md`. **F158 remains the next free finding ID.**
+
 **Last completed work: PROMOTED TO PRODUCTION — F155 S3, the bounded arrival guard, 2026-09-05
 (PR #150, merge `787b0ee`; staging code `b5ad0e4`).** Rick's explicit request. A **cherry-pick**
 promotion, not a merge: staging carries a large amount of unrequested work (F72 S0/S1a/S2a/S3, F153,

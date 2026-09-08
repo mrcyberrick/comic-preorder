@@ -1,9 +1,9 @@
 # Weekly newsletter — acquisition funnel repair
 
 **STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S6a DONE (`f0189a8`)**, superseding S1's destination;
-**S6b DONE ON STAGING (`68e3144`)**; S6c not started; S1x open |
-staging=2026-09-08 (S6b) | prod=NOT PROMOTED — S6a publishes at the Fri 2026-09-11 import; S6b needs an
-explicit promotion request | findings=none (feature build)
+**S6b LIVE ON PRODUCTION (PR #151, merge `4548fc4`)**; S6c not started; S1x open |
+staging=2026-09-08 | prod=2026-09-08 (S6b only — S6a publishes at the Fri 2026-09-11 import) |
+findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
