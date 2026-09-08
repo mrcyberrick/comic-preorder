@@ -347,6 +347,14 @@ read: any source may deep link, and the value exists only for the click report.
 **Live and testable now:**
 `https://staging.pulllist.pages.dev/subscriptions.html?ref=newsletter&series=Absolute%20Batman`
 
+**✅ CONFIRMED BY RICK, 2026-09-08: "The URL works as expected when I signin first."** That is the
+human gate, not just the harness — a real person, a real browser, a real session.
+
+**The "when I signin first" qualifier is the finding, not an aside.** A logged-out visitor pasting
+the same URL is bounced to the front door by `initNav()` with the URL discarded, and the page looks
+broken when it is not. That is precisely **S6c**, and it is the half that serves acquisition —
+a newcomer is by definition logged out.
+
 **Gates — `playwright/s6b-series-deeplink-verify.mjs`, 11/11**, local-only, driving the deployed
 staging bytes with a real browser (password grant + `addInitScript`, not a magic link — F107):
 
@@ -400,7 +408,7 @@ post-rewrite total falls a little. **The cover cap still needs a real send measu
 | **W5** | Date-normalised diff vs a pre-change baseline: only href/anchor lines changed; `rss.xml` byte-identical |
 | **W6** | `npm test` still green (295/295) |
 | **W7** | **Layout check in a real browser** — an unlinked cover cell must sit correctly beside linked ones, desktop and mobile widths |
-| **W8** | S6b: a real click from the built email reaches `subscriptions.html` with the search prefilled and the right series listed |
+| **W8** | S6b: **the URL half CONFIRMED by Rick 2026-09-08** (signed in, staging, real browser). The *click-from-the-email* half is **not yet testable**: the producer's `APP_BASE_URL` is `rjbookstop.pulllist.app` — **production** — so every cover in a local preview points at production, where S6b is not deployed. End-to-end newsletter → click → subscribe can only be exercised once S6b is promoted |
 
 ### Sequencing — and why S6a ships before Friday regardless
 
