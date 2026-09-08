@@ -1,8 +1,8 @@
 # Weekly newsletter — acquisition funnel repair
 
-**STATUS:** IN PROGRESS — S1 DONE (`8836380`), S2+S3 DONE (`6a8d4ec`), RSS decision CLOSED (leave as-is),
-all 2026-09-08; **only S1x remains, blocked on a real send measurement** | staging=n/a (scripts repo) |
-prod=n/a (publishes at the Fri 2026-09-11 import) | findings=none (feature build)
+**STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S1's mechanism done (`8836380`) but its DESTINATION
+is SUPERSEDED — see § 2a S6**; S6 SCOPED, not started; S1x open, blocked on a real send measurement |
+staging=n/a (scripts repo) | prod=n/a (publishes at the Fri 2026-09-11 import) | findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
@@ -62,7 +62,12 @@ locked; the email simply rarely points at it.
 All three are edits to `build-pull-feed.js` in the scripts repo. Nothing here touches the PULLLIST
 web app, its schema, its Edge Functions, or either Supabase project's data.
 
-### S1 — cover links point at the app, not the distributor CDN — ✅ DONE 2026-09-08
+### S1 — cover links point at the app, not the distributor CDN — ✅ DONE 2026-09-08, ⚠️ DESTINATION SUPERSEDED BY S6
+
+> **Read § 2a S6 before acting on this section.** S1's *mechanism* stands — the tuple append,
+> the helper, the two changed builders. Its *destination* is wrong, and was measured wrong the
+> next hour: `catalog.html` is month-scoped and **cannot contain a single title in the
+> newsletter** (0 of 68). S6 replaces the destination; nothing here needs reverting first.
 
 **Shipped:** scripts repo `main` `8836380`, pushed and verified on `origin/main`. Six functional
 lines plus comment; `build-pull-feed.js` only.
@@ -251,6 +256,131 @@ S1 adds `?ref=&c=` params to every cover link, costing roughly **+1.5–2 KB**.
 **So S1 must land together with a size reduction.** Recommended: cap the grid at a curated subset
 per issue — the count is Rick's call, and fewer, larger covers also tightens the pitch. A hard
 assertion on the built file's size is gate V4 below.
+
+---
+
+## 2a. S6 — cover links drive series SUBSCRIPTION (supersedes S1's destination)
+
+**STATUS: SCOPED 2026-09-08, not started.** Rick's idea, and better than any of the three options
+this plan had reached on its own. **Rick's instruction: covers with no series are left unlinked.**
+
+### Why S1's destination was wrong — measured, not argued
+
+| Check | Result |
+|---|---|
+| This week's 68 arriving titles, by `catalog_month` | **2026-07: 55, 2026-06: 9, no catalog row: 4** |
+| Current catalog month (`catalog.html` hard-scopes to it, `:634`) | **2026-09** |
+| **Findable in `catalog.html`** | **0 of 68** |
+
+The two surfaces are **disjoint by design**: the newsletter is `weekly_shipment` — what *arrives*
+Wednesday, solicited two to three months ago — while the catalog is what you can *order now*, for
+delivery in two months. A comic landing this week was ordered in July; the catalog is showing
+November. They never overlap.
+
+`arrivals.html` was the obvious next guess, and Rick rejected it correctly: it renders the same
+`weekly_shipment` week the email already shows, so the click returns the reader to a list of the
+covers they just looked at. **No new information — the click is meaningless.**
+
+There is also no cheap third option: `catalog` and `weekly_shipment` are **both anon-denied**
+(`42501 permission denied`, measured), so no public title page exists to land on without new DB work.
+
+### Why subscribe is the right action
+
+**Nothing in this newsletter can be ordered** — every title is past its FOC and already on the truck.
+But *"I like this, get it for me every month from now on"* fits perfectly, and it is the app's core
+loop (subscribe → the import auto-reserves standard covers each month).
+
+It is also a far stronger signup pitch. *"Create a free account and never miss Teenage Mutant Ninja
+Turtles"* beats *"create an account to browse a catalog"* — concrete intent, worth the friction.
+
+**And it works for the exact reason the catalog did not.** `searchSeries()`
+(`subscriptions.html:836-851`) queries `catalog` with **no `catalog_month` filter**, deliberately —
+its own comment reads *"standard covers only across all catalog months"*. A June or July series is
+findable today.
+
+| Evidence | Result |
+|---|---|
+| Covers carrying a `series_name` | **58 of 68 (85%)** |
+| Distinct series behind them | **30** — so subscribe-per-series is the meaningful unit, not per-cover |
+| Series with a standard cover in the shipment | 29 of 30 |
+| Series search month-scoped? | **No** |
+| `Subscriptions.subscribe(userId, seriesName, distributor)` | already exists |
+| Search panel already renders Subscribe buttons | yes (`subscriptions.html:~910`) |
+
+**The 10 unlinked titles are semantically correct, not a compromise.** They are *Star Trek: 60th
+Anniversary Special* (4 variants), *Star Trek: Deviations* (2), an *Archie vs the Terminator* ashcan
+promo, a *Magic: The Gathering* one-shot, and two *Gunslinger Spawn* rows whose catalog row is
+missing. **One-shots and specials have no next issue to subscribe to.**
+
+### S6a — producer (scripts repo, `build-pull-feed.js`)
+
+**One query, verified live against production (HTTP 200, 58/68 populated):**
+
+```
+select=title,cover_url,item_code,upc,catalog:catalog_id(series_name,distributor,variant_type)
+```
+
+- `row[2]` **becomes `series_name`**, replacing S1's `item_code || upc` key. Nothing else reads
+  row[2], and carrying a dead key is worse than repurposing one. Same append-not-reorder discipline
+  otherwise: rows [0] and [1] keep their meaning for all three builders.
+- Cover links become `subscriptions.html?ref=newsletter&amp;series=<url-encoded>`.
+- **No `series_name` → emit NO `<a>` at all.** The cover image and its title still render; they are
+  simply not clickable.
+
+**Decision taken: pass `series` only, not `distributor`.** The existing search dedupes by
+`series_name||distributor` and shows both if a series exists under both — the reader picks. Passing
+`d=` would need new filter logic in the page for a case that may never occur. Revisit if noisy.
+
+**Known imprecision, accepted:** the search is `ilike %q%`, a substring match, so a short series name
+surfaces its neighbours (a link for "Batman" also matches "Absolute Batman"). The results panel
+handles that legibly. Exact-match-when-deep-linked is a refinement, not a blocker.
+
+### S6b — `subscriptions.html` reads `?series=` (PULLLIST, staging → promotion)
+
+Roughly 8 lines: read the param, set `#search`.value, call the existing `searchSeries()`. The panel,
+the dedupe, the Subscribe buttons and the write path all already exist and stay untouched.
+
+### S6c — the return path (PULLLIST, the fiddly half)
+
+`initNav()` (`app.js:508-511`) redirects an unauthenticated visitor to `index.html` and **discards
+the URL**; `index.html` then hardcodes `window.location.href = 'catalog.html'` in **four** places
+after successful auth (`:601`, `:661`, `:807`, `:852`). A newcomer's intent must be stashed before
+the redirect and honoured at all four sites.
+
+**This is what makes the acquisition case work end to end** — sign up, and land on the series that
+made you sign up. It was not worth building when the destination was a catalog that could not show
+the title. It is worth building now.
+
+### What S6 does NOT do
+
+**It does not close S1x.** Link count drops 72 → 62 (58 cover + 4 non-cover), which helps modestly.
+Series names are longer than item codes, so the pre-rewrite file grows slightly while the
+post-rewrite total falls a little. **The cover cap still needs a real send measurement.**
+
+### Gates
+
+| Gate | Check |
+|---|---|
+| **W1** | `node --check` clean; `--local` build completes |
+| **W2** | Exactly **58** cover links, all to `subscriptions.html`, each carrying `ref=newsletter` and a URL-encoded `series` |
+| **W3** | Exactly **10** covers render with **no `<a>` wrapper**, and their image and title still render. Assert the count, so a builder that was missed shows up as a shortfall rather than passing silently |
+| **W4** | Every emitted `series` value traces back to a source row's `catalog.series_name` |
+| **W5** | Date-normalised diff vs a pre-change baseline: only href/anchor lines changed; `rss.xml` byte-identical |
+| **W6** | `npm test` still green (295/295) |
+| **W7** | **Layout check in a real browser** — an unlinked cover cell must sit correctly beside linked ones, desktop and mobile widths |
+| **W8** | S6b: a real click from the built email reaches `subscriptions.html` with the search prefilled and the right series listed |
+
+### Sequencing — and why S6a ships before Friday regardless
+
+**Doing nothing is the worst option.** Friday's import publishes whatever is in the scripts repo,
+and that is currently S1's catalog links — a destination that provably cannot show the title.
+
+**S6a alone is still an improvement** even before S6b is promoted: the param is inert, so a
+logged-in reader lands on the subscriptions page rather than the specific series. Topically right,
+not yet precise. A logged-out reader's path is unchanged either way (front door).
+
+Recommended: **S6a to the scripts repo before Friday; S6b and S6c to staging in parallel, promoted
+on their own merits.** If S6b lands first, better — but do not hold S6a for it.
 
 ---
 
