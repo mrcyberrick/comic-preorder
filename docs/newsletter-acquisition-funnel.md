@@ -1,7 +1,8 @@
 # Weekly newsletter — acquisition funnel repair
 
-**STATUS:** IN PROGRESS — S1 DONE 2026-09-08 (scripts repo `main` `8836380`, pushed); S1x pending a real
-measurement; S2/S3 not started | staging=n/a (scripts repo) | prod=n/a | findings=none (feature build)
+**STATUS:** IN PROGRESS — S1 DONE (`8836380`), S2+S3 DONE (`6a8d4ec`), RSS decision CLOSED (leave as-is),
+all 2026-09-08; **only S1x remains, blocked on a real send measurement** | staging=n/a (scripts repo) |
+prod=n/a (publishes at the Fri 2026-09-11 import) | findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
@@ -148,7 +149,28 @@ S1 is still worth shipping alone because it:
 Making the click land on *the comic itself* is **S4** (§ 3) — an app change, deliberately not
 smuggled into a scripts-only session.
 
-### S2 — rewrite the CTA for someone who has never used the app
+### S2 — rewrite the CTA for someone who has never used the app — ✅ DONE 2026-09-08 (`6a8d4ec`)
+
+**Direction chosen by Rick: free + low commitment.** Email now reads *Free — takes about a minute /
+We hold your books behind the counter / Know what arrives Wednesday*, button **START YOUR PULL LIST
+— FREE**, subtext *New here? Set it up online, pick up in store.*
+
+**⚠️ Found during the work, worse than the email and not in this plan: the BROWSER page's only call
+to action was "Ask Us About Online Reservations / Speak with a staff member today" plus a phone
+number — on a page whose entire job is app signup there was NO app link in the CTA block at all.**
+It now leads with **Create your free account**; the phone stays as a fallback, and the dismiss/
+re-open tab's matching old framing follows.
+
+**Its 5-feature explainer panel is deliberately unchanged** — that is feature description with its
+own paragraphs, not the acquisition ask, and a visitor reading the page is served by it. A first
+assertion wrongly demanded that copy be absent from both surfaces; **the code was right and the test
+was over-broad**, so the assertion was scoped rather than the code changed.
+
+**A second defect the gates caught:** an explanatory HTML comment sat *inside* a template literal,
+so it was being emitted into the published page — bytes shipped to every reader, on a message
+already near the clip line. Removed; rationale lives in the commit and here instead.
+
+#### Superseded plan text, kept for the record
 
 Two builders carry the promo block and must stay consistent: `buildEmailHtml()` (~lines 1404-1476)
 and `buildNewsletterHtml()` (~lines 984-1064).
@@ -160,7 +182,14 @@ button.
 
 Exact wording is Rick's call — this plan deliberately does not pre-write his shop's voice.
 
-### S3 — attribution, so a working campaign is distinguishable from a broken one
+### S3 — attribution — ✅ DONE 2026-09-08 (`6a8d4ec`)
+
+All four non-cover app links carry `ref=newsletter` plus a **placement**: `header`, `hero`, `cta`
+(email) and `web-cta` (browser page). Covers already carried `ref` from S1. **Zero untagged app
+links remain on either surface** — so the click report can separate "clicked the big red button"
+from "clicked the logo", which say very different things about the copy.
+
+#### Superseded plan text, kept for the record
 
 Append `?ref=newsletter` to all app links (the 3 existing plus the 65 from S1).
 
