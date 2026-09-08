@@ -94,6 +94,13 @@ now. Nothing is lost by deciding it later; changing it is a one-line follow-up.
 | **V4** | **NOT met — see S1x below. Deliberately not guessed.** |
 | **V7** | **Owed — Rick's step. Deferred by decision to after the Fri 2026-09-11 import** (§ 5a), when the new links are live and the page can be checked as published rather than as a local build. |
 
+#### Superseded plan text, kept for the record
+
+**⚠️ Read the DONE note above, not this.** What follows is the pre-execution plan; two of its
+specifics were measured wrong and corrected during the work — the key is `item_code || upc` (not
+`item_code`), and the separator is `&amp;` (not a bare `&`). The RSS row's "Rick's call" is now
+**closed: leave as-is.**
+
 **The data is already there.** `weekly_shipment` carries `item_code`, `upc` and `catalog_id` (read
 live from production 2026-09-08). `fetchWeekRows()` simply does not select them:
 
