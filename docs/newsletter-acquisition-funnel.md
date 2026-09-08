@@ -1,8 +1,9 @@
 # Weekly newsletter — acquisition funnel repair
 
-**STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S1's mechanism done (`8836380`) but its DESTINATION
-is SUPERSEDED — see § 2a S6**; S6 SCOPED, not started; S1x open, blocked on a real send measurement |
-staging=n/a (scripts repo) | prod=n/a (publishes at the Fri 2026-09-11 import) | findings=none (feature build)
+**STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S6a DONE (`f0189a8`)**, superseding S1's destination;
+**S6b DONE ON STAGING (`68e3144`)**; S6c not started; S1x open |
+staging=2026-09-08 (S6b) | prod=NOT PROMOTED — S6a publishes at the Fri 2026-09-11 import; S6b needs an
+explicit promotion request | findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
@@ -335,10 +336,41 @@ select=title,cover_url,item_code,upc,catalog:catalog_id(series_name,distributor,
 surfaces its neighbours (a link for "Batman" also matches "Absolute Batman"). The results panel
 handles that legibly. Exact-match-when-deep-linked is a refinement, not a blocker.
 
-### S6b — `subscriptions.html` reads `?series=` (PULLLIST, staging → promotion)
+### S6b — `subscriptions.html` reads `?series=` — ✅ DONE ON STAGING 2026-09-08 (`68e3144`)
 
-Roughly 8 lines: read the param, set `#search`.value, call the existing `searchSeries()`. The panel,
-the dedupe, the Subscribe buttons and the write path all already exist and stay untouched.
+28 lines: read the param, set `#search`.value, call the existing `searchSeries()`. The panel, the
+dedupe, the Subscribe buttons and the write path are all untouched, so a deep-linked result and a
+typed one cannot diverge. **Honours `isBlocked`** — a pending or paused account already has its
+search input disabled, and the deep link does not route around that gate. `ref` is deliberately not
+read: any source may deep link, and the value exists only for the click report.
+
+**Live and testable now:**
+`https://staging.pulllist.pages.dev/subscriptions.html?ref=newsletter&series=Absolute%20Batman`
+
+**Gates — `playwright/s6b-series-deeplink-verify.mjs`, 11/11**, local-only, driving the deployed
+staging bytes with a real browser (password grant + `addInitScript`, not a magic link — F107):
+
+| Gate | Result |
+|---|---|
+| V1 | Search prefilled, panel displayed, series listed, Subscribe button offered |
+| **V2** | The series lives **only** in older catalog months — the direct proof `catalog.html` could never have served this |
+| V3 | Negative control — no param, search stays empty and panel hidden |
+| V4 | Clicking Subscribe **wrote the row**, correct `user_id` and series |
+| V5 | Unknown series → "No series found", not a broken page |
+| V6 | Zero console errors across four page loads |
+| V7 | Teardown clean — zero orphaned auth users, confirmed by a fresh read (F130's own failure mode) |
+
+**Full regression: 146 passed, 0 failed, exit 0, 24.9 min**, run directly against the deployed
+staging bytes post-push (not through `run-smoke.ps1` — 2026-08-30 note), after confirming the new
+bytes were served on the **plain** URL.
+
+**⚠️ V2 failed on the first run, and the fixture was wrong rather than the code.** The first pick,
+*Absolute Green Lantern*, is an ongoing series present in **every** month including the current one,
+so it discriminated nothing. Re-keyed to *Absolute Batman* (2026-05 → 08, absent from 2026-09).
+
+That failure forced a measurement worth keeping: **1,470 of staging's 3,287 series (45%) are absent
+from the current catalog month.** That is the scale of what the catalog destination could never have
+shown, and it is now recorded in the harness.
 
 ### S6c — the return path (PULLLIST, the fiddly half)
 
