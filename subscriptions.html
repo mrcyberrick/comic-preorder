@@ -943,6 +943,34 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
     }
   });
 
+  // ── S6b — ?series= deep link from the weekly newsletter ────────────────
+  // Each cover in the weekly newsletter links here as
+  //   subscriptions.html?ref=newsletter&series=<series name>
+  // Why here and not the catalog: a title arriving this week cannot be
+  // ordered — it is past its FOC and already on the truck — but subscribing
+  // to its series is exactly the right action. catalog.html could not serve
+  // this at all: it hard-scopes to the current catalog_month, and the
+  // newsletter's titles were solicited two to three months earlier (measured
+  // 2026-09-08: 0 of that week's 68 arriving titles existed in the current
+  // month). searchSeries() has no month filter, so the series is findable.
+  //
+  // Deliberately drives the SAME searchSeries() path a typed query uses —
+  // no second query and no separate rendering, so the two cannot diverge.
+  // `ref` is not read: any source may deep link, and the value is only there
+  // for the click report.
+  const deepLinkSeries = new URLSearchParams(window.location.search).get('series');
+  if (deepLinkSeries) {
+    // isBlocked covers pending/paused accounts, whose search input is
+    // disabled above — honour that rather than routing around it.
+    if (isBlocked) {
+      searchInput.placeholder = BLOCKED_TITLE;
+    } else {
+      searchInput.value = deepLinkSeries;
+      await searchSeries(deepLinkSeries);
+      resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
   // Log page view — real customer sessions only
   if (!profile?.is_admin && !AdminContext.isActive()) {
     UsageEvents.pageView(user.id, 'subscriptions');
