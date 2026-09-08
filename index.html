@@ -598,7 +598,8 @@
   if (!hasInvite) {
     const session = await Auth.getSession();
     if (session) {
-      window.location.href = 'catalog.html';
+      // S6c — honour a stashed destination (already-signed-in visitor landing on index.html).
+      window.location.href = PostAuthRedirect.take('catalog.html');
       return;
     }
   }
@@ -658,7 +659,8 @@
       // No password setup needed — send them straight to catalog.
       if (type === 'magiclink') {
         history.replaceState(null, '', window.location.pathname);
-        window.location.href = 'catalog.html';
+        // S6c — honour a stashed destination (magic-link completion).
+        window.location.href = PostAuthRedirect.take('catalog.html');
         return;
       }
 
@@ -804,7 +806,8 @@
         document.getElementById('progress-bar').style.width = '100%';
       }, 50);
       setTimeout(() => {
-        window.location.href = 'catalog.html';
+        // S6c — honour a stashed destination (password-setup completion).
+        window.location.href = PostAuthRedirect.take('catalog.html');
       }, 2700);
     }
   }
@@ -849,7 +852,8 @@
       btnLogin.disabled    = false;
       btnLogin.textContent = 'Sign In';
     } else {
-      window.location.href = 'catalog.html';
+      // S6c — honour a stashed destination (email + password sign-in).
+      window.location.href = PostAuthRedirect.take('catalog.html');
     }
   }
 
