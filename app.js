@@ -201,6 +201,57 @@ const Branding = {
 };
 window.Branding = Branding;
 
+// ── Post-auth return path (S6c) ──────────────────────────────
+// initNav() redirects a signed-out visitor to index.html and, until 2026-09-08,
+// threw the requested URL away — there was no ?next=. So a newsletter or social
+// link carrying ?series= lost its intent at the sign-in wall, and the visitor
+// landed on the catalog having asked for something else entirely. Stash the
+// intended path on the way out, honour it after a successful sign-in.
+//
+// localStorage, NOT sessionStorage: a magic link opened from a mail client
+// frequently lands in a NEW tab, which starts with an empty sessionStorage and
+// would silently lose the intent — the exact failure this exists to fix.
+//
+// Only pathname+search is stored, and `take()` refuses anything that is not a
+// same-origin absolute path, so this cannot become an open redirect no matter
+// what ends up in storage.
+//
+// Deliberately NOT extended to cover account creation. A brand-new signup lands
+// with status='pending' (register-customer:121) awaiting admin approval, and a
+// pending profile makes subscriptions.html's isBlocked true — which disables
+// the search input. Carrying the intent through a signup form, an email round
+// trip and an approval delay would deposit the newcomer on a page they cannot
+// act on. Rick's call, 2026-09-08: existing accounts get their link back, a new
+// visitor follows the standard onboarding process.
+const PostAuthRedirect = {
+  _key: 'pulllist.post_auth_redirect',
+  _ttlMs: 60 * 60 * 1000,   // 1h — a stale intent must never hijack a later login
+
+  stash(loc = window.location) {
+    try {
+      const path = (loc.pathname || '') + (loc.search || '');
+      // Never stash the sign-in page or the front door, or sign-in loops.
+      if (!loc.pathname || loc.pathname === '/' || /index\.html$/.test(loc.pathname)) return;
+      window.localStorage.setItem(this._key, JSON.stringify({ path, at: Date.now() }));
+    } catch { /* private mode / storage disabled — degrade to the fallback */ }
+  },
+
+  take(fallback = 'catalog.html') {
+    try {
+      const raw = window.localStorage.getItem(this._key);
+      window.localStorage.removeItem(this._key);   // one-shot, always cleared
+      if (!raw) return fallback;
+      const { path, at } = JSON.parse(raw);
+      if (!path || !at || Date.now() - at > this._ttlMs) return fallback;
+      // Same-origin absolute path only. Reject protocol-relative "//evil.com"
+      // and anything carrying a scheme.
+      if (!path.startsWith('/') || path.startsWith('//') || /^[a-z]+:/i.test(path)) return fallback;
+      return path;
+    } catch { return fallback; }
+  },
+};
+window.PostAuthRedirect = PostAuthRedirect;
+
 // ── Auth Helpers ─────────────────────────────────────────────
 const Auth = {
   async getSession() {
@@ -254,6 +305,8 @@ const Auth = {
     const user = await this.getUser();
     if (user) UsageEvents.logout(user.id);
     await db.auth.signOut();
+    // S6c — remember where they were headed before the sign-in wall.
+    PostAuthRedirect.stash();
     window.location.href = 'index.html';
   },
 };
