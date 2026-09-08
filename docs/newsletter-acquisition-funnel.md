@@ -1,9 +1,9 @@
 # Weekly newsletter — acquisition funnel repair
 
 **STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S6a DONE (`f0189a8`)**, superseding S1's destination;
-**S6b LIVE ON PRODUCTION (PR #151, merge `4548fc4`)**; **S6c DONE ON STAGING (`aaa6ca8`), not promoted**;
-S1x open | staging=2026-09-08 | prod=2026-09-08 (S6b only — S6a publishes at the Fri 2026-09-11 import) |
-findings=none (feature build)
+**S6b LIVE ON PRODUCTION (PR #151, `4548fc4`)**; **S6c LIVE ON PRODUCTION (PR #152, `1b2cc90`)**;
+**only S1x remains open** | staging=2026-09-08 | prod=2026-09-08 (S6b+S6c — S6a publishes at the
+Fri 2026-09-11 import) | findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
@@ -380,7 +380,7 @@ That failure forced a measurement worth keeping: **1,470 of staging's 3,287 seri
 from the current catalog month.** That is the scale of what the catalog destination could never have
 shown, and it is now recorded in the harness.
 
-### S6c — the return path — ✅ DONE ON STAGING 2026-09-08 (`aaa6ca8`)
+### S6c — the return path — ✅ LIVE ON PRODUCTION 2026-09-08 (PR #152, `1b2cc90`; staging `aaa6ca8`)
 
 `initNav()` redirected a signed-out visitor to `index.html` and **discarded the requested URL** —
 there was no `?next=` — so a newsletter or social link carrying `?series=` lost its intent at the

@@ -99,6 +99,85 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: PROMOTED TO PRODUCTION — newsletter S6c, the post-auth return path,
+2026-09-08 (PR #152, merge `1b2cc90`; staging `aaa6ca8`).** Rick's explicit `/promote-prod` request,
+later the same day as S6b. **`app.js` + `index.html`, +61/−4. No schema, no RLS, no Edge Function,
+no `config.js`.**
+
+**What shipped.** `initNav()` redirected a signed-out visitor to `index.html` and **discarded the
+requested URL** — there was no `?next=` — so a newsletter or social link carrying `?series=` lost its
+intent at the sign-in wall. A new **`PostAuthRedirect`** helper in `app.js` (one implementation,
+shared, so `initNav()` and `index.html` cannot drift) stashes the intended path; the **four** places
+`index.html` hardcoded `catalog.html` after successful auth now honour it. `localStorage`, **not**
+`sessionStorage` — a magic link opened from a mail client frequently lands in a *new tab*, which
+starts with an empty `sessionStorage` and would silently lose the intent, the exact failure this
+fixes.
+
+**⚠️ THE `merge=ours` DRIVER SILENTLY DROPPED `app.js`, AND IT WOULD HAVE BROKEN PRODUCTION SIGN-IN.**
+`.gitattributes` sets `app.js merge=ours`; a cherry-pick is a 3-way merge, so the driver kept `main`'s
+copy and discarded the entire helper. **The tell was the stat line, exactly as in PR #149** — staging
+`aaa6ca8` was *"2 files changed, 61 insertions"*, the pick landed *"1 file changed, 8 insertions"*.
+Uncorrected this ships `index.html` calling `PostAuthRedirect.take()` **four times against an
+undefined object** — a ReferenceError on the sign-in page. **That is worse than PR #149's silent
+no-op button**, and it is the second time this driver has bitten a cherry-pick promotion. Restored as
+its own visible commit (`7695f70`).
+
+**`git apply` then REFUSED, and the refusal was correct rather than an obstacle.** Staging's `app.js`
+carries **F72 S0's `Tier` helper, which `main` does not have**, so the hunk's context did not exist
+here — and taking staging's whole `app.js` would have dragged **F72 S0 to production**, unrequested.
+The block was instead lifted **verbatim from `origin/staging`** and inserted at `main`'s own
+equivalent anchor. **Proven, not assumed: the helper hashes `6339a8aa6edbe031` on `origin/staging`,
+on the promotion branch, AND in the bytes production serves** — production runs exactly the code the
+harness and suite exercised. No leakage: `window.Tier` ×**0**, `Tier.isPaid` ×**0**.
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves, and functionally in a real
+browser — which mattered here because the failure mode was a broken sign-in page.** Served bytes:
+`app.js` `const PostAuthRedirect` ×1, `window.PostAuthRedirect` ×1, `PostAuthRedirect.stash()` ×1;
+`index.html` `PostAuthRedirect.take` ×4 with **0** remaining hardcoded `href = 'catalog.html'`.
+`config.js` prod ref ×1, staging ref ×**0**. **Real-browser check on production, no account created:**
+`typeof window.PostAuthRedirect` is `object`, `stash`/`take` are both functions, **a poisoned
+`//evil.example.com/` stash was rejected by live production code** (returned `catalog.html`), and
+**zero console/page errors** on both front doors. **`#email` is correctly invisible on the apex and
+visible on `rjbookstop.pulllist.app`** (`data-front-door` = `apex` vs `tenant`) — a first assertion
+called that a FAIL, and the assertion was wrong, not the code: the apex renders the platform
+marketing page by design.
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150/#151 record: the
+diff never touches the customer reserve path. The meaningful check here was the sign-in page, done
+above. **Rick confirmed the flow himself on staging before merging: *"Links works as expected."***
+
+**Staging verification that earned it.** `playwright/s6c-post-auth-return-verify.mjs` **11/11** in a
+real browser against deployed staging bytes — the intent stashed and restored, the stash **one-shot**,
+a **2h-old stash ignored** (1h TTL), **three open-redirect payloads rejected**
+(`//evil.example.com/`, `https://evil.example.com/`, `javascript:alert(1)`), a **regression guard**
+that a login with no stash still lands on `catalog.html`, and teardown with zero orphaned auth users.
+**V2a was negative-control tested** — inverted to the pre-S6c expectation and confirmed to go red.
+**Full Playwright suite 146 passed, 0 failed, exit 0, 23.6 min**, which is the evidence that matters
+since `initNav()` runs on every nav page.
+
+**⚠️ Account creation is deliberately NOT covered, and the code is why.** A new signup lands
+`status='pending'` (`register-customer:121`) awaiting approval, and a pending profile makes
+`subscriptions.html`'s `isBlocked` true (`:405-407`), which **disables the search input**. Carrying
+intent through a signup form, an email round trip and an approval delay would deposit the newcomer on
+a page they cannot act on. **Rick's call, 2026-09-08:** existing accounts get their link back; a new
+visitor follows the standard onboarding process.
+
+**The funnel is now complete on production for signed-in AND signed-out customers with accounts.**
+Remaining: **S6a**, the producer half that emits the links, is in the **scripts repo** (`main`
+`f0189a8`) and publishes at the next shipment import, expected **Fri 2026-09-11** — until then the
+live newsletter still carries the old links. **S1x** (the cover cap) stays open, still needing a real
+send measurement.
+
+**These links are now a social-media tool too** (Rick's observation): `?series=` is shareable, but
+**use the tenant hostname** — `rjbookstop.pulllist.app/subscriptions.html?series=…` — because a bare
+apex link resolves no tenant slug and renders the platform marketing page instead of the branded
+sign-in, measured above.
+
+**No finding ID consumed (feature build, not a defect).** Discarding the URL at the sign-in wall was
+not miscalculating or hiding anything; this is different behaviour, wanted for the acquisition goal
+Rick stated 2026-09-08. Plan doc: `docs/newsletter-acquisition-funnel.md`. **F158 remains the next
+free finding ID.**
+
 **Last completed work: PROMOTED TO PRODUCTION — newsletter S6b, the `?series=` deep link,
 2026-09-08 (PR #151, merge `4548fc4`; staging `68e3144`, cherry-pick `ead8df9`).** Rick's explicit
 `/promote-prod` request. **One file, `subscriptions.html`, +28/−0. No schema, no RLS, no Edge
