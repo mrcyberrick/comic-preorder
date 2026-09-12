@@ -78,8 +78,53 @@
       list-style: none;
     }
     .ofu-details > summary::-webkit-details-marker { display: none; }
-    .ofu-details > summary::before { content: 'B8'; font-size: 0.7rem; }
-    .ofu-details[open] > summary::before { content: 'BE'; }
+    /* Disclosure triangles, written as LITERAL characters on purpose.
+       These rendered as an unprintable box followed by the text "B8" / "BE"
+       from whenever they were written until 2026-09-12. The source wanted the
+       CSS escapes \25B8 / \25BE; something on the way in read \25 as a legacy
+       OCTAL escape, and octal 25 is 0x15 - the NAK control character - leaving
+       a control char plus the literal characters "B8". Same class as the
+       \00b7 print-CTA bug caught pre-deploy on 2026-08-27, but this one shipped.
+       A literal glyph has no backslash to misread, and this file already
+       carries plenty of them. */
+    .ofu-details > summary::before { content: '▸'; font-size: 0.7rem; }
+    .ofu-details[open] > summary::before { content: '▾'; }
+
+    /* Bounded by scroll, exactly as .ofu-never-scroll is and for the same
+       reason: these rows carry the Approve / Decline decision, so hiding all
+       but the first N would put a real action behind an invisible boundary. */
+    .pending-acct-scroll {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 260px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    /* Secondary count badge on the Customers tabs (Rick, 2026-09-12).
+       Deliberately MUTED, not accent. The only badge that ever sat on this
+       strip was the amber pending count, and that is now a Follow-Up panel -
+       so nothing up here should read as "act on me" any more. These are
+       totals you glance at, not alerts.
+       Hidden while the count is UNKNOWN, shown when it is a measured 0. Those
+       are different claims and .is-set is what keeps them apart: an absent
+       badge that meant zero would let an unloaded tab assert it is empty,
+       which is the F96/F115 shape. */
+    .tab-count {
+      display: none;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.68rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      vertical-align: middle;
+    }
+    .tab-count.is-set { display: inline-block; }
+    .admin-tab.active .tab-count { color: var(--text-primary); }
     .ofu-details > summary:hover { text-decoration: underline; }
 
     @media (max-width: 640px) {
@@ -221,7 +266,8 @@
        they looked authoritative, not because a decision depended on them.
        Relabelling them ("Copies", + a scope caption) was tried on 2026-08-07
        and treated the symptom; this removes the cause. The pending COUNT is not
-       lost — the Pending tab badge still carries it.
+       lost — it moved to the Pending Accounts Follow-Up panel (2026-09-12),
+       which carries the three actions as well as the number.
        The .stats-bar / .stat CSS deliberately STAYS in style.css: it is shared
        with arrivals, catalog, mylist and subscriptions.
        See docs/admin-dashboard-process-map.md § 5.5 W1 and § 5.7.1. -->
@@ -241,6 +287,20 @@
     <button class="admin-mode"        data-mode="bagging"   role="tab" aria-selected="false">Bagging<span class="admin-mode-sub">weekly</span></button>
     <button class="admin-mode"        data-mode="ordering"  role="tab" aria-selected="false">Ordering<span class="admin-mode-sub">monthly</span></button>
   </div>
+
+  <!-- Pending Accounts Panel (Rick, 2026-09-12) — first of the three Follow-Up
+       panels, and a sibling of the other two in every mechanical respect:
+       data-chrome routes it to Customers mode, and it owns its OWN inline
+       display so it can hide itself when empty. Those two mechanisms must stay
+       independent — see applyMode()'s note on the bug that caused.
+
+       FIRST in the stack on purpose. It is the smallest of the three — usually
+       zero rows, at most a handful — so it costs almost nothing above Order
+       Follow-Up, and it is the only one where a person, not a title, is
+       waiting. Its predecessor was a red count on a tab you had to already be
+       looking at, which is the opposite arrangement. -->
+  <div id="pending-accounts-panel" data-chrome="customers" style="display:none;margin-bottom:20px;padding:14px 16px;
+       border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius-lg);background:var(--bg-card)"></div>
 
   <!-- Backorder Risk Panel (F101 § 4.5) — hidden when empty, tab-independent -->
   <div id="backorder-risk-panel" data-chrome="customers" style="display:none;margin-bottom:20px;padding:14px 16px;
@@ -275,14 +335,24 @@
 
   <!-- Tabs — filtered to the active mode by applyMode() -->
   <div class="admin-tabs">
-    <button class="admin-tab active" data-tab="by-customer" data-mode="customers">Pull Lists</button>
+    <!-- Secondary count badges (Rick, 2026-09-12). Each states its own tab's
+         TOTAL and never the filtered or searched subset — a number that
+         silently narrows while still looking like a total is the F121 defect,
+         and a fix for F121 must not reintroduce it. See setTabCount(). -->
+    <button class="admin-tab active" data-tab="by-customer" data-mode="customers">Pull Lists<span class="tab-count" id="count-pull-lists" title="Customers holding a reservation this catalog month"></span></button>
     <!-- Accounts replaces BOTH the Pending and Paper Customers tabs (2026-08-09).
          Those were two filtered views of one table, and between them they still
          could not show an ordinary active customer with nothing reserved this
          month — 10 of 25 profiles on staging had no surface anywhere. One list,
-         with those two as filters over it. -->
-    <button class="admin-tab" data-tab="accounts" data-mode="customers" id="tab-btn-accounts">Accounts <span id="pending-badge" style="display:none;background:var(--accent);color:#fff;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle"></span></button>
-    <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions</button>
+         with those two as filters over it.
+         The amber #pending-badge that used to hang here was RETIRED 2026-09-12
+         (Rick). A count is not an action, and that one sat on a tab you had to
+         be looking at already; pending approvals now have their own Follow-Up
+         panel with Approve / Decline / Hide. The number survives in three
+         places — that panel, this tab's own summary line, and the Pending
+         filter — so nothing was lost by dropping the badge. -->
+    <button class="admin-tab" data-tab="accounts" data-mode="customers" id="tab-btn-accounts">Accounts<span class="tab-count" id="count-accounts" title="Every account in this tenant"></span></button>
+    <button class="admin-tab" data-tab="subscriptions" data-mode="customers">Subscriptions<span class="tab-count" id="count-subscriptions" title="Series subscriptions across all customers"></span></button>
     <button class="admin-tab" data-tab="this-week" data-mode="bagging">This Week</button>
     <button class="admin-tab" data-tab="by-distributor" data-mode="ordering">All Orders</button>
     <button class="admin-tab" data-tab="paper-orders" data-mode="ordering">Paper Orders</button>
@@ -1514,6 +1584,61 @@
 
   const FOC_DOT_DAYS = 7;          // Rick 2026-08-08 — "act now" horizon for the Ordering dot
   let pendingCount   = null;       // null = not loaded yet, deliberately not 0
+  // Pending minus the ones this admin has hidden from the Follow-Up panel.
+  // Kept separate from pendingCount because they answer different questions:
+  // the Accounts tab still states every pending account, while the panel and
+  // the attention dot speak only for what has not been dismissed. Same
+  // null-means-not-known rule as above.
+  let pendingVisibleCount = null;
+
+  // ── Secondary tab counts (Rick, 2026-09-12) ────────────────
+  // Each badge states its tab's TOTAL. Never a filtered or searched subset:
+  // the Pull Lists count is taken before renderByCustomer() applies its search,
+  // and Accounts uses accounts.length rather than the filtered rows. A number
+  // that silently narrows while still looking like a total is the whole of
+  // F121, and these badges sit on the very tab strip that finding rebuilt.
+  //
+  // null means NOT KNOWN YET and renders as no badge at all; 0 means a measured
+  // zero and renders as "0". Collapsing those two would let an unloaded tab
+  // claim to be empty, which is the F96/F115 shape.
+  function setTabCount(elId, n) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (typeof n !== 'number' || Number.isNaN(n)) {
+      el.textContent = '';
+      el.classList.remove('is-set');
+      return;
+    }
+    el.textContent = String(n);
+    el.classList.add('is-set');
+  }
+
+  // ── Hidden pending accounts (Rick, 2026-09-12) ─────────────
+  // Per-admin, per-browser dismissal for the Pending Accounts panel.
+  // localStorage and NOT a column, deliberately: this is one operator's view
+  // state, not a fact about the customer, and it must never be mistakeable for
+  // a decision. The account stays `pending` and stays fully actionable on the
+  // Accounts tab; nothing server-side can tell that Hide was ever pressed.
+  //
+  // Tenant-scoped key, because one browser can legitimately administer two.
+  // Every access is wrapped: storage throws outright in some privacy modes, and
+  // a dead panel is a far worse outcome than a forgotten dismissal.
+  function pendingHiddenKey() {
+    let t = '';
+    try { t = TenantContext.current()?.id || ''; } catch (_) { /* not resolved yet */ }
+    return `pulllist.pendingHidden.${t}`;
+  }
+  function readHiddenPending() {
+    try {
+      const raw = localStorage.getItem(pendingHiddenKey());
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (_) { return new Set(); }
+  }
+  function writeHiddenPending(set) {
+    try { localStorage.setItem(pendingHiddenKey(), JSON.stringify([...set])); }
+    catch (_) { /* non-fatal — the panel just keeps showing the row */ }
+  }
 
   // ── Attention dots ─────────────────────────────────────────
   // One dot per mode: "there is something in here for you". Two levels only —
@@ -1554,7 +1679,11 @@
     let level = null;
     const raise = (l) => { if (l === 'alert' || !level) level = (l === 'alert' ? 'alert' : (level || 'warn')); };
 
-    if (typeof pendingCount === 'number' && pendingCount > 0) raise('warn');
+    // Hidden pending accounts deliberately do NOT light the dot — that is what
+    // Hide means, and a dismissal that still nags is not a dismissal. They are
+    // not lost: the panel keeps a standing "N hidden — Show" line for as long
+    // as any are, and the Accounts tab lists them as Pending regardless.
+    if (typeof pendingVisibleCount === 'number' && pendingVisibleCount > 0) raise('warn');
 
     if (fullDataLoaded) {
       const risk = computeBackorderRisk();
@@ -1643,8 +1772,8 @@
     if (tab === 'subscriptions')   loadSubscriptions();
     if (tab === 'paper-orders')    initPaperOrdersTab();
     // 'accounts' is deliberately absent: ensureAccounts() runs eagerly at init
-    // so the pending badge and the attention dot are right on arrival, not only
-    // after the tab is opened.
+    // so the Accounts count badge, the Pending Accounts panel and the attention
+    // dot are right on arrival, not only after the tab is opened.
     // by-customer and by-distributor are rendered by loadData() already.
   }
 
@@ -2170,6 +2299,13 @@
         otherMonth[key] = (otherMonth[key] || 0) + 1;
       });
     }
+
+    // Unfiltered on purpose — see setTabCount(). fullTotals was built from
+    // allPreorders BEFORE the search narrowed `grouped`, so this counts
+    // "customers with a reservation this month", not "customers matching what
+    // you just typed". Setting it from `grouped` would make the badge move as
+    // you type while still reading as a total.
+    setTabCount('count-pull-lists', Object.keys(fullTotals).length);
 
     const container = document.getElementById('customer-groups');
     if (!Object.keys(grouped).length) {
@@ -4043,8 +4179,12 @@
     const container = document.getElementById('subscriptions-list');
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load subscriptions: ${escapeHtml(error.message)}</div>`;
-      return;
+      return;   // count left untouched: a failed read knows nothing, including zero
     }
+    // Authoritative once the tab has genuinely loaded; supersedes the cheap head
+    // count taken at page load. Counts SUBSCRIPTIONS rather than series rows, so
+    // it reconciles with the sum of the table's own Count column below.
+    setTabCount('count-subscriptions', items.length);
     if (!items.length) {
       container.innerHTML = `<div class="empty-state"><h3>No subscriptions yet</h3><p>Customers can subscribe to series from the catalog item detail view.</p></div>`;
       return;
@@ -4075,6 +4215,24 @@
     const container = document.getElementById('subscriptions-list');
     if (!container.querySelector('table')) loadSubscriptions();
   });
+
+  // Eager, cheap and head-only, so the Subscriptions badge is right on arrival
+  // without paying for the tab's full fetch. RLS scopes it to this tenant —
+  // the same boundary getAllAdmin() relies on — so the two agree, and
+  // loadSubscriptions() overwrites it with the real figure on first open.
+  (async () => {
+    try {
+      const { count, error } = await db
+        .from('subscriptions')
+        .select('id', { count: 'exact', head: true });
+      if (error) throw error;
+      if (typeof count === 'number') setTabCount('count-subscriptions', count);
+    } catch (err) {
+      // Non-fatal by design. No badge is an honest "not known" and the tab
+      // itself still works; rendering 0 here would be a guess dressed as a fact.
+      console.warn('subscription count unavailable — badge omitted', err);
+    }
+  })();
 
 
 
@@ -4131,14 +4289,24 @@
       console.warn('get_account_activity unavailable — Last seen will read "unknown"', err);
     }
 
-    // The badge and the Customers attention dot both count pending approvals.
-    // Derived from this one fetch now, so there is a single source for it.
-    pendingCount = accounts.filter(u => u.status === 'pending').length;
-    const badge  = document.getElementById('pending-badge');
-    if (badge) {
-      badge.textContent   = pendingCount;
-      badge.style.display = pendingCount > 0 ? 'inline' : 'none';
-    }
+    // The Follow-Up panel and the Customers attention dot both count pending
+    // approvals, and both derive from this one fetch so there is a single
+    // source for the number.
+    const pendingIds = accounts.filter(u => u.status === 'pending').map(u => u.id);
+    pendingCount = pendingIds.length;
+
+    // Prune the hidden set against what is pending RIGHT NOW. Without this it
+    // grows without bound, and an account that somehow returned to pending
+    // would stay invisible on the strength of a dismissal aimed at a different
+    // decision. Approve and Decline therefore need no cleanup of their own.
+    const livePending = new Set(pendingIds);
+    const hidden      = readHiddenPending();
+    let pruned = false;
+    hidden.forEach(id => { if (!livePending.has(id)) { hidden.delete(id); pruned = true; } });
+    if (pruned) writeHiddenPending(hidden);
+    pendingVisibleCount = pendingIds.filter(id => !hidden.has(id)).length;
+
+    setTabCount('count-accounts', accounts.length);
     updateModeDots();
   }
 
@@ -4398,46 +4566,11 @@
     });
 
     container.querySelectorAll('.acct-approve').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const { id, name } = btn.dataset;
-        if (!confirm(`Approve ${name} and send them an invitation email?`)) return;
-        btn.disabled = true; btn.textContent = 'Approving…';
-
-        const { data: sessionData } = await db.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) { toast('Session expired — please sign out and back in', 'error'); btn.disabled = false; btn.textContent = '✓ Approve'; return; }
-
-        const { error } = await Users.approve(id, token);
-        if (error) {
-          toast(`Failed to approve: ${error}`, 'error');
-          btn.disabled = false; btn.textContent = '✓ Approve';
-          return;
-        }
-        toast(`${name} approved — invitation email sent`);
-        await ensureAccounts({ force: true });
-        renderAccounts();
-      });
+      btn.addEventListener('click', () => approveAccount(btn));
     });
 
     container.querySelectorAll('.acct-decline').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const { id, name } = btn.dataset;
-        if (!confirm(`Decline and remove ${name}'s account? This cannot be undone.`)) return;
-        btn.disabled = true; btn.textContent = 'Removing…';
-
-        const { error } = await Users.deleteProfile(id);
-        if (error) {
-          // F10: the preorders FK is ON DELETE NO ACTION, so this fails loudly
-          // and deliberately if the customer already holds reservations. That
-          // is a guard, not a bug — say so rather than showing a raw 409.
-          toast(`Could not remove ${name}: ${error.message}`, 'error');
-          btn.disabled = false; btn.textContent = '✕ Decline';
-          return;
-        }
-        toast(`${name}'s request removed`);
-        await ensureAccounts({ force: true });
-        renderAccounts();
-      });
+      btn.addEventListener('click', () => declineAccount(btn));
     });
 
     // Pause / Resume. Writes an already-legal `status` value; no schema change.
@@ -4504,15 +4637,196 @@
     });
   }
 
-  // Eager, so the pending badge and the Customers attention dot are correct on
-  // arrival rather than only after the tab is opened. Same reason the old
-  // loadPendingAccounts() ran eagerly.
-  ensureAccounts().then(renderAccounts);
+  // ── Approve / Decline — ONE implementation, TWO surfaces ──────────────
+  // The Accounts-tab row and the Pending Accounts Follow-Up panel both offer
+  // these, and they must not drift. On decline the confirm WORDING is the
+  // safeguard — it deletes a profile and says so — and two copies of a
+  // safeguard is one copy of a safeguard. Same reasoning as the single
+  // recordSupplierRejection() writer (F143/F156).
+  //
+  // The button is disabled and relabelled in place, and its ORIGINAL label is
+  // captured and restored on the error path rather than hardcoded — the panel
+  // says "Approve", the table says "✓ Approve", and neither surface has to
+  // know the other's wording. (Hardcoding it is the bug F156 fixed in
+  // wireArrivalRejectActions().)
+  async function approveAccount(btn) {
+    const { id, name } = btn.dataset;
+    if (!confirm(`Approve ${name} and send them an invitation email?`)) return;
+    const original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Approving…';
 
-  document.getElementById('btn-refresh-accounts').addEventListener('click', async () => {
+    const { data: sessionData } = await db.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) {
+      toast('Session expired — please sign out and back in', 'error');
+      btn.disabled = false; btn.textContent = original;
+      return;
+    }
+
+    const { error } = await Users.approve(id, token);
+    if (error) {
+      toast(`Failed to approve: ${error}`, 'error');
+      btn.disabled = false; btn.textContent = original;
+      return;
+    }
+    toast(`${name} approved — invitation email sent`);
+    await refreshAccountSurfaces();
+  }
+
+  async function declineAccount(btn) {
+    const { id, name } = btn.dataset;
+    if (!confirm(`Decline and remove ${name}'s account? This cannot be undone.`)) return;
+    const original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Removing…';
+
+    const { error } = await Users.deleteProfile(id);
+    if (error) {
+      // F10: the preorders FK is ON DELETE NO ACTION, so this fails loudly
+      // and deliberately if the customer already holds reservations. That
+      // is a guard, not a bug — say so rather than showing a raw 409.
+      toast(`Could not remove ${name}: ${error.message}`, 'error');
+      btn.disabled = false; btn.textContent = original;
+      return;
+    }
+    toast(`${name}'s request removed`);
+    await refreshAccountSurfaces();
+  }
+
+  // Both surfaces RE-READ rather than patching their own DOM. The Accounts tab
+  // already did this deliberately (2026-08-09): optimistic removal reported
+  // success even when the write had not landed. ensureAccounts() recomputes the
+  // counts and the attention dot, so nothing else needs poking.
+  async function refreshAccountSurfaces() {
     await ensureAccounts({ force: true });
     renderAccounts();
-  });
+    renderPendingAccountsPanel();
+  }
+
+  // ── Pending Accounts panel (Rick, 2026-09-12) ─────────────────────────
+  // Pending approvals used to be a red count on the Accounts tab. A count is
+  // not an action, and that one sat on a tab you had to be looking at already;
+  // the three things it implies now live where every other "something is
+  // waiting for you" already surfaces, beside Order Follow-Up.
+  //
+  // Approve and Decline are the SAME writers the Accounts tab uses. Hide is
+  // view state only — see readHiddenPending().
+  function renderPendingAccountsPanel() {
+    const panel = document.getElementById('pending-accounts-panel');
+    if (!panel) return;
+
+    // Not loaded says nothing, so say nothing. An empty panel here would assert
+    // "nobody is waiting", which is precisely the claim that cannot be made
+    // before the fetch lands — and ensureAccounts() leaves accountsLoaded false
+    // on error, so a failed read lands here too rather than reading as calm.
+    if (!accountsLoaded) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+
+    const hidden  = readHiddenPending();
+    const pending = accounts.filter(u => u.status === 'pending');
+    const shown   = pending.filter(u => !hidden.has(u.id));
+    const nHidden = pending.length - shown.length;
+
+    if (!pending.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+    panel.style.display = '';
+
+    const rows = shown.map(u => {
+      const name  = escapeHtml(u.full_name || '—');
+      // Paper customers carry a synthetic address; showing it would be noise
+      // dressed as contact detail. Same treatment as the Accounts table.
+      const email = (u.email || '').endsWith('@paper.pulllist.local')
+        ? '<span style="color:var(--text-muted)">— no email —</span>'
+        : escapeHtml(u.email || '—');
+      return `
+        <div class="pending-acct-row" id="pending-acct-${u.id}" style="padding:10px 12px;
+             border-radius:var(--radius);background:rgba(245,158,11,0.08);
+             border:1px solid rgba(245,158,11,0.3)">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                ${name}
+                <span style="font-weight:400;color:var(--text-muted);font-size:0.75rem">${email}</span>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text-muted)">
+                Requested ${formatDate(u.created_at?.split('T')[0])}${u.phone ? ` · ${escapeHtml(u.phone)}` : ''}
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn btn-primary btn-sm acct-approve" data-id="${u.id}" data-name="${name}"
+                      style="font-size:0.68rem;padding:3px 10px">Approve</button>
+              <button type="button" class="btn btn-danger btn-sm acct-decline" data-id="${u.id}" data-name="${name}"
+                      style="font-size:0.68rem;padding:3px 10px">Decline</button>
+              <button type="button" class="btn btn-ghost btn-sm pending-hide-btn" data-id="${u.id}" data-name="${name}"
+                      style="font-size:0.68rem;padding:3px 10px;color:var(--text-muted)"
+                      title="Clears this row from the panel only. The account stays pending and stays on the Accounts tab.">Hide</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${shown.length ? '12px' : '0'};gap:10px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:0.95rem;font-family:var(--font-display);letter-spacing:0.03em;color:var(--warning)">
+          ⏳ Pending Accounts
+        </h3>
+        <span style="font-size:0.75rem;color:var(--text-muted)">${
+          shown.length ? `${shown.length} waiting for approval` : 'none showing'
+        }${nHidden ? ` · ${nHidden} hidden` : ''}</span>
+      </div>
+      ${shown.length ? `<div class="pending-acct-scroll">${rows}</div>` : ''}
+      ${nHidden ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:${shown.length ? '10px' : '0'}">
+        ${nHidden} hidden from this panel — still pending, still listed on the Accounts tab.
+        <button type="button" id="pending-unhide-btn" class="btn btn-ghost btn-sm"
+                style="font-size:0.68rem;padding:2px 8px;color:var(--accent)">Show ${nHidden === 1 ? 'it' : 'them'}</button>
+      </div>` : ''}
+      ${shown.length ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
+        Approve sends an invitation email · Decline deletes the request · Hide only clears it from here.
+      </div>` : ''}
+    `;
+
+    wirePendingPanelActions(panel);
+  }
+
+  function wirePendingPanelActions(panel) {
+    panel.querySelectorAll('.acct-approve').forEach(btn =>
+      btn.addEventListener('click', () => approveAccount(btn)));
+    panel.querySelectorAll('.acct-decline').forEach(btn =>
+      btn.addEventListener('click', () => declineAccount(btn)));
+
+    // Hide writes NO database state — this browser's view preference and
+    // nothing else. The toast says so out loud, because the button sits beside
+    // Decline and an operator must never be left wondering whether they just
+    // removed somebody.
+    panel.querySelectorAll('.pending-hide-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hidden = readHiddenPending();
+        hidden.add(btn.dataset.id);
+        writeHiddenPending(hidden);
+        recountVisiblePending();
+        renderPendingAccountsPanel();
+        toast(`${btn.dataset.name} hidden from Follow-Up — still pending on Accounts`);
+      });
+    });
+
+    panel.querySelector('#pending-unhide-btn')?.addEventListener('click', () => {
+      writeHiddenPending(new Set());
+      recountVisiblePending();
+      renderPendingAccountsPanel();
+    });
+  }
+
+  // Keeps the attention dot honest after a hide or unhide without re-fetching:
+  // the pending set has not changed, only which of it this admin wants shown.
+  function recountVisiblePending() {
+    const hidden = readHiddenPending();
+    pendingVisibleCount = accounts.filter(u => u.status === 'pending' && !hidden.has(u.id)).length;
+    updateModeDots();
+  }
+
+  // Eager, so the Accounts count badge, the Pending Accounts panel and the
+  // Customers attention dot are all correct on arrival rather than only after
+  // the tab is opened. Same reason the old loadPendingAccounts() ran eagerly.
+  ensureAccounts().then(() => { renderAccounts(); renderPendingAccountsPanel(); });
+
+  document.getElementById('btn-refresh-accounts').addEventListener('click', refreshAccountSurfaces);
   document.getElementById('accounts-filter').addEventListener('change', renderAccounts);
   document.getElementById('accounts-search').addEventListener('input', debounce(renderAccounts, 200));
   document.querySelector('[data-tab="accounts"]').addEventListener('click', async () => {
