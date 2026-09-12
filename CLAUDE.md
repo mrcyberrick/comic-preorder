@@ -99,6 +99,130 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: admin Customers surface — tab count badges, Pending Accounts moved to
+Follow-Up, and the Order Follow-Up disclosure marker fixed, GREEN on STAGING, 2026-09-12**
+(`cde24cf` code, `515721a` print-CSS follow-up, both merged `--ff-only`, pushed). Rick's request,
+three items in one pass. **`admin.html` +376/−62 and `style.css` +5. No schema, no RLS, no Edge
+Function, no `config.js`, no other page. Production untouched.**
+
+**(1) Secondary count badges on the three Customers tabs** — Pull Lists, Accounts, Subscriptions.
+Deliberately **muted, not accent**: the only badge that had ever sat on that strip was the amber
+pending count, and that is now a panel, so nothing up there should read as "act on me" any more.
+Each states its tab's **TOTAL**, never the filtered or searched subset — `count-pull-lists` is set
+from `fullTotals` *before* `renderByCustomer()` applies its search (and before its empty-result
+early return), so the number does not move as you type. A number that silently narrows while still
+looking like a total is the whole of F121, and these badges sit on the very tab strip that finding
+rebuilt. `null` renders as **no badge**, a measured 0 renders as **"0"** — `.is-set` is what keeps
+those two claims apart, the same not-loaded-is-not-zero rule `pendingCount` already followed.
+Subscriptions gets a cheap **head-only** count at page load (`count: 'exact', head: true`), which
+`loadSubscriptions()` overwrites with the real figure on first open; it counts **subscriptions, not
+series rows**, so it reconciles with the sum of that table's own Count column.
+
+**(2) The amber `#pending-badge` is RETIRED; pending approvals are now a Follow-Up panel** —
+`#pending-accounts-panel`, a third `data-chrome="customers"` sibling placed **above**
+`#backorder-risk-panel`, with **Approve / Decline / Hide**. A count is not an action, and that one
+sat on a tab you had to be looking at already. Placed first because it is the smallest of the three
+(usually zero rows, hidden entirely) and the only one where a *person* is waiting; bounded by scroll
+at 260px like `.ofu-never-scroll`, and for the same reason — these rows carry the decision, so
+hiding all but the first N would put a real action behind an invisible boundary.
+
+**Approve and Decline are the SAME writers the Accounts tab uses**, extracted to
+`approveAccount()` / `declineAccount()` + `refreshAccountSurfaces()`. The decline confirm **wording
+is the safeguard** — it deletes a profile and says so — and two copies of a safeguard is one copy of
+a safeguard (the single-`recordSupplierRejection()` reasoning, F143/F156). Each button's own label
+is captured and restored on the error path rather than hardcoded, which is the bug F156 fixed in
+`wireArrivalRejectActions()`. **The Accounts tab keeps its own Approve/Decline unchanged**, so
+`19-admin-account-actions.spec.ts` is untouched, and the pending number still appears in the
+Accounts summary line and the Pending filter.
+
+**Hide is VIEW STATE ONLY — Rick confirmed the design 2026-09-12.** A per-admin, per-browser
+`localStorage` dismissal, tenant-scoped key, every access wrapped (storage throws outright in some
+privacy modes, and a dead panel is worse than a forgotten dismissal). It writes **nothing**
+server-side: the account stays `pending` and stays fully actionable on the Accounts tab, and nothing
+in the database can tell Hide was ever pressed. **Hidden rows deliberately do NOT light the
+Customers attention dot** — that is what Hide means, and a dismissal that still nags is not one.
+Nothing is silently lost: the panel keeps a standing **"N hidden — Show them"** line for as long as
+any are hidden, and the set is **pruned against what is actually pending on every fetch**, so a
+stale id cannot suppress a live row and approve/decline need no cleanup of their own.
+
+**(3) The Order Follow-Up disclosure marker, and the cause is worth carrying forward.** Rick
+screenshotted the collapsible link rendering an unprintable box followed by the literal text `BE`.
+The source wanted the CSS escapes `\25B8` / `\25BE` (▸ ▾); **something on the way in read `\25` as a
+legacy OCTAL escape — octal 25 is `0x15`, the NAK control character** — leaving a control char plus
+the characters "B8". **Same class as the `\00b7` print-CTA bug caught pre-deploy 2026-08-27, except
+this one shipped and sat live.** Now literal glyphs, which have no backslash to misread; **zero
+control characters remain anywhere in the file**, verified.
+
+**A real gap found alongside, not asked for: the bagging-list print.** `style.css` explicitly hides
+`#backorder-risk-panel` and `#withdrawn-panel` from `body.printing-this-week` because they sit above
+`.admin-tabs` and are not `.admin-section`s — a fix made **after** one of them was found on a real
+printed sheet (2026-08-06). The new panel has the identical shape and was caught by none of those
+rules. Listed at birth instead (`515721a`). Belt-and-braces today, since printing is only reachable
+from Bagging mode where `.chrome-off` already applies — but that mechanism arrived two days *after*
+the print fix, and this panel should not be the one that regresses if it changes.
+
+**Gates.** `node --check` clean on the single inline `<script>` block. Unit suite **295/295**
+(unchanged — no import-script code touched). **Full Playwright suite: 146 passed, 0 failed, exit 0,
+23.7 min**, run against deployed staging bytes post-push, with `globalTeardown` clearing its own
+synthetic tenant. Deployed bytes verified directly (`curl -L`): `pending-accounts-panel` ×2,
+`class="tab-count"` ×3, `setTabCount` ×7, `id="pending-badge"` ×**0**, and the marker lines carrying
+the real E2 96 B8 / E2 96 BE bytes.
+
+**The evidence that actually covers this change is a local harness, because the suite has none.** No
+committed spec asserts a tab badge (they did not exist), the Pending panel (new), or a `::before`
+glyph — so a green suite says "nothing else broke", which is worth having and is not the same as
+"this works". `playwright/admin-tab-counts-pending-verify.mjs` (local-only,
+`f149-maintenance-verify.mjs` convention, password grant + `addInitScript` rather than a magic link,
+per F107): **36 checks green, 1 honestly skipped**. Badges reconcile **three ways** — against a
+service-role count, against the rendered customer groups, and against the Accounts tab's own summary
+line. **The F121 trap is tested directly**: typing a nonsense search narrows the list 2→0 while the
+Pull Lists badge holds at 2. Decline genuinely deleted a profile, Approve genuinely flipped `status`
+to active (edge function stubbed *with its DB effect*, as spec 19 does), a hostile display name is
+escaped, no horizontal page scroll at 390px, teardown left **zero orphaned auth users**.
+
+**⚠️ Two assertions failed on the first run and the TEST was wrong, not the code — the F133 trap,
+reproduced.** Staging carries **2 real pending accounts of its own**, so "the panel is now empty"
+was never a property of this environment; both assertions assumed the panel held only their own
+fixture, which is exactly what § 13 F133 variant (b) describes. Re-scoped to the fixtures, and the
+replacement is a **better** check: *Hide is per-row — the other pending accounts are untouched*.
+
+**The marker fix was negative-control tested rather than trusted.** Re-injecting the original rule
+over a live page computes `"\15 BE"` and the assertion goes **red**; the fixed rule computes `"▾"`
+and goes green — which also confirms the diagnosis, since that is precisely the box-plus-BE Rick
+photographed. The panel renderer was separately exercised in an isolated Node harness (22/22) across
+not-loaded, zero-pending, all-hidden and stale-hidden-id, and negative-control tested by breaking
+the code in a scratch copy and observing 5 assertions go red.
+
+**⚠️ ONE CHECK IS SKIPPED, NOT PASSED, and it is stated rather than glossed: V21 — whether hiding
+every pending account clears the amber dot.** Staging's Customers dot is already `dot-alert`, raised
+by Order Follow-Up / Withdrawn, so the pending contribution **cannot be isolated on this data**. The
+logic is covered in the isolated harness; the live path is unproven. Worth a real check the next
+time staging's Never Arrived panel is empty.
+
+**⚠️ A process trap that cost this session real time, recorded so it is not rediscovered.**
+`TaskStop` (and killing an agent shell generally) stops the **shell wrapper, not the Playwright
+process tree** — the run keeps going. Two runs then raced each other against the same staging
+tenant, where `15-order-export-ledger` mutates `app_settings.order_deadline` globally. Compounding
+it, `npx playwright test > file` is **block-buffered**, so `tail` on the log shows stale content and
+progress looks frozen when it is not; the run's own `N passed (Xm)` summary line is the only
+trustworthy figure — the same "check for a test count before believing either colour" rule
+§ Smoke Test Suite already records for `run-smoke.ps1`. **Two healthy runs were killed on that
+misreading before it was diagnosed** (by `Get-CimInstance Win32_Process`, which showed two
+`npx playwright test` trees alive at once). Kill by process tree, and read the summary line rather
+than the tail.
+
+**Two fixture tenants created by those interrupted runs were cleaned up** (`pw-5308211e`,
+`pw-67c2e26c`), using the suite's own `deleteTestTenant` shape. **Four older ones remain**
+(`pw-56132e92`, `pw-fc2e3fc7`, `pw-a62e4116`, `pw-2d3c4d60`, all August) — pre-existing **F130**
+territory, deliberately left alone, since that finding's own next step is to classify by originating
+spec before deleting anything. Staging's own data was confirmed unchanged afterwards by a fresh
+service-role read: 43 accounts, both real pending accounts intact, zero harness leftovers.
+
+**No finding ID consumed.** (1) and (2) are feature builds to request — the prior behaviour was not
+miscalculating or hiding anything, it was different behaviour Rick wanted. (3) is a genuine shipped
+defect, but it was reported and fixed in the same session with nothing left open to track, the same
+disposition the 2026-08-24 Lighthouse sweep records. **F158 remains the next free finding ID.**
+
 **Last completed work: PROMOTED TO PRODUCTION — newsletter S6c, the post-auth return path,
 2026-09-08 (PR #152, merge `1b2cc90`; staging `aaa6ca8`).** Rick's explicit `/promote-prod` request,
 later the same day as S6b. **`app.js` + `index.html`, +61/−4. No schema, no RLS, no Edge Function,
