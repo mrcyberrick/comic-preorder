@@ -266,6 +266,11 @@ button { cursor: pointer; font-family: var(--font-body); }
      printed above the bagging list on every "Print Bagging List" click. */
   body.printing-this-week #backorder-risk-panel,
   body.printing-this-week #withdrawn-panel,
+  /* #pending-accounts-panel (2026-09-12) — the same shape as the two above: a
+     third tab-independent panel sitting over .admin-tabs, so none of the rules
+     above catches it either. Listed at birth rather than after someone finds
+     it printed on a bagging sheet, which is how the other two got here. */
+  body.printing-this-week #pending-accounts-panel,
   /* .admin-modes (fix, 2026-08-15) — the Customers/Bagging/Ordering mode
      switcher sits above .admin-tabs and is not gated by any data-chrome
      attribute (it's shown in every mode), so none of the rules above ever
