@@ -1,9 +1,9 @@
 # Weekly newsletter — acquisition funnel repair
 
-**STATUS:** IN PROGRESS — S2+S3 DONE (`6a8d4ec`); **S6a DONE (`f0189a8`)**, superseding S1's destination;
-**S6b LIVE ON PRODUCTION (PR #151, `4548fc4`)**; **S6c LIVE ON PRODUCTION (PR #152, `1b2cc90`)**;
-**only S1x remains open** | staging=2026-09-08 | prod=2026-09-08 (S6b+S6c — S6a publishes at the
-Fri 2026-09-11 import) | findings=none (feature build)
+**STATUS:** COMPLETE 2026-09-16 — S2+S3 (`6a8d4ec`), S6a (`f0189a8`), S6b (PR #151 `4548fc4`),
+S6c (PR #152 `1b2cc90`), **S1x CLOSED by measurement (`621ead4`)** | staging=2026-09-08 |
+prod=2026-09-08 (S6b+S6c); producer live since the Fri 2026-09-11 import, first real send
+2026-09-16 | findings=none (feature build)
 
 **Owner:** Rick. **Execution:** one dedicated session. **Repo: the private scripts repo only**
 (`build-pull-feed.js`). **No PULLLIST deploy, no schema change, no Edge Function, no DNS.**
@@ -216,7 +216,39 @@ cannot disturb `TenantContext` resolution or any page's init.
 This makes Brevo's click report per-title and per-placement. **It does not close the loop to
 signups** — that needs app-side capture, which is **S5** (§ 3).
 
-### S1x — the size guard — ⏸ OPEN, and deliberately not guessed
+### S1x — the size guard — ✅ CLOSED 2026-09-16 BY MEASUREMENT (`621ead4`)
+
+#### The real send settled it, and my estimate was wrong
+
+**A real Brevo send (campaign 32, 2026-09-16) reported `HTML size: 99.1 KB` and tripped the send
+script's own 95 KB guard.** I had estimated 95.1–97.4 KB post-rewrite and called all three points
+safe. The assembled message was **101,494 bytes — about 3 KB under Gmail's ~102 KB clip threshold**,
+on a list that is roughly 70% Gmail. Not the comfortable margin the estimate implied.
+
+**The fix was dedupe, not a cap.** That week's 77 covers carry only **42 distinct series** — 26
+series ship multiple covers (4× Superman Unlimited, 4× Wonder Woman, 4× Savage Sword Of Conan). One
+cover per series keeps every title represented.
+
+**A plain cap was rejected, and this is the part worth carrying:** rows sort A-Z by title, so
+truncating at N would have cut the *same back half of the alphabet every single week* — X-Men and
+Wonder Woman would never appear again. `NEWSLETTER_MAX_COVERS = 60` survives only as a backstop.
+
+It also makes the grid match S6's link semantics: **one cover, one series, one subscribe link**,
+verified 1:1 (42 links, 42 series). Four Wonder Woman covers previously pointed at the same
+subscribe search.
+
+| | before | after |
+|---|---|---|
+| Email, raw | 101,494 B (99.1 KB) | **61,958 B (60.5 KB)** |
+| Tracked links | 81 | **46** |
+| Worst-case post-Brevo (260-char rewrite) | ~103 KB | **67.7 KB** |
+| Covers | 78 | 42 |
+
+`rss.xml` is deliberately unchanged and still carries all **77** items — it is not
+space-constrained. The preheader still reports the true total, with a new line reading *"One cover
+per series · 77 titles arriving"* so the shorter grid is explained rather than unexplained.
+
+#### Superseded estimate, kept for the record
 
 **Measured after S1:** the built email is **89,909 bytes (87.8 KB)** with 72 tracked links. S1 added
 **+800 bytes** to a pre-existing 87 KB problem, so it made the situation 0.9% worse rather than
