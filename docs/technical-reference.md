@@ -6088,6 +6088,18 @@ reasoning — only the disposition changed, not the diagnosis.
   S6. A bounded widening is what is wanted: include fulfilled rows that have **no shipment evidence**
   and were fulfilled within the last N days, and *suppress* rows whose ledger nets ≤ 0 or which carry
   a non-null `arrival_outcome`. That single suppression rule fixes the over-reporting half too.
+- **Live instance REPAIRED 2026-09-18** via local one-off `fix-cimmerian-false-fulfil-2026-09-18.js`
+  (before-state in `fix-cimmerian-log-2026-09-18.json`). `on_sale_date` `2026-09-23` → **`2026-09-30`**
+  (Lunar's own 09/18 file), both reservations `fulfilled` → **false** with `fulfilled_at` cleared,
+  `arrival_outcome` deliberately left NULL — NULL means *no arrival judgement has been made*, which
+  is exactly true for a book that has not shipped. **Independently verified by a fresh read, not the
+  script's own output:** `foc_date` unchanged at `2026-06-15`, and the row is **back inside
+  `check-dates.js`'s own `fulfilled=eq.false` watch set (2 rows)** — which is the point of the
+  un-fulfil, not a side effect. The script refuses outright if any `weekly_shipment` row exists (that
+  would mean it really arrived) or if `fulfilled_at` is not the exact auto-fulfil batch stamp.
+  **⚠️ This buys twelve days, not a cure:** if the title slips past 2026-09-30,
+  `auto_fulfill_past_on_sale()` re-fulfils it and it drops straight back out of the checker. **The
+  defect itself is untouched.**
 - **Interim, no code:** none. There is no operator action that surfaces these rows — that is the
   finding. F155 S3's bounded deferral would stop new instances arriving but is **not on production**.
 - **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
