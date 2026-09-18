@@ -1,6 +1,6 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-09-07 (F157 zero-row guard)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
@@ -203,9 +203,20 @@ Read-only, never writes.
 Catches dates the distributor revised after solicitation. Only ever updates `on_sale_date` /
 `foc_date` on rows that already exist — it never imports a catalog.
 
-### 1. Download two files into `..\recheck\`
+### 1. Download into `..\recheck\` — LIVE catalogs only
 - **Lunar** → Resources → **All Products CSV Order Form** (one file, all months)
-- **PRH** → Master Data for each catalog the script names
+- **PRH** → Master Data for each **live** catalog — roughly the last three months
+
+> ⚠️ **Do NOT pull a frozen PRH catalog, even though the script asks for it.** The script's
+> `NEXT RUN` list ranks months by how many reserved codes they hold and **knows nothing about**
+> **freezing** — on 2026-09-18 it listed 2026-05, which is frozen. A frozen catalog reports the
+> original solicitation date forever, and the script will write that stale date over a correct
+> one. That happened on 2026-09-18 (**F159**) and had to be reverted by hand.
+>
+> Already-frozen files live in `..\recheck\_frozen-do-not-use\`. **Leave them there.**
+> As of 2026-09-18: 2026-07 / 2026-08 / 2026-09 are live; 2026-04 and 2026-05 are frozen;
+> **2026-06 is entering the window** — it still produced a genuine correction on 2026-09-18,
+> so keep pulling it until it stops changing, then quarantine it too.
 
 ### 2. Run it
 ```powershell
@@ -216,9 +227,19 @@ Add `--no-write` first if you want to look before applying.
 ### 3. Answer the apply prompt
 `Apply N date correction(s) to PRODUCTION? (y/n)`
 
-The script tracks each file's hash between runs and tells you when a PRH catalog has frozen
-(stopped changing). Once frozen, no file carries revisions for that month any more — that is a
-known dead end, not a mistake on your part.
+A frozen PRH catalog is a **known dead end, not a mistake on your part** — once frozen, no file
+carries revisions for that month any more.
+
+> ⚠️ **Do not rely on the script's `unchanged ×N` counter to tell you a catalog has frozen.**
+> *(This paragraph previously said the script "tracks each file's hash between runs and tells
+> you when a PRH catalog has frozen." **Measured false on 2026-09-18**, and corrected here — the
+> same shape as F155's own root cause, where one confident runbook sentence stopped anyone
+> re-pulling PRH at all.)* Two reasons it cannot carry that weight: only a file seen on a
+> **previous** run carries a stored hash, so a first-seen file gives no signal at all — five of
+> seven did on 2026-09-18 — and the counter cannot tell *"the distributor stopped publishing"*
+> from *"the operator re-supplied the same file"*. Re-run a stale file a few weeks running and
+> it will declare a **live** catalog frozen. **Judge by catalog age instead: roughly three
+> months past the catalog date.**
 
 ---
 
