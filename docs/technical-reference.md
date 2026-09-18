@@ -6044,7 +6044,105 @@ reasoning — only the disposition changed, not the diagnosis.
   duplicate), F131 (single-operator import; the tenant-facing motivation), F155 (the
   never-re-pull assumption that makes older months fragile).
 
-Next free finding ID: **F158**.
+#### F158 — `check-dates.js` only watches UNFULFILLED reservations, so it is blind to every row that has already suffered the F155 harm — and it re-reports already-resolved rows forever
+
+- **Status:** **filed 2026-09-18, OPEN — not started.** Scripts repo, `check-dates.js` only; no app
+  code, no schema. Found by Rick asking about one Lunar code (`0526AZ0505`) that the weekly check had
+  never mentioned. **One live instance repaired the same day** (see below); the defect is untouched.
+- **The scope, in one line:** the drift query is
+  `preorders?tenant_id=eq.<t>&fulfilled=eq.false` (`check-dates.js` ~line 245). **The F155 harm
+  sequence ENDS in auto-fulfilment** — stale date passes → row leaves both halves of My List → never
+  matches a bagging week → `auto_fulfill_past_on_sale()` marks it fulfilled. So the row leaves the
+  watch set at exactly the moment the harm completes. **The checker protects a row right up until it
+  breaks, then stops looking at it.**
+- **Live instance, measured 2026-09-18.** `0526AZ0505` CIMMERIAN XUTHAL OF THE DUSK #1 (OF 3) CVR B
+  (Lunar, `catalog_month` 2026-05, ABLAZE):
+
+  | | |
+  |---|---|
+  | Both reservations | `fulfilled=true`, `fulfilled_at` **`2026-07-25T14:29:12.113942+00:00` — identical on both**, i.e. one batch write (`auto_fulfill_past_on_sale()`) |
+  | `weekly_shipment` | **zero rows, ever** |
+  | Our `on_sale_date` | `2026-09-23` |
+  | Lunar's own file, 09/18 | **`9/30/2026`** — twelve days in the future on the day this was found |
+  | `order_submissions` | one `monthly` row, **qty 2**, `2026-05-24` — genuinely ordered, so a slipped title, not a cancelled one |
+
+  Two customers were shown a collected state from 2026-07-25 onward for a book that had not shipped
+  and had not gone on sale. **No check-dates.js run has ever mentioned it, and by construction none
+  ever will.**
+- **The same scope over-reports in the other direction.** The `>> N are PAST on-sale with NO shipment
+  evidence and NO date source` block listed the **identical six titles** on 2026-09-14 and again on
+  2026-09-18. Verified live: `0726IM0315`–`0319` (the five SPAWN 77 incentive covers) each carry a
+  **supplier rejection recorded 2026-09-05** netting the code to 0, and `0726AC0632` carries
+  **`arrival_outcome='not_arrived'`**. All six were resolved *before* the first of those runs.
+  `check-dates.js` reads neither `order_submissions` nor `arrival_outcome`, so nothing about those
+  rows will ever change and **they will be re-reported every week indefinitely** — a permanent false
+  alarm sitting inside the one block that exists to catch a real F155 case.
+- **⚠️ The same scope also produced a silent near-miss, which is worth reading as a warning about
+  luck.** On 2026-09-18 **F159** overwrote a hand-corrected date on `75960621519500122`. Its sibling
+  `75960621519500111` — same frozen month, hand-corrected the same day, same stale value in the same
+  file — **escaped only because its reservations are `fulfilled=true / arrival_outcome='arrived'`, so
+  this scope dropped it before the diff ran.** A row was protected by the very filter that is the
+  defect. That is coincidence, not a safety property, and it must not be mistaken for one.
+- **Fix direction (not designed, and the bound is the hard part).** Widening to *all* fulfilled rows
+  is not viable — production held **859** `fulfilled=true, arrival_outcome IS NULL` orphans at F115
+  S6. A bounded widening is what is wanted: include fulfilled rows that have **no shipment evidence**
+  and were fulfilled within the last N days, and *suppress* rows whose ledger nets ≤ 0 or which carry
+  a non-null `arrival_outcome`. That single suppression rule fixes the over-reporting half too.
+- **Interim, no code:** none. There is no operator action that surfaces these rows — that is the
+  finding. F155 S3's bounded deferral would stop new instances arriving but is **not on production**.
+- **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
+  same day, same script, different root cause), F115 (`arrival_outcome`, and the 859-row orphan
+  population that bounds any widening), F143 (why a ledger rejection and an arrival judgement are
+  separate statements — the reason both must be consulted).
+
+#### F159 — `check-dates.js` treats a FROZEN PRH catalog as authoritative and silently overwrites hand-corrections with a date that can never be current
+
+- **Status:** **filed 2026-09-18, OPEN — not started. One production row was wrongly written and was
+  reverted the same day.** Scripts repo, `check-dates.js` only.
+- **What happened.** The 2026-09-18 run applied 9 date corrections. **Eight were genuine** (PRH
+  2026-06/07/08, live catalogs, all moving later, none previously hand-corrected). The ninth:
+
+  ```
+  75960621519500122  DNX #1 JIM LEE HIDDEN GEM VARIANT  (PRH, 2026-05)
+    2026-09-04  hand-corrected  2026-09-02 -> 2026-09-16   (fix-stale-dates-f155-log-2026-09-04.json)
+    2026-09-18  check-dates.js  2026-09-16 -> 2026-09-02   <-- WRONG
+  ```
+- **Why the source cannot be right, ever.** PRH 2026-05 is **frozen**, measured four ways by F155:
+  two downloads 44 minutes apart are byte-identical (MD5 `438958a0b69b961ab140ab63c9b3f3bf`), **0 of
+  1,078** rows differ from the May import, its Weekly Change Reports run 2026-04-24 → **2026-07-31
+  and stop**, and **0 of 5,123** PRH `MainIdentifier`s ever re-list in a later monthly file. The file
+  reports the original solicitation date and **cannot report anything else**. `check-dates.js` has no
+  frozen-month check and no awareness that a value was set by hand, so it read the stale date as
+  current and wrote it back — with no prompt distinguishing it from the eight genuine changes.
+- **The script's own closing warning describes this exact hazard** — *"Re-importing any of these
+  catalog months RESTORES whatever that distributor file says — the stale date, for a frozen PRH
+  month"* — but aims it at `import.js`. **The script did it to itself**, and printed the warning
+  *after* applying.
+- **Reverted 2026-09-18** via local one-off `revert-frozen-prh-overwrite-2026-09-18.js` (before-state
+  in `revert-frozen-prh-log-2026-09-18.json`). **Independently verified by fresh read, not the
+  script's own output:** both 2026-09-04 hand-corrections now read `2026-09-16`, and **all 8 genuine
+  corrections confirmed still intact** — the revert touched nothing else.
+- **⚠️ `unchanged ×N` cannot serve as the guard, and that is worth stating because it looks like it
+  could.** Only a file seen on a *previous* run carries a stored hash: on 2026-09-18, **five of seven
+  files were first-seen and had no signal at all**. The counter also cannot distinguish *"the
+  distributor stopped publishing"* from *"the operator re-supplied the same file"* — re-running a
+  stale file a few weeks running will make the script declare a **live** catalog frozen.
+- **Interim mitigation, live, no code:** the frozen PRH files are moved out of the recheck folder into
+  `catalogs/recheck/_frozen-do-not-use/` (2026-04 and 2026-05, with a README recording why). They are
+  **moved, not deleted** — `import.js` may still legitimately need them for an older-month backfill,
+  which is a different job with different rules. **2026-06 was deliberately left in place**: it enters
+  the freeze window around now but produced a genuine correction on 2026-09-18 (Mimi Green #4, moved
+  later), so it was still carrying real revisions that day.
+- **Fix direction:** refuse to apply a change whose source catalog is older than roughly three months
+  past its catalog date, or whose file hash has been unchanged across N runs — and, separately, check
+  the correction logs before overwriting a value a human set. Prompt per-source rather than applying
+  all changes under one y/n, so a frozen-source change cannot ride along with eight good ones.
+- **Related:** F155 (measured the freeze; its § Step 3 item 6 already warns that a re-import reverts a
+  hand-correction — this is that hazard reached from the checker instead of the importer), F158 (same
+  script, same day, different root cause; its scope is why the sibling row escaped), F146 (whose
+  withdrawal-clearing backfill is the other documented way a hand-correction gets reverted).
+
+Next free finding ID: **F160**.
 
 ---
 
