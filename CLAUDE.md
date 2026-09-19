@@ -99,11 +99,119 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: PROMOTED TO PRODUCTION — admin Customers tab badges, the Pending Accounts
+Follow-Up panel, and the Order Follow-Up disclosure-marker fix, 2026-09-12 (PR #153, merge
+`c2f9f42`; staging `cde24cf` + `515721a`).** Rick's explicit `/promote-prod` request, merged the
+same day it was opened. **A cherry-pick, not a merge** — `staging` was **61 commits ahead** of
+`main`, carrying F72 S0/S1a/S2a/S3, F153, F154, F156, `register-customer`/`register-tenant` and 9
+client files; **none of it went.** **`admin.html` + `style.css`, +381/−62. No schema, no RLS, no
+Edge Function, no `config.js`, no other page.**
+
+**What shipped, in one line each.** (1) Pull Lists / Accounts / Subscriptions each carry a **muted**
+count badge stating that tab's TOTAL — the Pull Lists figure is taken from `fullTotals` *before*
+`renderByCustomer()` applies its search, so it cannot become a filtered subtotal wearing a total's
+clothes, which is F121's own defect on the very strip F121 rebuilt. (2) The amber `#pending-badge`
+is **retired**; pending approvals are a Follow-Up panel above Order Follow-Up with **Approve /
+Decline / Hide**, where Approve and Decline call the *same* writers the Accounts tab uses
+(`approveAccount()`/`declineAccount()`), so the decline confirm wording — the actual safeguard —
+cannot drift between two copies. (3) The disclosure marker no longer renders a control character
+plus the literal text `BE`.
+
+**Hide is VIEW STATE ONLY — Rick confirmed the design 2026-09-12, and it is deliberately not a
+column.** Per-admin, per-browser `localStorage`, tenant-scoped, every access wrapped. It writes
+nothing server-side: the account stays `pending`, stays fully actionable on the Accounts tab, and
+nothing in the database can tell Hide was ever pressed. **Hidden rows do not light the Customers
+attention dot** — a dismissal that still nags is not a dismissal. Nothing is silently lost: a
+standing **"N hidden — Show them"** line persists while any are hidden, and the set is **pruned
+against what is actually pending on every fetch**, so a stale id cannot suppress a live row.
+
+**The marker bug's cause is the reusable part.** The source wanted the CSS escapes `\25B8` / `\25BE`
+(▸ ▾); **something on the way in read `\25` as a legacy OCTAL escape — octal 25 is `0x15`, the NAK
+control character** — leaving a control char followed by the characters "B8". **Same class as the
+`\00b7` print-CTA bug caught pre-deploy 2026-08-27, except this one shipped and sat live.** Fixed
+with literal glyphs, which have no backslash to misread.
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — the
+documented 302 trap), not inferred from the merge: `admin.html` returns `pending-accounts-panel` ×2,
+`class="tab-count"` ×3, `setTabCount` ×7, `pending-hide-btn` ×2, `approveAccount` ×3,
+`declineAccount` ×3, `readHiddenPending` ×6, `pending-unhide-btn` ×2, and the marker lines carrying
+literal **▸ / ▾**; `id="pending-badge"` is ×**0**, confirming the retirement. `style.css` carries
+`printing-this-week #pending-accounts-panel` ×1. **Negative assertions hold — the excluded staging
+work did not ride along:** `Tier.isPaid` ×0, `data-paid-only` ×0, `print-store-info` ×0,
+`window.Tier` ×0. `config.js` carries the prod ref `plgegklqtdjxeglvyjte` ×1 and the staging ref
+×**0**. PR file list re-read **on GitHub itself** — exactly 2 files.
+
+**⚠️ TWO PRODUCTION GREP COUNTS MOVED, AND BOTH ARE COMMENTS, NOT CODE — recorded so a future
+session does not read them as drift.** `recordSupplierRejection` goes **×3 → ×4** (PR #149's
+recorded figure) and `ofu-never-scroll` **×2 → ×3** (PR #146's). Both were run down against the
+diff rather than waved through: the extra occurrences are this change's own explanatory comments,
+and comments ship in the HTML. Exactly PR #151's `catalog_month` ×3-where-×2-was-predicted shape.
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150/#151/#152
+record: the diff is `admin.html` + `style.css` and never touches the customer reserve path,
+confirmed from the diff itself before deciding.
+
+**⚠️ THE PENDING PANEL HAS HAD NOTHING TO DISPLAY ON PRODUCTION SINCE IT SHIPPED — measured
+read-only 2026-09-18, six days in: 31 accounts, **0 pending**, 60 subscriptions.** So the badges are
+live and correct (Accounts reads 31, Subscriptions 60), but the panel is correctly *hidden*, and
+**its rows, its Approve/Decline/Hide controls and the hidden-set persistence have never been
+exercised against production data.** That is the same "first live exercise still pending" shape
+F146 and F147 carry, and it is stated rather than left to be assumed from a green promotion: the
+next real signup is the first time any of it renders for a customer-facing decision.
+
+**⚠️ One verification is SKIPPED, not passed, and it stays open: whether hiding every pending
+account clears the amber attention dot.** Staging's Customers dot is already `dot-alert`, raised by
+Order Follow-Up / Withdrawn, so the pending contribution cannot be isolated there; production has no
+pending accounts at all, so it cannot be isolated here either. The logic is covered in an isolated
+render harness; **the live path is unproven on both environments.** Worth a real check the first
+time production carries a pending account and Never Arrived is empty.
+
+**The evidence that covers this change is a local harness, because the suite has none.** No
+committed spec asserts a tab badge (they did not exist), the Pending panel (new), or a `::before`
+glyph. `playwright/admin-tab-counts-pending-verify.mjs` (local-only, `f149-maintenance-verify.mjs`
+convention, password grant + `addInitScript` rather than a magic link, per F107): **36 checks green,
+1 skipped.** Badges reconcile **three ways** — against a service-role count, the rendered customer
+groups, and the Accounts tab's own summary line. **F121's trap is tested directly**: a nonsense
+search narrows the list 2→0 while the Pull Lists badge holds at 2. Decline genuinely deleted a
+profile, Approve genuinely flipped `status`, a hostile display name is escaped, no horizontal scroll
+at 390px, **zero orphaned auth users** on teardown. The marker fix was **negative-control tested** —
+re-injecting the original rule computes `"\15 BE"` and the assertion goes red, which also confirms
+the diagnosis. Full suite **146 passed, 0 failed, exit 0, 23.7 min**; unit **295/295**.
+
+**⚠️ Two assertions failed on the harness's first run and the TEST was wrong, not the code — F133
+variant (b), reproduced.** Staging carries **2 real pending accounts of its own**, so "the panel is
+now empty" was never a property of that environment; both assertions assumed the panel held only
+their own fixture. Re-scoped, and the replacement is a **better** check: *Hide is per-row — the other
+pending accounts are untouched.*
+
+**⚠️ A process trap that cost real time twice, recorded so it is not rediscovered.** (1) `TaskStop`
+— and killing an agent shell generally — stops the **shell wrapper, not the Playwright process
+tree**, so a "stopped" run keeps going and races the next one against the same staging tenant, where
+`15-order-export-ledger` mutates `app_settings.order_deadline` globally; `Get-CimInstance
+Win32_Process` showed two live `npx playwright test` trees. Compounding it, `npx playwright test >
+file` is **block-buffered**, so `tail` reads stale and progress looks frozen when it is not — the
+run's own `N passed (Xm)` summary is the only trustworthy figure, which is the same rule
+§ Smoke Test Suite already records for `run-smoke.ps1`. **Two healthy runs were killed on that
+misreading.** (2) **Resuming a session days later left the working tree on the `*-prod` promotion
+branch, so `CLAUDE.md` re-read into context as `main`'s copy — 61 commits stale, still claiming
+F157 was the next free ID.** Nothing was written from it, but an edit made against that tree would
+have reverted four other sessions' doc work. **Check `git rev-parse --abbrev-ref HEAD` before
+trusting any re-read of this file.**
+
+**No finding ID consumed.** (1) and (2) are **feature builds to request** — the prior behaviour was
+not miscalculating or hiding anything; it was different behaviour Rick wanted. (3) is a genuine
+shipped **defect**, but it was reported and fixed in the same session with nothing left open to
+track, the same disposition the 2026-08-24 Lighthouse sweep records. **F160 remains the next free
+finding ID.**
+
 **Last completed work: admin Customers surface — tab count badges, Pending Accounts moved to
 Follow-Up, and the Order Follow-Up disclosure marker fixed, GREEN on STAGING, 2026-09-12**
 (`cde24cf` code, `515721a` print-CSS follow-up, both merged `--ff-only`, pushed). Rick's request,
 three items in one pass. **`admin.html` +376/−62 and `style.css` +5. No schema, no RLS, no Edge
-Function, no `config.js`, no other page. Production untouched.**
+Function, no `config.js`, no other page.** ***PROMOTED TO PRODUCTION 2026-09-12 via PR #153
+(merge `c2f9f42`) — see the entry above. This sentence read "Production untouched" and was left
+standing after it stopped being true, which is the F132/F138/F139/F145 stale-claim pattern; the
+words are kept here rather than deleted so the correction is visible.***
 
 **(1) Secondary count badges on the three Customers tabs** — Pull Lists, Accounts, Subscriptions.
 Deliberately **muted, not accent**: the only badge that had ever sat on that strip was the amber
