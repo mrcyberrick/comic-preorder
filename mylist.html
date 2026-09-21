@@ -1507,7 +1507,11 @@ function confirmDialog(message, okLabel = 'Remove') {
             : '⚠ Arrived damaged';
       const canRemove = isWithdrawn || isRejected;   // == what F109 permits
       const cover = c.cover_url
-        ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
+        // onerror MUST also add .loaded — see the fade-in loop below for why.
+        // COVER_PLACEHOLDER is a .webp file, not a data: URI, so the
+        // `img[src^="data:image"]{opacity:1}` escape hatch does not cover it:
+        // without this the fallback image is invisible too.
+        ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;this.classList.add('loaded');">`
         : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
       return `
         <div class="month-arrival-card withdrawn-row" data-preorder-id="${item.id}">
@@ -1526,6 +1530,18 @@ function confirmDialog(message, okLabel = 'Remove') {
           </div>
         </div>`;
     }).join('');
+
+    // Fade in images. NOT optional decoration — `.month-arrival-cover img` is
+    // `opacity: 0` in this file's own stylesheet and only `.loaded` (or a
+    // data: URI src, which COVER_PLACEHOLDER is not) turns it visible. Omitting
+    // this loop shipped every cover in the section as an empty grey box while
+    // the images themselves downloaded perfectly — the covers were never dead
+    // URLs, they were invisible. Identical to the loop renderArrivingThisMonth()
+    // and the main list already run for exactly the same reason.
+    grid.querySelectorAll('img').forEach(img => {
+      if (img.complete) img.classList.add('loaded');
+      else img.addEventListener('load', () => img.classList.add('loaded'));
+    });
 
     // Own handler, own bucket. Deliberately NOT the main list's `.cancel-btn`
     // wiring: that one resolves the row out of `allItems` and splices it back,
