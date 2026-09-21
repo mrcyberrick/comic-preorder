@@ -99,6 +99,107 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: PROMOTED TO PRODUCTION — Order Follow-Up's resolve control now clears an
+UNFULFILLED Never Arrived row, 2026-09-21 (PR #154, merge `df483a3`; staging `6dcbc01`, pick
+`a99da07`).** Rick's explicit request, merged the same day it was opened. A **cherry-pick, not a
+merge** — `staging` was **67 commits ahead**, carrying F72 S0/S1a/S3, F153, F154, F156,
+`register-customer`/`register-tenant` and 9 client files; **none of it went.** **`admin.html` only,
++33/−2. No schema, no RLS, no Edge Function, no `config.js`, no other page.**
+
+**Found live by Rick, from a real symptom, not an audit.** `0726AC0632` (LIFE WITH ARCHIE #1
+FACSIMILE CVR A, Lunar, "Cancelled" on Lunar's own site) stayed on Order Follow-Up after he clicked
+**Didn't arrive**. The write landed, the toast read "Marked didn't arrive", `loadData()` reloaded —
+and the row came straight back, permanently.
+
+**The cause is a second producer nobody extended.** Never Arrived is fed from **two** places:
+`neverArrivedFromFulfilled()` requires `p.fulfilled` and filters on `arrival_outcome`, so the control
+works there — and **F155 S3(b) (2026-09-05) added a second producer inside
+`computeBackorderRisk()`'s own `forEach`** for a released-but-unfulfilled title, which **read
+`arrival_outcome` nowhere**. So the resolve buttons were rendered on rows they structurally could not
+clear. **F134's own comment — *"any value other than 'unknown' drops the row out of
+`neverArrivedFromFulfilled()`'s filter, so no additional clearing logic is needed here"* — was TRUE
+when written and was falsified the moment S3(b) landed**; that filter governs only the FULFILLED
+path. Corrected in place, old wording kept visible per convention.
+
+**The fix is one line**, placed with the settled-outcome exits rather than inside the S3(b) branch so
+a judged title also clears Backordered and At risk — it is not an open case on any of the three.
+**`'unknown'` deliberately still does NOT clear** (judged, and we still don't know — the open state
+the panel exists to surface); **NULL is "not yet judged"** (F115 § 3.1) and does not clear either.
+
+**⚠️ THE ASSERTION WAS OBSERVED RED BEFORE IT WENT GREEN, and that was free rather than engineered.**
+Staging was still serving pre-fix bytes when the test was written, so that run **was** the negative
+control: `Expected: 0, Received: 1`, the row resolving **23 times over 10s**. Everything ahead of it
+passed — row present, `data-state="neverArrived"`, `fulfilled=false`, `arrival_outcome=null` — so the
+failure was the clearing itself, nothing incidental.
+
+**The coverage gap that let this ship is now closed, and it is the reusable lesson.** Spec 21's V4
+was the **only** test asserting the resolve control clears the panel, and **its fixture is
+`fulfilled: true`** — so it only ever exercised the producer that already worked. A green suite said
+"nothing else broke" for two weeks while the control was dead on the other path. New **V7** drives
+the unfulfilled path, with the fixture shaped to reach **only** the S3(b) line (no shipment row, no
+ledger row) so the clearing cannot be credited to F129's exit instead, and it asserts **`fulfilled`
+stays false** — clearing the panel must never be bought by marking the row fulfilled, which is the
+exact lie F115 exists to stop.
+
+**Gates.** `node --check` clean on the single inline `<script>`. Unit **295/295** (unchanged — no
+import-script code). **Full Playwright suite: 147 passed, 0 failed, exit 0, 20.7 min** against
+deployed staging bytes post-push — **146 → 147 reconciles exactly as V7**. Spec 21 **7/7**. **Zero
+orphaned auth users** confirmed by fresh read (one leftover found is dated 2026-08-24, pre-existing
+F130, left alone per that finding's own rule — and now classified as originating from spec 21's V4
+block).
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — the documented
+302 trap), not inferred from the merge: `admin judged it — settled` ×1, `pending-accounts-panel` ×2
+(PR #153's, preserved). **Negative assertions hold** — the excluded staging work did not ride along:
+`Tier.isPaid` ×**0**, `data-paid-only` ×**0**, `print-store-info` ×**0**, `window.Tier` ×**0**.
+`config.js` prod ref ×1, staging ref ×**0**. PR file list re-read **on GitHub itself** — exactly
+1 file.
+
+**⚠️ ONE PRODUCTION GREP COUNT MOVED AND IT IS COMMENTS, NOT CODE — recorded so a future session does
+not read it as drift.** `neverArrivedFromFulfilled` goes **×4 → ×6**. Run down against the diff
+rather than waved through: **3 added lines mention it, 1 removed, net +2**, and **0 of the additions
+are non-comment** — all three are `//` lines (the new exit returns early, it never calls the
+function). Comments ship in the HTML. Exactly PR #151's `catalog_month` ×3-where-×2 and PR #153's
+`recordSupplierRejection` ×3→×4 shape.
+
+**Blast radius measured on production BEFORE promoting, and it held: exactly 1 row.** Of **23**
+unfulfilled rows carrying an `arrival_outcome`, **22 read `'unknown'` and correctly stay**; only
+`0726AC0632` clears, and its mark was already in the database, so it cleared with no re-click and no
+data fix. **Rick confirmed it live on production: *"I see that the marked followup row has been
+hidden as expected."*** Production data is unchanged by this promotion — the fix is a pure render
+change and writes nothing (re-read post-deploy: still 23/22/1).
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150/#151/#152/#153
+record: the diff is `admin.html` only and never touches the customer reserve path, confirmed from the
+diff itself before deciding.
+
+**⚠️ THE CUSTOMER-FACING HALF IS NOT FIXED, IS NOT FILED, AND IS THE MORE USEFUL RESULT.** Rick's
+question had two halves — *move it off Follow-Up* (done) and *show this status to the customer* (**not
+done**). Measured: **a stranded row is in NEITHER My List section**, so **no** arrival status can
+reach the customer no matter what an admin marks. `mylist.html:937` scopes the main table to
+`catalog_month === currentMonth` (this row is `2026-07`, current is `2026-09`) and `:938-940` scopes
+Upcoming Arrivals to `on_sale_date >= today` (`2026-09-09 < 2026-09-21`). **The copy already exists
+and simply has no row to render on** — `⚠ Did not arrive — contact the store.` (`mylist.html:1099`).
+This is **F155's own stranding mechanism reaching its terminal case**: F155 S1/S2 addressed date
+*drift*, but a title that genuinely will never arrive still vanishes from the customer's view.
+**All 23 of the rows above are stranded this way.** Filing was offered and Rick chose to fix the panel
+first; **it remains unfiled, so it will be lost unless someone files it.**
+
+**⚠️ Two smaller residuals, stated rather than left to be rediscovered.** (1) **The resolve buttons
+have no confirm and no un-resolve.** On the unfulfilled path a mis-click used to be harmless — the row
+just came back — and is now consequential, with no UI to undo it. That is a real change in exposure,
+and it is the same gap F143's confirm gate closed for the rejection write. (2) The **22 `'unknown'`
+unfulfilled rows** behave correctly and stay on the panel, but **where that value came from on an
+unfulfilled row was not traced** — F115's import writes it at fulfilment time, so their origin is
+unexplained.
+
+**No finding ID consumed.** This is a genuine shipped **defect** — the control was dead on one path,
+which is wrong behaviour, not merely different behaviour — but it was reported and fixed in the same
+session and is now RESOLVED on **both** environments with nothing left open to track on *this* half,
+the same disposition the 2026-08-24 Lighthouse sweep and PR #153's marker fix record. **F160 remains
+the next free finding ID — and the customer-facing half above is the thing most worth spending it
+on.**
+
 **Last completed work: PROMOTED TO PRODUCTION — admin Customers tab badges, the Pending Accounts
 Follow-Up panel, and the Order Follow-Up disclosure-marker fix, 2026-09-12 (PR #153, merge
 `c2f9f42`; staging `cde24cf` + `515721a`).** Rick's explicit `/promote-prod` request, merged the
