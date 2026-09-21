@@ -1884,6 +1884,28 @@
       // admin no control to reach for. Two correct behaviours, no surface.
       //
       // Settled outcomes still win and must stay first:
+      //
+      // An admin judgement recorded from this panel's OWN resolve control.
+      // This exit is here because S3(b)'s line below made this forEach a
+      // SECOND producer of Never Arrived rows, and nothing on this path read
+      // arrival_outcome: the control wrote, the toast confirmed, loadData()
+      // reloaded — and the row came straight back, every time, for good.
+      // F134's own comment on the control ("any value other than 'unknown'
+      // drops the row out of neverArrivedFromFulfilled()'s filter, so no
+      // additional clearing logic is needed here") was TRUE when written and
+      // was falsified the moment S3(b) landed: that filter governs only the
+      // FULFILLED path, and an unfulfilled row never reaches it.
+      // Found live on production — 0726AC0632, marked "Didn't arrive",
+      // fulfilled=false, still on the panel.
+      //
+      // 'unknown' deliberately does NOT clear: it means "judged, and we still
+      // don't know", which is precisely the open state this panel exists to
+      // surface — the same reading neverArrivedFromFulfilled() gives it.
+      // NULL is "not yet judged" (F115 § 3.1) and must not clear either.
+      // Placed with the settled exits rather than inside the S3(b) branch so
+      // it clears Backordered and At risk too: a judged title is not an open
+      // case on any of the three panels.
+      if (p.arrival_outcome && p.arrival_outcome !== 'unknown') return; // admin judged it — settled
       if (hasShipmentEvidence(c)) return;                        // arrived — cleared
       // F129: a REJECTED code (ledgerRejected() — rows present, net <= 0) is a
       // decided case, not an open one — the store has already recorded the
@@ -1961,8 +1983,17 @@
 
     // F134 Part 2b — admin-only resolve control, Never Arrived rows only.
     // Writes arrival_outcome and nothing else; any value other than 'unknown'
-    // drops the row out of neverArrivedFromFulfilled()'s filter, so no
-    // additional clearing logic is needed here (plan § 4.2). One title-level
+    // clears the row from this panel.
+    //
+    // ⚠ CORRECTED — this comment used to read "…drops the row out of
+    // neverArrivedFromFulfilled()'s filter, so no additional clearing logic is
+    // needed here (plan § 4.2)". True as written under F134, and FALSE from
+    // F155 S3(b) onward: that filter governs only the FULFILLED path, while
+    // S3(b) added an unfulfilled producer that read arrival_outcome nowhere.
+    // The clearing logic it said was unnecessary is now the settled-outcome
+    // exit at the head of computeBackorderRisk()'s forEach — see the comment
+    // there. The old wording is kept above rather than deleted so the
+    // correction is visible. One title-level
     // judgement applies to every customer who reserved it — data-ids carries
     // every underlying preorder id the group collapsed (groupByExportCode's
     // `rows`, F134), not just the first.
