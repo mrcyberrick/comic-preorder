@@ -986,6 +986,17 @@ function confirmDialog(message, okLabel = 'Remove') {
     allUnavailable = items.filter(i => {
       const c = i.catalog;
       if (!c) return false;
+      // OPEN reservations only. `fulfilled` is the system's "this one is
+      // closed" flag — the row has already been through its cycle and the
+      // customer was told so. Re-opening closed rows months later is not what
+      // this section is for, and some of them the customer genuinely
+      // collected. Omitting this check shipped in the first cut and was wrong:
+      // measured on production 2026-09-21 it selected 54 rows rather than 23,
+      // of which 31 were fulfilled, and put 24 cards on one customer's list.
+      // It matches the filter both admin-side panels already use —
+      // computeWithdrawnTitles() and computeBackorderRisk() both lead with
+      // !p.fulfilled.
+      if (i.fulfilled) return false;
       const inMainTable = c.catalog_month === currentMonth;
       const inUpcoming  = !!(c.on_sale_date && c.on_sale_date >= today);
       if (inMainTable || inUpcoming) return false;          // already visible
@@ -1523,13 +1534,18 @@ function confirmDialog(message, okLabel = 'Remove') {
       // rejected -> not_arrived/damaged. Kept identical deliberately, so a
       // row cannot describe itself one way here and another way there.
       const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
+      // SHORT labels, matching .month-arrival-card's own existing convention —
+      // not the long sentences the desktop TABLE uses. These cards are 100px
+      // wide, so the table wording rendered as five lines of near-identical
+      // text on every card; at 20 cards that is a wall, not information. The
+      // section's intro note carries the explanation once, for all of them.
       const notice = isWithdrawn
-        ? '⚠ No longer available — withdrawn by the distributor. This title cannot arrive.'
+        ? '⚠ Withdrawn by the distributor'
         : isRejected
-          ? '⚠ Rejected by the supplier — this title will not arrive as scheduled.'
+          ? '⚠ Rejected by the supplier'
           : isNotArrived
-            ? '⚠ Did not arrive — contact the store.'
-            : '⚠ Arrived damaged — contact the store.';
+            ? '⚠ Did not arrive'
+            : '⚠ Arrived damaged';
       const canRemove = isWithdrawn || isRejected;   // == what F109 permits
       const cover = c.cover_url
         ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
@@ -1546,7 +1562,8 @@ function confirmDialog(message, okLabel = 'Remove') {
             ${canRemove
               ? `<button class="btn btn-danger btn-sm cancel-btn-unavailable" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
                          style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>`
-              : `<span class="foc-locked-chip" style="margin-top:4px" title="The store has this on order — contact them">⚠ Contact the store</span>`}
+              : `<span class="foc-locked-chip" title="The store has this on order — contact them"
+                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>`}
           </div>
         </div>`;
     }).join('');
