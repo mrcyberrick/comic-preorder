@@ -619,6 +619,28 @@
     </div>
   </div>
 
+  <!-- No longer coming — reservations the store has CONFIRMED will not arrive,
+       which the past-item auto-hide would otherwise make invisible. Rendered
+       OPEN by default when non-empty: a closed disclosure would hide exactly
+       the thing the customer needs to be told, the same reasoning PR #142
+       applied to the bagging list's "Not arriving this week" note. -->
+  <div class="month-arrivals" id="unavailable-section" style="display:none">
+    <div class="month-arrivals-header" id="unavailable-toggle">
+      <div class="month-arrivals-title">
+        <span>No longer coming</span>
+        <span class="month-arrivals-count" id="unavailable-count">0</span>
+      </div>
+      <span class="month-arrivals-chevron">▼</span>
+    </div>
+    <div class="month-arrivals-body">
+      <p id="unavailable-note" style="margin:0 0 10px;font-size:0.78rem;color:var(--text-secondary)">
+        The store confirmed these will not arrive. Removing one only clears it from your list —
+        there is nothing to collect.
+      </p>
+      <div class="month-arrivals-grid" id="unavailable-grid"></div>
+    </div>
+  </div>
+
 
   <!-- Subscriptions (collapsible) -->
   <div class="my-subs" id="my-subs-section" style="display:none">
@@ -808,6 +830,11 @@ function confirmDialog(message, okLabel = 'Remove') {
 
   let allItems = [];
   let allUpcoming = []; // all future reservations across all months
+  // Reservations that fall out of BOTH lists above (past month AND past
+  // on-sale) but which the store has CONFIRMED will never arrive. Without
+  // this third bucket they are invisible to the customer entirely — see
+  // renderUnavailable().
+  let allUnavailable = [];
   let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
 
   // Codes the store has already submitted to a distributor (F101/F102
@@ -931,7 +958,36 @@ function confirmDialog(message, okLabel = 'Remove') {
       const d = i.catalog?.on_sale_date;
       return d && d >= today;
     });
+    // ── The stranded-terminal bucket ─────────────────────────
+    // A reservation drops out of BOTH lists above once its catalog month has
+    // passed AND its on-sale date has gone by — the deliberate past-item
+    // auto-hide (§ Key Business Logic). That is correct for an ordinary title
+    // the customer collected, and WRONG for one the store has confirmed is
+    // never coming: the customer is simply never told. It also makes F120's
+    // rejected badge TRANSIENT — visible only while on_sale_date is still
+    // future, gone the day it passes, with no notice of any kind.
+    //
+    // Measured on production 2026-09-21: 23 of 1,342 open reservations were
+    // stranded, and ALL 23 carried a confirmed terminal state — 22 rejected,
+    // 1 not_arrived. Zero stranded rows lacked one, so this bucket is signal,
+    // not a backlog of ordinary past items.
+    //
+    // Only HUMAN-CONFIRMED states qualify, matching F134 § 4.3's settled rule
+    // that auto-judged 'unknown' stays staff-only (Order Follow-Up, admin
+    // only). 'arrived' is not terminal — it means the book is on the shelf.
+    allUnavailable = items.filter(i => {
+      const c = i.catalog;
+      if (!c) return false;
+      const inMainTable = c.catalog_month === currentMonth;
+      const inUpcoming  = !!(c.on_sale_date && c.on_sale_date >= today);
+      if (inMainTable || inUpcoming) return false;          // already visible
+      return !!c.withdrawn_at
+          || isCodeRejected(c)
+          || i.arrival_outcome === 'not_arrived'
+          || i.arrival_outcome === 'damaged';
+    });
     renderList();
+    renderUnavailable();
   }
 
   function renderList() {
@@ -1376,6 +1432,116 @@ function confirmDialog(message, okLabel = 'Remove') {
     document.getElementById('my-subs-section').classList.toggle('open');
   });
 
+  // ── No longer coming ─────────────────────────────────────
+  // The customer-facing half of the stranded-reservation problem. A row that
+  // falls out of BOTH the current-month table and Upcoming Arrivals is
+  // invisible, so a title the store has CONFIRMED is not coming could never
+  // be communicated at all — whatever an admin marked, and however correct
+  // the copy already sitting in the branches below was. All 23 of
+  // production's stranded reservations were in exactly that state.
+  //
+  // ⚠ REMOVE IS OFFERED ONLY WHERE THE SERVER WOULD ACTUALLY ALLOW THE
+  // DELETE, and that is not a UI nicety — it is F109's trigger.
+  // trg_preorders_block_ordered_delete permits a customer DELETE when the
+  // catalog row is withdrawn (its step 3) or the code's ledger nets <= 0
+  // (step 5), and RAISEs check_violation otherwise. So
+  // `isWithdrawn || isCodeRejected(c)` mirrors those two allow-paths exactly.
+  // Offering Remove on a net > 0 row would render a button the database
+  // rejects — the customer clicks, gets "Failed to remove reservation", and
+  // learns nothing. Such a row keeps the chip and the "contact the store"
+  // copy, which is the honest answer: the store has it on order and must
+  // settle the ledger (or withdraw the title) first.
+  //
+  // Rick's call, 2026-09-21: Remove appears here and ONLY here. The
+  // current-month table's rejected rows stay badge-only exactly as the
+  // 2026-08-06 decision set them, because that reasoning — a live cycle
+  // might still be corrected — holds there and has expired here.
+  function renderUnavailable() {
+    const section = document.getElementById('unavailable-section');
+    const grid    = document.getElementById('unavailable-grid');
+    const countEl = document.getElementById('unavailable-count');
+    if (!section || !grid || !countEl) return;
+
+    if (!allUnavailable.length) {
+      section.style.display = 'none';
+      section.classList.remove('open');
+      grid.innerHTML = '';                 // clear stale cards on shrink-to-empty
+      countEl.textContent = '0';
+      return;
+    }
+
+    section.style.display = '';
+    section.classList.add('open');         // open by default — see the markup note
+    countEl.textContent = String(allUnavailable.length);
+
+    grid.innerHTML = allUnavailable.map(item => {
+      const c = item.catalog;
+      const isWithdrawn = !!c.withdrawn_at;
+      const isRejected  = !isWithdrawn && isCodeRejected(c);
+      // Same precedence chain the two visible lists use: withdrawn ->
+      // rejected -> not_arrived/damaged. Kept identical deliberately, so a
+      // row cannot describe itself one way here and another way there.
+      const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
+      const notice = isWithdrawn
+        ? '⚠ No longer available — withdrawn by the distributor. This title cannot arrive.'
+        : isRejected
+          ? '⚠ Rejected by the supplier — this title will not arrive as scheduled.'
+          : isNotArrived
+            ? '⚠ Did not arrive — contact the store.'
+            : '⚠ Arrived damaged — contact the store.';
+      const canRemove = isWithdrawn || isRejected;   // == what F109 permits
+      const cover = c.cover_url
+        ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
+        : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
+      return `
+        <div class="month-arrival-card withdrawn-row" data-preorder-id="${item.id}">
+          <div class="month-arrival-cover">
+            <span class="distributor-badge badge-${c.distributor?.toLowerCase()}" style="font-size:0.55rem;padding:1px 5px">${escapeHtml(c.distributor||'')}</span>
+            ${cover}
+          </div>
+          <div class="month-arrival-info">
+            <div class="month-arrival-title">${escapeHtml(c.title)}</div>
+            <div class="withdrawn-notice">${notice}</div>
+            ${canRemove
+              ? `<button class="btn btn-danger btn-sm cancel-btn-unavailable" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
+                         style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>`
+              : `<span class="foc-locked-chip" style="margin-top:4px" title="The store has this on order — contact them">⚠ Contact the store</span>`}
+          </div>
+        </div>`;
+    }).join('');
+
+    // Own handler, own bucket. Deliberately NOT the main list's `.cancel-btn`
+    // wiring: that one resolves the row out of `allItems` and splices it back,
+    // and these rows are not in `allItems` at all — it would silently no-op
+    // on the state update while still issuing the delete.
+    grid.querySelectorAll('.cancel-btn-unavailable').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!(await confirmDialog('Remove this reservation? It is not arriving, so this only clears your list.'))) return;
+        btn.disabled = true;
+        const item = allUnavailable.find(i => i.id === btn.dataset.preorderId);
+        const { error } = await Preorders.cancel(AdminContext.resolveUserId(user.id), btn.dataset.catalogId);
+        if (error) {
+          toast('Failed to remove reservation', 'error');
+          btn.disabled = false;
+          return;
+        }
+        allUnavailable = allUnavailable.filter(i => i.id !== btn.dataset.preorderId);
+        toast('Reservation removed');
+        renderUnavailable();
+        if (!AdminContext.isActive()) {
+          const cCancelled = item?.catalog;
+          // Mirrors the main list's F110 § 2.2 flag: a cancellation that walks
+          // away from a copy already submitted to the distributor is worth
+          // finding later. Only reachable via the withdrawn override here,
+          // since a net > 0 code never renders this button at all.
+          UsageEvents.cancel(user.id, cCancelled, cCancelled?.withdrawn_at
+            ? { withdrawn: true, cancelled_after_order_submitted: isCodeOrdered(cCancelled) }
+            : {});
+        }
+      });
+    });
+  }
+
   // ── Upcoming Arrivals ────────────────────────────────────
   function renderArrivingThisMonth() {
     // Use allUpcoming which spans all catalog months
@@ -1527,6 +1693,10 @@ function confirmDialog(message, okLabel = 'Remove') {
   }
 
   // Toggle collapse
+  document.getElementById('unavailable-toggle').addEventListener('click', () => {
+    document.getElementById('unavailable-section').classList.toggle('open');
+  });
+
   document.getElementById('month-arrivals-toggle').addEventListener('click', () => {
     document.getElementById('month-arrivals-section').classList.toggle('open');
   });
