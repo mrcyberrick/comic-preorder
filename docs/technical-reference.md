@@ -6049,6 +6049,8 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Status:** **filed 2026-09-18, OPEN — not started.** Scripts repo, `check-dates.js` only; no app
   code, no schema. Found by Rick asking about one Lunar code (`0526AZ0505`) that the weekly check had
   never mentioned. **One live instance repaired the same day** (see below); the defect is untouched.
+  **A second live instance was found 2026-09-22 — its own sibling cover, never checked on 09-18 —
+  and is NOT yet repaired** (see below).
 - **The scope, in one line:** the drift query is
   `preorders?tenant_id=eq.<t>&fulfilled=eq.false` (`check-dates.js` ~line 245). **The F155 harm
   sequence ENDS in auto-fulfilment** — stale date passes → row leaves both halves of My List → never
@@ -6122,6 +6124,29 @@ reasoning — only the disposition changed, not the diagnosis.
   held until October is verified green"), which was superseded the next day. The plan doc's own
   § 5 body also still says "production still runs the pre-F155 body." Both were trusted over the
   STATUS token — the precise inversion CLAUDE.md § Document Integrity warns against.
+- **⚠️ SECOND LIVE INSTANCE FOUND 2026-09-22, unrepaired — the defect's own prediction, confirmed
+  on the very next row.** `0526AZ0504` CIMMERIAN XUTHAL OF THE DUSK #1 (OF 3) **CVR A** — `0505`'s
+  own sibling cover, one row away — carries the identical shape and was never checked during the
+  2026-09-18 investigation, which only looked at the one code Rick asked about. `fulfilled_at`
+  `2026-07-25T14:29:12.113942+00:00` — **byte-identical to `0505`'s stamp**, i.e. the same batch
+  write caught both — zero `weekly_shipment` rows ever, our `on_sale_date` still `2026-09-23`
+  against Lunar's 09-22 file's `9/30/2026` (read from the same download that already carries
+  `0505`'s corrected value). **Also invisible to `neverArrivedFromFulfilled()`**
+  (`admin.html:1861`), not only to `check-dates.js`: that filter explicitly excludes a NULL
+  `arrival_outcome` ("not yet judged, not judged unknown"), which is exactly what this row carries
+  — so there is genuinely no admin surface anywhere in the app for it today. Found by asking about
+  `0505`'s own sibling directly, not by any systemic check — itself more evidence for the fix
+  direction above, not a new fact about the mechanism. **Complication found alongside, not yet
+  resolved:** `0504` also carries a second, orphaned `catalog_month=2026-06` duplicate catalog row
+  (predates F136's 2026-08-22 dedupe fix; `on_sale_date` dead at `2026-07-22`, untouched by
+  anything) holding its own separate `fulfilled=true` reservation for a different customer (Albert
+  Abaunza) in the identical zero-evidence shape — two different people each shown a collected state
+  for what is physically one book, split across two disconnected catalog rows. `order_submissions`
+  shows exactly 2 copies ordered total (`qty 2`, `monthly`, `2026-05-24`), matching the 1+1
+  reservations, so the shop's own ledger is correct even though the two reservations aren't unified
+  on one row. **Neither row has been corrected — both await Rick's decision**, since the
+  orphaned-duplicate half is a merge/repoint judgment call, not a mechanical date fix like `0505`'s
+  was.
 - **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
   same day, same script, different root cause), F115 (`arrival_outcome`, and the 859-row orphan
   population that bounds any widening), F143 (why a ledger rejection and an arrival judgement are
