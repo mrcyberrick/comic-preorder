@@ -6147,6 +6147,33 @@ reasoning — only the disposition changed, not the diagnosis.
   on one row. **Neither row has been corrected — both await Rick's decision**, since the
   orphaned-duplicate half is a merge/repoint judgment call, not a mechanical date fix like `0505`'s
   was.
+- **⚠️ SYSTEMIC FIX LANDED 2026-09-22, scripts repo `main` `e267233` — but read this as a REPORT
+  widening, not a remediation.** New pure, exported `shouldWatchFulfilledRow(row, today, maxDays)`
+  in both `import.js`/`import-staging.js` (same duplicate-and-test-both convention as
+  `classifyReservedDateDrift`, after the 2026-05-08 hot-patch drift incident). A fulfilled row now
+  qualifies for the weekly watch only if it is **unjudged** (`arrival_outcome` NULL), **unshipped**
+  (no `weekly_shipment` evidence), **unresolved** (ledger net > 0 — a recorded F143 rejection or
+  correction is its own resolution, not this defect), and **recent** (fulfilled within
+  `FULFILLED_WATCH_DAYS = 14` of today — bounding against F115 S6's 859-row orphan population,
+  which this must not re-surface every run). `check-dates.js` wires this in as a new **read-only**
+  report section; it never writes — un-fulfilling still needs the same per-row guards
+  `fix-cimmerian-false-fulfil-2026-09-18.js` used, which stays a human decision, not a weekly
+  default.
+  - **26 new unit tests** (13 cases × 2 modules), negative-control verified (disabled the
+    shipment-evidence guard, exactly the expected test went red, restored, 26/26 green again).
+  - **Verified against BOTH live production and staging** (`--no-write`), no errors, no regression
+    to any existing report section. **The bounded weekly path correctly found NOTHING on
+    production today** — both `0526AZ0505` and `0526AZ0504` are 59 days stale, outside the 14-day
+    window by design. That is not the fix failing; it is F115 S6's territory (a one-time
+    historical sweep), deliberately not this weekly check's job.
+  - **A standalone one-time UNBOUNDED sweep** (same tested function, `maxDays=Infinity`, read-only,
+    not part of `check-dates.js`) confirmed it finds `0526AZ0504` for real — and surfaced far more
+    than the two known instances: **60 rows tenant-wide** currently match this shape. Most read as
+    ordinary data-completeness gaps (fulfilled a few days *after* on-sale, i.e. probably genuinely
+    arrived, just never got a `weekly_shipment` row logged) rather than the CIMMERIAN pattern
+    (fulfilled while the date was later revised further out) — distinguishing the two needs the
+    same title-by-title care F115 S6 applied. **Explicitly parked, not triaged** — Rick's call,
+    2026-09-22, to hold this for a separate session rather than fold it into this fix.
 - **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
   same day, same script, different root cause), F115 (`arrival_outcome`, and the 859-row orphan
   population that bounds any widening), F143 (why a ledger rejection and an arrival judgement are
