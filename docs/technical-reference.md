@@ -6144,9 +6144,18 @@ reasoning — only the disposition changed, not the diagnosis.
   for what is physically one book, split across two disconnected catalog rows. `order_submissions`
   shows exactly 2 copies ordered total (`qty 2`, `monthly`, `2026-05-24`), matching the 1+1
   reservations, so the shop's own ledger is correct even though the two reservations aren't unified
-  on one row. **Neither row has been corrected — both await Rick's decision**, since the
-  orphaned-duplicate half is a merge/repoint judgment call, not a mechanical date fix like `0505`'s
-  was.
+  on one row. **The 2026-06 orphaned-duplicate row (Albert Abaunza's reservation) is still
+  uncorrected — a merge/repoint judgment call, not a mechanical date fix, and still Rick's decision
+  to make.**
+- **`0504`'s LIVE (2026-05) row REPAIRED 2026-09-22** via local one-off
+  `fix-cimmerian-cvr-a-2026-09-22.js` (same convention as `fix-cimmerian-false-fulfil-2026-09-18.js`;
+  before-state in `fix-cimmerian-cvr-a-log-2026-09-22.json`; both local-only, matching every prior
+  one-off in this class). `on_sale_date` `2026-09-23` → **`2026-09-30`** (Lunar's own 09-22 file),
+  the one reservation `fulfilled` → **false** with `fulfilled_at` cleared, `arrival_outcome`
+  deliberately left NULL. **Independently verified by a fresh read, not the script's own output:**
+  `foc_date` unchanged at `2026-06-15`; the 2026-06 orphaned duplicate row confirmed **byte-identical
+  to its pre-fix state** (`fulfilled=true`, `fulfilled_at` unchanged, `arrival_outcome` NULL) — this
+  script's own out-of-scope guard held, and Albert Abaunza's reservation was never touched.
 - **⚠️ SYSTEMIC FIX LANDED 2026-09-22, scripts repo `main` `e267233` — but read this as a REPORT
   widening, not a remediation.** New pure, exported `shouldWatchFulfilledRow(row, today, maxDays)`
   in both `import.js`/`import-staging.js` (same duplicate-and-test-both convention as
