@@ -6101,7 +6101,27 @@ reasoning — only the disposition changed, not the diagnosis.
   `auto_fulfill_past_on_sale()` re-fulfils it and it drops straight back out of the checker. **The
   defect itself is untouched.**
 - **Interim, no code:** none. There is no operator action that surfaces these rows — that is the
-  finding. F155 S3's bounded deferral would stop new instances arriving but is **not on production**.
+  finding.
+- ***CORRECTED 2026-09-22.** This entry originally read "F155 S3's bounded deferral would stop new
+  instances arriving but is **not on production**." **That is false. S3(a) has been live on
+  production since 2026-09-05**, applied by Rick immediately after PR #150 merged
+  (`docs/sql/auto_fulfill_past_on_sale.sql`: `prod=APPLIED 2026-09-05 (F155 S3a body)`), and
+  `f155-catalog-date-revision-detection.md`'s own STATUS token has read COMPLETE, BOTH
+  ENVIRONMENTS since that date. **Confirmed behaviourally on 2026-09-22, not from the doc:** 15
+  reservations past their on-sale date with **no shipment evidence at all** are surviving
+  unfulfilled — which the pre-F155 body could not produce, since it fulfilled everything past
+  on-sale unconditionally.*
+- **What that changes, and what it does not.** New instances of this finding now arrive more
+  slowly: a stale-dated row with no evidence is **deferred up to 14 days** rather than fulfilled on
+  the first weekly run, and S3(b) keeps it visible in Never Arrived meanwhile. **The finding
+  stands unchanged past that window** — once the deferral lapses and the row is fulfilled, this
+  scope drops it permanently, exactly as described above. S3 narrows the intake; it does not close
+  the hole.
+- **Why the error happened, because it is the documented failure mode.** CLAUDE.md's narrative
+  still carries the 2026-09-04 *recommendation* ("S3 to staging now with its production promotion
+  held until October is verified green"), which was superseded the next day. The plan doc's own
+  § 5 body also still says "production still runs the pre-F155 body." Both were trusted over the
+  STATUS token — the precise inversion CLAUDE.md § Document Integrity warns against.
 - **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
   same day, same script, different root cause), F115 (`arrival_outcome`, and the 859-row orphan
   population that bounds any widening), F143 (why a ledger rejection and an arrival judgement are

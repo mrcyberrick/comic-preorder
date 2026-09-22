@@ -195,10 +195,20 @@ every title passes through the 30-day window before its on-sale date.
 
 ## 5. S3 — bounded deferral (the guard)
 
-**CLIENT HALF SHIPPED to staging 2026-09-04** (`b5ad0e4`, merged `--ff-only`, pushed, new bytes
-confirmed served on the plain URL). **SQL HALF IS PENDING — Rick must apply
-`docs/sql/auto_fulfill_past_on_sale.sql` to staging.** The file's own `-- STATUS:` line says so, and
-production still runs the pre-F155 body.
+**BOTH HALVES SHIPPED, BOTH ENVIRONMENTS.** Client half to staging 2026-09-04 (`b5ad0e4`, merged
+`--ff-only`, pushed, new bytes confirmed served on the plain URL); SQL half applied by Rick to
+**staging and production on 2026-09-05**, immediately after PR #150 merged
+(`docs/sql/auto_fulfill_past_on_sale.sql`: `prod=APPLIED 2026-09-05 (F155 S3a body)`).
+
+> ***Corrected 2026-09-22.** This paragraph read "**SQL HALF IS PENDING — Rick must apply
+> `docs/sql/auto_fulfill_past_on_sale.sql` to staging.** The file's own `-- STATUS:` line says so,
+> and production still runs the pre-F155 body" for seventeen days after both halves had landed —
+> contradicting this doc's **own STATUS token**, which has read COMPLETE, BOTH ENVIRONMENTS since
+> 2026-09-05. It was read as current on 2026-09-18 and again on 2026-09-22 and produced a false
+> claim in a filed finding (§ 13 F158, since corrected). **Verified behaviourally before
+> rewriting, not from the STATUS token either:** on 2026-09-22, 15 reservations past their
+> on-sale date with no shipment evidence were surviving unfulfilled — which the pre-F155 body
+> cannot produce.*
 
 **Sequencing is client-first here, deliberately, and it is the reverse of F149's.** S3(b) calls
 nothing new, so it is safe standing alone — it only widens what the Never Arrived panel shows. S3(a)

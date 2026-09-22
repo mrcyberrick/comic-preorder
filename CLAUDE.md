@@ -939,6 +939,16 @@ production exercise** — both have fired exactly once each and both fired wrong
 stale dates going in), S3 to staging now with its production promotion held until October is
 verified green.** **F155 is the finding this consumed. F156 is the next free ID.**
 
+> ***SUPERSEDED THE NEXT DAY, recorded 2026-09-22.** The recommendation above — "S3 to staging now
+> with its production promotion held until October is verified green" — was written 2026-09-04 and
+> **did not happen that way. Both S3 halves went to production on 2026-09-05**, PR #150 plus Rick
+> applying `docs/sql/auto_fulfill_past_on_sale.sql` immediately after. `f155-catalog-date-revision-detection.md`'s
+> STATUS token has read COMPLETE, BOTH ENVIRONMENTS since. **This stale recommendation was read as
+> current on 2026-09-18 and 2026-09-22 and produced a false claim in § 13 F158** (since corrected)
+> — the F132/F138/F139/F145 pattern again, in the section that warns about it. **The bounded
+> deferral IS live on production**: confirmed behaviourally 2026-09-22, 15 past-on-sale
+> reservations with no shipment evidence surviving unfulfilled.*
+
 **Prior work (2026-09-04, earlier): F72 S3 — print outputs tier-gated, GREEN on STAGING** (`b1e1445`,
 merged `--ff-only`, pushed). Closes the last open item from this session's F72 work — every paper
 output a customer or staffer could hold now follows the same rule S1a/S2a already established.
