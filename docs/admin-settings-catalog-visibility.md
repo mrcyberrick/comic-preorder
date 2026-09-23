@@ -1,6 +1,7 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** NOT STARTED · staging=— · prod=— · PR=— · findings: **F160 (filed 2026-09-23, see § 2)**
+**STATUS:** IN PROGRESS — S1 WRITTEN, NOT APPLIED · staging=— · prod=— · PR=— · findings: **F160 (filed 2026-09-23, see § 2)**
+**Q1/Q2/Q3 ANSWERED 2026-09-23 (Rick)** — see § 7. S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, its own STATUS `staging=PENDING | prod=PENDING`. **No code written, nothing applied to either database.**
 
 **Type:** Feature build, Rick's request 2026-09-23. **One new page, one new RPC, one new
 `app_settings` key. No schema change to any existing table, no RLS change, no Edge Function.**
@@ -193,10 +194,34 @@ compute counts it then discards, keeping only a Set. Production is ~3,100 rows /
 a three-year tenant is 10-15 round trips of 1,000 rows to render 78 numbers. This is the same
 unbounded-read shape as F82 / F113 / F139 / F140 / F156.
 
-New RPC — `get_publisher_reserve_counts(p_tenant_id uuid)`, `STABLE SECURITY DEFINER
-SET search_path = public`, returning `(publisher text, reserved_count bigint)` from a `GROUP BY`
-union of both sources. Precedent: `get_popular_series()` is the same shape. **This also makes the
-existing Print Catalog cheaper, so it pays for itself outside this feature.**
+New RPC — **`get_publisher_reserve_counts(p_catalog_month text DEFAULT NULL)`**, `LANGUAGE sql
+STABLE SECURITY DEFINER SET search_path = public`, returning
+`(publisher text, reserved_count bigint, month_title_count bigint)`. Written:
+`docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`. Precedent: `get_ordered_codes()` and
+`get_popular_series()` are the same shape. **This also makes the existing Print Catalog cheaper, so
+it pays for itself outside this feature.**
+
+**⚠️ Two corrections this file originally had wrong, kept visible per convention.**
+
+1. **It specified `get_publisher_reserve_counts(p_tenant_id uuid)`. That is a cross-tenant leak.**
+   The grant is to `authenticated`, so any signed-in customer could have passed another tenant's
+   uuid and read its reserve history. Tenant scope comes from `current_tenant_id()` **in the body**,
+   never from a caller-supplied parameter — the pattern every other RLS-adjacent function here
+   already follows.
+2. **It returned only `reserved_count`, which is not enough to render the page.** The settings list
+   needs each publisher's title count for the month as well (the mockup's second column), and a
+   publisher present this month with *no* reserve history must still be listed — so the count cannot
+   come from a reservations-only aggregate. The RPC now `FULL OUTER JOIN`s month publishers against
+   all-time reserve counts, which means it **also retires `Catalog.getPublishers()`'s own full-month
+   paging** (`app.js:794`, 3 round trips at 2,399 rows) for this caller.
+
+**Grant: `authenticated` only**, with `REVOKE ALL … FROM PUBLIC, anon`. F124 records the only four
+functions that may legitimately carry an `anon` grant; this is not one of them.
+
+**Do not "improve" the counting rule inside this function.** It must reproduce
+`getReservedPublishers()` exactly — every row of both tables, all catalog months, regardless of
+`fulfilled`, keyed `lower(btrim(publisher))` to match the JS `pub.trim().toLowerCase()` — so that a
+V2 discrepancy means a real difference rather than a deliberate one.
 
 ---
 
@@ -219,12 +244,24 @@ No code. Confirms § 2 and replaces this plan's estimates with figures.
 5. `SELECT pg_total_relation_size('public.catalog')` — § 8's storage estimate is derived from row
    counts and **must not be planned on until measured**.
 
-### S1 — `get_publisher_reserve_counts()` RPC (DB only)
+### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23, NOT APPLIED
 
-`docs/sql/<date>-publisher-reserve-counts.sql`, with the `-- STATUS:` line. Explicit
-`anon`/`authenticated` EXECUTE grant decision: **`authenticated` only** — this is an admin-facing
-aggregate and there is no anon caller. Staging first; production before S4 deploys there.
-Per F105: the RPC lands **before** any client code that calls it.
+**File: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`**, STATUS line
+`staging=PENDING | prod=PENDING`. Rick runs it; staging first, production before S4 deploys there
+(F105 — the RPC lands **before** any client code that calls it, never after).
+
+The file carries, in order: a **pre-check** on the five columns it depends on (§ 4 of the technical
+reference was last re-read from live 2026-08-10 and columns have been added to `catalog` since —
+expected 6 rows, and fewer means stop), the function, the grant plus revoke, a grants verification,
+a `prosecdef`/`proconfig`/overload check that `CREATE OR REPLACE` did not drop `SECURITY DEFINER` or
+leave a stray signature, a smoke with **its expected values stated before it runs**, and a rollback
+line.
+
+**⚠️ The smoke cannot run as written in the SQL Editor and the file says so.** The editor runs as
+`postgres`, so `current_tenant_id()` resolves through `auth.uid()` and returns NULL — the function
+returns **zero rows**, which is correct behaviour and not a failure. The file therefore ships a
+second query that substitutes an explicit tenant id for the smoke, and defers the real check to V2
+in a signed-in browser.
 
 ### S2 — `settings.html`, nav rework, gear activation (client only, zero behaviour change)
 
@@ -274,6 +311,80 @@ environment, or the fail-open default briefly widens the print sheet.
 | V10 | New spec asserting V3, V5 and V7 — the suite has **zero** coverage of any of this today, so a green run otherwise proves only that nothing else broke |
 | V11 | Post-deploy: served bytes verified with `curl -L` (the documented 302 trap), positive **and** negative assertions |
 
+### 5.1 V2 in full — the parity gate, and why it is a browser check and not SQL
+
+The RPC must reproduce `getReservedPublishers()` exactly. **Checking it with SQL that reimplements
+the same rule would be circular** — "a verification step that cannot fail is not a verification
+step" (§ Smoke Test Suite). So V2 runs *both implementations in one signed-in admin session* and
+diffs them. The old one goes through PostgREST under RLS; the new one is a single `GROUP BY`. Two
+independent paths, same session, same data.
+
+`db` is a top-level `const` in `app.js`, loaded as a classic script, so it resolves from the console's
+global scope. Paste this on the deployed admin page, signed in as an admin:
+
+```js
+(async () => {
+  const MIN = 7;
+
+  // ── OLD — byte-faithful copy of getReservedPublishers() (admin.html:5251) ──
+  const counts = new Map();
+  async function collect(table, selectExpr, extract) {
+    const countRes = await db.from(table).select('*', { count: 'exact', head: true });
+    const total = countRes.count ?? 0;
+    if (!total) return;
+    const batches = [];
+    for (let from = 0; from < total; from += 1000) {
+      batches.push(db.from(table).select(selectExpr).range(from, Math.min(from + 999, total - 1)));
+    }
+    const results = await Promise.all(batches);
+    results.flatMap(r => r.data || []).forEach(row => {
+      const pub = extract(row);
+      if (pub) {
+        const key = pub.trim().toLowerCase();
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    });
+  }
+  await Promise.all([
+    collect('reservation_history', 'publisher', r => r.publisher),
+    collect('preorders', 'catalog(publisher)', r => r.catalog?.publisher),
+  ]);
+  const oldSet = new Set([...counts].filter(([, n]) => n >= MIN).map(([k]) => k));
+
+  // ── NEW — the RPC ──
+  const { data, error } = await db.rpc('get_publisher_reserve_counts');
+  if (error) { console.error('RPC failed', error); return; }
+  const newSet = new Set(
+    data.filter(r => Number(r.reserved_count) >= MIN)
+        .map(r => r.publisher.trim().toLowerCase())
+  );
+
+  // ── DIFF ──
+  const onlyOld = [...oldSet].filter(k => !newSet.has(k));
+  const onlyNew = [...newSet].filter(k => !oldSet.has(k));
+  const mismatch = data
+    .map(r => ({ k: r.publisher.trim().toLowerCase(), rpc: Number(r.reserved_count) }))
+    .filter(r => (counts.get(r.k) || 0) !== r.rpc);
+
+  console.log('old >= 7:', oldSet.size, ' new >= 7:', newSet.size);
+  console.log('only in OLD:', onlyOld);
+  console.log('only in NEW:', onlyNew);
+  console.log('per-publisher count mismatches:', mismatch);
+  console.log(!onlyOld.length && !onlyNew.length && !mismatch.length
+    ? 'V2 PASS — identical' : 'V2 FAIL — investigate above');
+})();
+```
+
+**Negative-control it before believing a pass**, per this project's standing practice: change `MIN`
+to `6` on the `newSet` line only, re-run, and confirm the diff reports publishers "only in NEW". If
+it still says PASS, the comparison is vacuous and the real result is unknown.
+
+**Two expected non-failures, so neither is mistaken for a defect.** Publishers with `reserved_count`
+0 appear in the RPC output and not in the old Map — `counts.get(k) || 0` makes those compare equal,
+by design, because the settings page must list a publisher that has titles this month and no
+history. And a publisher with history but no titles this month comes back with its *lowercased* key
+as its display name, since there is no current row to take canonical casing from.
+
 ---
 
 ## 6. Out of scope — stop and ask
@@ -297,16 +408,26 @@ environment, or the fail-open default briefly widens the print sheet.
 not a design choice. Filed ahead of S0's live confirmation rather than after it, with that limit
 stated in the finding itself.
 
-**Q2 — Seeding the past-FOC rule, which is the one place the two surfaces cannot both keep today's
-behaviour.** One rule now governs both, so unification necessarily moves one of them.
-*Recommend: hide past-FOC on both.* A title past FOC is already unreservable for new customers —
-`isFocLocked` → `isFocPast` blocks it — so showing it in the customer catalog advertises something
-that cannot be ordered. The cost is that customers stop seeing rows they see today. The alternative
-(show past-FOC on both) instead makes the printed sheet **longer**, which is paper.
+**Q2 — ANSWERED 2026-09-23 (Rick): hide past-FOC on BOTH surfaces.** This is the one place the two
+surfaces cannot both keep today's behaviour — one rule now governs both, so unification necessarily
+moves one of them. Rationale for the direction taken: a title past FOC is already unreservable, since
+`isFocLocked` → `isFocPast` blocks new reservations *and* cancellations, so showing it in the
+customer catalog advertises something that cannot be ordered.
 
-**Q3 — Keep "Reserved ≥ 7" as a one-click preset?** *Recommend: yes.* It reproduces today's
-behaviour in one click and is a sane starting point for an established tenant — as an explicit
-choice rather than a constant.
+**⚠️ This is a customer-visible change and S3's seed must encode it deliberately.** Customers stop
+seeing rows they see today. The print sheet is unaffected — it already hides them — so V4's
+"unchanged at 1,534 / 34" still holds. Measure the customer-side delta in S0 (how many current-month
+titles have a passed FOC) so the size of the change is known before it ships, not after.
+
+**Q3 — ANSWERED 2026-09-23 (Rick): keep "Reserved ≥ 7" as a one-click preset.** It reproduces
+today's behaviour in one click and is a sane starting point for an established tenant — as an
+explicit choice rather than a hardcoded constant. It must **not** be the default for a tenant with
+no history (§ 2 / F160).
+
+*Provenance note: Rick's reply numbered these "Q1, agree - Q2, agree" against the two decisions
+raised in conversation (past-FOC, then the preset), which are this doc's Q2 and Q3. Q1 was already
+closed by the F160 filing earlier in the same session. Recorded this way so the mapping is visible
+if it needs correcting.*
 
 **Q4 — Does the page-vs-mode decision hold?** Settled on performance in § 3.1; recorded here because
 it is the decision most likely to be revisited.
@@ -352,8 +473,9 @@ What does scale, and how it is handled here:
 ## 9. Completion criteria
 
 - [ ] S0 measured on both environments; § 2 confirmed or refuted; § 8's storage figure replaced with a real one
-- [ ] Q1-Q3 answered by Rick and recorded in § 7
-- [ ] S1 RPC applied to staging, verified by V2
+- [x] Q1-Q3 answered by Rick and recorded in § 7 (2026-09-23)
+- [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
+- [ ] S1 RPC applied to staging, verified by V2 (§ 5.1 browser diff, negative-controlled)
 - [ ] S2 merged to `staging` `--ff-only`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync in the same commit
 - [ ] `aria-hidden` / `tabindex` removed from the gear (`app.js:539-540`)
 - [ ] S3 seed applied to staging, V4 green there
