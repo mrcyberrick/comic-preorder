@@ -31,12 +31,32 @@
 --                                                     VALIDATED.
 --     demoshop     2026-09  2,288 rows  72 pubs   0 w/history  0 passing
 --                             0 rows ->  0 pages  <-- F160 CONFIRMED
--- Q2  FAILED TWICE, both my fault, both fixed. See Q2's own header.
+-- Q2  raysandjudys: 5 publishers pass -- Marvel 25/314, DC 21/288,
+--     Boom Entertainment 19/102, Abrams 14/27, ABLAZE 9/11.
+--     12 near-misses (1-6 reserved), incl. Archie 6/6 -- ONE short of the bar --
+--     Titan Comics 4/95, IDW 1/114, Dark Horse 1/49.
+--     55 publishers at 0 reserved, incl. Image Comics 0/246 and
+--     DYNAMITE 0/208.  demoshop: all 72 at 0.
+--     ✅ THREE-WAY ARITHMETIC RECONCILIATION, which validates Q1/Q2/Q6
+--        against each other: the 5 passing publishers hold
+--        314+288+102+27+11 = 742 current-month titles; Q6 says 54 of those
+--        fail the FOC rule; 742 - 54 = 688 = Q1's predicted_print_rows,
+--        EXACTLY. Three independently-written queries agree.
+--     ⚠️ STAGING RESERVE COUNTS ARE TEST DATA (24 archived + 64 live per
+--        CLAUDE.md), so this is NOT a real popularity ranking. "Image Comics
+--        has 0 reservations" is a staging artifact. Production Q2 is the only
+--        source for real popularity. What IS environment-independent is the
+--        SHAPE: a small-catalog publisher (Abrams, 27 titles) clears the bar
+--        while a 246-title major (Image) does not.
 -- Q3  raysandjudys  restricted 332 | standard 1,122 | variant_no_ratio 848
 --     demoshop      restricted 332 | standard 1,117 | variant_no_ratio 839
 --     standard_with_ratio = 0 and ratio_malformed = 0 on every tenant.
 -- Q4  22 distinct ratios on raysandjudys, 18 on demoshop, ALL well-formed.
--- Q5  NOT RUN — still owed.
+-- Q5  raysandjudys 2,302 rows: priced 2,298 | zero_price 4 | no_price_set 0
+--     demoshop     2,288 rows: priced 2,284 | zero_price 4 | no_price_set 0
+--     Negative prices: 0 on every tenant.
+--     ⚠️ The promotional filter governs FOUR titles, and the no-price toggle
+--        governs ZERO. The mockup assumed 27 and 9. Scope cut, see the plan.
 -- Q6  raysandjudys  no_foc 0 | passed_today 10 | in_month_or_before 234
 --                   newly_hidden 54 | protected_by_reservation 7
 -- Q7  catalog = 20 MB / 13,071 rows / 1,633 BYTES PER ROW
@@ -61,6 +81,24 @@
 -- (3) 1,633 BYTES PER ROW, 2.3-5x my 300-700 estimate. So Supabase free tier's
 --     500 MB is exhausted at roughly 28-30 tenants on `catalog` ALONE, not at
 --     100. That is a much nearer and more actionable threshold.
+--
+-- (4) PUBLISHER-NAME FRAGMENTATION IS ALREADY IN THE DATA, not a future risk.
+--     Plan § 8 raised this as hypothetical ("if Lunar re-spells BOOM!
+--     Studios..."). Q2 shows it present TODAY:
+--       "Titan Comics" (95 titles) AND "Titan" (1 title)      <-- same publisher
+--       "Kodansha Comics" (24) AND "Kodansha USA" (7)
+--       "Fantagraphics" (11) AND "Fantagraphics Underground" (1)
+--       "Random House Children's Books" / "...Publishing Group" / "...Worlds"
+--       "Penguin Publishing Group" / "Penguin Young Readers Group"
+--       "Disney - RHCB" / "Disney Publishing Group"
+--     Also note the founding tenant's Boom is "Boom Entertainment", NOT the
+--     "BOOM! Studios" this plan and the mockup both assumed.
+--     TWO consequences: (a) an admin ticking "Titan Comics" silently misses
+--     the title filed under "Titan"; (b) the EXISTING print filter splits
+--     reserve counts across spellings, so a publisher with 4+4 reservations
+--     never clears the bar of 7 that 8 would have cleared. (b) is a candidate
+--     defect in shipped code — but staging's counts are test data, so it must
+--     be confirmed on PRODUCTION Q2 before being filed.
 -- ============================================================================
 
 

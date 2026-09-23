@@ -61,7 +61,7 @@ preference in `localStorage`. This page sets the tenant-wide floor those filters
 | Standard cover | `catalog.variant_type` | NULL / `'Standard'` (Lunar) / `'Primary Title'` (PRH) |
 | Allocation ratio | `catalog.order_requirement` | PRH's `OrderRequirement`; **Lunar's ratio is in `variant_type` itself** and is derived into this column at import by `parseLunarVariantRestriction()` |
 | Past FOC | `catalog.foc_date` | date, nullable. **NULL has no cutoff — keep it** |
-| Promotional | `catalog.price_usd` | numeric, nullable. `0` and `NULL` are different cases |
+| Promotional | `catalog.price_usd` | numeric, nullable. **⚠️ MEASURED 2026-09-23: `= 0` is FOUR titles and `IS NULL` is ZERO** — see § 3.7 |
 
 `current_tenant_id()` is `STABLE`, so RLS is evaluated once per query, not per row.
 
@@ -148,6 +148,18 @@ floor when history is empty); catalog shows everything. **Deploying S4 then chan
 The first save is a deliberate act, and the impact bar states both numbers before the admin commits
 to it. If Rick then wants divergent lists, option 3 becomes a small follow-on rather than a
 launch-day decision.
+
+**The three queries reconcile exactly, which is why these numbers can be trusted.** Q2's five
+passing publishers hold `314 + 288 + 102 + 27 + 11 = 742` current-month titles; Q6 says 54 of those
+fail the FOC rule; `742 − 54 = 688`, which is Q1's `predicted_print_rows` to the row. Three
+independently-written queries agree, so the model is not merely self-consistent — it is
+cross-checked.
+
+**⚠️ But staging's reserve counts are TEST DATA** (24 archived + 64 live, per CLAUDE.md's own note),
+so the *ranking* is meaningless here — "Image Comics has 0 reservations" is a staging artifact, not a
+fact about comics. Production Q2 is the only source for real popularity. What *is*
+environment-independent is the shape: **Abrams clears the bar on 27 titles while Image Comics, with
+246, does not.**
 
 **This validates the mockup's two-number impact bar as load-bearing, not decorative.** "Customers
 will see X" and "printed sheet Y pages" move in *opposite directions* as the publisher list widens,
@@ -248,6 +260,25 @@ fail-open direction is unchanged in spirit — never render an empty surface —
 "open" is not the same value on both sides. It still mirrors
 `Settings.isMaintenanceModePublic()`'s fail-open and remains the deliberate **inverse** of `Tier`,
 which fails closed because *free* is its safe render.
+
+### 3.7 The promotional group shrinks to one toggle — measured, 2026-09-23
+
+S0 Q5, both staging tenants: **`price_usd = 0` is 4 titles. `price_usd IS NULL` is 0. Negative
+prices are 0.** The mockup assumed 27 and 9.
+
+**Ship one toggle, not two.** "Priced $0.00 — 4 titles" is worth having; a toggle governing zero
+rows is clutter that implies a population that does not exist.
+
+**The no-price case becomes a data-quality signal, not a visibility filter**, which is what this
+file's own S0 comment predicted: *"If no_price_set is large, that is an import-quality finding of its
+own, not a filter requirement."* It measured zero, so it is not a filter requirement. Keep the
+filter *model* able to express it — a future import can produce NULLs, exactly as F156's
+`order_requirement` did — but surface a non-zero count as a warning rather than a switch.
+
+⚠️ **Four titles is small enough to question the group's existence at all.** Kept because it is
+nearly free once the section scaffolding is there, and because a free promotional bundle is exactly
+the kind of row `0726DC0300` (F155's stale DC Connect bundle) shows up as. Rick's call if he would
+rather drop it from v1.
 
 ### 3.5 Do NOT materialize a `catalog_visible` column
 
@@ -550,11 +581,34 @@ What does scale, and how it is handled here:
 
 **Two multi-tenant fragilities worth carrying forward:**
 
-1. **The config is keyed on free text the distributor controls.** Allowlists store publisher names,
-   normalized `trim().toLowerCase()`. If Lunar re-spells "BOOM! Studios", that publisher silently
-   drops from *every* tenant's allowlist at once — one upstream edit, N stores affected. Mitigation:
-   the settings page surfaces "N publishers in your configuration no longer match this month's
-   catalog" rather than failing quietly. **Build this in S2, not later.**
+1. **The config is keyed on free text the distributor controls — ⚠️ NO LONGER HYPOTHETICAL,
+   MEASURED 2026-09-23.** Allowlists store publisher names, normalized `trim().toLowerCase()`. This
+   section originally speculated *"if Lunar re-spells BOOM! Studios…"*. S0 Q2 shows the same
+   publisher already present under two names **today**:
+
+   | | |
+   |---|---|
+   | `Titan Comics` 95 titles · `Titan` 1 title | same publisher, two rows |
+   | `Kodansha Comics` 24 · `Kodansha USA` 7 | |
+   | `Fantagraphics` 11 · `Fantagraphics Underground` 1 | arguably distinct imprints |
+   | `Random House Children's Books` 8 · `…Publishing Group` 3 · `…Worlds` 22 | three |
+   | `Penguin Publishing Group` 6 · `Penguin Young Readers Group` 10 | |
+   | `Disney - RHCB` 1 · `Disney Publishing Group` 3 | |
+
+   Note also that the founding tenant's Boom is **`Boom Entertainment`**, not the `BOOM! Studios`
+   this plan and the mockup both assumed — so "78 publishers" and the mockup's publisher names were
+   both invented rather than read.
+
+   **Two consequences, and the second is a candidate defect in shipped code.** (a) An admin ticking
+   `Titan Comics` silently misses the title filed under `Titan`. (b) **The existing print filter
+   splits reserve counts across spellings**, so a publisher holding 4 + 4 reservations never clears
+   the bar of 7 that 8 would have cleared — the bar is harder to pass than it looks. (b) must be
+   **confirmed on production Q2 before being filed**: staging's counts are test data, so
+   fragmentation there proves the shape but not a live instance.
+
+   **S2 requirements, now mandatory rather than nice-to-have:** surface "N publishers in your
+   configuration no longer match this month's catalog", *and* flag near-duplicate publisher names in
+   the list so the admin can see `Titan` sitting beside `Titan Comics` instead of scrolling past it.
 2. **Catalog rows are copied per tenant — ✅ MEASURED 2026-09-23, and the threshold is much nearer
    than 100 tenants.** `demoshop` was created with 2,288 rows copied from the founding tenant. S0 Q7
    on staging: `catalog` is **20 MB across 13,071 rows = 1,633 bytes per row** — **2.3–5× my
@@ -580,7 +634,7 @@ What does scale, and how it is handled here:
 
 - [x] S0 queries written — `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql` (2026-09-23)
 - [x] S0 run on **STAGING** 2026-09-23 — F160 CONFIRMED (Q1/Q8), storage measured (Q7), ratios and cover classes measured (Q3/Q4), FOC cost measured (Q6). Three results changed the plan: § 2.1, § 3.2 ratios, § 8 storage
-- [ ] S0 Q2 re-run (failed twice on my own bugs, both fixed) and **Q5 run — still owed**
+- [x] S0 Q2 + Q5 run on staging 2026-09-23 — three-way arithmetic reconciliation confirmed (§ 2.1); publisher fragmentation measured (§ 8); promotional group cut to one toggle (§ 3.7)
 - [ ] S0 run on **PRODUCTION** — Q1/Q8 complete F160's confirmation, Q7 confirms the storage threshold
 - [ ] § 2.1's unification decision made by Rick (the 70% / 36% customer-catalog cut)
 - [x] Q1-Q3 answered by Rick and recorded in § 7 (2026-09-23)
