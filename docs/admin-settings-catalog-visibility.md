@@ -115,6 +115,45 @@ reservations. That near-miss band is the population the settings page exists to 
 independently of this plan — worth doing if this plan does not ship soon, because exposure begins
 at the next tenant onboarding rather than at this plan's schedule.
 
+### 2.1 ⚠️ SECOND BLOCKING RESULT — unification is not free, and the publisher bar is the expensive half
+
+Measured on staging 2026-09-23 (S0 Q1/Q6). **S3 as originally written — "seed the founding tenants
+reproducing today's effective print behaviour" — would silently cut the customer catalog by 70%.**
+
+| | customer catalog today | under today's print config | change |
+|---|---|---|---|
+| staging `raysandjudys` | **2,302** titles, 72 publishers | **688** titles, 5 publishers | **−70%** |
+| production `rjbookstop` | ~2,399 titles, 78 publishers | ~1,534 titles, 14 publishers | **−36%** |
+
+**The FOC rule I flagged under Q2 is the small half.** Of staging's 1,614-row reduction, the
+past-FOC rule accounts for **54** rows (Q6 `newly_hidden_from_customers`, of which 7 are held by the
+reservation exemption) and the **publisher bar accounts for ~1,560**. I had the proportions
+backwards when I raised Q2 as the decision to think about.
+
+**The root problem is structural, not a bad default: no single config can preserve both surfaces,
+because they disagree today.** § 1.1's table is the whole finding — the print filters, the catalog
+does not. Unification necessarily moves one of them:
+
+1. **Print's behaviour wins** → customers lose 70% (staging) / 36% (production) of what they can
+   browse. Almost certainly not intended, and it is what S3 would have done.
+2. **Catalog's behaviour wins** → the printed sheet grows from 15 pages to ~50 on staging, ~34 to
+   ~54 on production. Real paper cost, and paper cost is why the barcode variant was dropped.
+3. **Per-surface publisher lists** → both preserved, at the cost of two lists in the UI. The data
+   arguably argues for this: the print is a browsing aid constrained by paper, the web catalog has
+   no paper constraint, so a shared list is fighting two different jobs.
+
+**Recommendation, and it changes § 3.4 rather than picking a winner: no config row means each
+surface keeps exactly today's behaviour.** Print applies the ≥7 bar plus the FOC rule (with F160's
+floor when history is empty); catalog shows everything. **Deploying S4 then changes nothing at all.**
+The first save is a deliberate act, and the impact bar states both numbers before the admin commits
+to it. If Rick then wants divergent lists, option 3 becomes a small follow-on rather than a
+launch-day decision.
+
+**This validates the mockup's two-number impact bar as load-bearing, not decorative.** "Customers
+will see X" and "printed sheet Y pages" move in *opposite directions* as the publisher list widens,
+so an admin editing one list needs both numbers in front of them. A single "titles visible" readout
+would have hidden exactly this trade.
+
 ---
 
 ## 3. Architecture decisions
@@ -166,8 +205,17 @@ rows (`catalog.html:799-820`).
 Mechanics:
 - Publisher → `.in('publisher', shown)` or `.not('publisher','in',hidden)`, **whichever list is
   shorter** (≤ 39 names worst case at 78 publishers).
-- Ratio threshold → **no numeric parsing.** `order_requirement` holds a small enumerable set of
-  strings, so it is `.in('order_requirement', ['1:5','1:10'])`.
+- Ratio threshold → **no numeric parsing**, but the set is larger than assumed. **Measured
+  2026-09-23: 22 distinct values on staging** (1:1, 1:2, 1:3, 1:4, 1:5, 1:7, 1:10, 1:15, 1:20, 1:25,
+  1:30, 1:40, 1:50, 1:60, 1:75, 1:100, 1:125, 1:200, 1:250, 1:300, 1:500, 1:1000), 18 on
+  `demoshop`, **all well-formed** — zero rows fail `^[0-9]+:[0-9]+$`. So `.in()` still works and is
+  still ~150 characters of URL, but two design consequences follow:
+  **(a) the mockup's fixed six-option dropdown misrepresents the data** and must be built from the
+  distinct values actually present (or replaced with a numeric "denominator ≤ N" input);
+  **(b) 1:1 and 1:2 are barely restrictions at all** — 1:1 means order one, get one — so grouping
+  them under "allocation-restricted" is questionable labelling worth revisiting in S2.
+  Current-month ratio rows sum to exactly **332**, reconciling with § 1.3's cover-class total, so
+  the data is internally consistent.
 - Cover class, price, FOC → plain predicates.
 - **The reservation exemption (§ 3.3) cannot be a predicate** — it needs the customer's own reserved
   set, which is already in memory as `reservedIds`. It is a client-side union applied after the fetch.
@@ -179,13 +227,27 @@ F155's stranding exactly: present in the database, absent from every surface the
 It is not a preference and gets no toggle — the impact bar states how many titles it is keeping
 visible so the admin can see it working.
 
-### 3.4 Fail open, never closed
+### 3.4 Fail open — and "open" means today's behaviour, per surface
 
-Missing key, malformed JSON, unparseable blob → **show everything**. `app_settings.value` is untyped
-text with no CHECK constraint. Failing closed means a store with an empty catalog and no visible
-cause. This mirrors `Settings.isMaintenanceModePublic()`'s fail-open, and is the deliberate
-**inverse** of `Tier`, which fails closed because *free* is its safe render — here the safe render is
-everything.
+**REVISED 2026-09-23 after S0.** This section originally read *"Missing key, malformed JSON,
+unparseable blob → **show everything**"*, on both surfaces. Measured, that is wrong for the print:
+it would grow the founding tenant's sheet from 15 pages to ~50 the moment S4 deployed, with nobody
+having asked for it (§ 2.1).
+
+**Corrected rule — absence of config means each surface keeps exactly what it does today:**
+
+| State | Customer catalog | Print catalog |
+|---|---|---|
+| No `catalog_filters` row, tenant HAS reserve history | everything | ≥7 publisher bar + FOC rule (today) |
+| No `catalog_filters` row, tenant has NO history | everything | **everything** — F160's floor |
+| Malformed / unparseable JSON | everything | as "no row" above, plus a console warn |
+| Valid config | the config | the config |
+
+So **S4 deploys as a no-op** and the first save is the only thing that changes behaviour. The
+fail-open direction is unchanged in spirit — never render an empty surface — it just recognises that
+"open" is not the same value on both sides. It still mirrors
+`Settings.isMaintenanceModePublic()`'s fail-open and remains the deliberate **inverse** of `Tier`,
+which fails closed because *free* is its safe render.
 
 ### 3.5 Do NOT materialize a `catalog_visible` column
 
@@ -299,12 +361,25 @@ in a signed-in browser.
 - Writes `app_settings.catalog_filters`. **Nothing reads it yet.**
 - Left rail carries `Branding` and `Email Templates` as disabled "Soon" entries (§ 6).
 
-### S3 — Seed the founding tenants (data step, Rick)
+### S3 — Seed the founding tenants — ⚠️ REVISED, AND POSSIBLY DELETED
 
-Write an explicit `catalog_filters` for staging's `raysandjudys` and production's `rjbookstop`
-reproducing **today's effective print behaviour** — the publishers that currently clear the ≥7 bar,
-all cover types shown, past-FOC per Q2's answer, promos shown. Must land **before** S4 on each
-environment, or the fail-open default briefly widens the print sheet.
+**This step originally said: write a `catalog_filters` reproducing today's effective print behaviour
+for `raysandjudys` and `rjbookstop`. S0 measured that as a 70% cut to the customer catalog
+(§ 2.1), so it must not be done as written.**
+
+Under § 3.4's corrected rule, **S3 is no longer needed to make S4 safe** — absence of config already
+preserves both surfaces, so S4 deploys as a no-op and this step's whole purpose is gone.
+
+What remains is optional and is Rick's call, not a prerequisite:
+
+- **Do nothing.** S4 ships inert; Rick opens the settings page and makes the first deliberate choice
+  with the impact bar in front of him. **Recommended** — it is the only option where nothing changes
+  without someone choosing it.
+- **Seed "all publishers shown"** for both surfaces. Customer catalog unchanged; print grows to ~50
+  pages on staging, ~54 on production. Only do this if the longer sheet is actually wanted.
+
+Either way, **no seed may reproduce the ≥7 bar on the customer side** without Rick seeing § 2.1's
+numbers first and saying so explicitly.
 
 ### S4 — Apply the config (client only — the behaviour change)
 
@@ -480,22 +555,34 @@ What does scale, and how it is handled here:
    drops from *every* tenant's allowlist at once — one upstream edit, N stores affected. Mitigation:
    the settings page surfaces "N publishers in your configuration no longer match this month's
    catalog" rather than failing quietly. **Build this in S2, not later.**
-2. **Catalog rows are copied per tenant.** `demoshop` was created with 2,288 rows copied from the
-   founding tenant. At ~9,400 steady-state rows per tenant (production post-F136 dedupe, 2026-08-22),
-   100 tenants is ~940,000 rows across 33 text-heavy columns and 8 indexes. At an estimated
-   300-700 bytes/row that is roughly 280-660 MB before indexes, against Supabase free tier's 500 MB.
-   **This is an estimate from row counts, not a measurement** — S0 item 5. If it holds, the binding
-   constraint at 100 tenants is **Supabase storage, not email**, reversing the standing assumption
-   that MailerSend's 500/month cap was the near-term ceiling (formed at two tenants; email has since
-   moved to Resend at 3,000/month). Supabase Pro is 8 GB at $25/month total — a line item at
-   $39-50/tenant pricing, not a redesign. **Not this feature's problem, and not this feature's fix.**
+2. **Catalog rows are copied per tenant — ✅ MEASURED 2026-09-23, and the threshold is much nearer
+   than 100 tenants.** `demoshop` was created with 2,288 rows copied from the founding tenant. S0 Q7
+   on staging: `catalog` is **20 MB across 13,071 rows = 1,633 bytes per row** — **2.3–5× my
+   300–700 estimate**, which was wrong in magnitude while right in direction.
+
+   At 1,633 bytes/row and ~10,800 rows for a real shop, **one tenant costs ~17.6 MB of `catalog`
+   alone**. So Supabase free tier's 500 MB is exhausted at roughly **28–30 tenants**, not 100 —
+   and Q7's own 100-tenant projection is **1,679 MB**, 3.4× over the free tier.
+
+   *(The original estimate is kept above rather than deleted. It was derived from row counts with a
+   guessed row width; the row width was the part that was wrong.)*
+
+   **So the binding constraint arrives at ~28 tenants, and it is Supabase storage, not email** —
+   reversing the standing assumption that MailerSend's 500/month cap was the near-term ceiling (that
+   was formed at two tenants, and email has since moved to Resend at 3,000/month). Supabase Pro is
+   8 GB at $25/month total, which at $39–50/tenant is covered many times over by the ~28th tenant's
+   own subscription. **A line item to plan, not a redesign — and not this feature's problem or fix.**
+   Still owed: Q7 on production, whose retained-month count may differ from staging's.
 
 ---
 
 ## 9. Completion criteria
 
 - [x] S0 queries written — `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql` (2026-09-23)
-- [ ] S0 **run** on both environments; § 2 confirmed or refuted (Q1/Q8); § 8's storage figure replaced with Q7's real one; § 1.3's cover-class and ratio figures replaced with Q3/Q4's; Q2's customer-visible FOC cost known before S3 seeds it (Q6)
+- [x] S0 run on **STAGING** 2026-09-23 — F160 CONFIRMED (Q1/Q8), storage measured (Q7), ratios and cover classes measured (Q3/Q4), FOC cost measured (Q6). Three results changed the plan: § 2.1, § 3.2 ratios, § 8 storage
+- [ ] S0 Q2 re-run (failed twice on my own bugs, both fixed) and **Q5 run — still owed**
+- [ ] S0 run on **PRODUCTION** — Q1/Q8 complete F160's confirmation, Q7 confirms the storage threshold
+- [ ] § 2.1's unification decision made by Rick (the 70% / 36% customer-catalog cut)
 - [x] Q1-Q3 answered by Rick and recorded in § 7 (2026-09-23)
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
 - [ ] S1 RPC applied to staging, verified by V2 (§ 5.1 browser diff, negative-controlled)

@@ -22,6 +22,46 @@
 -- "A surprising query result triggers re-verification, not immediate
 -- remediation").
 -- ============================================================================
+--
+-- ██ MEASURED — STAGING, 2026-09-23 (Rick). PRODUCTION NOT YET RUN. ██
+--
+-- Q1  raysandjudys 2026-09  2,302 rows  72 pubs  17 w/history  5 passing
+--                           688 rows -> 15 pages  <-- PAGES MATCH THE REAL
+--                                                     2026-08-24 PRINT. Model
+--                                                     VALIDATED.
+--     demoshop     2026-09  2,288 rows  72 pubs   0 w/history  0 passing
+--                             0 rows ->  0 pages  <-- F160 CONFIRMED
+-- Q2  FAILED TWICE, both my fault, both fixed. See Q2's own header.
+-- Q3  raysandjudys  restricted 332 | standard 1,122 | variant_no_ratio 848
+--     demoshop      restricted 332 | standard 1,117 | variant_no_ratio 839
+--     standard_with_ratio = 0 and ratio_malformed = 0 on every tenant.
+-- Q4  22 distinct ratios on raysandjudys, 18 on demoshop, ALL well-formed.
+-- Q5  NOT RUN — still owed.
+-- Q6  raysandjudys  no_foc 0 | passed_today 10 | in_month_or_before 234
+--                   newly_hidden 54 | protected_by_reservation 7
+-- Q7  catalog = 20 MB / 13,071 rows / 1,633 BYTES PER ROW
+--     projected 100 tenants = 1,679 MB
+-- Q8  demoshop only. Exactly one live F160 instance on staging.
+--
+-- ⚠️ THREE RESULTS THAT CHANGED THE PLAN — full detail in the plan doc:
+--
+-- (1) THE PUBLISHER FILTER, NOT THE FOC RULE, IS THE EXPENSIVE ONE.
+--     Customers see all 2,302 rows today. Seeding the founding tenant's
+--     CURRENT PRINT CONFIG would cut that to 688 — a 70% reduction, 67 of 72
+--     publishers gone. The FOC rule accounts for 54 of those rows; the
+--     publisher bar accounts for ~1,560. Q6's `newly_hidden = 54` is real but
+--     it is the small half. Plan § 3.4 and § 4 S3 both revised.
+--
+-- (2) 22 DISTINCT RATIOS, NOT ~6. 1:1 1:2 1:3 1:4 1:5 1:7 1:10 1:15 1:20
+--     1:25 1:30 1:40 1:50 1:60 1:75 1:100 1:125 1:200 1:250 1:300 1:500
+--     1:1000. The mockup's fixed six-option dropdown misrepresents this, and
+--     1:1 / 1:2 are barely restrictions at all. Current-month ratio rows sum
+--     to exactly 332, reconciling with Q3 — the data is internally consistent.
+--
+-- (3) 1,633 BYTES PER ROW, 2.3-5x my 300-700 estimate. So Supabase free tier's
+--     500 MB is exhausted at roughly 28-30 tenants on `catalog` ALONE, not at
+--     100. That is a much nearer and more actionable threshold.
+-- ============================================================================
 
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -124,8 +164,23 @@ ORDER BY t.slug;
 -- Read the top ~25 — the shape matters more than the tail.
 -- ⚠️ Watch for near-miss publishers (reserved_count 5 or 6) carrying a large
 -- month_title_count: those are the self-reinforcement cases the settings page
--- exists to make visible. On production 2026-08 the mockup predicted Viz Media
--- at 6 reserved with ~214 titles — confirm or correct that here.
+-- exists to make visible. On staging Q1 says 12 publishers sit between 1 and 6
+-- reservations — this query names them.
+--
+-- The pub_keys CTE below is the UNION of "has titles this month" and "has
+-- reserve history", so a publisher in either set appears exactly once.
+-- ⚠️ Deliberately NOT a FULL OUTER JOIN. The RPC can use one because both of
+-- its CTEs are already single-tenant; adding the tenant dimension to a FULL
+-- OUTER breaks it — unmatched right-side rows carry a NULL tenant, so a
+-- publisher with history but no current-month titles gets dropped, which is
+-- precisely the row this query exists to show.
+--
+-- ⚠️⚠️ SELECT FROM `WITH` TO THE SEMICOLON — this query is 5 CTEs and one
+-- SELECT, ~45 lines, ONE statement. It failed twice on 2026-09-23: first on a
+-- missing comma after month_pubs (my bug, fixed), then with
+-- `syntax error at or near "pub_keys"`, which means the selection began
+-- mid-query. There are now NO standalone comment blocks between the CTEs, so
+-- the body is contiguous and a click-drag from `WITH` cannot land inside it.
 WITH latest AS (
   SELECT tenant_id, max(catalog_month) AS m FROM catalog GROUP BY tenant_id
 ),
@@ -151,13 +206,6 @@ month_pubs AS (
   WHERE btrim(COALESCE(c.publisher, '')) <> ''
   GROUP BY 1, 2
 ),
--- The key universe is the UNION of "has titles this month" and "has reserve
--- history", so a publisher in either set appears exactly once.
--- ⚠️ Deliberately NOT a FULL OUTER JOIN here. The RPC can use one because both
--- of its CTEs are already single-tenant; adding the tenant dimension to a FULL
--- OUTER breaks it — unmatched right-side rows carry a NULL tenant, so a
--- publisher with history but no current-month titles gets dropped, which is
--- precisely the row this query exists to show.
 pub_keys AS (
   SELECT tenant_id, k FROM month_pubs
   UNION
@@ -234,7 +282,6 @@ LEFT JOIN (SELECT tenant_id, max(catalog_month) AS m FROM catalog GROUP BY tenan
 WHERE c.order_requirement IS NOT NULL
 GROUP BY t.slug, c.order_requirement, 5
 ORDER BY t.slug,
-         -- order by the ratio's denominator so the list reads 1:5, 1:10, 1:25…
          CASE WHEN c.order_requirement ~ '^[0-9]+:[0-9]+$'
               THEN split_part(c.order_requirement, ':', 2)::int ELSE 999999 END;
 
