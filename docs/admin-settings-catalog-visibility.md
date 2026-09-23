@@ -230,7 +230,22 @@ V2 discrepancy means a real difference rather than a deliberate one.
 Each step is independently safe and independently revertible. **S2 writes a config nothing reads;
 S4 is the only step that changes what anyone sees.**
 
-### S0 — Measure (read-only, both environments). BLOCKING.
+### S0 — Measure (read-only, both environments). BLOCKING. ✅ QUERIES WRITTEN 2026-09-23
+
+**File: `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql`** — eight queries, Q1–Q8, every one
+a `SELECT`. STATUS `N/A` on both environments, which is the correct token: the file creates, alters
+and writes nothing.
+
+**⚠️ Run them ONE AT A TIME.** The Supabase SQL Editor shows only the last statement's result, so
+pasting the whole file displays Q8 and silently discards Q1–Q7. Each query states its expected shape
+*before* it runs, so a surprise triggers re-verification rather than remediation.
+
+**Q1 is the one to run first, and it is self-validating.** It replicates the print's two hardcoded
+filters in SQL and predicts each tenant's printed row count. That SQL cannot validate the client —
+but the client validates *it*: the 1,534 rows / 34 pages figure came from a real print on
+2026-08-24. If the founding-tenant row lands there, the model is sound and Q1's `demoshop` prediction
+of **0** can be trusted, which confirms F160 without printing anything. If it does not land there,
+that discrepancy matters more than F160 and everything stops.
 
 No code. Confirms § 2 and replaces this plan's estimates with figures.
 
@@ -472,7 +487,8 @@ What does scale, and how it is handled here:
 
 ## 9. Completion criteria
 
-- [ ] S0 measured on both environments; § 2 confirmed or refuted; § 8's storage figure replaced with a real one
+- [x] S0 queries written — `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql` (2026-09-23)
+- [ ] S0 **run** on both environments; § 2 confirmed or refuted (Q1/Q8); § 8's storage figure replaced with Q7's real one; § 1.3's cover-class and ratio figures replaced with Q3/Q4's; Q2's customer-visible FOC cost known before S3 seeds it (Q6)
 - [x] Q1-Q3 answered by Rick and recorded in § 7 (2026-09-23)
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
 - [ ] S1 RPC applied to staging, verified by V2 (§ 5.1 browser diff, negative-controlled)
