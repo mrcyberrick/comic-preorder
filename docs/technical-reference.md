@@ -6237,10 +6237,40 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F160 — a tenant with no reservation history gets a BLANK Print Catalog: `getReservedPublishers()` returns an empty set and every row is filtered out
 
-- **Status:** **filed 2026-09-23, OPEN — not started.** Both environments (identical code).
-  `admin.html` only, no schema involvement. **⚠️ Derived from reading the code path end to end, NOT
-  yet confirmed against a live zero-history tenant** — see *Verification owed* below. Filed at
-  Rick's instruction after the settings-page planning session surfaced it.
+- **Status:** **filed 2026-09-23, CONFIRMED LIVE the same day, OPEN — not started.** Both
+  environments (identical code). `admin.html` only, no schema involvement. Filed at Rick's
+  instruction after the settings-page planning session surfaced it, then **confirmed by measurement
+  rather than left on a code reading** — see *Confirmed* below. *(This entry read "Derived from
+  reading the code path end to end, NOT yet confirmed against a live zero-history tenant" for a few
+  hours between filing and measurement. The words are kept here rather than deleted so the
+  correction is visible.)*
+- **⚠️ CONFIRMED on staging 2026-09-23, and the affected tenant is the DEMO one.** Q1 of
+  `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql`, run by Rick:
+
+  | slug | plan | month | catalog rows | publishers | with any history | passing bar | predicted print rows |
+  |---|---|---|---|---|---|---|---|
+  | `demoshop` | free | 2026-09 | **2,288** | 72 | **0** | **0** | **0** |
+  | `raysandjudys` | pro | 2026-09 | 2,302 | 72 | 17 | 5 | 688 |
+
+  `demoshop` holds a complete 2,288-row catalog across 72 publishers and its Print Catalog renders
+  **completely blank**. That is the predicted failure, observed.
+- **The prediction model was validated before the demoshop figure was trusted**, which is why that
+  zero can be believed. Q1 reimplements the print's own filters in SQL, so it cannot validate the
+  client — the client validates it. Against the real print of 2026-08-24 (4 publishers → 638 rows →
+  **15 pages**), staging now returns 5 publishers → 688 rows → **15 pages**. Pages match exactly;
+  the +1 publisher and +50 rows are one publisher crossing the bar on a month of additional reserve
+  history, in a different catalog month. Had the founding row *not* landed there, this finding would
+  still be unconfirmed.
+- **⚠️ PRACTICAL CONSEQUENCE, worth more than the severity rating: `demoshop` is the tenant Rick
+  shows prospects.** F72 S1a (2026-09-03) built it precisely so a free-tier walkthrough carries no
+  founding-tenant identity, and its own closeout lists print output as "unreachable from a
+  screen-share demo, but real if a physical handout is ever part of the pitch." It is worse than
+  unreachable — it is **blank**. Any prospect asking to see the paper catalog gets an empty sheet.
+- **Staging's exclusion rate is more severe than production's.** Of 72 publishers in the month, only
+  **17 have any reserve history at all** and only **5** clear the bar — so **67 of 72 (93%)** are
+  hidden from the printed sheet, against production's recorded 64 of 78 (82%). The 12 publishers
+  sitting between 1 and 6 reservations are the near-miss population the settings page exists to make
+  visible.
 - **Severity: Low today, High the moment a second tenant onboards.** Only the founding tenants use
   Paper Orders, and both have reserve history, so nobody has seen it. The Print Catalog is the paper
   artifact customers write their orders on — a new tenant's first use of it produces an empty sheet,
@@ -6285,13 +6315,13 @@ reasoning — only the disposition changed, not the diagnosis.
   product judgement and Rick's call. **F160 is the degenerate case of the same mechanism, not the
   same question:** at zero history the bar excludes 78 of 78 and the feature produces nothing at all.
   A surface that renders empty is wrong behaviour regardless of where the trade is set.
-- **Verification owed, and it is cheap.** Do this before acting on the fix: sign in as an admin of a
-  zero-history tenant and print Ordering ▸ Paper Orders ▸ Print Catalog. Staging's `demoshop` is the
-  natural subject — it was created 2026-09-03 with **2,288 real catalog rows copied** from the
-  founding tenant's current month, so it has catalog rows and (believed, unconfirmed) no
-  reservations. Production's `comicstore` is the second candidate, though whether it holds catalog
-  rows at all is unverified. Expected result: a blank sheet. **What is confirmed today is the code
-  path; what is not confirmed is that a tenant is actually standing on it.**
+- **Still owed, and it is small: the production half.** Q1 has been run on **staging only**.
+  Production's `comicstore` is the remaining candidate and it is unknown whether it holds catalog
+  rows at all — if it holds none, production has no live instance today and this finding is
+  staging-only in practice while remaining a defect in code on both. Run Q1 and Q8 on production to
+  settle it. A real browser print of `demoshop` is no longer needed — the SQL is the stronger
+  check, since it reports the row count the print would receive rather than a human's reading of a
+  blank page.
 - **Fix direction — a floor, not a redesign.** When `counts` is empty (equivalently: the tenant has
   no reserve history), fall through to **all** publishers rather than none. Fail-open is the correct
   direction here for the same reason it is correct for maintenance mode and the inverse of `Tier`'s

@@ -101,10 +101,17 @@ because only one tenant has reserve history. The gradient is already measurable:
 3. The founding tenant must be seeded explicitly (§ 4 S3) so that turning this on changes nothing
    for it.
 
-**Filed as F160, 2026-09-23** (Rick's instruction, same session) — see `docs/technical-reference.md`
-§ 13 F160. **The filing is honest about its own limit: it is derived from reading the code path end
-to end, and is NOT yet confirmed against a live zero-history tenant.** S0 item 1 is that
-confirmation and still owed. F160's own fix is a one-line fail-open floor that can land
+**Filed as F160 and CONFIRMED LIVE ON STAGING, both 2026-09-23** — see `docs/technical-reference.md`
+§ 13 F160. S0 Q1, run by Rick: **`demoshop` holds 2,288 catalog rows across 72 publishers, 0 with
+any reserve history, 0 passing the bar, 0 predicted print rows.** The model was validated first
+(staging founding returned 15 pages against the real 2026-08-24 print's 15), so that zero is
+trustworthy. **The affected tenant is the demo one** — the very tenant F72 S1a built to show
+prospects. Production's half is still owed; `comicstore` is its only candidate and may hold no
+catalog rows at all.
+
+**Staging's exclusion is worse than production's: 67 of 72 publishers (93%) hidden, against 64 of 78
+(82%)** — with only 17 of 72 holding any reserve history and 12 sitting between 1 and 6
+reservations. That near-miss band is the population the settings page exists to make visible. F160's own fix is a one-line fail-open floor that can land
 independently of this plan — worth doing if this plan does not ship soon, because exposure begins
 at the next tenant onboarding rather than at this plan's schedule.
 

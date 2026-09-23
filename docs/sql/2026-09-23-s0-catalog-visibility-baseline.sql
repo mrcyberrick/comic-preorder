@@ -40,6 +40,22 @@
 --                                 predicted_print_rows = 0   <-- THIS IS F160
 --   * production `comicstore`  -> unknown; may hold no catalog rows at all
 --
+-- ✅ ACTUAL, STAGING, run by Rick 2026-09-23 (expectations above kept visible):
+--   raysandjudys  2026-09  2,302 rows  72 pubs  17 with history  5 passing
+--                          688 rows -> 15 pages   <-- PAGES MATCH THE REAL PRINT
+--   demoshop      2026-09  2,288 rows  72 pubs   0 with history  0 passing
+--                            0 rows ->  0 pages  <-- F160 CONFIRMED
+--   Also present: 4 leftover pw-* fixture tenants (F130's recorded August set,
+--   still exactly four) one of which holds 1 stray catalog row with a null
+--   publisher; and `riverside-comics` with no catalog at all, consistent with
+--   F154's "Catalog for null" print header.
+--   Publishers 4->5 and rows 638->688 since 2026-08-24 = one publisher crossing
+--   the bar on a month of added reserve history. Model VALIDATED.
+--   ⚠️ month_publishers is 72 here, not the 78 this plan quotes from production
+--   2026-08. That figure is environment- and month-specific; do not treat 78 as
+--   a constant.
+--   PRODUCTION NOT YET RUN.
+--
 -- ⚠️ WHY THIS IS NOT CIRCULAR. This SQL reimplements the client filter, so it
 -- cannot validate the client. It is validated BY the client: the 1,534 / 34
 -- figures came from a real print on 2026-08-24. If the founding-tenant row
@@ -134,7 +150,7 @@ month_pubs AS (
   JOIN latest l ON l.tenant_id = c.tenant_id AND l.m = c.catalog_month
   WHERE btrim(COALESCE(c.publisher, '')) <> ''
   GROUP BY 1, 2
-)
+),
 -- The key universe is the UNION of "has titles this month" and "has reserve
 -- history", so a publisher in either set appears exactly once.
 -- ⚠️ Deliberately NOT a FULL OUTER JOIN here. The RPC can use one because both
@@ -142,7 +158,7 @@ month_pubs AS (
 -- OUTER breaks it — unmatched right-side rows carry a NULL tenant, so a
 -- publisher with history but no current-month titles gets dropped, which is
 -- precisely the row this query exists to show.
-keys AS (
+pub_keys AS (
   SELECT tenant_id, k FROM month_pubs
   UNION
   SELECT tenant_id, k FROM reserved
@@ -152,7 +168,7 @@ SELECT t.slug,
        COALESCE(r.n, 0)           AS reserved_count,
        COALESCE(mp.n, 0)          AS month_title_count,
        CASE WHEN COALESCE(r.n, 0) >= 7 THEN 'shown today' ELSE 'HIDDEN today' END AS print_status
-FROM keys ky
+FROM pub_keys ky
 JOIN tenants t      ON t.id = ky.tenant_id
 LEFT JOIN month_pubs mp ON mp.tenant_id = ky.tenant_id AND mp.k = ky.k
 LEFT JOIN reserved   r  ON r.tenant_id  = ky.tenant_id AND r.k  = ky.k
