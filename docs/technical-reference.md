@@ -6235,7 +6235,79 @@ reasoning — only the disposition changed, not the diagnosis.
   script, same day, different root cause; its scope is why the sibling row escaped), F146 (whose
   withdrawal-clearing backfill is the other documented way a hand-correction gets reverted).
 
-Next free finding ID: **F160**.
+#### F160 — a tenant with no reservation history gets a BLANK Print Catalog: `getReservedPublishers()` returns an empty set and every row is filtered out
+
+- **Status:** **filed 2026-09-23, OPEN — not started.** Both environments (identical code).
+  `admin.html` only, no schema involvement. **⚠️ Derived from reading the code path end to end, NOT
+  yet confirmed against a live zero-history tenant** — see *Verification owed* below. Filed at
+  Rick's instruction after the settings-page planning session surfaced it.
+- **Severity: Low today, High the moment a second tenant onboards.** Only the founding tenants use
+  Paper Orders, and both have reserve history, so nobody has seen it. The Print Catalog is the paper
+  artifact customers write their orders on — a new tenant's first use of it produces an empty sheet,
+  **silently**, because the filter has no error path.
+- **The code path, in full.** `getReservedPublishers()` (`admin.html:5251`) builds a `counts` Map by
+  paging `reservation_history.publisher` and `preorders → catalog(publisher)`. It then keeps only the
+  publishers clearing the bar (`:5280`):
+
+  ```js
+  const MIN_RESERVED = 7;                                       // :5249
+  counts.forEach((n, key) => { if (n >= MIN_RESERVED) set.add(key); });   // :5280
+  ```
+
+  and `fetchAllCatalogForDistributor()` filters the month against it (`:5329`):
+
+  ```js
+  return items.filter(c =>
+    c.publisher && reserved.has(c.publisher.trim().toLowerCase()) &&      // :5329
+    (!c.foc_date || c.foc_date.slice(0, 7) > currentCatalogMonth)         // :5330
+  );
+  ```
+
+  **A tenant with no reservations produces an empty `counts`, therefore an empty `set`, therefore an
+  empty array.** There is no fallback, no floor and no warning anywhere in that path; the print
+  window opens on a document with zero rows.
+- **The existing gradient points straight at it**, which is why this needs no speculation about the
+  mechanism — only confirmation that a tenant sits at the end of it. Same catalog month, same code:
+
+  | Tenant | Publishers passing | Rows printed | Pages |
+  |---|---|---|---|
+  | production founding (`rjbookstop`) | 14 of 78 | 1,534 | 34 |
+  | staging founding (`raysandjudys`) | 4 of 78 | 638 | 15 |
+  | **any tenant with no reserve history** | **0** | **0** | **0** |
+
+  The production/staging figures are the ones already recorded at `admin.html:5371-5380` and in
+  CLAUDE.md; the third row is this finding.
+- **This is NOT a re-opening of the self-reinforcement trade, and the distinction matters.** The
+  2026-08-24 single-combined-catalog-print session measured that the bar excludes **64 of 78**
+  publishers on production (Oni Press, Viz Media, Yen Press, Seven Seas and Vault among them) and
+  that the exclusion is self-reinforcing — a publisher that never prints is never seen, so never
+  earns reservations. It deliberately **filed no finding**, because whether that trade is right is a
+  product judgement and Rick's call. **F160 is the degenerate case of the same mechanism, not the
+  same question:** at zero history the bar excludes 78 of 78 and the feature produces nothing at all.
+  A surface that renders empty is wrong behaviour regardless of where the trade is set.
+- **Verification owed, and it is cheap.** Do this before acting on the fix: sign in as an admin of a
+  zero-history tenant and print Ordering ▸ Paper Orders ▸ Print Catalog. Staging's `demoshop` is the
+  natural subject — it was created 2026-09-03 with **2,288 real catalog rows copied** from the
+  founding tenant's current month, so it has catalog rows and (believed, unconfirmed) no
+  reservations. Production's `comicstore` is the second candidate, though whether it holds catalog
+  rows at all is unverified. Expected result: a blank sheet. **What is confirmed today is the code
+  path; what is not confirmed is that a tenant is actually standing on it.**
+- **Fix direction — a floor, not a redesign.** When `counts` is empty (equivalently: the tenant has
+  no reserve history), fall through to **all** publishers rather than none. Fail-open is the correct
+  direction here for the same reason it is correct for maintenance mode and the inverse of `Tier`'s
+  fail-closed: the safe render for a catalog is *everything*, and an over-long sheet is a paper cost
+  while an empty one is a broken workflow.
+- **Superseded in full by `docs/admin-settings-catalog-visibility.md`** (STATUS: NOT STARTED), whose
+  § 2 records this as its blocking entry condition. That plan replaces `MIN_RESERVED` with explicit
+  per-tenant configuration defaulting to show-all, which closes this by construction — but **the
+  one-line floor above is worth landing independently if that plan does not ship soon**, because the
+  exposure begins at the next tenant onboarding, not at the plan's schedule.
+- **Related:** **F131** (single-operator import SPOF — the other structural blocker on tenant
+  growth), **F72** (branding: the other thing that must be true before a second tenant takes real
+  customers), **F145** (per-tenant hostname provisioning is likewise recorded nowhere), and the
+  2026-08-24 print-consolidation session's self-reinforcement note, distinguished above.
+
+Next free finding ID: **F161**.
 
 ---
 

@@ -1,6 +1,6 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** NOT STARTED · staging=— · prod=— · PR=— · findings: none consumed yet (**F160 candidate — see § 2, not yet filed**)
+**STATUS:** NOT STARTED · staging=— · prod=— · PR=— · findings: **F160 (filed 2026-09-23, see § 2)**
 
 **Type:** Feature build, Rick's request 2026-09-23. **One new page, one new RPC, one new
 `app_settings` key. No schema change to any existing table, no RLS change, no Edge Function.**
@@ -100,8 +100,12 @@ because only one tenant has reserve history. The gradient is already measurable:
 3. The founding tenant must be seeded explicitly (§ 4 S3) so that turning this on changes nothing
    for it.
 
-**Not yet filed.** It is a genuine shipped defect rather than a design choice, so it would consume
-**F160**. Rick's call — see § 7 Q1. Confirm it first in S0; do not file from code reading alone.
+**Filed as F160, 2026-09-23** (Rick's instruction, same session) — see `docs/technical-reference.md`
+§ 13 F160. **The filing is honest about its own limit: it is derived from reading the code path end
+to end, and is NOT yet confirmed against a live zero-history tenant.** S0 item 1 is that
+confirmation and still owed. F160's own fix is a one-line fail-open floor that can land
+independently of this plan — worth doing if this plan does not ship soon, because exposure begins
+at the next tenant onboarding rather than at this plan's schedule.
 
 ---
 
@@ -289,8 +293,9 @@ environment, or the fail-open default briefly widens the print sheet.
 
 ## 7. Open decisions — Rick
 
-**Q1 — File the § 2 cold start as F160?** It is a genuine shipped defect, not a design choice.
-*Recommend: yes, after S0 confirms it.* Not filed as of this writing.
+**Q1 — ANSWERED 2026-09-23 (Rick): filed as F160.** The § 2 cold start is a genuine shipped defect,
+not a design choice. Filed ahead of S0's live confirmation rather than after it, with that limit
+stated in the finding itself.
 
 **Q2 — Seeding the past-FOC rule, which is the one place the two surfaces cannot both keep today's
 behaviour.** One rule now governs both, so unification necessarily moves one of them.
