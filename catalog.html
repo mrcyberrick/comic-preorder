@@ -498,6 +498,66 @@
     );
   }
 
+  // Would the saved config hide anything at all? When it would not, the
+  // server-paginated default path takes its original single-query route and
+  // this feature costs a tenant with no config precisely nothing.
+  function visibilityActive() {
+    const c = catalogFilterCfg;
+    if (!c) return false;
+    return (Array.isArray(c.publishersHidden) && c.publishersHidden.length > 0)
+        || c.showStandard === false
+        || c.showVariants === false
+        || c.showRestricted === false
+        || c.ratioMax != null
+        || c.hidePastFoc === true
+        || c.hideZeroPrice === true;
+  }
+
+  // The LIGHT id pass behind the default path's two-step. Six small columns for
+  // the month, ordered exactly as Catalog.fetch() orders — so slicing this list
+  // gives the same page the unfiltered query would have — then filtered through
+  // the one shared predicate.
+  //
+  // Cached on the filter signature, NOT on the page: turning pages is the
+  // common action and must not re-fetch. Any change to month, distributor,
+  // publisher, search or the saved config invalidates it.
+  let _visCache = { key: null, rows: null };
+
+  async function visibleIdsForFilters(filters) {
+    const key = JSON.stringify([
+      filters.month, filters.distributor, filters.publisher, filters.search,
+      filters.hideVariants, catalogFilterCfg,
+    ]);
+    if (_visCache.key === key) return { rows: _visCache.rows, error: null };
+
+    const { data, error } = await fetchAllRows(() => {
+      let q = db.from('catalog')
+        .select('id, publisher, variant_type, order_requirement, price_usd, foc_date')
+        .eq('catalog_month', filters.month);
+      if (filters.distributor) q = q.eq('distributor', filters.distributor);
+      if (filters.publisher)   q = q.eq('publisher', filters.publisher);
+      if (filters.search) {
+        q = q.or(
+          `title.ilike.%${filters.search}%,series_name.ilike.%${filters.search}%,writer.ilike.%${filters.search}%,publisher.ilike.%${filters.search}%,upc.ilike.%${filters.search}%,isbn.ilike.%${filters.search}%,item_code.ilike.%${filters.search}%`
+        );
+      }
+      if (filters.hideVariants) {
+        q = q.or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title');
+      }
+      // Same three-key order as Catalog.fetch(), plus id so page boundaries are
+      // deterministic across the paged reads (the F140 tiebreaker rule).
+      return q.order('publisher', { ascending: true })
+              .order('series_name', { ascending: true })
+              .order('title', { ascending: true })
+              .order('id', { ascending: true });
+    });
+    if (error) return { rows: [], error };
+
+    const rows = applyVisibility(data || []);
+    _visCache = { key, rows };
+    return { rows, error: null };
+  }
+
   currentMonth = await Catalog.getLatestMonth();
 
   // ── Tenant-wide catalog visibility (S4b, 2026-09-24) ──────────
@@ -947,7 +1007,50 @@
       pageSize:     PAGE_SIZE,
     };
 
-    const { items, total, error } = await Catalog.fetch(filters);
+    // ⚠️ THIS PATH IS SERVER-PAGINATED, which is why it cannot reuse
+    // applyVisibility() the way the three branches above do. Catalog.fetch()
+    // asks PostgREST for one page of 50 and a total count; filtering those 50
+    // in the browser would produce short pages and a wrong total — the exact
+    // failure the `hideVariants` note above records.
+    //
+    // ⚠️ AND IT IS THE DEFAULT VIEW. The three branches above only run for
+    // "FOC Expiring", "Recommended" and "Reserved/Not reserved"; an ordinary
+    // visit lands here. Wiring the other three and missing this one left the
+    // normal catalog completely unfiltered — found by Rick testing a saved
+    // config and seeing no change at all, 2026-09-24.
+    //
+    // Fixed with the same two-step the `recommended` branch already uses:
+    // filter a LIGHT id pass with the one shared predicate, then fetch that
+    // page's full rows by id. One predicate across all four paths beats four
+    // hand-built PostgREST expressions that can silently disagree — and the
+    // publisher exclusion cannot be a server predicate anyway (§ 3.2's
+    // correction: lowercased keys against a mixed-case column).
+    let items, total, error;
+
+    if (!visibilityActive()) {
+      // FAST PATH — nothing is filtered, so this is the original call
+      // unchanged. A tenant with no saved config pays nothing for this feature.
+      ({ items, total, error } = await Catalog.fetch(filters));
+    } else {
+      const visibleRows = await visibleIdsForFilters(filters);
+      if (visibleRows.error) {
+        error = visibleRows.error;
+      } else {
+        total = visibleRows.rows.length;
+        const from     = (page - 1) * PAGE_SIZE;
+        const pageIds  = visibleRows.rows.slice(from, from + PAGE_SIZE).map(r => r.id);
+        if (!pageIds.length) {
+          items = [];
+        } else {
+          const res = await db.from('catalog').select('*').in('id', pageIds);
+          error = res.error;
+          // `.in()` returns rows in arbitrary order — restore the paged order,
+          // same as the recommended branch does.
+          const byId = new Map((res.data || []).map(r => [r.id, r]));
+          items = pageIds.map(id => byId.get(id)).filter(Boolean);
+        }
+      }
+    }
 
     if (error) {
       grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${error.message}</div>`;
