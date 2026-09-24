@@ -6333,11 +6333,22 @@ reasoning — only the disposition changed, not the diagnosis.
   `comicstore` is a two-row demo tenant, so nothing real is broken there — but the mechanism is now
   confirmed live on both environments, and the widened definition means any tenant whose
   reservations are spread thinly across publishers is exposed, not only a brand-new one.
-- **Fix direction — a floor, not a redesign.** When `counts` is empty (equivalently: the tenant has
-  no reserve history), fall through to **all** publishers rather than none. Fail-open is the correct
-  direction here for the same reason it is correct for maintenance mode and the inverse of `Tier`'s
-  fail-closed: the safe render for a catalog is *everything*, and an over-long sheet is a paper cost
-  while an empty one is a broken workflow.
+- **Fix — DELETE THE BAR, decided by Rick 2026-09-23. Not the floor this entry first proposed.**
+  `MIN_RESERVED` (`admin.html:5249`), `getReservedPublishers()` (`:5251`) and the `reserved.has(...)`
+  clause at `:5329` all go. With no bar, an empty or thinly-spread reserve history cannot produce a
+  blank sheet, so the defect is removed rather than guarded.
+  *(This entry originally read "Fix direction — a floor, not a redesign. When `counts` is empty …
+  fall through to all publishers rather than none." That floor was a patch on a heuristic that is
+  being deleted; the wording is kept so the change of direction is visible.)*
+- **The bar only ever existed on the print**, so deleting it changes **nothing for customers** — they
+  have always seen every publisher. The cost is paper: production's sheet goes **33 → 45 pages**
+  (2,068 FOC-eligible rows ÷ 46). The trimming capability returns as explicit, admin-set publisher
+  exclusions on the new Settings page, with "Reserved ≥ 7" available as a one-click preset that
+  reproduces today's 1,507 rows / 33 pages exactly.
+- **Carried by `docs/admin-settings-catalog-visibility.md` § 4 S4(a)**, which also records the
+  sequencing constraint: gate V2 must compare the new RPC against `getReservedPublishers()` **before**
+  S4 deletes it, and the page-count change should not land in the 2026-09-25 October import window,
+  which already carries F146/F147's first live production exercise.
 - **Superseded in full by `docs/admin-settings-catalog-visibility.md`** (STATUS: NOT STARTED), whose
   § 2 records this as its blocking entry condition. That plan replaces `MIN_RESERVED` with explicit
   per-tenant configuration defaulting to show-all, which closes this by construction — but **the

@@ -1,7 +1,7 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S1 WRITTEN, NOT APPLIED · staging=— · prod=— · PR=— · findings: **F160 (filed 2026-09-23, see § 2)**
-**Q1/Q2/Q3 ANSWERED 2026-09-23 (Rick)** — see § 7. S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, its own STATUS `staging=PENDING | prod=PENDING`. **No code written, nothing applied to either database.**
+**STATUS:** IN PROGRESS — S0 MEASURED BOTH ENVIRONMENTS, S1 WRITTEN NOT APPLIED · staging=— · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, fixed by S4(a))**
+**Q1–Q5 ANSWERED 2026-09-23 (Rick)** — see § 7. **The shaping decision is Q4: DELETE the ≥7 publisher bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the default state "store nothing". **Q5: store publisher EXCLUSIONS, never inclusions** (§ 3.2.1). S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, STATUS `staging=PENDING | prod=PENDING`. **No code written, nothing applied to either database.**
 
 **Type:** Feature build, Rick's request 2026-09-23. **One new page, one new RPC, one new
 `app_settings` key. No schema change to any existing table, no RLS change, no Edge Function.**
@@ -31,12 +31,18 @@ explicit, editable, and shared.
 
 ### 1.1 The two surfaces, and where they diverge
 
+All figures below are **production, catalog month 2026-09, measured 2026-09-23** (S0 Q1/Q6).
+
 | | Monthly Catalog (`catalog.html`) | Print Catalog (Paper Orders) |
 |---|---|---|
-| Publisher filter | none (all 78) | **≥ 7 all-time reservations** (14 of 78 on prod) |
-| Past-FOC filter | none | **hides FOC ≤ current catalog month** |
+| Publisher filter | none — all **72** | **≥ 7 all-time reservations** → 14 of 72 |
+| Past-FOC filter | none | hides FOC ≤ current catalog month → −109 of the 14's rows |
 | Cover / ratio / price filter | none | none |
-| Titles shown, prod 2026-08 | 2,399 | **1,534** (34 pages @ 46 rows) |
+| **Titles shown** | **2,302** | **1,507** (33 pages @ 46 rows) |
+
+*(This table read "all 78 / 14 of 78 / 2,399 / 1,534 / 34 pages" from the 2026-08-24 print record
+until production was measured. **72 publishers, not 78** — that figure is per-environment and
+per-month and must not be treated as a constant. The 14 publishers matched exactly.)*
 
 Per-customer filters on `catalog.html` (distributor, publisher, reserved, variants, plus the
 📌 Pin) are **a different thing** and are untouched by this work — they are one customer's view
@@ -88,32 +94,50 @@ history produces an empty set**, and `:5329` then filters out every row. There i
 that path.
 
 This is **not** a consequence of the new feature. It is a latent defect in shipped code, invisible
-because only one tenant has reserve history. The gradient is already measurable:
+because only the founding tenants have reserve history. The gradient, all measured 2026-09-23 except
+the last historical row:
 
-- production, 14 publishers pass → 1,534 rows → 34 pages
-- staging, 4 publishers pass → 638 rows → 15 pages
-- a tenant with zero history → **0 publishers pass → 0 rows → blank sheet**
+| tenant | publishers passing | rows | pages |
+|---|---|---|---|
+| production `rjbookstop` | 14 of 72 | 1,507 | 33 |
+| staging `raysandjudys` | 5 of 72 | 688 | 15 |
+| production `comicstore` (1 reservation) | **0 of 1** | **0** | **0** |
+| staging `demoshop` (no history, 2,288 rows) | **0 of 72** | **0** | **0** |
 
-**Consequences for this plan:**
+*(The 2026-08-24 real print recorded 14 → 1,534 → 34 on production and 4 → 638 → 15 on staging, on
+the previous catalog month. Both validated the prediction model before its zeroes were trusted.)*
 
-1. The default configuration for a tenant with no history must be **show all**, not "reserved ≥ 7".
-2. Absence of a config row must mean **show all** (§ 3.4, fail-open).
-3. The founding tenant must be seeded explicitly (§ 4 S3) so that turning this on changes nothing
-   for it.
+**Consequences for this plan — ✅ ALL RESOLVED 2026-09-23 by deleting the bar (§ 2.1):**
+
+1. ~~The default for a tenant with no history must be show-all, not "reserved ≥ 7".~~ **Moot.** There
+   is no bar, so there is no default to get wrong.
+2. Absence of a config row means **show all**, both surfaces (§ 3.4). Unchanged, and now simpler.
+3. ~~The founding tenant must be seeded explicitly (S3) so turning this on changes nothing.~~
+   **S3 deleted** — nothing to preserve, nothing to seed.
+
+**F160's fix is the deletion itself**, in § 4 S4(a) — not the fail-open floor originally proposed
+below. The floor would have patched a heuristic that is being removed.
 
 **Filed as F160 and CONFIRMED LIVE ON STAGING, both 2026-09-23** — see `docs/technical-reference.md`
 § 13 F160. S0 Q1, run by Rick: **`demoshop` holds 2,288 catalog rows across 72 publishers, 0 with
 any reserve history, 0 passing the bar, 0 predicted print rows.** The model was validated first
 (staging founding returned 15 pages against the real 2026-08-24 print's 15), so that zero is
 trustworthy. **The affected tenant is the demo one** — the very tenant F72 S1a built to show
-prospects. Production's half is still owed; `comicstore` is its only candidate and may hold no
-catalog rows at all.
+prospects. **Production confirmed the same day** — `comicstore`: 2 catalog rows, 1 reservation,
+0 publishers passing, 0 print rows. And the finding's **definition needed widening**: the trigger is
+*no publisher clears the bar*, not *zero reserve history*, so any tenant whose reservations are
+spread thinly is exposed (§ 13 F160).
 
-**Staging's exclusion is worse than production's: 67 of 72 publishers (93%) hidden, against 64 of 78
-(82%)** — with only 17 of 72 holding any reserve history and 12 sitting between 1 and 6
-reservations. That near-miss band is the population the settings page exists to make visible. F160's own fix is a one-line fail-open floor that can land
-independently of this plan — worth doing if this plan does not ship soon, because exposure begins
-at the next tenant onboarding rather than at this plan's schedule.
+**Staging's exclusion is worse than production's: 67 of 72 publishers (93%) hidden, against 58 of 72
+(81%)** — with only 17 of 72 holding any reserve history and 12 sitting between 1 and 6
+reservations. That near-miss band is the population the settings page exists to make visible.
+
+**F160's fix is S4(a)'s deletion of the bar**, not a standalone floor. *(This paragraph previously
+read "F160's own fix is a one-line fail-open floor that can land independently of this plan — worth
+doing if this plan does not ship soon." Superseded 2026-09-23: with the bar deleted there is nothing
+to floor, so the fix is no longer separable from S4.)* If F160 needs closing ahead of the rest,
+deleting the bar **is** the standalone change — it touches only
+`fetchAllCatalogForDistributor()` — at the cost of a 45-page sheet until the settings page ships.
 
 ### 2.1 ⚠️ SECOND BLOCKING RESULT — unification is not free, and the publisher bar is the expensive half
 
@@ -161,24 +185,36 @@ past-FOC rule accounts for **54** rows (Q6 `newly_hidden_from_customers`, of whi
 reservation exemption) and the **publisher bar accounts for ~1,560**. I had the proportions
 backwards when I raised Q2 as the decision to think about.
 
-**The root problem is structural, not a bad default: no single config can preserve both surfaces,
-because they disagree today.** § 1.1's table is the whole finding — the print filters, the catalog
-does not. Unification necessarily moves one of them:
+**✅ RESOLVED 2026-09-23 (Rick): DELETE THE ≥7 BAR. The problem dissolves rather than being
+traded off.**
 
-1. **Print's behaviour wins** → customers lose 70% (staging) / 36% (production) of what they can
-   browse. Almost certainly not intended, and it is what S3 would have done.
-2. **Catalog's behaviour wins** → the printed sheet grows from 15 pages to ~50 on staging, ~34 to
-   ~54 on production. Real paper cost, and paper cost is why the barcode variant was dropped.
-3. **Per-surface publisher lists** → both preserved, at the cost of two lists in the UI. The data
-   arguably argues for this: the print is a browsing aid constrained by paper, the web catalog has
-   no paper constraint, so a shared list is fighting two different jobs.
+This section originally posed a three-way fork — print's behaviour wins (customers lose 34.5%),
+catalog's wins (sheet grows), or per-surface lists — and recommended a per-surface default. **Rick's
+question cut through it: the bar only exists on the print, so deleting it changes nothing for
+customers at all.**
 
-**Recommendation, and it changes § 3.4 rather than picking a winner: no config row means each
-surface keeps exactly today's behaviour.** Print applies the ≥7 bar plus the FOC rule (with F160's
-floor when history is empty); catalog shows everything. **Deploying S4 then changes nothing at all.**
-The first save is a deliberate act, and the impact bar states both numbers before the admin commits
-to it. If Rick then wants divergent lists, option 3 becomes a small follow-on rather than a
-launch-day decision.
+| | effect of deleting the bar |
+|---|---|
+| Customer catalog | **no change** — it never had the bar; still 2,302 |
+| Print catalog | **33 → 45 pages** (2,068 FOC-eligible rows ÷ 46) |
+
+That is the entire cost: **+12 pages, 1.36×, on the print only.** *(An earlier draft of this section
+said "~50 staging / ~54 production" — sloppy arithmetic, corrected: both environments converge on 45
+because both hold the same 2,302-row catalog.)*
+
+**Consequences, all simplifications:**
+
+- **The default state stores nothing at all**, so there is nothing to go stale and nothing to break.
+  Every customer sees every publisher; any filtering is something the admin added deliberately.
+- **§ 3.4's per-surface default table is gone** — replaced by plain show-everything.
+- **S3 disappears.** Its whole purpose was seeding a config to stop S4 changing behaviour; with no
+  bar there is no behaviour to preserve.
+- **F160 is resolved by deletion, not by the fail-open floor** § 2 proposed. No bar means an empty
+  reserve history cannot produce an empty sheet. The floor was a patch on a heuristic that is going.
+- **The per-surface idea is withdrawn.** The asymmetry is real — hiding a publisher from the *web*
+  costs a sale, hiding it from *paper* costs only discovery — but one list plus the page-count
+  readout gets the same outcome for half the UI. Revisit only if 45 pages proves too long and
+  trimming publishers turns out to hurt the web side.
 
 **The three queries reconcile exactly, which is why these numbers can be trusted.** Q2's five
 passing publishers hold `314 + 288 + 102 + 27 + 11 = 742` current-month titles; Q6 says 54 of those
@@ -246,8 +282,9 @@ rows (`catalog.html:799-820`).
 - **Client-side** — fetch everything, then hide. Strictly slower than today.
 
 Mechanics:
-- Publisher → `.in('publisher', shown)` or `.not('publisher','in',hidden)`, **whichever list is
-  shorter** (≤ 39 names worst case at 78 publishers).
+- Publisher → **always `.not('publisher','in',hidden)`. Store EXCLUSIONS, never inclusions.**
+  See § 3.2.1 — this is a correctness requirement, not an optimization, and it reverses what this
+  line originally said.
 - Ratio threshold → **no numeric parsing**, but the set is larger than assumed. **Measured
   2026-09-23: 22 distinct values on staging** (1:1, 1:2, 1:3, 1:4, 1:5, 1:7, 1:10, 1:15, 1:20, 1:25,
   1:30, 1:40, 1:50, 1:60, 1:75, 1:100, 1:125, 1:200, 1:250, 1:300, 1:500, 1:1000), 18 on
@@ -263,6 +300,42 @@ Mechanics:
 - **The reservation exemption (§ 3.3) cannot be a predicate** — it needs the customer's own reserved
   set, which is already in memory as `reservedIds`. It is a client-side union applied after the fetch.
 
+### 3.2.1 ⚠️ Store publisher EXCLUSIONS, not inclusions — Rick, 2026-09-23
+
+**Raised by Rick, and it identifies a failure mode this design would have introduced that the
+current code does not have.** Today's ≥7 bar is *computed* from reserve history on every load —
+nothing is persisted, so there is no snapshot to go stale. A stored publisher list is a snapshot of
+values **the distributor controls**.
+
+**The source is already inconsistent, measured:** `Titan` and `Titan Comics` coexist in the *same*
+catalog month (§ 8). So this is not drift over time — the export is non-canonical today.
+
+| stored | on a rename | result |
+|---|---|---|
+| allowlist (shown) | old name stops matching | **that publisher's titles silently vanish** from catalog *and* print |
+| **blocklist (hidden)** | old name stops matching | **titles reappear** |
+
+**Exclusions fail in the harmless direction.** A publisher appearing unexpectedly is a one-click fix;
+a publisher you sell disappearing silently is the F155-shaped harm — invisible until a customer
+complains. It also matches real use: hide the handful you do not want rather than enumerating the 14
+you do, so the stored list is normally **short**, not 58 entries.
+
+**This reverses advice given earlier in this plan** — "store whichever list is shorter, `in` with 14
+shown, `not.in` with 58 hidden." That was an optimization applied to a decision that is not about
+size: which direction you store determines the failure mode, so exclusions win even when they are the
+longer list and the URL is longer.
+
+**And it re-scopes the "Reserved ≥ 7" preset (§ 7 Q3).** It cannot be a *living* rule. A persistent
+threshold recomputes each load, which looks immune — but a renamed publisher's history does not
+follow the new name, so it reads as 0 reservations and **the rule hides it**, reintroducing the exact
+failure through the back door. The preset must therefore be a **one-time list-populator**: clicking
+it writes today's under-7 publishers in as explicit exclusions, and from then on it is a curated list
+that fails open. Honest about what it is.
+
+**Prevention is not complete, so detection stays** (§ 8): the settings page surfaces "N publishers in
+your configuration no longer match this month's catalog" and flags near-duplicate names, which
+catches a rename that quietly un-hid something.
+
 ### 3.3 The reservation exemption is locked on
 
 **A title the customer has already reserved is never hidden.** Without this the feature recreates
@@ -270,46 +343,31 @@ F155's stranding exactly: present in the database, absent from every surface the
 It is not a preference and gets no toggle — the impact bar states how many titles it is keeping
 visible so the admin can see it working.
 
-### 3.4 Fail open — and "open" means today's behaviour, per surface
+### 3.4 Fail open — and with the bar deleted, "open" is simply everything
 
-**REVISED 2026-09-23 after S0.** This section originally read *"Missing key, malformed JSON,
-unparseable blob → **show everything**"*, on both surfaces. Measured, that is wrong for the print:
-it would grow the founding tenant's sheet from 15 pages to ~50 the moment S4 deployed, with nobody
-having asked for it (§ 2.1).
+**Missing key, malformed JSON, unparseable blob, or an empty exclusion list → show everything, on
+both surfaces.** `app_settings.value` is untyped text with no CHECK constraint, so a bad blob must
+never be able to empty a surface.
 
-**Corrected rule — absence of config means each surface keeps exactly what it does today:**
+*(This section has been revised twice. It first said plain "show everything", which was right in
+spirit but assumed the ≥7 bar stayed, so the print would have jumped to 45 pages unasked. It was then
+rewritten as a per-surface table preserving each surface's current behaviour. **Deleting the bar
+(§ 2.1) makes both of those moot** — there is no legacy print behaviour left to preserve, and the
+default is genuinely "everything" on both sides. The intermediate table is dropped; the reasoning is
+kept so a reader does not re-derive it.)*
 
-| State | Customer catalog | Print catalog |
-|---|---|---|
-| No `catalog_filters` row, tenant HAS reserve history | everything | ≥7 publisher bar + FOC rule (today) |
-| No `catalog_filters` row, tenant has NO history | everything | **everything** — F160's floor |
-| Malformed / unparseable JSON | everything | as "no row" above, plus a console warn |
-| Valid config | the config | the config |
+Two properties worth stating plainly:
 
-So **S4 deploys as a no-op** and the first save is the only thing that changes behaviour. The
-fail-open direction is unchanged in spirit — never render an empty surface — it just recognises that
-"open" is not the same value on both sides. It still mirrors
-`Settings.isMaintenanceModePublic()`'s fail-open and remains the deliberate **inverse** of `Tier`,
-which fails closed because *free* is its safe render.
+- **The default state persists nothing.** No `catalog_filters` row exists until an admin saves one,
+  so there is no snapshot to go stale and no spelling to mismatch (§ 3.2.1).
+- **Direction, not value, is what matters.** This mirrors
+  `Settings.isMaintenanceModePublic()`'s fail-open and is the deliberate **inverse** of `Tier`, which
+  fails closed because *free* is its safe render. Here the safe render is everything, because an
+  empty catalog is a broken store and an over-long print is only paper.
 
-### 3.7 The promotional group shrinks to one toggle — measured, 2026-09-23
-
-S0 Q5, both staging tenants: **`price_usd = 0` is 4 titles. `price_usd IS NULL` is 0. Negative
-prices are 0.** The mockup assumed 27 and 9.
-
-**Ship one toggle, not two.** "Priced $0.00 — 4 titles" is worth having; a toggle governing zero
-rows is clutter that implies a population that does not exist.
-
-**The no-price case becomes a data-quality signal, not a visibility filter**, which is what this
-file's own S0 comment predicted: *"If no_price_set is large, that is an import-quality finding of its
-own, not a filter requirement."* It measured zero, so it is not a filter requirement. Keep the
-filter *model* able to express it — a future import can produce NULLs, exactly as F156's
-`order_requirement` did — but surface a non-zero count as a warning rather than a switch.
-
-⚠️ **Four titles is small enough to question the group's existence at all.** Kept because it is
-nearly free once the section scaffolding is there, and because a free promotional bundle is exactly
-the kind of row `0726DC0300` (F155's stale DC Connect bundle) shows up as. Rick's call if he would
-rather drop it from v1.
+⚠️ **S4 is therefore NOT a no-op any more** — deleting the bar takes the print from 33 to 45 pages
+on its first run. That is the one visible change in the whole sequence, it is intended, and § 4 S4
+carries the timing note.
 
 ### 3.5 Do NOT materialize a `catalog_visible` column
 
@@ -353,6 +411,27 @@ functions that may legitimately carry an `anon` grant; this is not one of them.
 `getReservedPublishers()` exactly — every row of both tables, all catalog months, regardless of
 `fulfilled`, keyed `lower(btrim(publisher))` to match the JS `pub.trim().toLowerCase()` — so that a
 V2 discrepancy means a real difference rather than a deliberate one.
+
+---
+
+### 3.7 The promotional group shrinks to one toggle — measured, 2026-09-23
+
+S0 Q5, both staging tenants: **`price_usd = 0` is 4 titles. `price_usd IS NULL` is 0. Negative
+prices are 0.** The mockup assumed 27 and 9.
+
+**Ship one toggle, not two.** "Priced $0.00 — 4 titles" is worth having; a toggle governing zero
+rows is clutter that implies a population that does not exist.
+
+**The no-price case becomes a data-quality signal, not a visibility filter**, which is what this
+file's own S0 comment predicted: *"If no_price_set is large, that is an import-quality finding of its
+own, not a filter requirement."* It measured zero, so it is not a filter requirement. Keep the
+filter *model* able to express it — a future import can produce NULLs, exactly as F156's
+`order_requirement` did — but surface a non-zero count as a warning rather than a switch.
+
+⚠️ **Four titles is small enough to question the group's existence at all.** Kept because it is
+nearly free once the section scaffolding is there, and because a free promotional bundle is exactly
+the kind of row `0726DC0300` (F155's stale DC Connect bundle) shows up as. Rick's call if he would
+rather drop it from v1.
 
 ---
 
@@ -423,34 +502,52 @@ in a signed-in browser.
 - Writes `app_settings.catalog_filters`. **Nothing reads it yet.**
 - Left rail carries `Branding` and `Email Templates` as disabled "Soon" entries (§ 6).
 
-### S3 — Seed the founding tenants — ⚠️ REVISED, AND POSSIBLY DELETED
+### S3 — ~~Seed the founding tenants~~ — ❌ DELETED 2026-09-23
 
-**This step originally said: write a `catalog_filters` reproducing today's effective print behaviour
-for `raysandjudys` and `rjbookstop`. S0 measured that as a 70% cut to the customer catalog
-(§ 2.1), so it must not be done as written.**
+**This step is gone, and the reason is worth keeping.** It originally said: write a
+`catalog_filters` reproducing today's effective print behaviour for `raysandjudys` and
+`rjbookstop`. S0 measured that as a **34.5% cut to the customer catalog** (§ 2.1) — it would have
+shipped that silently as a routine data step.
 
-Under § 3.4's corrected rule, **S3 is no longer needed to make S4 safe** — absence of config already
-preserves both surfaces, so S4 deploys as a no-op and this step's whole purpose is gone.
+It was then rewritten as optional, to accompany § 3.4's per-surface default. **Deleting the ≥7 bar
+removes its purpose entirely**: there is no legacy behaviour to preserve, so there is nothing to
+seed. The default is no config row at all.
 
-What remains is optional and is Rick's call, not a prerequisite:
+**Nothing replaces it.** The founding tenants get no seeded config; Rick's first save on the settings
+page is the first stored config that has ever existed, made with the impact bar in front of him.
 
-- **Do nothing.** S4 ships inert; Rick opens the settings page and makes the first deliberate choice
-  with the impact bar in front of him. **Recommended** — it is the only option where nothing changes
-  without someone choosing it.
-- **Seed "all publishers shown"** for both surfaces. Customer catalog unchanged; print grows to ~50
-  pages on staging, ~54 on production. Only do this if the longer sheet is actually wanted.
+### S4 — Delete the ≥7 bar and apply the config (client only — the behaviour change)
 
-Either way, **no seed may reproduce the ≥7 bar on the customer side** without Rick seeing § 2.1's
-numbers first and saying so explicitly.
+**Two things, and the first is the one that changes what anyone sees.**
 
-### S4 — Apply the config (client only — the behaviour change)
+**(a) Delete the publisher bar** — `MIN_RESERVED` (`admin.html:5249`), `getReservedPublishers()`
+(`:5251`) and the `reserved.has(...)` clause at `:5329`. The FOC clause at `:5330` **stays** for now
+and becomes config-driven in (b). The counts the settings UI needs come from S1's RPC, so nothing
+else needs that function.
 
-- `catalog.html`: read the config, fold the read into an existing parallel batch rather than adding
-  a 7th serialized step, apply as predicates per § 3.2, apply the reservation exemption per § 3.3.
-- `admin.html`: replace the two hardcoded filters at `:5329-5330` with the config, inside
-  `fetchAllCatalogForDistributor()` — the single chokepoint. `MIN_RESERVED` and the bare
-  `getReservedPublishers()` Set are retired; the RPC feeds the settings UI instead.
-- Deploy staging → verify → production promotion is a **separate, explicitly requested** step.
+- **This is F160's fix.** No bar means an empty reserve history cannot produce a blank sheet. The
+  fail-open floor § 2 proposed is not built — it was a patch on the thing being removed.
+- **Print goes 33 → 45 pages on its first run** (§ 2.1). Intended, and the only visible change in
+  the sequence.
+- **Sweep before deleting.** `getReservedPublishers()` is memoized and shared; confirm no other
+  caller exists (`grep` showed 2 call sites, both in the combined print, 2026-09-23 — re-verify at
+  build time). Per CLAUDE.md's own rule, sweep the suite for references before deleting anything
+  with an id or a name.
+
+**(b) Apply the config where one exists.**
+
+- `catalog.html`: read `catalog_filters`, fold the read into an existing parallel batch rather than
+  adding a 7th serialized step, apply as predicates per § 3.2 — **publisher as `.not(...in...)` per
+  § 3.2.1** — and apply the reservation exemption per § 3.3.
+- `admin.html`: the same config inside `fetchAllCatalogForDistributor()`, the single chokepoint.
+- **No config row → everything, both surfaces** (§ 3.4).
+
+**⚠️ Timing.** The page-count change lands on the next print. The **2026-09-25 October import is
+already an attended gate** carrying F146's and F147's first-ever live production exercise, and a
+paper change should not share that window. Either land S4 on production after that gate is verified
+green, or before it with Rick explicitly expecting a 45-page sheet.
+
+Deploy staging → verify → **production promotion is a separate, explicitly requested step.**
 
 ---
 
@@ -458,16 +555,18 @@ numbers first and saying so explicitly.
 
 | Gate | Assertion |
 |---|---|
-| V1 | S0 confirms or refutes § 2's cold start on a real zero-history tenant. **If refuted, re-derive § 2 and § 4 S3 before proceeding.** |
-| V2 | RPC returns the same publisher set as today's `getReservedPublishers()` at threshold 7, on both environments — proven by comparing against the old paging implementation, not assumed |
-| V3 | With no `catalog_filters` row, both surfaces show **everything** (fail-open, § 3.4) — tested by deleting the key, not by reasoning |
-| V4 | With the S3 seed applied, the production Print Catalog's row and page counts are **unchanged** from today's 1,534 / 34 |
+| V1 | ✅ **DONE 2026-09-23, both environments.** S0 confirmed § 2's cold start and corrected its definition — the trigger is "no publisher clears the bar", not "zero reserve history" (§ 13 F160) |
+| V2 | RPC returns the same publisher set as today's `getReservedPublishers()` at threshold 7, on both environments — proven by comparing against the old paging implementation, not assumed. **Must run BEFORE S4 deletes that function**, or there is nothing left to compare against (§ 5.1) |
+| V3 | With no `catalog_filters` row, both surfaces show **everything** (§ 3.4) — tested by deleting the key, not by reasoning |
+| V4 | **REPLACES the old "print unchanged at 1,534 / 34" assertion, which the bar deletion makes false.** After S4 with no config row, the production print is **2,068 rows / 45 pages**; with the "Reserved ≥ 7" preset clicked it returns to **1,507 / 33**. Both asserted, because the second is what proves the preset reproduces the old behaviour rather than approximating it |
+| V4a | **Publisher exclusions survive a rename in the safe direction** (§ 3.2.1): with a publisher excluded, rewrite its `catalog.publisher` value on a scratch row and confirm the row **reappears** rather than staying hidden. Negative-control the assertion by confirming it fails if the config is inverted to an allowlist |
 | V5 | A reserved title stays visible to its customer with its publisher hidden (§ 3.3), asserted in a real browser |
 | V6 | Publisher filtering is confirmed to reach the **query**, not the client — assert the request's `publisher` param, and that the row count fetched drops |
 | V7 | Malformed JSON in `catalog_filters` shows everything and logs, rather than emptying the catalog |
 | V8 | `node --check` clean on every touched inline `<script>`; nav + footer blocks on `settings.html` hash-identical to the other six |
 | V9 | Full Playwright suite green against deployed staging bytes **post-push**. Current baseline **147 passed** |
-| V10 | New spec asserting V3, V5 and V7 — the suite has **zero** coverage of any of this today, so a green run otherwise proves only that nothing else broke |
+| V10 | New spec asserting V3, V4a, V5 and V7 — the suite has **zero** coverage of any of this today, so a green run otherwise proves only that nothing else broke |
+| V12 | **`getReservedPublishers` and `MIN_RESERVED` return ×0** in the served `admin.html` after S4, and `06-admin-this-week-bagging` / `17-admin-modes` are swept for references before the deletion (CLAUDE.md's rule after the single-catalog-print session turned the suite red by deleting a classed element) |
 | V11 | Post-deploy: served bytes verified with `curl -L` (the documented 302 trap), positive **and** negative assertions |
 
 ### 5.1 V2 in full — the parity gate, and why it is a browser check and not SQL
@@ -578,21 +677,36 @@ seeing rows they see today. The print sheet is unaffected — it already hides t
 "unchanged at 1,534 / 34" still holds. Measure the customer-side delta in S0 (how many current-month
 titles have a passed FOC) so the size of the change is known before it ships, not after.
 
-**Q3 — ANSWERED 2026-09-23 (Rick): keep "Reserved ≥ 7" as a one-click preset.** It reproduces
-today's behaviour in one click and is a sane starting point for an established tenant — as an
-explicit choice rather than a hardcoded constant. It must **not** be the default for a tenant with
-no history (§ 2 / F160).
+**Q3 — ANSWERED 2026-09-23 (Rick), then RE-SCOPED the same day: keep "Reserved ≥ 7" as a one-click
+preset, but only as a LIST-POPULATOR, never a living rule.** It reproduces today's print in one
+click and is a sane starting point for an established tenant — as an explicit choice rather than a
+hardcoded constant.
+
+**Why it cannot be a persistent rule (§ 3.2.1).** A living threshold recomputes on every load, which
+looks immune to spelling drift. It is not: a renamed publisher's reserve history does not follow the
+new name, so it reads as 0 reservations and **the rule hides it** — reintroducing exactly the
+silent-disappearance failure Rick raised. So clicking the preset writes today's under-7 publishers
+in as **explicit exclusions**, and from then on it is a curated list that fails open.
+
+**Q4 — ANSWERED 2026-09-23 (Rick): delete the ≥7 publisher bar** rather than encode it. See § 2.1 —
+this is the decision that collapsed § 2.1's three-way fork, deleted S3, and turned F160's fix into a
+deletion. Cost: the print goes 33 → 45 pages; customers are unaffected.
+
+**Q5 — ANSWERED 2026-09-23 (Rick, by raising it): store publisher EXCLUSIONS, not inclusions.**
+See § 3.2.1.
 
 *Provenance note: Rick's reply numbered these "Q1, agree - Q2, agree" against the two decisions
 raised in conversation (past-FOC, then the preset), which are this doc's Q2 and Q3. Q1 was already
 closed by the F160 filing earlier in the same session. Recorded this way so the mapping is visible
 if it needs correcting.*
 
-**Q4 — Does the page-vs-mode decision hold?** Settled on performance in § 3.1; recorded here because
-it is the decision most likely to be revisited.
+**Q6 — Does the page-vs-mode decision hold?** Settled on performance in § 3.1; recorded here because
+it is the decision most likely to be revisited. *(Was Q4 until 2026-09-23; renumbered when the bar
+deletion and exclusion storage took Q4/Q5.)*
 
-**Q5 — § 8's storage estimate is derived, not measured.** S0 item 5 settles it. Do not plan
-infrastructure spend on it before then.
+**Q7 — ANSWERED by measurement 2026-09-23: § 8's storage estimate is no longer derived.** Production
+Q7 returned **2,001 bytes/row**, putting the free-tier ceiling at roughly **20 tenants**. Infrastructure
+spend can now be planned on it. *(Was Q5.)*
 
 ---
 
@@ -645,9 +759,15 @@ What does scale, and how it is handled here:
    as one that holds — and because the arithmetic would change the moment a second spelling starts
    accumulating reservations.
 
-   **S2 requirements, now mandatory rather than nice-to-have:** surface "N publishers in your
-   configuration no longer match this month's catalog", *and* flag near-duplicate publisher names in
-   the list so the admin can see `Titan` sitting beside `Titan Comics` instead of scrolling past it.
+   **The structural fix is § 3.2.1: store EXCLUSIONS, not inclusions**, so a rename fails by making
+   titles reappear rather than vanish. That is prevention, and it is the reason this fragility is no
+   longer load-bearing.
+
+   **S2 requirements, still mandatory as detection:** surface "N publishers in your configuration no
+   longer match this month's catalog", *and* flag near-duplicate publisher names in the list so the
+   admin can see `Titan` sitting beside `Titan Comics` instead of scrolling past it. With exclusions
+   stored, the case these catch is a rename that quietly **un-hid** something — annoying, not
+   harmful, but worth seeing.
 2. **Catalog rows are copied per tenant — ✅ MEASURED 2026-09-23, and the threshold is much nearer
    than 100 tenants.** `demoshop` was created with 2,288 rows copied from the founding tenant. S0 Q7
    on staging: `catalog` is **20 MB across 13,071 rows = 1,633 bytes per row** — **2.3–5× my
@@ -681,17 +801,18 @@ What does scale, and how it is handled here:
 - [x] S0 run on **STAGING** 2026-09-23 — F160 CONFIRMED (Q1/Q8), storage measured (Q7), ratios and cover classes measured (Q3/Q4), FOC cost measured (Q6). Three results changed the plan: § 2.1, § 3.2 ratios, § 8 storage
 - [x] S0 Q2 + Q5 run on staging 2026-09-23 — three-way arithmetic reconciliation confirmed (§ 2.1); publisher fragmentation measured (§ 8); promotional group cut to one toggle (§ 3.7)
 - [x] S0 run on **PRODUCTION** 2026-09-23 — F160 confirmed there too and its definition corrected (§ 13 F160); model validated (14 publishers, matching the real print exactly); reconciliation held on independent data (1,616 − 109 = 1,507); real reserve history obtained (§ 2.1); storage threshold revised to ~20 tenants (§ 8). **Q5 still owed on production**
-- [ ] § 2.1's unification decision made by Rick (the 70% / 36% customer-catalog cut)
-- [x] Q1-Q3 answered by Rick and recorded in § 7 (2026-09-23)
+- [x] **§ 2.1's unification decision made by Rick 2026-09-23: DELETE the ≥7 bar.** Collapsed the three-way fork, deleted S3, turned F160's fix into a deletion, and made the default "store nothing"
+- [x] Q1–Q5 answered by Rick and recorded in § 7 (2026-09-23) — incl. Q4 bar deletion and Q5 exclusion storage; Q6/Q7 renumbered
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
-- [ ] S1 RPC applied to staging, verified by V2 (§ 5.1 browser diff, negative-controlled)
+- [ ] S1 RPC applied to staging, verified by **V2 — which must run BEFORE S4 deletes `getReservedPublishers()`**, or the comparison has no baseline
 - [ ] S2 merged to `staging` `--ff-only`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync in the same commit
 - [ ] `aria-hidden` / `tabindex` removed from the gear (`app.js:539-540`)
-- [ ] S3 seed applied to staging, V4 green there
-- [ ] S4 merged to `staging`; V3, V5, V6, V7 green
+- [ ] ~~S3 seed applied~~ — **step deleted, nothing to seed**
+- [ ] S4 merged to `staging` — bar deleted (a) and config applied (b); V3, V4, V4a, V5, V6, V7, V12 green
 - [ ] V8, V9 (147+ baseline), V10 green
-- [ ] Production promotion: **separate, explicitly requested.** S1 RPC and S3 seed land on production
-      **before** S4's client code (F105)
+- [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
+      S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
+      window already carries F146/F147's first live exercise and should not also carry a paper change
 - [ ] V11 green against production's served bytes
 - [ ] This doc's STATUS token updated; CLAUDE.md § Current Migration Phase advanced
 
