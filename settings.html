@@ -473,28 +473,22 @@
   const navAnalytics = document.getElementById('nav-analytics');
   if (navAnalytics) navAnalytics.style.display = 'block';
 
-  const CONFIG_KEY    = 'catalog_filters';
+  const CONFIG_KEY    = CatalogFilters.KEY;
   const ROWS_PER_PAGE = 46;   // must match admin.html's print geometry (:5438)
 
-  // Absence of a stored config means SHOW EVERYTHING, on both surfaces. There
-  // is no legacy publisher bar to preserve — it is deleted in S4(a) — so
-  // "open" is simply everything, and the default state persists nothing at all.
-  function defaultConfig() {
-    return {
-      v: 1,
-      publishersHidden: [],   // EXCLUSIONS, never an allowlist. A renamed
-                              // publisher stops matching and REAPPEARS, which
-                              // is the harmless direction; an allowlist would
-                              // make it silently vanish.
-      showStandard: true,
-      showVariants: true,
-      showRestricted: true,
-      ratioMax: null,         // null = every ratio shown
-      hidePastFoc: false,
-      focMode: 'month',       // 'month' (print's rule) | 'today' (literal)
-      hideZeroPrice: false,
-    };
-  }
+  // ⚠️ The shape and its defaults come from CatalogFilters (app.js), NOT from a
+  // copy here. This file carried its own defaultConfig() literal until
+  // 2026-09-24 — two definitions of the same contract, in the writer and the
+  // reader, which is precisely the drift this project keeps getting bitten by
+  // (F132/F156's derived column, F143/F156's duplicated writers, and the seven
+  // copies of the standard-cover test in § 1.4). The writer must not be able to
+  // disagree with the reader about what "default" means, or the page would open
+  // showing unsaved changes against a config nobody edited.
+  //
+  // publishersHidden holds EXCLUSIONS, never an allowlist: a renamed publisher
+  // stops matching and REAPPEARS, which is the harmless direction. An allowlist
+  // would make it silently vanish (§ 3.2.1).
+  const defaultConfig = () => CatalogFilters.defaults();
 
   const pubKey = s => (s || '').trim().toLowerCase();
 

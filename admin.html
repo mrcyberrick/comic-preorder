@@ -1330,7 +1330,9 @@
   // Count-first, paged read — F113. admin.html:679-693 previously issued a
   // single unbounded select(), silently capped at PostgREST's 1,000-row
   // default (production holds 2,004). Mirrors the precedent already in this
-  // file at getReservedPublishers()/fetchAllCatalogForDistributor() (below).
+  // file at fetchAllCatalogForDistributor() (below). (This read
+  // "getReservedPublishers()/fetchAllCatalogForDistributor()" until 2026-09-24;
+  // the first of those was deleted with the >= 7 bar, S4a.)
   // created_at is not unique, so `id` is added as a tiebreaker to keep
   // range() page boundaries deterministic.
   async function fetchAllPreorders() {
@@ -5239,50 +5241,33 @@
   // Header: catalog month, title count, tier-gated View Online link (F72 S3)
   // Footer margin box: Page X of Y · print date · tier-gated identity (via CSS @page)
 
-  // Set of publishers (trimmed, lower-cased) with a meaningful all-time reserve
-  // history — at least MIN_RESERVED reservation records across archived
-  // reservation_history rows plus current live preorders (every month). Each row
-  // in either source is one reserved-title record (one customer/title/month), so
-  // this counts total reservations per publisher, not distinct titles. Memoized
-  // for the page session so the Lunar and PRH prints share one fetch. Both
-  // sources are paged because PostgREST caps a single response at 1000 rows, so
-  // no record is missed in a long history.
-  const MIN_RESERVED = 7;
-  let _reservedPublishers = null;
-  async function getReservedPublishers() {
-    if (_reservedPublishers) return _reservedPublishers;
-    const counts = new Map();
-
-    async function collect(table, selectExpr, extract) {
-      const countRes = await db.from(table).select('*', { count: 'exact', head: true });
-      const total = countRes.count ?? 0;
-      if (!total) return;
-      const batches = [];
-      for (let from = 0; from < total; from += 1000) {
-        batches.push(db.from(table).select(selectExpr).range(from, Math.min(from + 999, total - 1)));
-      }
-      const results = await Promise.all(batches);
-      results.flatMap(r => r.data || []).forEach(row => {
-        const pub = extract(row);
-        if (pub) {
-          const key = pub.trim().toLowerCase();
-          counts.set(key, (counts.get(key) || 0) + 1);
-        }
-      });
-    }
-
-    await Promise.all([
-      collect('reservation_history', 'publisher', r => r.publisher),
-      collect('preorders', 'catalog(publisher)', r => r.catalog?.publisher),
-    ]);
-
-    // Keep only publishers whose total all-time reservation count meets the bar.
-    const set = new Set();
-    counts.forEach((n, key) => { if (n >= MIN_RESERVED) set.add(key); });
-
-    _reservedPublishers = set;
-    return set;
-  }
+  // The >= 7 publisher bar that used to live here is GONE (2026-09-24, S4a of
+  // docs/admin-settings-catalog-visibility.md). It was `const MIN_RESERVED = 7`
+  // plus a memoized getReservedPublishers() that paged the ENTIRE
+  // reservation_history and preorders tables to build a Set of publishers with
+  // at least 7 all-time reservations, and fetchAllCatalogForDistributor() then
+  // dropped every title whose publisher was absent from it.
+  //
+  // WHY IT WENT, and it is two separate reasons:
+  //   * IT WAS F160. A tenant with no publisher clearing the bar got an EMPTY
+  //     Set and therefore a BLANK printed sheet, silently. Confirmed live on
+  //     both environments 2026-09-23 - staging's `demoshop` holds 2,288 catalog
+  //     rows and printed 0; production's `comicstore` likewise. Deleting the
+  //     bar removes the defect rather than guarding it.
+  //   * IT WAS SELF-REINFORCING, measured on real reserve history. It hid
+  //     Seven Seas (81 titles this month, 0 reservations), Oni Press (67/0),
+  //     Yen Press (52/0), Viz Media (37/2) while Abrams cleared it on 9
+  //     reservations and 27 titles. A publisher nobody can see earns no
+  //     reservations, so it stays invisible. 58 of 72 publishers were excluded.
+  //
+  // Trimming the sheet is now an explicit, visible admin choice on
+  // settings.html, stored as publisher EXCLUSIONS and read through
+  // CatalogFilters. The reserve counts that used to be computed here by paging
+  // two whole tables now come from the get_publisher_reserve_counts() RPC - one
+  // GROUP BY instead of 10-15 round trips for a mature tenant.
+  //
+  // CONSEQUENCE: this sheet is LONGER. Production goes 1,507 rows / 33 pages to
+  // 2,068 / 45 with no config saved. That is intended and is the whole trade.
 
   async function fetchAllCatalogForDistributor(distributor) {
     if (!currentCatalogMonth) {
@@ -5317,19 +5302,22 @@
     const results = await Promise.all(batches);
     const items = results.flatMap(r => r.data || []);
 
-    // Keep only titles whose publisher has a meaningful all-time reserve history
-    // (>= 5 total reservations across archived + current) — see getReservedPublishers.
-    const reserved = await getReservedPublishers();
-
-    // Also hide rows whose FOC falls in the current catalog month or earlier —
-    // that order cutoff has passed for this cycle, so the sheet only lists titles
-    // still open to order (FOC in a later month). foc_date is "YYYY-MM-DD" and
-    // currentCatalogMonth is "YYYY-MM", so comparing the month prefix as strings
-    // is sufficient. Rows with no FOC are kept (they have no cutoff to be past).
-    return items.filter(c =>
-      c.publisher && reserved.has(c.publisher.trim().toLowerCase()) &&
-      (!c.foc_date || c.foc_date.slice(0, 7) > currentCatalogMonth)
-    );
+    // Both filters are now admin configuration, read through the one helper
+    // both surfaces share so the printed sheet and the customer catalog cannot
+    // drift apart (app.js CatalogFilters — F143/F156's single-writer reasoning
+    // applied to a predicate).
+    //
+    // The FOC rule this used to hardcode — keep only titles whose FOC month is
+    // LATER than the catalog month — is reproduced exactly by the default
+    // `hidePastFoc: true` + `focMode: 'month'`, so that dimension is unchanged.
+    // What changed is the publisher dimension: with no exclusions saved, every
+    // publisher now prints.
+    //
+    // No reservation exemption here, deliberately: that rule is per-customer
+    // ("never hide a title THIS customer reserved") and has no meaning on a
+    // sheet printed for the whole shop.
+    const cfg = await CatalogFilters.load();
+    return CatalogFilters.apply(items, cfg, currentCatalogMonth);
   }
 
   // The code the sheet prints for a row. PRH leads with ISBN, Lunar with UPC.
@@ -5368,14 +5356,20 @@
   // The encoder is gone from this file; it is recoverable from git history at
   // commit 56c97c9 if that hardware is ever replaced.
   //
-  // How long this sheet actually runs, and why you cannot tell from the catalog
-  // size (measured 2026-08-24, catalog month 2026-08). getReservedPublishers()
-  // above, not the row count, decides: it keeps only publishers with
-  // MIN_RESERVED+ all-time reservations, and that bar cuts far harder than it
-  // looks. Both environments hold ~2,400 rows across 78 publishers for the same
-  // month, and they print very differently —
-  //   staging     4 publishers pass →   638 rows → 15 pages
-  //   production 14 publishers pass → 1,534 rows → 34 pages
+  // How long this sheet actually runs, and why you STILL cannot tell from the
+  // catalog size. Until 2026-09-24 the answer was getReservedPublishers()' >= 7
+  // bar, which cut far harder than the row count suggested and made the two
+  // environments print completely differently on the same catalog —
+  //   staging     4 publishers passed →   638 rows → 15 pages
+  //   production 14 publishers passed → 1,534 rows → 34 pages
+  // That bar is deleted (S4a). The length is now decided by the admin's own
+  // publisher exclusions on settings.html plus the FOC rule, so it is a SAVED
+  // SETTING per tenant rather than a property of the data. With nothing saved,
+  // production prints 2,068 rows / 45 pages.
+  // The original lesson survives intact and is the reason this note stays:
+  // MEASURE AGAINST THE ENVIRONMENT YOU MEAN. A page count taken on staging, or
+  // from a raw catalog file, describes neither production nor any other tenant —
+  // and it now varies by configuration as well as by data.
   // — because staging's reserve history is 24 archived + 64 live rows of test
   // data against production's 485 + 2,623. So a page count taken on staging says
   // nothing about the production print, and a count taken from a raw catalog
@@ -5680,9 +5674,13 @@
     btn.textContent = 'Loading…';
 
     try {
-      // Sequential, not Promise.all: getReservedPublishers() is memoized on
-      // first call, and two parallel callers would both miss the memo and run
-      // the (paged, whole-history) reservation scan twice.
+      // Sequential, not Promise.all. The original reason was that
+      // getReservedPublishers() was memoized and two parallel callers would
+      // both miss the memo and rescan the whole reservation history; that
+      // function is gone (S4a, 2026-09-24). Kept sequential anyway, for a
+      // smaller reason: each call now does its own CatalogFilters.load(), so
+      // running them in parallel doubles the app_settings read for no gain on
+      // two calls. Do not "optimise" this into Promise.all expecting a win.
       const lunar = await fetchAllCatalogForDistributor('Lunar');
       if (!lunar) return;
       const prh = await fetchAllCatalogForDistributor('PRH');

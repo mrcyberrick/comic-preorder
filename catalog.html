@@ -471,7 +471,47 @@
     return !vt || vt === 'Standard' || vt === 'Primary Title';
   }
 
+  // The admin's saved catalog-visibility config, loaded once below.
+  let catalogFilterCfg = null;
+
+  // Applies it to a full result set BEFORE pagination — which is why all three
+  // call sites sit exactly where the per-customer variant filter already ran.
+  // Filtering after slicing is what caused short pages and empty grid cells
+  // before (see path B's own note), and it would do so again.
+  //
+  // ⚠️ THE RESERVATION EXEMPTION LIVES HERE, and it is the one rule that is not
+  // configurable. A title this customer has already reserved is never hidden,
+  // whatever the admin has filtered. Without it, hiding a publisher would
+  // strand an existing reservation exactly the way F155 stranded DNX #1:
+  // present in the database, absent from every surface the customer can reach —
+  // and on this page it would also remove the only route to cancelling it.
+  // `reservedIds` is assigned later in init than this function is defined, but
+  // it is only ever READ at call time, from inside loadCatalog(); guarded
+  // anyway so an early call degrades to "no exemptions" rather than throwing.
+  function applyVisibility(rows) {
+    if (!catalogFilterCfg) return rows;
+    return CatalogFilters.apply(
+      rows,
+      catalogFilterCfg,
+      currentMonth,
+      r => !!(reservedIds && reservedIds.has && reservedIds.has(r.id))
+    );
+  }
+
   currentMonth = await Catalog.getLatestMonth();
+
+  // ── Tenant-wide catalog visibility (S4b, 2026-09-24) ──────────
+  // The admin's saved filters from settings.html, read through the ONE helper
+  // the printed sheet also uses (app.js CatalogFilters) so the two surfaces
+  // cannot disagree. Loaded once per page load, not per render: it is a single
+  // indexed PK read on app_settings, and re-reading it inside loadCatalog()
+  // would put it on every search keystroke.
+  //
+  // Fails OPEN — a missing, unreadable or hide-everything config yields the
+  // full catalog. A customer seeing too much is a curation miss; a customer
+  // seeing nothing is a broken store.
+  catalogFilterCfg = await CatalogFilters.load();
+
   if (currentMonth) {
     document.getElementById('catalog-subtitle').textContent =
       `Catalog for ${currentMonth} — browse and reserve items`;
@@ -680,7 +720,7 @@
       // Client-side: keep only items whose FOC date is this calendar month,
       // then apply the variant filter on top.
       const hideVariants = variantEl.value === 'standard';
-      const filtered = items
+      const filtered = applyVisibility(items)
         .filter(i => isFocThisMonth(i.foc_date))
         .filter(i => !hideVariants || isStandardCover(i));
 
@@ -747,9 +787,10 @@
       // Apply variant filter to the FULL ranked list BEFORE paginating.
       // Filtering after slicing caused short pages and empty grid cells.
       const hideVariants = variantEl.value === 'standard';
+      const visible = applyVisibility(rankedItems);
       const filteredItems = hideVariants
-        ? rankedItems.filter(i => isStandardCover(i))
-        : rankedItems;
+        ? visible.filter(i => isStandardCover(i))
+        : visible;
 
       const filteredTotal = filteredItems.length;
       const pageFrom      = (page - 1) * PAGE_SIZE;
@@ -858,9 +899,10 @@
 
       // Apply client-side variant + reserved filters across ALL items
       const hideVariants = variantEl.value === 'standard';
+      const visibleItems = applyVisibility(items);
       const filtered = (reserveFilter === 'reserved'
-        ? items.filter(i => reservedIds.has(i.id))
-        : items.filter(i => !reservedIds.has(i.id))
+        ? visibleItems.filter(i => reservedIds.has(i.id))
+        : visibleItems.filter(i => !reservedIds.has(i.id))
       ).filter(i => !hideVariants || isStandardCover(i));
 
       // Now paginate the filtered result ourselves

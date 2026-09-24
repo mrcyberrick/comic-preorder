@@ -1157,6 +1157,140 @@ async function fetchAllRows(buildQuery, pageSize = 1000) {
   return { data: all, error: null };
 }
 
+// ── Catalog visibility filters (S4, 2026-09-24) ───────────────
+// The ONE reader of app_settings.catalog_filters. Both surfaces it governs —
+// catalog.html's Monthly Catalog and admin.html's Paper Orders print — call
+// this, so the rule cannot drift between them. That single-writer reasoning is
+// F143/F156's, applied to a predicate instead of a write.
+//
+// Plan: docs/admin-settings-catalog-visibility.md. settings.html writes the
+// config; this reads it.
+//
+// ⚠️ FAILS OPEN, ALWAYS. Missing row, unreadable row, malformed JSON, or a
+// config that would hide every title all resolve to SHOW EVERYTHING.
+// app_settings.value is untyped text with no CHECK constraint, and an empty
+// catalog is a broken store while an over-long print is only paper. This is the
+// deliberate inverse of Tier, which fails closed because *free* is its safe
+// render.
+//
+// ⚠️ WHY THIS FILTERS CLIENT-SIDE, correcting the plan's § 3.2. That section
+// said the filters would be query predicates, arguing it would make the catalog
+// FASTER than today by fetching fewer rows. That is not achievable as designed:
+// publisher exclusions are stored as `lower(btrim(publisher))` keys (matching
+// getReservedPublishers()' own normalisation and the S1 RPC's), but
+// `catalog.publisher` holds mixed case, and PostgREST's `not.in` compares raw
+// column values with no way to express a lowercased comparison. Sending display
+// values instead would work, but it needs a key->display mapping built from the
+// month's actual publisher list, which is a real optimisation and not this step.
+// Filtering client-side is also structurally free here: every catalog.html
+// path ALREADY fetches all matching rows and then filters in the browser — it
+// is where `hideVariants` has always been applied — so this adds a predicate
+// beside an existing one rather than changing how anything paginates.
+const CatalogFilters = {
+  KEY: 'catalog_filters',
+
+  defaults() {
+    return {
+      v: 1,
+      publishersHidden: [],
+      showStandard: true,
+      showVariants: true,
+      showRestricted: true,
+      ratioMax: null,
+      // ⚠️ TRUE, and this resolves a conflict between two recorded decisions.
+      // Q2 (Rick, 2026-09-23) is "hide past-FOC on BOTH surfaces". § 3.4 is
+      // "no config means show everything". Both cannot hold for the default.
+      // Resolved in Q2's favour for the FOC dimension specifically, because:
+      //   * it PRESERVES the print's current behaviour. The hardcoded clause at
+      //     admin.html:5330 already hides FOC <= the catalog month, and
+      //     `hidePastFoc: true` + `focMode: 'month'` reproduces it exactly. A
+      //     false default would instead lengthen the sheet to ~51 pages, a
+      //     change nobody asked for.
+      //   * § 3.4's fail-open rule exists to stop a bad config EMPTYING a
+      //     surface. Hiding 109 of 2,302 rows is not an empty surface; reading
+      //     "show everything" onto every dimension is over-literal.
+      // COST, stated rather than buried: the customer catalog loses those 109
+      // titles on S4's deploy even with no config saved (Q6, production
+      // 2026-09). That is the trade Q2 accepted, now applied by default.
+      hidePastFoc: true,
+      focMode: 'month',
+      hideZeroPrice: false,
+    };
+  },
+
+  _key(s) { return (s || '').trim().toLowerCase(); },
+
+  async load() {
+    try {
+      const raw = await Settings.get(this.KEY);
+      if (!raw) return this.defaults();
+      const parsed = JSON.parse(raw);
+      const cfg = Object.assign(this.defaults(), parsed);
+      cfg.publishersHidden = Array.isArray(parsed.publishersHidden)
+        ? parsed.publishersHidden.map(s => this._key(s)).filter(Boolean)
+        : [];
+      cfg._hiddenSet = new Set(cfg.publishersHidden);
+      return cfg;
+    } catch (err) {
+      console.warn('catalog_filters unreadable — showing everything', err);
+      return this.defaults();
+    }
+  },
+
+  // True when the row should be HIDDEN. `currentMonth` is needed only for
+  // focMode 'month'; pass the catalog month the rows belong to.
+  hides(row, cfg, currentMonth) {
+    if (!row || !cfg) return false;
+    const hiddenSet = cfg._hiddenSet || new Set(cfg.publishersHidden || []);
+    if (hiddenSet.has(this._key(row.publisher))) return true;
+
+    const cls = coverClassOf(row);
+    if (cls === 'standard' && cfg.showStandard === false) return true;
+    if (cls === 'variant'  && cfg.showVariants === false) return true;
+    if (cls === 'restricted') {
+      if (cfg.showRestricted === false) return true;
+      if (cfg.ratioMax != null) {
+        const d = ratioDenominator(row.order_requirement);
+        // A malformed ratio (d null) is NOT hidden — it must not read as 0 and
+        // slip past a "no harder than N" threshold in either direction.
+        if (d != null && d > cfg.ratioMax) return true;
+      }
+    }
+    if (cfg.hidePastFoc && row.foc_date) {
+      // A row with no foc_date has no cutoff to be past, so it is always kept.
+      const past = cfg.focMode === 'today'
+        ? row.foc_date < DateUtils.todayLocal()
+        : (currentMonth ? row.foc_date.slice(0, 7) <= currentMonth : false);
+      if (past) return true;
+    }
+    if (cfg.hideZeroPrice && Number(row.price_usd) === 0) return true;
+    return false;
+  },
+
+  // Filter a list, with the ZERO-VISIBILITY GUARD: if a config would hide
+  // every row, it is treated as no config at all and the full list is returned.
+  // Nobody means "show my customers nothing", and a stored blob that empties a
+  // surface is exactly what fail-open exists to stop — including the one a
+  // "Hide all" click can produce. Logged loudly so it is not silent.
+  //
+  // `exempt` is an optional predicate that forces a row visible regardless.
+  // catalog.html passes the customer's own reserved set through it: a title
+  // someone has already reserved is never hidden, or a filter could strand it
+  // the way F155 stranded DNX #1 — present in the database, absent from every
+  // surface the customer can reach.
+  apply(rows, cfg, currentMonth, exempt) {
+    if (!cfg || !Array.isArray(rows) || !rows.length) return rows || [];
+    const kept = rows.filter(r =>
+      (exempt && exempt(r)) || !this.hides(r, cfg, currentMonth));
+    if (!kept.length && rows.length) {
+      console.warn('catalog_filters would hide every title — ignoring it and showing everything');
+      return rows;
+    }
+    return kept;
+  },
+};
+window.CatalogFilters = CatalogFilters;
+
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
   async getMyIds(userId) {
