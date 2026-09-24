@@ -610,19 +610,32 @@
     return { rows, error: null };
   }
 
-  currentMonth = await Catalog.getLatestMonth();
-
-  // ── Tenant-wide catalog visibility (S4b, 2026-09-24) ──────────
-  // The admin's saved filters from settings.html, read through the ONE helper
-  // the printed sheet also uses (app.js CatalogFilters) so the two surfaces
-  // cannot disagree. Loaded once per page load, not per render: it is a single
-  // indexed PK read on app_settings, and re-reading it inside loadCatalog()
-  // would put it on every search keystroke.
+  // ── Catalog month + tenant-wide visibility config ─────────────
+  // ⚠️ PARALLEL, NOT SEQUENTIAL, and that is the point. The visibility config
+  // (S4b, 2026-09-24) is the admin's saved filters from settings.html, read
+  // through the ONE helper the printed sheet also uses (app.js
+  // CatalogFilters) so the two surfaces cannot disagree.
   //
-  // Fails OPEN — a missing, unreadable or hide-everything config yields the
-  // full catalog. A customer seeing too much is a curation miss; a customer
-  // seeing nothing is a broken store.
-  catalogFilterCfg = await CatalogFilters.load();
+  // It first shipped as its own `await` after getLatestMonth(), which made it a
+  // SEVENTH serialized step on a page whose init was already 6 round trips deep
+  // — precisely what this plan's § 4 S4 said not to do ("fold the read into an
+  // existing parallel batch rather than adding a 7th serialized step"). The two
+  // reads are independent: load() only needs the tenant, which RLS supplies,
+  // and currentMonth is not consulted until hides() runs much later. Overlapping
+  // them makes the config cost ZERO added latency on the fast path.
+  //
+  // Read once per page load, never inside loadCatalog(), or it would run on
+  // every search keystroke.
+  //
+  // Fails OPEN — a missing or unreadable config yields the defaults, which
+  // hide nothing but past-FOC. A customer seeing too much is a curation miss;
+  // a customer seeing nothing is a broken store.
+  const [_month, _cfg] = await Promise.all([
+    Catalog.getLatestMonth(),
+    CatalogFilters.load(),
+  ]);
+  currentMonth      = _month;
+  catalogFilterCfg  = _cfg;
 
   if (currentMonth) {
     document.getElementById('catalog-subtitle').textContent =
