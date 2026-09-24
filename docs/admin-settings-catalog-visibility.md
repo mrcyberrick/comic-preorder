@@ -123,7 +123,38 @@ reproducing today's effective print behaviour" — would silently cut the custom
 | | customer catalog today | under today's print config | change |
 |---|---|---|---|
 | staging `raysandjudys` | **2,302** titles, 72 publishers | **688** titles, 5 publishers | **−70%** |
-| production `rjbookstop` | ~2,399 titles, 78 publishers | ~1,534 titles, 14 publishers | **−36%** |
+| production `rjbookstop` | **2,302** titles, 72 publishers | **1,507** titles, 14 publishers | **−34.5%** |
+
+*(Production measured 2026-09-23, replacing this row's earlier ~2,399 / ~1,534 / −36% estimate. Both
+environments hold 2,302 rows for 2026-09 across the same 72 publishers — the same import.)*
+
+**On production the split is 686 rows to the publisher bar and 109 to the FOC rule** (Q6). The
+publisher bar is the expensive half on both environments.
+
+**⚠️ THE STRONGEST ARGUMENT FOR THIS FEATURE IS NOW MEASURED, ON REAL RESERVE HISTORY.** Staging's
+counts were test data; production's are three years of a real shop. What the bar hides there:
+
+| Publisher | Reserved | Titles this month | |
+|---|---|---|---|
+| Seven Seas Entertainment | 0 | **81** | hidden |
+| Oni Press | 0 | **67** | hidden |
+| Yen Press | 0 | **52** | hidden |
+| BAD IDEA | 0 | 38 | hidden |
+| Viz Media | **2** | 37 | hidden |
+| Vault Comics | 0 | 29 | hidden |
+| Prana Publishers | 0 | 29 | hidden |
+| Ignition Press | 0 | 28 | hidden |
+| Kodansha Comics | 0 | 24 | hidden |
+| Papercutz | **1** | 22 | hidden |
+| Random House Worlds | 0 | 22 | hidden |
+| — | — | — | |
+| Abrams | **9** | 27 | **shown** |
+
+**Abrams clears the bar on 9 reservations and 27 titles while Oni Press, with 67 titles, is invisible
+because it has 0.** That is the self-reinforcement loop the 2026-08-24 session described and declined
+to file, now with real numbers attached: a publisher nobody can see earns no reservations, so it
+stays invisible. Every manga and indie publisher CLAUDE.md named — Oni, Viz, Yen Press, Seven Seas,
+Vault — is confirmed excluded on production.
 
 **The FOC rule I flagged under Q2 is the small half.** Of staging's 1,614-row reduction, the
 past-FOC rule accounts for **54** rows (Q6 `newly_hidden_from_customers`, of which 7 are held by the
@@ -599,12 +630,20 @@ What does scale, and how it is handled here:
    this plan and the mockup both assumed — so "78 publishers" and the mockup's publisher names were
    both invented rather than read.
 
-   **Two consequences, and the second is a candidate defect in shipped code.** (a) An admin ticking
-   `Titan Comics` silently misses the title filed under `Titan`. (b) **The existing print filter
-   splits reserve counts across spellings**, so a publisher holding 4 + 4 reservations never clears
-   the bar of 7 that 8 would have cleared — the bar is harder to pass than it looks. (b) must be
-   **confirmed on production Q2 before being filed**: staging's counts are test data, so
-   fragmentation there proves the shape but not a live instance.
+   **Two consequences were predicted. Production Q2 confirms one and REFUTES the other.**
+
+   **(a) CONFIRMED, live on production.** `Titan Comics` (167 reserved, 95 titles) is shown; `Titan`
+   (2 reserved, 1 title) is **hidden**. One real title is dropped from the printed sheet because it
+   is filed under the short spelling. Tiny, but real, and it is on paper today.
+
+   **(b) REFUTED — do NOT file it.** I predicted that split counts would push a publisher below the
+   bar: "4 + 4 never clears the 7 that 8 would have." Checked against every near-duplicate pair on
+   production, it does not happen. `Titan Comics` clears the bar on its own 167, so merging changes
+   nothing; every other pair sums to less than 7 either way (Kodansha 0+0, Fantagraphics 0+0, the
+   three Random House entries 3+0+0, Penguin 0+0, Disney 0+0). **The mechanism is real and its
+   harmful case is absent from the data.** Recorded because a prediction that fails is worth as much
+   as one that holds — and because the arithmetic would change the moment a second spelling starts
+   accumulating reservations.
 
    **S2 requirements, now mandatory rather than nice-to-have:** surface "N publishers in your
    configuration no longer match this month's catalog", *and* flag near-duplicate publisher names in
@@ -614,19 +653,25 @@ What does scale, and how it is handled here:
    on staging: `catalog` is **20 MB across 13,071 rows = 1,633 bytes per row** — **2.3–5× my
    300–700 estimate**, which was wrong in magnitude while right in direction.
 
-   At 1,633 bytes/row and ~10,800 rows for a real shop, **one tenant costs ~17.6 MB of `catalog`
-   alone**. So Supabase free tier's 500 MB is exhausted at roughly **28–30 tenants**, not 100 —
-   and Q7's own 100-tenant projection is **1,679 MB**, 3.4× over the free tier.
+   **Production, measured the same day, is heavier still: 22 MB across 11,276 rows = 2,001 bytes per
+   row**, and Q7's 100-tenant projection there is **2,151 MB**. At ~22.6 MB of `catalog` per real
+   tenant, **the free tier's 500 MB is exhausted at roughly 22 tenants** — and that is `catalog`
+   alone, before `preorders`, `reservation_history`, `usage_events`, `order_submissions` and
+   `weekly_shipment`, so the practical ceiling is **under 20**.
+
+   *(Staging measured 1,633 bytes/row and ~28–30 tenants. Production's 2,001 is the number to plan
+   against — it has the real retained-month profile.)*
 
    *(The original estimate is kept above rather than deleted. It was derived from row counts with a
    guessed row width; the row width was the part that was wrong.)*
 
-   **So the binding constraint arrives at ~28 tenants, and it is Supabase storage, not email** —
-   reversing the standing assumption that MailerSend's 500/month cap was the near-term ceiling (that
-   was formed at two tenants, and email has since moved to Resend at 3,000/month). Supabase Pro is
-   8 GB at $25/month total, which at $39–50/tenant is covered many times over by the ~28th tenant's
-   own subscription. **A line item to plan, not a redesign — and not this feature's problem or fix.**
-   Still owed: Q7 on production, whose retained-month count may differ from staging's.
+   **So the binding constraint arrives at roughly 20 tenants, and it is Supabase storage, not
+   email** — reversing the standing assumption that MailerSend's 500/month cap was the near-term
+   ceiling (that was formed at two tenants, and email has since moved to Resend at 3,000/month).
+   Supabase Pro is 8 GB at $25/month total, which at $39–50/tenant is covered many times over by the
+   20th tenant's own subscription. **A line item to plan, not a redesign — and not this feature's
+   problem or fix.** Worth noting against the Founding Partner plan's "next 5 free-year slots": the
+   ceiling sits close enough that it lands inside the first cohort's growth, not beyond it.
 
 ---
 
@@ -635,7 +680,7 @@ What does scale, and how it is handled here:
 - [x] S0 queries written — `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql` (2026-09-23)
 - [x] S0 run on **STAGING** 2026-09-23 — F160 CONFIRMED (Q1/Q8), storage measured (Q7), ratios and cover classes measured (Q3/Q4), FOC cost measured (Q6). Three results changed the plan: § 2.1, § 3.2 ratios, § 8 storage
 - [x] S0 Q2 + Q5 run on staging 2026-09-23 — three-way arithmetic reconciliation confirmed (§ 2.1); publisher fragmentation measured (§ 8); promotional group cut to one toggle (§ 3.7)
-- [ ] S0 run on **PRODUCTION** — Q1/Q8 complete F160's confirmation, Q7 confirms the storage threshold
+- [x] S0 run on **PRODUCTION** 2026-09-23 — F160 confirmed there too and its definition corrected (§ 13 F160); model validated (14 publishers, matching the real print exactly); reconciliation held on independent data (1,616 − 109 = 1,507); real reserve history obtained (§ 2.1); storage threshold revised to ~20 tenants (§ 8). **Q5 still owed on production**
 - [ ] § 2.1's unification decision made by Rick (the 70% / 36% customer-catalog cut)
 - [x] Q1-Q3 answered by Rick and recorded in § 7 (2026-09-23)
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)

@@ -6315,13 +6315,24 @@ reasoning — only the disposition changed, not the diagnosis.
   product judgement and Rick's call. **F160 is the degenerate case of the same mechanism, not the
   same question:** at zero history the bar excludes 78 of 78 and the feature produces nothing at all.
   A surface that renders empty is wrong behaviour regardless of where the trade is set.
-- **Still owed, and it is small: the production half.** Q1 has been run on **staging only**.
-  Production's `comicstore` is the remaining candidate and it is unknown whether it holds catalog
-  rows at all — if it holds none, production has no live instance today and this finding is
-  staging-only in practice while remaining a defect in code on both. Run Q1 and Q8 on production to
-  settle it. A real browser print of `demoshop` is no longer needed — the SQL is the stronger
-  check, since it reports the row count the print would receive rather than a human's reading of a
-  blank page.
+- **✅ PRODUCTION CONFIRMED TOO, 2026-09-23 — and the finding's own definition needed correcting.**
+  Q1 on production: `comicstore` holds **2 catalog rows, 1 publisher, 1 reservation, 0 publishers
+  passing the bar → 0 predicted print rows.** Its Print Catalog is blank. Production's founding
+  tenant validated the model alongside it: **14 publishers passing, matching the 2026-08-24 print's
+  14 exactly** (1,534 rows → 34 pages then; 1,507 → 33 now, on a later catalog month).
+- **⚠️ THE DEFINITION WAS WRONG, AND MY OWN CHECK RETURNED A FALSE NEGATIVE.** This entry and S0's
+  Q8 both framed the trigger as **zero reserve history**. It is not — the real condition is **no
+  publisher clears `MIN_RESERVED`**, and zero history is merely the most obvious route to it.
+  `comicstore` has *one* reservation, so Q8's `archived_reservations = 0` predicate excluded it and
+  the query returned **no rows on production** — which reads as "no live instance" and is false.
+  Only cross-reading Q1's `publishers_passing_bar` column caught it. **The correct test is
+  `month_rows > 0 AND publishers_passing_bar = 0`.** Q8 is kept in the file with this recorded
+  rather than deleted, because it is a clean instance of the § Smoke Test Suite rule it violates:
+  *before asking anyone to run a check, ask what its output looks like when the thing has FAILED.*
+- **Practical impact on production is nil; the meaningful instance is staging's `demoshop`.**
+  `comicstore` is a two-row demo tenant, so nothing real is broken there — but the mechanism is now
+  confirmed live on both environments, and the widened definition means any tenant whose
+  reservations are spread thinly across publishers is exposed, not only a brand-new one.
 - **Fix direction — a floor, not a redesign.** When `counts` is empty (equivalently: the tenant has
   no reserve history), fall through to **all** publishers rather than none. Fail-open is the correct
   direction here for the same reason it is correct for maintenance mode and the inverse of `Tier`'s

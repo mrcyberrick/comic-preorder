@@ -23,7 +23,34 @@
 -- remediation").
 -- ============================================================================
 --
--- ██ MEASURED — STAGING, 2026-09-23 (Rick). PRODUCTION NOT YET RUN. ██
+-- ██ MEASURED — PRODUCTION, 2026-09-23 (Rick). Q5 still owed there. ██
+--
+-- Q1  rjbookstop 2026-09  2,302 rows  72 pubs  22 w/history  14 passing
+--                         1,507 rows -> 33 pages
+--     ✅ 14 PUBLISHERS MATCHES THE 2026-08-24 PRINT EXACTLY (14 -> 1,534 ->
+--        34 pages). Now 14 -> 1,507 -> 33, the delta being a different catalog
+--        month. Model validated on production as well as staging.
+--     comicstore 2026-06  2 rows  1 pub  1 w/history  0 passing  -> 0 rows
+-- Q2  14 shown, 8 near-misses (1-6), 50 at zero. Real reserve history at last:
+--        Marvel 1,759/314 · DC 755/288 · IDW 348/114 · Image 268/246
+--        Titan Comics 167/95 · Boom 99/102 · DYNAMITE 79/208 · Dark Horse 37/49
+--        Mad Cave 33/59 · Archie 20/6 · ABLAZE 14/11 · Massive 12/81
+--        HarperCollins 11/16 · Abrams 9/27   <-- last one over the bar
+--     ✅ RECONCILES: those 14 hold 1,616 current-month titles; Q6 says 109
+--        fail the FOC rule; 1,616 - 109 = 1,507 = Q1's prediction, EXACTLY.
+--        Same three-way agreement as staging, on independent data.
+-- Q3  restricted 332 | standard 1,122 | variant_no_ratio 848 — IDENTICAL to
+--     staging. standard_with_ratio 0, ratio_malformed 0. Classes are disjoint.
+-- Q4  22 distinct ratios, all well-formed; current-month values identical to
+--     staging and summing to exactly 332, reconciling with Q3.
+-- Q5  NOT RUN on production (the query text came back instead of results).
+-- Q6  no_foc 0 | passed_today 10 | in_month_or_before 234
+--     newly_hidden 109 | protected_by_reservation 2
+-- Q7  catalog = 22 MB / 11,276 rows / 2,001 BYTES PER ROW
+--     projected 100 tenants = 2,151 MB
+-- Q8  NO ROWS — and that is a FALSE NEGATIVE. See the Q8 note below.
+--
+-- ██ MEASURED — STAGING, 2026-09-23 (Rick). ██
 --
 -- Q1  raysandjudys 2026-09  2,302 rows  72 pubs  17 w/history  5 passing
 --                           688 rows -> 15 pages  <-- PAGES MATCH THE REAL
@@ -450,9 +477,29 @@ FROM sz CROSS JOIN founding f;
 -- right now: its Print Catalog renders blank, silently.
 --
 -- EXPECTED: at least `demoshop` on staging. If this returns ZERO rows on both
--- environments, F160 is real in code but has no live instance yet — which is
--- still worth knowing, and should be recorded in § 13 F160 as such rather than
--- left implying an affected tenant exists.
+-- environments, F160 is real in code but has no live instance yet.
+--
+-- ⚠️⚠️ THIS QUERY'S PREDICATE IS TOO NARROW AND PRODUCED A FALSE NEGATIVE.
+-- Run on production 2026-09-23 it returned NO ROWS, which reads as "production
+-- has no live F160 instance". That conclusion is WRONG. `comicstore` holds 2
+-- catalog rows and ONE reservation, so it fails this query's
+-- `archived_reservations = 0` test — but Q1 shows its publishers_passing_bar is
+-- **0**, so its Print Catalog is blank all the same.
+--
+-- F160's real condition is "no publisher clears the bar", NOT "zero reserve
+-- history". Zero history is merely the most obvious way to get there; 1-6
+-- reservations spread thinly gets there too. **Q1's own
+-- publishers_passing_bar column is the correct test** and this query is
+-- redundant beside it.
+--
+-- Kept, not deleted, because the lesson is the point: I wrote a check whose
+-- passing and failing outputs look identical to a reader who does not
+-- cross-read Q1, and it would have shipped a false claim into § 13 F160 had
+-- Q1 not been in front of it. Per § Smoke Test Suite — before asking anyone to
+-- run a check, ask what its output looks like when the thing has FAILED.
+--
+-- CORRECTED TEST (use this instead): any tenant where Q1 reports
+-- month_rows > 0 AND publishers_passing_bar = 0.
 SELECT t.slug,
        t.plan,
        (SELECT count(*) FROM catalog c WHERE c.tenant_id = t.id)              AS catalog_rows,
