@@ -795,8 +795,17 @@ const Catalog = {
     return data?.catalog_month || null;
   },
 
-  async fetch({ month, distributor, publisher, search, hideVariants = false, page = 1, pageSize = 48 }) {
+  // `focCutoff` (optional, added 2026-09-24) keeps only rows whose foc_date is
+  // NULL or on/after that date — the past-FOC visibility rule expressed as a
+  // query predicate instead of a client-side pass. It exists so the common
+  // config, which hides past-FOC and nothing else, does NOT have to fall back
+  // to catalog.html's two-step: that cost 2 extra paged requests, 181 KB and
+  // 8.0s to first card against 3.1s, measured 2026-09-24. Callers that omit it
+  // (admin.html's Paper Orders typeahead) are completely unaffected.
+  async fetch({ month, distributor, publisher, search, hideVariants = false, focCutoff = null, page = 1, pageSize = 48 }) {
     let query = db.from('catalog').select('*', { count: 'exact' });
+    // NULL foc_date has no cutoff to be past, so it is always kept.
+    if (focCutoff) query = query.or(`foc_date.is.null,foc_date.gte.${focCutoff}`);
 
     if (month)       query = query.eq('catalog_month', month);
     if (distributor) query = query.eq('distributor', distributor);

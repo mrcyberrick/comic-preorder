@@ -501,6 +501,18 @@
   // Would the saved config hide anything at all? When it would not, the
   // server-paginated default path takes its original single-query route and
   // this feature costs a tenant with no config precisely nothing.
+  // ⚠️ `hidePastFoc` is DELIBERATELY ABSENT from this test, and that absence is
+  // load-bearing. It used to be here, and because it defaults to TRUE the test
+  // was true for every tenant including one with no saved config at all — so
+  // the "fast path" below was unreachable dead code and every catalog load paid
+  // the two-step. Measured 2026-09-24: 2 extra paged requests, 181 KB, and
+  // 8,011 ms to first card against 3,130 ms on the fast path. It is what Rick's
+  // Lighthouse comparison was actually showing.
+  // FOC is now a query PREDICATE instead (focCutoffForQuery below), so it costs
+  // nothing and does not force the two-step. Only the dimensions that genuinely
+  // cannot be expressed server-side remain here — publisher exclusions
+  // (lowercased keys vs a mixed-case column) and the cover/ratio/price rules —
+  // and all of those are opt-in rather than on by default.
   function visibilityActive() {
     const c = catalogFilterCfg;
     if (!c) return false;
@@ -509,8 +521,22 @@
         || c.showVariants === false
         || c.showRestricted === false
         || c.ratioMax != null
-        || c.hidePastFoc === true
         || c.hideZeroPrice === true;
+  }
+
+  // The past-FOC rule as a date the query can compare against, or null when the
+  // rule is off. 'today' is the literal reading; 'month' is the print's rule and
+  // hides anything whose FOC month is the catalog month or earlier, so the
+  // cutoff is the first day of the NEXT month.
+  function focCutoffForQuery() {
+    const c = catalogFilterCfg;
+    if (!c || c.hidePastFoc !== true) return null;
+    if (c.focMode === 'today') return DateUtils.todayLocal();
+    const [y, m] = (currentMonth || '').split('-').map(Number);
+    if (!y || !m) return null;
+    const ny = m === 12 ? y + 1 : y;
+    const nm = m === 12 ? 1 : m + 1;
+    return `${ny}-${String(nm).padStart(2, '0')}-01`;
   }
 
   // A deliberately quiet note that a tenant-wide filter is in force, appended
@@ -546,7 +572,7 @@
   async function visibleIdsForFilters(filters) {
     const key = JSON.stringify([
       filters.month, filters.distributor, filters.publisher, filters.search,
-      filters.hideVariants, catalogFilterCfg,
+      filters.hideVariants, filters.focCutoff, catalogFilterCfg,
     ]);
     if (_visCache.key === key) return { rows: _visCache.rows, error: null };
 
@@ -563,6 +589,12 @@
       }
       if (filters.hideVariants) {
         q = q.or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title');
+      }
+      // Same FOC predicate as the fast path. hides() re-checks it client-side,
+      // which is harmless and idempotent — but narrowing here means the id pass
+      // carries fewer rows over the wire.
+      if (filters.focCutoff) {
+        q = q.or(`foc_date.is.null,foc_date.gte.${filters.focCutoff}`);
       }
       // Same three-key order as Catalog.fetch(), plus id so page boundaries are
       // deterministic across the paged reads (the F140 tiebreaker rule).
@@ -1033,6 +1065,9 @@
       publisher:    pubEl.value,
       search:       searchEl.value.trim(),
       hideVariants: variantEl.value === 'standard',
+      // The past-FOC rule as a server-side predicate, so the common
+      // hide-past-FOC-only config keeps the single-query fast path.
+      focCutoff:    focCutoffForQuery(),
       page,
       pageSize:     PAGE_SIZE,
     };
