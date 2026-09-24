@@ -1,8 +1,27 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0–S4 ON STAGING, VERIFICATION INCOMPLETE · staging=2026-09-24 (`cd88153` S2, `886cab0` S4; S1 applied by Rick) · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**
-⚠️ **Not ready for production.** The regression suite is green (147/0) but **eight verification gates are still open and no committed spec asserts any of the new behaviour** — see § 9. A green suite here means nothing else broke, not that the filters are right.
-**Q1–Q5 ANSWERED 2026-09-23 (Rick)** — see § 7. **The shaping decision is Q4: DELETE the ≥7 publisher bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the default state "store nothing". **Q5: store publisher EXCLUSIONS, never inclusions** (§ 3.2.1). S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, STATUS `staging=PENDING | prod=PENDING`. **No code written, nothing applied to either database.**
+**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**
+
+**Evidence:** Playwright **147/0** (regression) plus `playwright/s4-visibility-verify.mjs` **7/7**
+(the behaviour itself — V3, V5, V6a, V7 and the zero-visibility guard, negative-controlled, measured
+against deployed bytes 2026-09-24).
+
+⚠️ **NOT READY FOR PRODUCTION, for two specific reasons.** (1) **V10 is open: no committed spec
+asserts any of this.** The 7/7 harness is local-only and untracked, so nothing in CI defends the
+feature — and the 147-test suite already proved it cannot catch a miss here, having stayed green
+while the entire default catalog path went unfiltered. (2) S4 is a **customer-visible** change (−109
+titles from the past-FOC default) and takes the print 33 → 45 pages, which should not land in the
+2026-09-25 October import window (§ 4 S4).
+
+**Q1–Q5 ANSWERED 2026-09-23 (Rick)** — see § 7. **The shaping decision is Q4: DELETE the ≥7 publisher
+bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the
+default state "store nothing". **Q5: store publisher EXCLUSIONS, never inclusions** (§ 3.2.1).
+S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, **applied to staging by Rick
+2026-09-24; `prod=PENDING`**.
+
+*(This block read "VERIFICATION INCOMPLETE … eight verification gates are still open … No code
+written, nothing applied to either database" — accurate when written on 2026-09-23 and stale within a
+day. Kept visible per convention.)*
 
 **Type:** Feature build, Rick's request 2026-09-23. **One new page, one new RPC, one new
 `app_settings` key. No schema change to any existing table, no RLS change, no Edge Function.**
@@ -112,7 +131,10 @@ the previous catalog month. Both validated the prediction model before its zeroe
 
 1. ~~The default for a tenant with no history must be show-all, not "reserved ≥ 7".~~ **Moot.** There
    is no bar, so there is no default to get wrong.
-2. Absence of a config row means **show all**, both surfaces (§ 3.4). Unchanged, and now simpler.
+2. Absence of a config row means **the defaults** — permissive on every dimension except
+   `hidePastFoc`, which is true so the print's existing FOC rule survives (§ 3.4). *(This read
+   "means **show all**, both surfaces" until 2026-09-24, when a test asserted literally that and
+   measured 2,068 against 2,302. "Open" is the defaults, not everything; corrected in `app.js` too.)*
 3. ~~The founding tenant must be seeded explicitly (S3) so turning this on changes nothing.~~
    **S3 deleted** — nothing to preserve, nothing to seed.
 
