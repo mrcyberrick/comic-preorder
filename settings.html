@@ -310,9 +310,15 @@
           </label>
           <button class="btn btn-secondary btn-sm" id="pub-all" type="button">Show all</button>
           <button class="btn btn-secondary btn-sm" id="pub-none" type="button">Hide all</button>
-          <button class="btn btn-ghost btn-sm" id="pub-preset" type="button"
-                  title="Hide every publisher with fewer than 7 all-time reservations — what the printed sheet did before this page existed"
-                  style="color:var(--accent)">Reserved &#8805; 7</button>
+          <!-- A "Reserved >= 7" preset button was here and was REMOVED
+               2026-09-24 at Rick's prompting. It filled the exclusion list with
+               every publisher under 7 all-time reservations — i.e. it
+               reconstructed in one click the exact hardcoded bar this whole
+               change exists to delete, and its label kept a deleted mechanism
+               alive by name. Sort by "Most reserved" instead: the least-reserved
+               publishers sort to the bottom with their title counts beside them,
+               and hiding them is then a deliberate act with the page-count
+               readout moving as you go. See the plan's § 7 Q3. -->
         </div>
 
         <div class="set-pub-head">
@@ -822,22 +828,9 @@
     draft.publishersHidden = publishers.map(p => p.key).sort();
     renderAll();
   });
-  el('pub-preset').addEventListener('click', () => {
-    if (!reserveCountsAvailable) {
-      toast('Reserve counts are unavailable, so this preset cannot be computed', 'error');
-      return;
-    }
-    // A one-time LIST-POPULATOR, not a living rule. A persistent "< 7" rule
-    // would recompute each load and look immune to renames, but a renamed
-    // publisher's history does not follow the new name, so it would read as 0
-    // reservations and the rule would hide it — the exact silent-disappearance
-    // failure exclusions exist to prevent.
-    draft.publishersHidden = publishers
-      .filter(p => (p.reservedCount || 0) < 7)
-      .map(p => p.key).sort();
-    renderAll();
-    toast('Filled in every publisher under 7 all-time reservations — review before saving');
-  });
+  // The #pub-preset handler that lived here is gone with its button — see the
+  // toolbar comment. Nothing replaces it: reproducing the >= 7 bar in one click
+  // is the behaviour being removed, not a convenience worth keeping.
 
   el('btn-discard').addEventListener('click', () => {
     draft = saved ? JSON.parse(JSON.stringify(saved)) : defaultConfig();

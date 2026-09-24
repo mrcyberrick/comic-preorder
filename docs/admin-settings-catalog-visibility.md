@@ -677,16 +677,28 @@ seeing rows they see today. The print sheet is unaffected — it already hides t
 "unchanged at 1,534 / 34" still holds. Measure the customer-side delta in S0 (how many current-month
 titles have a passed FOC) so the size of the change is known before it ships, not after.
 
-**Q3 — ANSWERED 2026-09-23 (Rick), then RE-SCOPED the same day: keep "Reserved ≥ 7" as a one-click
-preset, but only as a LIST-POPULATOR, never a living rule.** It reproduces today's print in one
-click and is a sane starting point for an established tenant — as an explicit choice rather than a
-hardcoded constant.
+**Q3 — REVERSED 2026-09-24 (Rick): the "Reserved ≥ 7" preset is REMOVED, not kept.** Rick saw it on
+the staging page and said *"I thought we would remove this."* He is right, and **my answer to this
+question went stale the moment Q4 was decided** — the two came in that order and I did not
+re-examine the first.
 
-**Why it cannot be a persistent rule (§ 3.2.1).** A living threshold recomputes on every load, which
-looks immune to spelling drift. It is not: a renamed publisher's reserve history does not follow the
-new name, so it reads as 0 reservations and **the rule hides it** — reintroducing exactly the
-silent-disappearance failure Rick raised. So clicking the preset writes today's under-7 publishers
-in as **explicit exclusions**, and from then on it is a curated list that fails open.
+**Why it had to go.** Q3 was answered "keep it" on the rationale that *it reproduces today's
+behaviour in one click*, which was a virtue while the plan still preserved today's behaviour. Q4
+then decided today's behaviour is the defect. So the button's one function became **reconstructing
+in a single click the exact hardcoded bar this change exists to delete** — hiding 58 of 72
+publishers, including Oni Press (67 titles), Seven Seas (81) and Yen Press (52). Its label also kept
+a deleted mechanism alive by name, which is how a removed rule creeps back.
+
+**Nothing replaces it.** Sorting by "Most reserved" already puts the least-reserved publishers at
+the bottom with their title counts beside them, so trimming the sheet stays possible — as a
+deliberate act, with the page count moving in the impact bar as you go. That is curation informed by
+data, which is the entire point of the page; a preset is the opposite.
+
+*(The earlier re-scoping argument is kept because it remains true and is the reason no future version
+of this should be a live rule: a persistent threshold recomputes each load and looks immune to
+spelling drift, but a renamed publisher's history does not follow the new name, so it reads as 0
+reservations and the rule hides it — reintroducing the silent-disappearance failure § 3.2.1 exists to
+prevent. If a trim helper is ever wanted, it must populate a list, never persist as a rule.)*
 
 **Q4 — ANSWERED 2026-09-23 (Rick): delete the ≥7 publisher bar** rather than encode it. See § 2.1 —
 this is the decision that collapsed § 2.1's three-way fork, deleted S3, and turned F160's fix into a
