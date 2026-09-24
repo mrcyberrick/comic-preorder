@@ -2565,8 +2565,10 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
   arrivals.html                    ← │ stay in sync (see § Files That Must
   subscriptions.html               ← │ Stay in Sync)
   admin.html                       ← │
-  analytics.html                   ← ┘ admin-gated nav link — but it DOES
-                                   ←   carry the shared nav+footer blocks
+  analytics.html                   ← │ admin-gated nav link — but it DOES
+                                   ← │ carry the shared nav+footer blocks
+  settings.html                    ← ┘ admin-gated; added 2026-09-23 (S2),
+                                   ←   the SEVENTH member of the sync set
   forgot-password.html             ← linked from the index.html sign-in footer
   app.js
   style.css
@@ -3054,10 +3056,32 @@ branch, and in fuller, more current form in the docs this table points to.)*
 
 ## Files That Must Stay in Sync
 
-The nav block must be identical across **six** pages: `catalog.html`,
-`mylist.html`, `arrivals.html`, `subscriptions.html`, `admin.html`, and
-**`analytics.html`**. When updating nav, copy from the most recently-updated
-file — the canonical version is whichever HTML file was last touched.
+The nav block must be identical across **seven** pages: `catalog.html`,
+`mylist.html`, `arrivals.html`, `subscriptions.html`, `admin.html`,
+**`analytics.html`**, and **`settings.html`**. When updating nav, copy from the
+most recently-updated file — the canonical version is whichever HTML file was
+last touched.
+
+**`settings.html` joined the set 2026-09-23** (S2 of
+`docs/admin-settings-catalog-visibility.md`), added in the same commit as the
+page itself, deliberately: this list going stale is the documented drift source,
+and `analytics.html` sat missing from it for months. Verify with a hash, not by
+reading — all seven nav blocks and all seven footers must match:
+
+```powershell
+foreach ($f in 'catalog','mylist','arrivals','subscriptions','admin','analytics','settings') {
+  $nav = (Get-Content "$f.html" -Raw) -replace '(?s)^.*?(<nav class="nav" id="main-nav">.*?</nav>).*$','$1'
+  "{0,-16} {1}" -f $f, (Get-FileHash -InputStream ([IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($nav)))).Hash.Substring(0,12)
+}
+```
+
+**A seventh member was a real cost, weighed and accepted** — see that plan's
+§ 3.1. `settings.html` is its own page rather than a fourth `admin.html` mode
+because 264 KB of `admin.html`'s 318 KB is inline script, `_headers` names no
+`.html` file (so HTML is uncacheable across deploys and every settings tweak
+would re-download the lot), and `runInitialTabLoad()` carries a documented
+silent-failure ordering hazard. The trade was made on performance, knowing it
+puts one more file on this list.
 
 **`analytics.html` was omitted from this list until 2026-08-15**, and this
 section plus § Repository Structure both described it as having no shared nav
@@ -3069,11 +3093,18 @@ identically (`EB2513E8ED474B3CE5251F2540A69852`), all six load
 contract in this section. Found while planning `docs/mobile-nav-tab-bar.md`,
 where a five-file nav edit would have silently skipped it.
 
-The footer block must be identical across all six pages, placed immediately
+The footer block must be identical across all seven pages, placed immediately
 before `<div id="toast-container"></div>`.
 
 The `<script>` load order must be the same on every page: Supabase UMD bundle
 → `config.js` → `app.js` → page-specific code.
+
+**The mobile gear is part of this contract now.** `NavSettingsLink.mount()`
+(`app.js`) self-gates on `#search` being **absent**, so it renders on exactly
+the pages that have no search box — `admin.html`, `analytics.html` and
+`settings.html` — and never beside the search magnifier. Adding a `#search` to
+one of those three silently removes its gear; removing `#search` from one of the
+other four silently adds one. Either is a nav change, not a page-local one.
 
 ---
 

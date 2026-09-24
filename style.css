@@ -1685,9 +1685,15 @@ button { cursor: pointer; font-family: var(--font-body); }
     color: var(--text-primary);
   }
   .nav-search-btn:hover { color: var(--accent); }
-  /* Placeholder only — does nothing on click (Rick's explicit instruction),
-     so no hover affordance implying otherwise. */
-  .nav-settings-placeholder { cursor: default; }
+  /* The gear is a real link to settings.html for an admin as of 2026-09-23
+     (app.js NavSettingsLink), so it gets the same hover affordance as the
+     search button. It rendered as an inert button from 2026-08-16 until then,
+     and this rule was `cursor: default` to avoid implying otherwise — kept as
+     a <button> fallback below for the non-admin branch, which no live page
+     currently reaches. The class name is historical; see NavSettingsLink. */
+  a.nav-settings-placeholder { cursor: pointer; }
+  a.nav-settings-placeholder:hover { color: var(--accent); }
+  button.nav-settings-placeholder { cursor: default; }
 
   .nav-search-field { display: none; }
   .nav-inner[data-search="open"] .nav-search-field {

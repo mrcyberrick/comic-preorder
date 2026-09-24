@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Settings — Pull List</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192-v2.png">
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+  <!-- Fonts: preconnect + direct <link>, never an @import — see style.css's
+       own note at the old @import location (2026-08-24 perf sweep). -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Settings — page-scoped styles ─────────────────────────────
+       Flat class names over the shared style.css variables; nothing here
+       belongs in the global stylesheet (settings-only surface), matching
+       analytics.html's convention. */
+
+    .set-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 28px; align-items: start; }
+
+    /* Section rail */
+    .set-rail { display: flex; flex-direction: column; gap: 22px; position: sticky; top: 76px; }
+    .set-rail-group-label {
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--text-secondary); padding: 0 0 8px 12px;
+    }
+    .set-rail-item {
+      display: flex; align-items: center; gap: 9px; padding: 11px 12px; border-radius: var(--radius);
+      border-left: 3px solid transparent; color: var(--text-secondary); font-size: 0.88rem;
+      text-decoration: none; min-height: 44px; box-sizing: border-box;
+    }
+    .set-rail-item.is-active {
+      background: var(--accent-dim); border-left-color: var(--accent);
+      color: var(--text-primary); font-weight: 600;
+    }
+    a.set-rail-item:hover { color: var(--text-primary); }
+    .set-soon {
+      margin-left: auto; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-secondary);
+      border: 1px solid var(--border); border-radius: 2px; padding: 1px 5px;
+    }
+
+    /* Panels */
+    .set-panel {
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      background: var(--bg-card); overflow: hidden; margin-bottom: 14px;
+    }
+    .set-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+    .set-panel-head h3 { margin: 0; font-size: 0.98rem; font-weight: 700; }
+    .set-panel-head p  { margin: 2px 0 0; font-size: 0.78rem; color: var(--text-secondary); }
+
+    /* Impact bar */
+    .set-impact {
+      border: 1px solid var(--border-accent); border-radius: var(--radius-lg);
+      background: var(--bg-card); padding: 16px 20px; margin-bottom: 16px;
+      display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap;
+    }
+    .set-impact-metric { min-width: 165px; }
+    .set-impact-label {
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--text-secondary);
+    }
+    .set-impact-value {
+      font-family: var(--font-display); font-size: 2.4rem; line-height: 1;
+      letter-spacing: 0.02em;
+    }
+    .set-impact-sub { font-size: 0.78rem; color: var(--text-secondary); margin-top: 3px; }
+    .set-impact-actions { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+    /* Toggle rows */
+    .set-row {
+      display: flex; align-items: center; gap: 14px; padding: 8px 18px;
+      min-height: 60px; cursor: pointer; border-bottom: 1px solid #222;
+    }
+    .set-row:last-child { border-bottom: 0; }
+    .set-row-text { flex-grow: 1; }
+    .set-row-title { display: block; font-size: 0.88rem; font-weight: 600; }
+    .set-row-note  { display: block; font-size: 0.75rem; color: var(--text-secondary); }
+    .set-row-count {
+      font-family: var(--font-display); font-size: 1.4rem; min-width: 62px;
+      text-align: right; color: var(--text-primary);
+    }
+
+    /* Publisher table */
+    .set-pub-toolbar { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .set-pub-head, .set-pub-row {
+      display: grid; grid-template-columns: 30px minmax(0, 1fr) 128px 118px;
+      align-items: center; padding: 0 18px;
+    }
+    .set-pub-head {
+      padding: 7px 18px; background: var(--bg); border-bottom: 1px solid var(--border);
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-secondary);
+    }
+    .set-pub-row { min-height: 44px; cursor: pointer; border-bottom: 1px solid #222; }
+    .set-pub-row.is-on { background: rgba(232,50,28,0.06); }
+    .set-pub-name { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .set-pub-row.is-on .set-pub-name { font-weight: 600; }
+    .set-pub-row:not(.is-on) .set-pub-name { color: var(--text-secondary); }
+    .set-num { text-align: right; font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+    .set-pub-scroll { max-height: 340px; overflow-y: auto; }
+    .set-dupe {
+      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--warning); background: rgba(245,158,11,0.14);
+      border: 1px solid rgba(245,158,11,0.4); border-radius: 2px;
+      padding: 1px 5px; margin-left: 7px; white-space: nowrap;
+    }
+
+    /* Notices */
+    .set-notice {
+      display: flex; align-items: flex-start; gap: 9px; padding: 11px 16px;
+      border-radius: var(--radius); font-size: 0.8rem; line-height: 1.5; margin-bottom: 14px;
+    }
+    .set-notice svg { flex-shrink: 0; margin-top: 2px; }
+    .set-notice-info { background: var(--bg-card); border: 1px solid var(--border-accent); color: var(--text-primary); }
+    .set-notice-warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.45); }
+    .set-notice-lock { background: var(--bg); border: 1px solid var(--border); color: var(--text-secondary); }
+
+    .set-subpanel {
+      margin: 0 18px 16px 76px; border: 1px solid var(--border-accent);
+      border-left: 3px solid var(--warning); border-radius: var(--radius);
+      background: var(--bg); padding: 13px 16px;
+    }
+    .set-ratio-chip {
+      display: inline-block; font-size: 0.74rem; font-weight: 700;
+      padding: 4px 9px; border-radius: 2px; white-space: nowrap; margin: 0 6px 6px 0;
+    }
+    .set-ratio-chip.is-in { background: rgba(245,158,11,0.16); color: var(--warning); border: 1px solid rgba(245,158,11,0.4); }
+    .set-ratio-chip.is-out { background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); text-decoration: line-through; }
+
+    .set-input {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text-primary);
+      font-family: var(--font-body); font-size: 0.82rem; padding: 0 10px;
+      min-height: 40px; outline: none;
+    }
+
+    /* Mobile: rail becomes a plain list above the content, panels stay full width */
+    @media (max-width: 860px) {
+      .set-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+      .set-rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+      .set-rail-group-label { display: none; }
+      .set-rail-item { border: 1px solid var(--border); border-left-width: 3px; }
+      .set-impact { gap: 18px; padding: 14px 16px; }
+      .set-impact-metric { min-width: 130px; }
+      .set-impact-value { font-size: 2rem; }
+      .set-impact-actions { margin-left: 0; width: 100%; flex-direction: row; align-items: center; }
+      .set-pub-head, .set-pub-row { grid-template-columns: 30px minmax(0, 1fr) 76px; }
+      .set-pub-col-month { display: none; }
+      .set-subpanel { margin-left: 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav" id="main-nav">
+  <div class="container nav-inner">
+    <a href="catalog.html" class="nav-logo">PULL<span>LIST</span></a>
+    <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links">
+      <li><a href="catalog.html">Catalog</a></li>
+      <li><a href="mylist.html">My List</a></li>
+      <li><a href="subscriptions.html">Subscriptions</a></li>
+      <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
+      <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
+      <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
+      <li id="nav-settings" style="display:none"><a href="settings.html">Settings</a></li>
+    </ul>
+    <div class="nav-user">
+      <span>Welcome, <strong id="nav-username"></strong></span>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Settings</h1>
+    <p>Store configuration — applies to every customer in this tenant</p>
+  </div>
+
+  <!-- Filters are not live until S4 of
+       docs/admin-settings-catalog-visibility.md. Saying so plainly beats
+       shipping a screen that looks functional and is not. -->
+  <div class="set-notice set-notice-warn" id="preview-banner">
+    <svg width="15" height="15" fill="none" stroke="var(--warning)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v5M12 17h.01"/><path d="M12 3 2 20h20L12 3z"/></svg>
+    <span><strong>Preview — these filters are not applied yet.</strong> Saving stores your choice and
+    the numbers below predict its effect, but the customer catalog and the printed sheet do not read
+    this configuration until the next deploy step. Nothing you do here changes what anyone sees today.</span>
+  </div>
+
+  <div id="load-state" class="loading-reserve">
+    <p style="color:var(--text-secondary);font-size:0.9rem">Loading catalog…</p>
+  </div>
+
+  <div class="set-layout" id="set-main" style="display:none">
+
+    <!-- ── Section rail ─────────────────────────────────────── -->
+    <nav class="set-rail" aria-label="Settings sections">
+      <div>
+        <div class="set-rail-group-label">Catalog</div>
+        <a class="set-rail-item is-active" href="#catalog-visibility" aria-current="true">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          Catalog Visibility
+        </a>
+      </div>
+      <div>
+        <div class="set-rail-group-label">Store identity</div>
+        <div class="set-rail-item">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
+          Branding <span class="set-soon">Soon</span>
+        </div>
+        <div class="set-rail-item">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14"/><path d="m3 6 9 7 9-7"/></svg>
+          Email Templates <span class="set-soon">Soon</span>
+        </div>
+      </div>
+      <div>
+        <div class="set-rail-group-label">Ordering cycle</div>
+        <a class="set-rail-item" href="admin.html">Order Deadline</a>
+        <a class="set-rail-item" href="admin.html">Maintenance Mode</a>
+        <p style="margin:8px 12px 0;font-size:0.7rem;color:var(--text-secondary);line-height:1.5">
+          Still on Admin ▸ Ordering. Listed here so this page is where you look first.
+        </p>
+      </div>
+    </nav>
+
+    <!-- ── Content ──────────────────────────────────────────── -->
+    <div>
+      <div id="catalog-visibility" style="margin-bottom:14px">
+        <h2 style="margin:0;font-family:var(--font-display);font-size:1.7rem;letter-spacing:0.03em;line-height:1.1">Catalog Visibility</h2>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:var(--text-secondary);max-width:760px">
+          One rule, two surfaces — the customer <strong>Monthly Catalog</strong> and the printed
+          <strong>Paper Orders</strong> catalog. Catalog month <strong id="cv-month">—</strong>.
+        </p>
+      </div>
+
+      <!-- Impact bar -->
+      <div class="set-impact">
+        <div class="set-impact-metric">
+          <div class="set-impact-label">Customers will see</div>
+          <div class="set-impact-value" id="imp-visible">—</div>
+          <div class="set-impact-sub">of <span id="imp-total">—</span> titles this month</div>
+        </div>
+        <div class="set-impact-metric">
+          <div class="set-impact-label">Printed sheet</div>
+          <div class="set-impact-value" id="imp-pages">—</div>
+          <div class="set-impact-sub">pages · 46 rows per page</div>
+        </div>
+        <div class="set-impact-metric" style="min-width:210px">
+          <div class="set-impact-label">Change</div>
+          <div class="set-impact-sub" id="imp-delta" style="margin-top:6px;font-weight:600">—</div>
+          <div class="set-impact-sub" id="imp-saved">Never saved</div>
+        </div>
+        <div class="set-impact-actions">
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary btn-sm" id="btn-discard" type="button">Discard</button>
+            <button class="btn btn-primary btn-sm" id="btn-save" type="button">Save changes</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-notice set-notice-lock">
+        <svg width="15" height="15" fill="none" stroke="var(--success)" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span><strong style="color:var(--text-primary)">A title a customer has already reserved is never hidden.</strong>
+        Always on, not configurable. A filter that could hide a reservation the customer still needs
+        to find would strand it — present in the database, absent from every surface they can reach.</span>
+      </div>
+
+      <div id="rpc-warning" style="display:none" class="set-notice set-notice-warn">
+        <svg width="15" height="15" fill="none" stroke="var(--warning)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v5M12 17h.01"/><path d="M12 3 2 20h20L12 3z"/></svg>
+        <span><strong>Reserve counts unavailable.</strong> <code>get_publisher_reserve_counts()</code>
+        is not present on this database yet, so the popularity column reads &ldquo;—&rdquo; rather than
+        zero — a missing measurement is not the same as a measured zero. Everything else on this page
+        works. Apply <code>docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql</code> to populate it.</span>
+      </div>
+
+      <div id="unmatched-warning" style="display:none" class="set-notice set-notice-warn">
+        <svg width="15" height="15" fill="none" stroke="var(--warning)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v5M12 17h.01"/><path d="M12 3 2 20h20L12 3z"/></svg>
+        <span id="unmatched-text"></span>
+      </div>
+
+      <!-- 1 · Publishers -->
+      <section class="set-panel">
+        <div class="set-pub-toolbar">
+          <div style="flex-grow:1;min-width:250px">
+            <h3 style="margin:0;font-size:0.98rem;font-weight:700">1 · Publishers</h3>
+            <p style="margin:2px 0 0;font-size:0.78rem;color:var(--text-secondary)">
+              <strong id="pub-summary">—</strong> · the count is that publisher's all-time reserved titles
+            </p>
+          </div>
+          <label style="display:flex;align-items:center;gap:7px" class="set-input">
+            <svg width="14" height="14" fill="none" stroke="var(--text-secondary)" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="visually-hidden">Search publishers</span>
+            <input type="text" id="pub-search" placeholder="Search publishers"
+                   style="background:none;border:0;outline:none;color:var(--text-primary);font-family:var(--font-body);font-size:0.82rem;width:140px;padding:0">
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;font-size:0.78rem;color:var(--text-secondary)">
+            Sort
+            <select id="pub-sort" class="set-input">
+              <option value="reserved">Most reserved</option>
+              <option value="month">Most titles</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+          <button class="btn btn-secondary btn-sm" id="pub-all" type="button">Show all</button>
+          <button class="btn btn-secondary btn-sm" id="pub-none" type="button">Hide all</button>
+          <button class="btn btn-ghost btn-sm" id="pub-preset" type="button"
+                  title="Hide every publisher with fewer than 7 all-time reservations — what the printed sheet did before this page existed"
+                  style="color:var(--accent)">Reserved &#8805; 7</button>
+        </div>
+
+        <div class="set-pub-head">
+          <span></span><span>Publisher</span>
+          <span style="text-align:right">Reserved</span>
+          <span style="text-align:right" class="set-pub-col-month">Titles</span>
+        </div>
+        <div class="set-pub-scroll" id="pub-list"></div>
+        <div style="padding:10px 18px;border-top:1px solid var(--border);background:var(--bg);font-size:0.78rem;color:var(--text-secondary)">
+          <span id="pub-hidden-summary">Nothing hidden.</span>
+        </div>
+      </section>
+
+      <!-- 2 · Cover types -->
+      <section class="set-panel">
+        <div class="set-panel-head">
+          <h3>2 · Cover types</h3>
+          <p>Three classes, and every title is in exactly one. A title is hidden if <em>any</em> rule on this page matches it.</p>
+        </div>
+        <label class="set-row">
+          <span class="toggle-switch"><input type="checkbox" id="cv-standard"><span class="toggle-slider"></span></span>
+          <span class="set-row-text">
+            <span class="set-row-title">Standard covers</span>
+            <span class="set-row-note"><code>variant_type</code> null, &ldquo;Standard&rdquo; (Lunar) or &ldquo;Primary Title&rdquo; (PRH)</span>
+          </span>
+          <span class="set-row-count" id="pop-standard">—</span>
+        </label>
+        <label class="set-row">
+          <span class="toggle-switch"><input type="checkbox" id="cv-variant"><span class="toggle-slider"></span></span>
+          <span class="set-row-text">
+            <span class="set-row-title">Variant covers — no allocation ratio</span>
+            <span class="set-row-note">A plain CVR B: neither standard nor restricted</span>
+          </span>
+          <span class="set-row-count" id="pop-variant">—</span>
+        </label>
+        <label class="set-row">
+          <span class="toggle-switch"><input type="checkbox" id="cv-restricted"><span class="toggle-slider"></span></span>
+          <span class="set-row-text">
+            <span class="set-row-title">Allocation-restricted covers</span>
+            <span class="set-row-note">PRH <code>order_requirement</code>; Lunar keeps the same ratio in <code>variant_type</code></span>
+          </span>
+          <span class="set-row-count" id="pop-restricted">—</span>
+        </label>
+        <div class="set-subpanel" id="ratio-panel">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <label for="cv-ratio" style="font-size:0.84rem;font-weight:600">Show ratios no harder than</label>
+            <select id="cv-ratio" class="set-input" style="border-color:var(--warning);font-weight:700"></select>
+            <span style="font-size:0.78rem;color:var(--text-secondary)">
+              &ldquo;Harder&rdquo; means a bigger second number: 1:25 needs 25 copies ordered to earn one, so it is harder than 1:10.
+            </span>
+          </div>
+          <div style="margin-top:12px" id="ratio-chips"></div>
+        </div>
+      </section>
+
+      <!-- 3 · Past FOC -->
+      <section class="set-panel">
+        <div class="set-panel-head">
+          <h3>3 · Past FOC dates</h3>
+          <p>A title past its final-order cutoff can no longer be ordered on this cycle.</p>
+        </div>
+        <label class="set-row">
+          <span class="toggle-switch"><input type="checkbox" id="cv-hidefoc"><span class="toggle-slider"></span></span>
+          <span class="set-row-text">
+            <span class="set-row-title">Hide titles whose FOC has passed</span>
+            <span class="set-row-note">The printed sheet already hides these; the web catalog does not. Turning this on applies one rule to both.</span>
+          </span>
+          <span class="set-row-count" id="pop-foc">—</span>
+        </label>
+        <div class="set-subpanel" id="foc-panel" style="border-left-color:var(--border-accent)">
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px">What counts as past</div>
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;cursor:pointer">
+            <input type="radio" name="focmode" value="today" id="foc-today">
+            <span>
+              <span style="display:block;font-size:0.84rem">FOC is earlier than today — <strong id="foc-count-today">—</strong> titles</span>
+              <span style="display:block;font-size:0.74rem;color:var(--text-secondary)">Literal reading of &ldquo;past&rdquo;. Keeps a title orderable right up to its cutoff.</span>
+            </span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;cursor:pointer">
+            <input type="radio" name="focmode" value="month" id="foc-month">
+            <span>
+              <span style="display:block;font-size:0.84rem">FOC falls in this catalog month or earlier — <strong id="foc-count-month">—</strong> titles</span>
+              <span style="display:block;font-size:0.74rem;color:var(--warning)">What the printed sheet enforces today. Stricter — it drops the current month too.</span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <!-- 4 · Promotional -->
+      <section class="set-panel">
+        <div class="set-panel-head">
+          <h3>4 · Promotional items</h3>
+          <p>Free giveaways and publisher bundles priced at $0.00.</p>
+        </div>
+        <label class="set-row">
+          <span class="toggle-switch"><input type="checkbox" id="cv-hidezero"><span class="toggle-slider"></span></span>
+          <span class="set-row-text">
+            <span class="set-row-title">Hide items priced $0.00</span>
+            <span class="set-row-note" id="zero-note"><code>price_usd = 0</code></span>
+          </span>
+          <span class="set-row-count" id="pop-zero">—</span>
+        </label>
+        <div id="noprice-note" style="display:none;padding:11px 18px;border-top:1px solid #222;font-size:0.78rem;color:var(--warning)">
+          <strong>Data-quality note:</strong> <span id="noprice-count">0</span> titles this month have
+          <code>price_usd</code> set to NULL rather than a number. That is missing import data, not a
+          giveaway, so it is reported here rather than given a filter of its own.
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
+</footer>
+
+<div id="toast-container"></div>
+
+<script src="vendor/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  // ── Admin gate ────────────────────────────────────────────────
+  const navData = await Auth.requireAdmin();
+  if (!navData) return;
+  await initNav();
+
+  // Analytics nav link — same per-page unlock the other six pages carry.
+  // Not consolidated into initNav() by this change; see app.js's note.
+  const navAnalytics = document.getElementById('nav-analytics');
+  if (navAnalytics) navAnalytics.style.display = 'block';
+
+  const CONFIG_KEY    = 'catalog_filters';
+  const ROWS_PER_PAGE = 46;   // must match admin.html's print geometry (:5438)
+
+  // Absence of a stored config means SHOW EVERYTHING, on both surfaces. There
+  // is no legacy publisher bar to preserve — it is deleted in S4(a) — so
+  // "open" is simply everything, and the default state persists nothing at all.
+  function defaultConfig() {
+    return {
+      v: 1,
+      publishersHidden: [],   // EXCLUSIONS, never an allowlist. A renamed
+                              // publisher stops matching and REAPPEARS, which
+                              // is the harmless direction; an allowlist would
+                              // make it silently vanish.
+      showStandard: true,
+      showVariants: true,
+      showRestricted: true,
+      ratioMax: null,         // null = every ratio shown
+      hidePastFoc: false,
+      focMode: 'month',       // 'month' (print's rule) | 'today' (literal)
+      hideZeroPrice: false,
+    };
+  }
+
+  const pubKey = s => (s || '').trim().toLowerCase();
+
+  let currentMonth = null;
+  let rows = [];              // minimal catalog projection for this month
+  let publishers = [];        // [{ key, display, monthCount, reservedCount }]
+  let reserveCountsAvailable = false;
+  let ratioSteps = [];        // distinct denominators actually present
+  let saved = null;           // last-saved config (null = never saved)
+  let savedAt = null;
+  let draft = defaultConfig();
+
+  // ── Load ──────────────────────────────────────────────────────
+  currentMonth = await Catalog.getLatestMonth();
+  document.getElementById('cv-month').textContent = currentMonth || 'none imported yet';
+
+  // Minimal projection — five columns, paged. fetchAllRows() rather than a
+  // bare select: a month runs past PostgREST's 1,000-row cap (F82/F113/F139/
+  // F140), and this page must never silently see a truncated catalog.
+  if (currentMonth) {
+    const res = await fetchAllRows(() => db
+      .from('catalog')
+      .select('publisher, variant_type, order_requirement, price_usd, foc_date')
+      .eq('catalog_month', currentMonth)
+      .order('publisher', { ascending: true })
+      .order('item_code', { ascending: true }));
+    rows = res.data || [];
+  }
+
+  // Reserve counts come from the RPC, not from paging reservation_history +
+  // preorders in the browser: that is O(the tenant's whole history) for ~72
+  // numbers. If the RPC is absent the column reads "—", never 0 — a missing
+  // measurement is not a measured zero.
+  const reserveByKey = new Map();
+  try {
+    const { data, error } = await db.rpc('get_publisher_reserve_counts', { p_catalog_month: currentMonth });
+    if (error) throw error;
+    (data || []).forEach(r => reserveByKey.set(pubKey(r.publisher), Number(r.reserved_count) || 0));
+    reserveCountsAvailable = true;
+  } catch (err) {
+    console.warn('get_publisher_reserve_counts unavailable', err);
+    document.getElementById('rpc-warning').style.display = 'flex';
+  }
+
+  // ── Derive the publisher list and populations from the rows ──
+  const byKey = new Map();
+  rows.forEach(r => {
+    const k = pubKey(r.publisher);
+    if (!k) return;
+    if (!byKey.has(k)) byKey.set(k, { key: k, display: (r.publisher || '').trim(), monthCount: 0 });
+    byKey.get(k).monthCount++;
+  });
+  publishers = Array.from(byKey.values()).map(p => ({
+    ...p,
+    reservedCount: reserveCountsAvailable ? (reserveByKey.get(p.key) || 0) : null,
+  }));
+
+  const pop = { standard: 0, variant: 0, restricted: 0, zero: 0, noPrice: 0, focToday: 0, focMonth: 0 };
+  const ratioSet = new Set();
+  rows.forEach(r => {
+    pop[coverClassOf(r)]++;
+    if (r.order_requirement) {
+      const d = ratioDenominator(r.order_requirement);
+      if (d != null) ratioSet.add(d);
+    }
+    if (Number(r.price_usd) === 0) pop.zero++;
+    if (r.price_usd === null || r.price_usd === undefined) pop.noPrice++;
+    if (focPast(r, 'today')) pop.focToday++;
+    if (focPast(r, 'month')) pop.focMonth++;
+  });
+  ratioSteps = Array.from(ratioSet).sort((a, b) => a - b);
+
+  function focPast(row, mode) {
+    if (!row.foc_date) return false;  // no cutoff to be past — always kept
+    return mode === 'today'
+      ? row.foc_date < DateUtils.todayLocal()
+      : row.foc_date.slice(0, 7) <= currentMonth;
+  }
+
+  // ── Load the stored config, if any ───────────────────────────
+  const storedRaw = await Settings.get(CONFIG_KEY);
+  if (storedRaw) {
+    try {
+      const parsed = JSON.parse(storedRaw);
+      saved = Object.assign(defaultConfig(), parsed);
+      saved.publishersHidden = Array.isArray(parsed.publishersHidden) ? parsed.publishersHidden.map(pubKey) : [];
+    } catch (err) {
+      // Fail OPEN: a malformed blob must show everything, never empty a
+      // surface. app_settings.value is untyped text with no CHECK constraint.
+      console.warn('catalog_filters is not valid JSON — falling back to show-everything', err);
+      toast('Saved filter configuration could not be read — showing everything', 'error');
+      saved = null;
+    }
+  }
+  if (saved) {
+    const { data } = await db.from('app_settings')
+      .select('updated_at').eq('key', CONFIG_KEY).maybeSingle();
+    savedAt = data?.updated_at || null;
+  }
+  draft = saved ? JSON.parse(JSON.stringify(saved)) : defaultConfig();
+
+  // ── Filter predicate — the same shape S4 will push into queries ──
+  function isHidden(row, cfg, hiddenSet) {
+    if (hiddenSet.has(pubKey(row.publisher))) return true;
+    const cls = coverClassOf(row);
+    if (cls === 'standard' && !cfg.showStandard) return true;
+    if (cls === 'variant'  && !cfg.showVariants) return true;
+    if (cls === 'restricted') {
+      if (!cfg.showRestricted) return true;
+      if (cfg.ratioMax != null) {
+        const d = ratioDenominator(row.order_requirement);
+        if (d != null && d > cfg.ratioMax) return true;
+      }
+    }
+    if (cfg.hidePastFoc && focPast(row, cfg.focMode)) return true;
+    if (cfg.hideZeroPrice && Number(row.price_usd) === 0) return true;
+    return false;
+  }
+
+  function visibleCount(cfg) {
+    const hiddenSet = new Set(cfg.publishersHidden);
+    let n = 0;
+    for (let i = 0; i < rows.length; i++) if (!isHidden(rows[i], cfg, hiddenSet)) n++;
+    return n;
+  }
+
+  // ── Near-duplicate publisher names ───────────────────────────
+  // Advisory heuristic, deliberately labelled as one: group by first word of
+  // 4+ characters. Catches the measured real cases — "Titan" beside "Titan
+  // Comics", Kodansha Comics / Kodansha USA, the three Random House entries —
+  // and will occasionally pair unrelated publishers that share a first word
+  // (Seven Seas / Seven Stories). A false pair costs a glance; a missed one
+  // costs a silently dropped title.
+  const dupeKeys = new Set();
+  {
+    const groups = new Map();
+    publishers.forEach(p => {
+      const first = p.key.replace(/[^a-z0-9 ]/g, '').split(/\s+/)[0] || '';
+      if (first.length < 4) return;
+      if (!groups.has(first)) groups.set(first, []);
+      groups.get(first).push(p.key);
+    });
+    groups.forEach(list => { if (list.length > 1) list.forEach(k => dupeKeys.add(k)); });
+  }
+
+  // ── Render ───────────────────────────────────────────────────
+  const el = id => document.getElementById(id);
+  const num = n => (n == null ? '—' : n.toLocaleString());
+
+  function renderRatioSelect() {
+    const sel = el('cv-ratio');
+    sel.innerHTML = '';
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'All ratios';
+    sel.appendChild(all);
+    // Built from the values actually present, never a fixed list: production
+    // carries 22 distinct ratios (1:1 … 1:1000), measured 2026-09-23, so a
+    // hardcoded six-option dropdown would misrepresent the data.
+    ratioSteps.forEach(d => {
+      const o = document.createElement('option');
+      o.value = String(d);
+      o.textContent = '1:' + d;
+      sel.appendChild(o);
+    });
+    sel.value = draft.ratioMax == null ? '' : String(draft.ratioMax);
+  }
+
+  function renderRatioChips() {
+    const wrap = el('ratio-chips');
+    wrap.innerHTML = '';
+    const counts = new Map();
+    rows.forEach(r => {
+      if (!r.order_requirement) return;
+      const d = ratioDenominator(r.order_requirement);
+      if (d != null) counts.set(d, (counts.get(d) || 0) + 1);
+    });
+    ratioSteps.forEach(d => {
+      const inc = draft.ratioMax == null || d <= draft.ratioMax;
+      const span = document.createElement('span');
+      span.className = 'set-ratio-chip ' + (inc ? 'is-in' : 'is-out');
+      span.textContent = '1:' + d + ' · ' + (counts.get(d) || 0);
+      wrap.appendChild(span);
+    });
+  }
+
+  function renderPublishers() {
+    const q = el('pub-search').value.trim().toLowerCase();
+    const sort = el('pub-sort').value;
+    const hiddenSet = new Set(draft.publishersHidden);
+
+    const list = publishers
+      .filter(p => !q || p.key.indexOf(q) >= 0)
+      .slice()
+      .sort((a, b) => {
+        if (sort === 'name')  return a.display.localeCompare(b.display);
+        if (sort === 'month') return b.monthCount - a.monthCount;
+        return (b.reservedCount || 0) - (a.reservedCount || 0)
+            || b.monthCount - a.monthCount;
+      });
+
+    const wrap = el('pub-list');
+    wrap.innerHTML = '';
+    list.forEach(p => {
+      const on = !hiddenSet.has(p.key);
+      const label = document.createElement('label');
+      label.className = 'set-pub-row' + (on ? ' is-on' : '');
+      // Publisher names are distributor-supplied free text, so they are
+      // escaped even though only an admin sees this screen.
+      label.innerHTML =
+        '<input type="checkbox"' + (on ? ' checked' : '') + '>' +
+        '<span class="set-pub-name">' + escapeHtml(p.display) +
+          (dupeKeys.has(p.key) ? '<span class="set-dupe" title="Shares a first word with another publisher in this month — check whether they are the same publisher under two spellings">similar name</span>' : '') +
+        '</span>' +
+        '<span class="set-num">' + num(p.reservedCount) + '</span>' +
+        '<span class="set-num set-pub-col-month">' + num(p.monthCount) + '</span>';
+      label.querySelector('input').addEventListener('change', (e) => {
+        const set = new Set(draft.publishersHidden);
+        if (e.target.checked) set.delete(p.key); else set.add(p.key);
+        draft.publishersHidden = Array.from(set).sort();
+        renderPublishers();
+        renderImpact();
+      });
+      wrap.appendChild(label);
+    });
+
+    const shown = publishers.length - draft.publishersHidden.filter(k => byKey.has(k)).length;
+    el('pub-summary').textContent = shown + ' of ' + publishers.length + ' shown';
+
+    const hiddenInMonth = draft.publishersHidden.filter(k => byKey.has(k));
+    const hiddenTitles = hiddenInMonth.reduce((n, k) => n + (byKey.get(k).monthCount || 0), 0);
+    el('pub-hidden-summary').innerHTML = hiddenInMonth.length
+      ? '<strong>' + hiddenInMonth.length + ' publishers hidden</strong> — ' + hiddenTitles.toLocaleString() + ' titles.'
+      : 'Nothing hidden — every publisher in this month is visible.';
+
+    // Config entries that no longer match anything this month. With exclusions
+    // stored this is the harmless direction of drift (a rename un-hides a
+    // publisher rather than hiding one), but it should still be visible.
+    const unmatched = draft.publishersHidden.filter(k => !byKey.has(k));
+    const uw = el('unmatched-warning');
+    if (unmatched.length) {
+      el('unmatched-text').innerHTML =
+        '<strong>' + unmatched.length + ' hidden publisher' + (unmatched.length === 1 ? '' : 's') +
+        ' no longer match this month’s catalog:</strong> ' +
+        unmatched.map(k => escapeHtml(k)).join(', ') +
+        '. A distributor re-spelling does this. The titles are visible again, which is the safe' +
+        ' direction — re-hide them under their current name if that was not what you wanted.';
+      uw.style.display = 'flex';
+    } else {
+      uw.style.display = 'none';
+    }
+  }
+
+  function renderImpact() {
+    const vis = visibleCount(draft);
+    el('imp-visible').textContent = vis.toLocaleString();
+    el('imp-total').textContent   = rows.length.toLocaleString();
+    el('imp-pages').textContent   = Math.ceil(vis / ROWS_PER_PAGE).toLocaleString();
+
+    const base = saved ? visibleCount(saved) : rows.length;
+    const delta = vis - base;
+    const d = el('imp-delta');
+    if (delta === 0) {
+      d.textContent = saved ? 'Matches the saved configuration' : 'Nothing hidden';
+      d.style.color = 'var(--text-secondary)';
+    } else {
+      d.textContent = (delta > 0 ? '+' : '−') + Math.abs(delta).toLocaleString() +
+                      ' titles vs ' + (saved ? 'saved' : 'showing everything') + ' — unsaved';
+      d.style.color = delta > 0 ? 'var(--success)' : 'var(--warning)';
+    }
+
+    el('imp-saved').textContent = savedAt
+      ? 'Last saved ' + new Date(savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'Never saved — nothing stored yet';
+
+    const dirty = JSON.stringify(draft) !== JSON.stringify(saved || defaultConfig());
+    el('btn-save').textContent = dirty ? 'Save changes' : 'Saved';
+    el('btn-save').disabled = !dirty;
+    el('btn-discard').disabled = !dirty;
+  }
+
+  function renderControls() {
+    el('cv-standard').checked   = draft.showStandard;
+    el('cv-variant').checked    = draft.showVariants;
+    el('cv-restricted').checked = draft.showRestricted;
+    el('cv-hidefoc').checked    = draft.hidePastFoc;
+    el('cv-hidezero').checked   = draft.hideZeroPrice;
+    el('foc-today').checked     = draft.focMode === 'today';
+    el('foc-month').checked     = draft.focMode === 'month';
+    el('ratio-panel').style.display = draft.showRestricted ? '' : 'none';
+    el('foc-panel').style.display   = draft.hidePastFoc ? '' : 'none';
+    renderRatioSelect();
+    renderRatioChips();
+  }
+
+  function renderAll() {
+    renderControls();
+    renderPublishers();
+    renderImpact();
+  }
+
+  // ── Static populations ───────────────────────────────────────
+  el('pop-standard').textContent   = num(pop.standard);
+  el('pop-variant').textContent    = num(pop.variant);
+  el('pop-restricted').textContent = num(pop.restricted);
+  el('pop-zero').textContent       = num(pop.zero);
+  el('foc-count-today').textContent = num(pop.focToday);
+  el('foc-count-month').textContent = num(pop.focMonth);
+  el('pop-foc').textContent        = num(draft.focMode === 'today' ? pop.focToday : pop.focMonth);
+  if (pop.noPrice > 0) {
+    el('noprice-count').textContent = pop.noPrice.toLocaleString();
+    el('noprice-note').style.display = 'block';
+  }
+
+  // ── Wiring ───────────────────────────────────────────────────
+  const bindToggle = (id, key) => el(id).addEventListener('change', (e) => {
+    draft[key] = e.target.checked;
+    renderAll();
+  });
+  bindToggle('cv-standard',   'showStandard');
+  bindToggle('cv-variant',    'showVariants');
+  bindToggle('cv-restricted', 'showRestricted');
+  bindToggle('cv-hidezero',   'hideZeroPrice');
+
+  el('cv-hidefoc').addEventListener('change', (e) => {
+    draft.hidePastFoc = e.target.checked;
+    el('pop-foc').textContent = num(draft.focMode === 'today' ? pop.focToday : pop.focMonth);
+    renderAll();
+  });
+
+  ['foc-today', 'foc-month'].forEach(id => el(id).addEventListener('change', (e) => {
+    if (!e.target.checked) return;
+    draft.focMode = e.target.value;
+    el('pop-foc').textContent = num(draft.focMode === 'today' ? pop.focToday : pop.focMonth);
+    renderAll();
+  }));
+
+  el('cv-ratio').addEventListener('change', (e) => {
+    draft.ratioMax = e.target.value === '' ? null : parseInt(e.target.value, 10);
+    renderAll();
+  });
+
+  el('pub-search').addEventListener('input', debounce(renderPublishers, 150));
+  el('pub-sort').addEventListener('change', renderPublishers);
+
+  el('pub-all').addEventListener('click', () => {
+    draft.publishersHidden = [];
+    renderAll();
+  });
+  el('pub-none').addEventListener('click', () => {
+    draft.publishersHidden = publishers.map(p => p.key).sort();
+    renderAll();
+  });
+  el('pub-preset').addEventListener('click', () => {
+    if (!reserveCountsAvailable) {
+      toast('Reserve counts are unavailable, so this preset cannot be computed', 'error');
+      return;
+    }
+    // A one-time LIST-POPULATOR, not a living rule. A persistent "< 7" rule
+    // would recompute each load and look immune to renames, but a renamed
+    // publisher's history does not follow the new name, so it would read as 0
+    // reservations and the rule would hide it — the exact silent-disappearance
+    // failure exclusions exist to prevent.
+    draft.publishersHidden = publishers
+      .filter(p => (p.reservedCount || 0) < 7)
+      .map(p => p.key).sort();
+    renderAll();
+    toast('Filled in every publisher under 7 all-time reservations — review before saving');
+  });
+
+  el('btn-discard').addEventListener('click', () => {
+    draft = saved ? JSON.parse(JSON.stringify(saved)) : defaultConfig();
+    renderAll();
+    toast('Changes discarded');
+  });
+
+  el('btn-save').addEventListener('click', async () => {
+    const btn = el('btn-save');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    const { error } = await Settings.set(CONFIG_KEY, JSON.stringify(draft));
+    if (error) {
+      console.error('catalog_filters save failed', error);
+      toast('Could not save — ' + (error.message || 'unknown error'), 'error');
+      btn.disabled = false;
+      btn.textContent = orig;
+      return;
+    }
+    saved = JSON.parse(JSON.stringify(draft));
+    savedAt = new Date().toISOString();
+    renderAll();
+    toast('Catalog visibility saved');
+  });
+
+  // ── Reveal ───────────────────────────────────────────────────
+  el('load-state').style.display = 'none';
+  el('set-main').style.display = 'grid';
+  renderAll();
+})();
+</script>
+</body>
+</html>

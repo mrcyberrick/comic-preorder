@@ -512,38 +512,65 @@ const NavSearch = {
   },
 };
 
-// ── Mobile Settings Placeholder (added 2026-08-16, Rick's request) ──
-// A non-functional gear icon filling the same header slot the search
-// magnifier occupies on catalog/mylist/subscriptions/arrivals. Pages
-// with no #search (admin.html, analytics.html — every admin-only nav
-// page today) otherwise leave that slot empty, and .nav-logo's
-// margin:0 auto then only centers the logo in the space after the
-// hamburger, not the full header width — those two pages read visibly
-// off-center next to the other four. Self-gates on #search's ABSENCE,
-// the inverse of NavSearch's gate, so it never appears alongside the
-// real search button. Does nothing on click by design — a future
-// settings surface can replace this; aria-hidden + tabindex="-1" keep
-// it out of the accessibility tree and tab order since it has no
-// function yet.
-const NavSettingsPlaceholder = {
-  mount() {
+// ── Mobile Settings gear (added 2026-08-16 as a placeholder; made a
+//    real link 2026-09-23, S2 of docs/admin-settings-catalog-visibility.md)
+// A gear icon filling the same header slot the search magnifier occupies
+// on catalog/mylist/subscriptions/arrivals. Pages with no #search
+// (admin.html, analytics.html, settings.html — every admin-only nav page)
+// otherwise leave that slot empty, and .nav-logo's margin:0 auto then only
+// centers the logo in the space after the hamburger, not the full header
+// width, so those pages read visibly off-center next to the other four.
+// Self-gates on #search's ABSENCE, the inverse of NavSearch's gate, so it
+// never appears alongside the real search button.
+//
+// It shipped deliberately non-functional, with aria-hidden="true" and
+// tabindex="-1" keeping it out of the accessibility tree and tab order
+// because it had no function; its own comment said "a future settings
+// surface can replace this". That surface now exists, so for an ADMIN it
+// renders as a real <a href="settings.html"> with both of those attributes
+// removed — leaving them on would make the only mobile route to Settings
+// invisible to a screen reader and unreachable by keyboard.
+//
+// A non-admin still gets the inert button: every page this mounts on is
+// admin-gated today, so that branch is defensive rather than reachable, but
+// it keeps the logo-centering purpose intact if a non-admin page ever drops
+// its #search.
+//
+// The CSS class stays `.nav-settings-placeholder` so style.css's base-hide
+// and its @media order:3 / display:flex rules are untouched. The name is now
+// historical — it is not a placeholder any more.
+const NavSettingsLink = {
+  // Gear/cog matching the app's stroke-only icon language (viewBox 24x24,
+  // stroke-width 2.4, square caps, miter joins — same as the hamburger,
+  // search and tab-bar icons).
+  _gearSvg:
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M19 12h2.3"></path><path d="M15.5 5.94 16.65 3.95"></path><path d="M8.5 5.94 7.35 3.95"></path><path d="M5 12H2.7"></path><path d="M8.5 18.06 7.35 20.05"></path><path d="M15.5 18.06 16.65 20.05"></path></svg>',
+
+  mount(isAdmin = false) {
     if (document.getElementById('search')) return; // NavSearch owns this slot instead
 
     const navInner = document.querySelector('.nav-inner');
-    if (!navInner || document.getElementById('nav-settings-placeholder')) return; // idempotent
+    if (!navInner || document.getElementById('nav-settings-gear')) return; // idempotent
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'nav-settings-placeholder';
-    btn.className = 'nav-settings-placeholder';
-    btn.setAttribute('aria-hidden', 'true');
-    btn.setAttribute('tabindex', '-1');
-    // Simple gear/cog, matching the app's stroke-only icon language
-    // (viewBox 24x24, stroke-width 2.4, square caps, miter joins — same
-    // as the hamburger/search/tab-bar icons).
-    btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M19 12h2.3"></path><path d="M15.5 5.94 16.65 3.95"></path><path d="M8.5 5.94 7.35 3.95"></path><path d="M5 12H2.7"></path><path d="M8.5 18.06 7.35 20.05"></path><path d="M15.5 18.06 16.65 20.05"></path></svg>';
+    let el;
+    if (isAdmin) {
+      el = document.createElement('a');
+      el.href = 'settings.html';
+      el.setAttribute('aria-label', 'Settings');
+      if ((window.location.pathname.split('/').pop() || '').startsWith('settings')) {
+        el.setAttribute('aria-current', 'page');
+      }
+    } else {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.setAttribute('aria-hidden', 'true');
+      el.setAttribute('tabindex', '-1');
+    }
+    el.id = 'nav-settings-gear';
+    el.className = 'nav-settings-placeholder';
+    el.innerHTML = this._gearSvg;
 
-    navInner.appendChild(btn);
+    navInner.appendChild(el);
   },
 };
 
@@ -568,10 +595,16 @@ async function initNav() {
   const nameEl  = nav.querySelector('#nav-username');
   if (nameEl) nameEl.textContent = profile?.full_name || user.email;
 
-  // Show admin link if admin
-  const adminLink = nav.querySelector('#nav-admin');
-  if (adminLink && profile?.is_admin) {
-    adminLink.style.display = 'block';
+  // Show admin-only nav links if admin.
+  // #nav-settings joins #nav-admin here (2026-09-23, S2) rather than being
+  // gated per-page: #nav-analytics is still unlocked by a copy of this test in
+  // each of the six pages' own scripts, which is pre-existing duplication this
+  // change deliberately does not touch. New links go in the one place.
+  if (profile?.is_admin) {
+    ['#nav-admin', '#nav-settings'].forEach(sel => {
+      const li = nav.querySelector(sel);
+      if (li) li.style.display = 'block';
+    });
   }
 
   // Mark current page active
@@ -595,7 +628,7 @@ async function initNav() {
   // Mobile tab bar + catalog search proxy (docs/mobile-nav-tab-bar.md)
   TabBar.mount(currentPage);
   NavSearch.mount();
-  NavSettingsPlaceholder.mount(); // fills the same slot when #search is absent
+  NavSettingsLink.mount(!!profile?.is_admin); // fills the same slot when #search is absent
 
   // Logout button
   const logoutBtn = nav.querySelector('#btn-logout');
@@ -1915,6 +1948,46 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ── Cover-type helpers (extracted 2026-09-23, S2) ─────────────
+// The standard-cover test existed as SEVEN inline copies — app.js:778,
+// catalog.html:470 and :1342, admin.html:5408 and :5815,
+// subscriptions.html:472 and :849. settings.html needs the same test, and
+// docs/admin-settings-catalog-visibility.md § 1.4 forbids adding an eighth,
+// so this is the one definition new code calls. The seven existing copies are
+// deliberately NOT migrated here: they sit on customer-facing reserve paths,
+// and rewriting them is a refactor with its own regression surface rather than
+// part of this feature. Migrating them is the follow-on.
+//
+// NULL, 'Standard' (Lunar) and 'Primary Title' (PRH) are standard covers;
+// everything else is a variant.
+function isStandardCoverType(variantType) {
+  return !variantType || variantType === 'Standard' || variantType === 'Primary Title';
+}
+
+// Which of the three disjoint cover classes a catalog row belongs to.
+// Measured 2026-09-23 (S0 Q3) on both environments: `standard_with_ratio` is
+// 0, i.e. no row carries an allocation ratio AND a standard variant_type, so
+// these three are genuinely disjoint and the order of the tests is not load
+// bearing. Restricted is tested first anyway, because an allocation ratio is
+// the stronger statement about a row.
+//
+// `order_requirement` holds the ratio for BOTH distributors: PRH publishes it
+// directly, Lunar keeps it in `variant_type` and the import derives it across
+// (F132/F156). So this never parses a title string — F144's own trap.
+function coverClassOf(row) {
+  if (row && row.order_requirement) return 'restricted';
+  return isStandardCoverType(row && row.variant_type) ? 'standard' : 'variant';
+}
+
+// The denominator of an allocation ratio: '1:25' -> 25. Null for anything not
+// matching N:M — measured 2026-09-23, zero rows fail that pattern on either
+// environment, but a malformed value must not silently read as 0 and slip
+// through a "ratios no harder than N" threshold.
+function ratioDenominator(orderRequirement) {
+  const m = /^(\d+):(\d+)$/.exec(orderRequirement || '');
+  return m ? parseInt(m[2], 10) : null;
 }
 
 function debounce(fn, delay) {
