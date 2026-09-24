@@ -703,12 +703,22 @@
   // Load publishers for filter
   if (currentMonth) {
     const publishers = await Catalog.getPublishers(currentMonth);
-    publishers.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p;
-      opt.textContent = p;
-      pubEl.appendChild(opt);
-    });
+    // ⚠️ Offer only publishers the tenant-wide config actually shows. Without
+    // this, a hidden publisher stays selectable and picking it returns "No
+    // items found" — a dead end that reads like a broken page. (Before the
+    // read-side guard was removed it was worse than a dead end: it SERVED the
+    // hidden titles. See CatalogFilters.apply()'s note.)
+    // A pinned publisher that is now hidden simply finds no matching <option>,
+    // so the select falls back to "All Publishers" on its own.
+    const hiddenPubs = new Set((catalogFilterCfg && catalogFilterCfg.publishersHidden) || []);
+    publishers
+      .filter(p => !hiddenPubs.has((p || '').trim().toLowerCase()))
+      .forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        pubEl.appendChild(opt);
+      });
     // Restore pinned publisher now that options exist
     if (pinned?.publisher) pubEl.value = pinned.publisher;
   }

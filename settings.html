@@ -855,6 +855,24 @@
   el('btn-save').addEventListener('click', async () => {
     const btn = el('btn-save');
     const orig = btn.textContent;
+
+    // ⚠️ ZERO-VISIBILITY GUARD — on the WRITE side, which is where it belongs.
+    // It briefly lived in CatalogFilters.apply() instead, and that was a bug:
+    // apply() only ever sees the subset its caller is rendering, so a customer
+    // narrowing catalog.html to a hidden publisher produced an all-hidden
+    // subset, the guard assumed the config was pathological, and it served
+    // every hidden title (found by Rick 2026-09-24). Here the question is asked
+    // once, against the WHOLE month, at the moment someone creates the config —
+    // which is the only place it can be asked meaningfully.
+    //
+    // Refuses rather than confirms: unlike the supplier-rejection write F143
+    // gates, there is no case where "show my customers nothing" is the intent,
+    // and the admin can always reach the same place by hiding all but one.
+    if (visibleCount(draft) === 0 && rows.length) {
+      toast('This would leave the catalog completely empty — nothing would be visible to any customer. Leave at least one title visible.', 'error');
+      return;
+    }
+
     btn.disabled = true;
     btn.textContent = 'Saving…';
     const { error } = await Settings.set(CONFIG_KEY, JSON.stringify(draft));

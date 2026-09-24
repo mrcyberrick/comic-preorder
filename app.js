@@ -1276,26 +1276,31 @@ const CatalogFilters = {
     return false;
   },
 
-  // Filter a list, with the ZERO-VISIBILITY GUARD: if a config would hide
-  // every row, it is treated as no config at all and the full list is returned.
-  // Nobody means "show my customers nothing", and a stored blob that empties a
-  // surface is exactly what fail-open exists to stop — including the one a
-  // "Hide all" click can produce. Logged loudly so it is not silent.
+  // Filter a list. Nothing clever: if the config matches no row, the result is
+  // empty, and that is correct.
   //
-  // `exempt` is an optional predicate that forces a row visible regardless.
-  // catalog.html passes the customer's own reserved set through it: a title
-  // someone has already reserved is never hidden, or a filter could strand it
-  // the way F155 stranded DNX #1 — present in the database, absent from every
-  // surface the customer can reach.
+  // ⚠️ A ZERO-VISIBILITY GUARD USED TO LIVE HERE AND IT WAS A REAL BUG.
+  // It read: if `kept` is empty, assume the config is pathological, ignore it
+  // and return every row. The premise is wrong, because apply() is handed
+  // WHATEVER SUBSET its caller is showing — and an empty result after a
+  // narrowed query means "nothing here matches", not "your config would empty
+  // the store". Found by Rick 2026-09-24: with a single publisher hidden, a
+  // customer picking that publisher in catalog.html's own filter got a subset
+  // in which every row was hidden, so the guard fired and served all 67 hidden
+  // titles. The filter was bypassed by using the product normally.
+  //
+  // The guard is now on the WRITE side, in settings.html's save, where it
+  // belongs: "would this config leave the catalog empty" is a property of the
+  // config against the whole month, evaluated once when someone creates it —
+  // not something a read path should infer from a page of results.
+  //
+  // `exempt` forces a row visible regardless. catalog.html passes the
+  // customer's own reserved set: a title someone has already reserved is never
+  // hidden, or a filter could strand it the way F155 stranded DNX #1 — present
+  // in the database, absent from every surface the customer can reach.
   apply(rows, cfg, currentMonth, exempt) {
     if (!cfg || !Array.isArray(rows) || !rows.length) return rows || [];
-    const kept = rows.filter(r =>
-      (exempt && exempt(r)) || !this.hides(r, cfg, currentMonth));
-    if (!kept.length && rows.length) {
-      console.warn('catalog_filters would hide every title — ignoring it and showing everything');
-      return rows;
-    }
-    return kept;
+    return rows.filter(r => (exempt && exempt(r)) || !this.hides(r, cfg, currentMonth));
   },
 };
 window.CatalogFilters = CatalogFilters;
