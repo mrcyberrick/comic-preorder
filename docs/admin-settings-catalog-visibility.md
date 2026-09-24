@@ -805,8 +805,11 @@ What does scale, and how it is handled here:
 - [x] Q1–Q5 answered by Rick and recorded in § 7 (2026-09-23) — incl. Q4 bar deletion and Q5 exclusion storage; Q6/Q7 renumbered
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
 - [ ] S1 RPC applied to staging, verified by **V2 — which must run BEFORE S4 deletes `getReservedPublishers()`**, or the comparison has no baseline
-- [ ] S2 merged to `staging` `--ff-only`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync in the same commit
-- [ ] `aria-hidden` / `tabindex` removed from the gear (`app.js:539-540`)
+- [x] **S2 merged to `staging` `--ff-only` and pushed 2026-09-23** (`cd88153`) — `settings.html` + the nav link on all six existing pages + `app.js` + `style.css`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync **in the same commit**, as required
+- [x] `aria-hidden` / `tabindex` removed from the gear — `NavSettingsPlaceholder` → `NavSettingsLink`, admin branch renders a real `<a href="settings.html">`
+- [x] **Gates green on S2.** `node --check` clean on `app.js` + all 7 inline scripts; unit **321/321**; **Playwright 147 passed, 0 failed, exit 0, 20.0m** against deployed staging bytes post-push, with the test count present in the log (the only trustworthy figure — § Smoke Test Suite records a false GREEN at exit 0 with no tests run); nav **and** footer blocks hash identically across all seven pages; served bytes confirmed on the plain URL with `NavSettingsPlaceholder` at ×0
+- [ ] **S2b — the `Admin ▾` dropdown grouping.** Deliberately NOT in `cd88153`: the nav still carries seven flat links. Split out so an 874-line new page and a restructure of the app's most-shared surface are reviewable apart. Spec dependencies already swept — `.nav-links`, `.nav-links a.active`, `#nav-hamburger` and `.nav-links .nav-bubble` must survive; nothing references `#nav-admin` or `#nav-analytics`
+- [ ] **Follow-on, not S2:** migrate the seven inline copies of the standard-cover test onto `app.js`'s new `isStandardCoverType()` (§ 1.4). Deliberately deferred — they sit on customer-facing reserve paths
 - [ ] ~~S3 seed applied~~ — **step deleted, nothing to seed**
 - [ ] S4 merged to `staging` — bar deleted (a) and config applied (b); V3, V4, V4a, V5, V6, V7, V12 green
 - [ ] V8, V9 (147+ baseline), V10 green

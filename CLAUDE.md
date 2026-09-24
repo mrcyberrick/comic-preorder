@@ -3127,8 +3127,15 @@ isolation (F15, F20), per-tenant branding unit spec, catalog info-card reserve
 (spec 14, added after F103), and the **order-export / order-ledger path**
 (spec 15, added 2026-08-03 — see below). `run-smoke.ps1` runs the scripts
 repo's committed unit suite (`npm test`, step [1/2]) before Playwright; the old
-local `node-tests/` copy was retired 2026-07-16. **56 Playwright tests as of
-2026-08-03.**
+local `node-tests/` copy was retired 2026-07-16.
+
+**Current counts, measured 2026-09-23: 321 unit + 147 Playwright (20.0 min),
+23 spec files.** *(This line read "**56 Playwright tests as of 2026-08-03**" —
+correct when written and then left for seven weeks while the suite roughly
+tripled. The unit figure had also drifted: entries below record 269 and then
+295, and it is now 321. **Both numbers are baselines a session compares its own
+run against, so a stale one invites "close enough" on a genuinely short run** —
+re-measure rather than trusting this line if the date above is old.)*
 
 **Spec 15 — `15-order-export-ledger.spec.ts` (F101/F102).** Covers the path
 that shipped to production on 2026-08-03: the Order Builder opens with a
