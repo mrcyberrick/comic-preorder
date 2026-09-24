@@ -21,6 +21,12 @@
 
     .set-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 28px; align-items: start; }
 
+    /* The publisher checkboxes and the FOC radios are native controls, which
+       default to the browser's blue. The .toggle-switch pills are unaffected —
+       their input is opacity:0 and the colour comes from .toggle-slider. */
+    .set-layout input[type="checkbox"],
+    .set-layout input[type="radio"] { accent-color: var(--accent); }
+
     /* Section rail */
     .set-rail { display: flex; flex-direction: column; gap: 22px; position: sticky; top: 76px; }
     .set-rail-group-label {
@@ -76,12 +82,26 @@
       min-height: 60px; cursor: pointer; border-bottom: 1px solid #222;
     }
     .set-row:last-child { border-bottom: 0; }
-    .set-row-text { flex-grow: 1; }
+    /* ⚠️ These three flex guards are load-bearing, not tidying (fixed
+       2026-09-24 from a real mobile screenshot).
+       style.css's shared .toggle-switch is `width:44px; height:24px` with no
+       flex-shrink — it was written for the admin header, where it is not a flex
+       item. Dropped into .set-row it shrinks: .set-row-text grows but keeps the
+       default `min-width:auto`, so it refuses to compress below its min-content
+       width and squeezes its siblings instead. A long note therefore collapsed
+       the 44px toggle to about 24px, and because .toggle-slider is `inset:0`
+       with `border-radius:24px`, a 24x24 box renders as a CIRCLE with the 16px
+       knob inside it rather than a pill — two overlapping blobs.
+       The "Hide items priced $0.00" row looked fine only because its note is
+       short enough to apply no pressure, which is what made this look like a
+       one-row bug when it affected every long-note toggle row. */
+    .set-row .toggle-switch { flex-shrink: 0; }
+    .set-row-text { flex-grow: 1; min-width: 0; }
     .set-row-title { display: block; font-size: 0.88rem; font-weight: 600; }
     .set-row-note  { display: block; font-size: 0.75rem; color: var(--text-secondary); }
     .set-row-count {
       font-family: var(--font-display); font-size: 1.4rem; min-width: 62px;
-      text-align: right; color: var(--text-primary);
+      flex-shrink: 0; text-align: right; color: var(--text-primary);
     }
 
     /* Publisher table */
