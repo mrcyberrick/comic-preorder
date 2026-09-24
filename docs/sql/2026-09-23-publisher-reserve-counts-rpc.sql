@@ -139,24 +139,47 @@ REVOKE ALL ON FUNCTION public.get_publisher_reserve_counts(text) FROM PUBLIC, an
 
 
 -- ── VERIFY: grants ──────────────────────────────────────────────────────────
--- EXPECTED: authenticated = EXECUTE, and nothing else. No anon, no PUBLIC.
+-- Aggregated into a single verdict row for the same reason as the check below:
+-- a zero-row result must not be able to read as a pass.
 -- F124 records that only four functions may legitimately carry an anon grant
 -- (current_tenant_id, current_user_is_admin, get_popular_series,
 -- resolve_tenant_by_slug); this is not one of them.
-SELECT grantee, privilege_type
+--
+-- EXPECTED: verdict = 'OK - authenticated only'
+SELECT
+  CASE
+    WHEN count(*) FILTER (WHERE grantee = 'authenticated') = 0
+      THEN 'PROBLEM - authenticated has no EXECUTE; the GRANT did not run'
+    WHEN count(*) FILTER (WHERE grantee IN ('anon', 'PUBLIC')) > 0
+      THEN 'PROBLEM - anon or PUBLIC can execute this (F124 violation)'
+    ELSE 'OK - authenticated only'
+  END                                             AS verdict,
+  COALESCE(string_agg(DISTINCT grantee, ', '), '(none)') AS grantees
 FROM information_schema.routine_privileges
 WHERE routine_name = 'get_publisher_reserve_counts';
 
 
--- ── VERIFY: security mode and search_path survived CREATE OR REPLACE ────────
--- EXPECTED: prosecdef = true, proconfig contains search_path=public,
--- and exactly ONE row (a second row would mean a stray overload -- the
--- DEFAULT makes get_publisher_reserve_counts() and (text) the same function,
--- so two rows here means something else was created).
-SELECT p.proname,
-       pg_get_function_identity_arguments(p.oid) AS args,
-       p.prosecdef,
-       p.proconfig
+-- ── VERIFY: does it exist, and did CREATE OR REPLACE keep its properties ────
+-- Written as an AGGREGATE so it always returns exactly ONE row with a spelled-
+-- out verdict. A plain `SELECT ... WHERE proname = ...` returns ZERO rows when
+-- the function is absent, and the editor shows that as "Success. No rows
+-- returned" -- indistinguishable from a pass to anyone not counting rows. That
+-- ambiguity already produced one false conclusion this session (S0's Q8 read as
+-- "production has no F160 instance" when it has one), so it is not repeated.
+--
+-- EXPECTED: verdict = 'OK - 1 definition, SECURITY DEFINER, search_path pinned'
+SELECT
+  CASE
+    WHEN count(*) = 0 THEN 'MISSING - the CREATE did not run. Re-run this file from the top.'
+    WHEN count(*) > 1 THEN 'PROBLEM - ' || count(*) || ' definitions exist; a stray overload was left behind'
+    WHEN bool_and(p.prosecdef) IS NOT TRUE THEN 'PROBLEM - not SECURITY DEFINER'
+    WHEN bool_and(array_to_string(p.proconfig, ',') LIKE '%search_path%') IS NOT TRUE
+      THEN 'PROBLEM - search_path is not pinned (F23/Pattern E footgun)'
+    ELSE 'OK - 1 definition, SECURITY DEFINER, search_path pinned'
+  END                                                   AS verdict,
+  count(*)                                              AS definitions,
+  COALESCE(string_agg(pg_get_function_identity_arguments(p.oid), ' | '), '-') AS signatures,
+  COALESCE(string_agg(array_to_string(p.proconfig, ','), ' | '), '-')         AS settings
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = 'get_publisher_reserve_counts';
@@ -164,40 +187,65 @@ WHERE n.nspname = 'public' AND p.proname = 'get_publisher_reserve_counts';
 
 -- ── SMOKE (run as postgres in the SQL Editor) ───────────────────────────────
 -- ⚠️ The SQL Editor runs as `postgres` superuser, so current_tenant_id()
--- resolves via auth.uid() and will be NULL here -- the function will return
--- ZERO ROWS in the editor. That is expected and is NOT a failure. Run the
--- smoke below, which substitutes an explicit tenant, and do the real
--- end-to-end check from a signed-in admin browser session (plan § 5 V2).
+-- resolves via auth.uid() and will be NULL here -- calling the function
+-- directly returns ZERO ROWS in the editor. That is expected and is NOT a
+-- failure. This smoke replicates the aggregate with explicit tenant scoping
+-- instead; the real end-to-end check is a signed-in admin browser session
+-- (plan § 5.1 V2).
 --
--- Founding tenant ids: staging 72e29f67-39f7-42bc-a4d5-d6f992f9d790;
--- production is in the gitignored scripts/phase-4-prod-tenant-uuid.txt.
--- Substitute below.
-WITH tid AS (SELECT '00000000-0000-0000-0000-000000000000'::uuid AS t),  -- <<< EDIT
-hist AS (
-  SELECT lower(btrim(rh.publisher)) AS k, count(*)::bigint AS n
-  FROM reservation_history rh CROSS JOIN tid
-  WHERE rh.tenant_id = tid.t AND btrim(COALESCE(rh.publisher, '')) <> ''
-  GROUP BY 1
+-- ⚠️⚠️ REWRITTEN 2026-09-23 BECAUSE THE FIRST VERSION WAS A FOOTGUN. It opened
+-- `WITH tid AS (SELECT '00000000-0000-0000-0000-000000000000'::uuid ...)` with
+-- a `-- <<< EDIT` marker and told the operator to substitute a founding-tenant
+-- uuid from a gitignored scratch file. Run unedited it returns
+--     publishers_with_any_history 0 | publishers_at_or_above_bar 0 | total null
+-- which reads as a plausible "this tenant has no reserve history" answer rather
+-- than "you did not edit the query" -- and that is exactly the failure this
+-- file's own § Smoke Test Suite rule warns about: a check whose failing output
+-- is indistinguishable from a real result. (`sum()` over zero rows giving NULL
+-- was the only tell.) It happened on the first real run.
+--
+-- The version below needs NO EDITING: it groups by tenant and names each one,
+-- so every tenant is visible at once, a missing substitution is impossible, and
+-- an empty result would mean "this database has no tenants" -- which is
+-- unmistakable. Same shape as S0's Q1, for the same reason.
+WITH hist AS (
+  SELECT rh.tenant_id, lower(btrim(rh.publisher)) AS k, count(*)::bigint AS n
+  FROM reservation_history rh
+  WHERE btrim(COALESCE(rh.publisher, '')) <> ''
+  GROUP BY 1, 2
 ),
 live AS (
-  SELECT lower(btrim(c.publisher)) AS k, count(*)::bigint AS n
-  FROM preorders p JOIN catalog c ON c.id = p.catalog_id CROSS JOIN tid
-  WHERE p.tenant_id = tid.t AND btrim(COALESCE(c.publisher, '')) <> ''
-  GROUP BY 1
+  SELECT p.tenant_id, lower(btrim(c.publisher)) AS k, count(*)::bigint AS n
+  FROM preorders p
+  JOIN catalog c ON c.id = p.catalog_id
+  WHERE btrim(COALESCE(c.publisher, '')) <> ''
+  GROUP BY 1, 2
 ),
 reserved AS (
-  SELECT u.k, sum(u.n)::bigint AS n
-  FROM (SELECT * FROM hist UNION ALL SELECT * FROM live) u GROUP BY u.k
+  SELECT u.tenant_id, u.k, sum(u.n)::bigint AS n
+  FROM (SELECT * FROM hist UNION ALL SELECT * FROM live) u
+  GROUP BY 1, 2
 )
-SELECT count(*)                                        AS publishers_with_any_history,
-       count(*) FILTER (WHERE n >= 7)                  AS publishers_at_or_above_bar,
-       sum(n)                                          AS total_reservation_records
-FROM reserved;
+SELECT t.slug,
+       t.plan,
+       COALESCE(count(r.k), 0)                              AS publishers_with_any_history,
+       COALESCE(count(r.k) FILTER (WHERE r.n >= 7), 0)       AS publishers_at_or_above_bar,
+       COALESCE(sum(r.n), 0)                                AS total_reservation_records
+FROM tenants t
+LEFT JOIN reserved r ON r.tenant_id = t.id
+GROUP BY t.slug, t.plan
+ORDER BY 5 DESC, 1;
 --
 -- EXPECTED, stated BEFORE running so a surprise triggers re-verification
--- rather than remediation (the print's own measured figures, 2026-08-24):
---   staging    publishers_at_or_above_bar ~= 4   (printed 638 rows / 15 pages)
---   production publishers_at_or_above_bar ~= 14  (printed 1,534 rows / 34 pages)
+-- rather than remediation. These are now MEASURED values, not the 2026-08-24
+-- print record -- S0 ran on both environments 2026-09-23:
+--   staging    raysandjudys -> 17 with history, 5 at/above bar
+--               demoshop, riverside-comics, 4x pw-* -> all 0 / 0 / 0
+--   production rjbookstop   -> 22 with history, 14 at/above bar
+--               comicstore  -> 1 with history, 0 at/above bar
+--
+-- ⚠️ A row reading 0 / 0 / 0 is now a MEANINGFUL result, not a broken query:
+-- it is F160's population. Every such tenant's Print Catalog renders blank.
 --
 -- ⚠️ This is CORROBORATION, not proof, and the direction is not guaranteed.
 -- Counts are NOT strictly monotonic: archiving moves a row from preorders into
