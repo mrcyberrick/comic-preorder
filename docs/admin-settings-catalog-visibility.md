@@ -1,6 +1,7 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0 MEASURED BOTH ENVIRONMENTS, S1 WRITTEN NOT APPLIED · staging=— · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, fixed by S4(a))**
+**STATUS:** IN PROGRESS — S0–S4 ON STAGING, VERIFICATION INCOMPLETE · staging=2026-09-24 (`cd88153` S2, `886cab0` S4; S1 applied by Rick) · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**
+⚠️ **Not ready for production.** The regression suite is green (147/0) but **eight verification gates are still open and no committed spec asserts any of the new behaviour** — see § 9. A green suite here means nothing else broke, not that the filters are right.
 **Q1–Q5 ANSWERED 2026-09-23 (Rick)** — see § 7. **The shaping decision is Q4: DELETE the ≥7 publisher bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the default state "store nothing". **Q5: store publisher EXCLUSIONS, never inclusions** (§ 3.2.1). S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, STATUS `staging=PENDING | prod=PENDING`. **No code written, nothing applied to either database.**
 
 **Type:** Feature build, Rick's request 2026-09-23. **One new page, one new RPC, one new
@@ -556,12 +557,13 @@ Deploy staging → verify → **production promotion is a separate, explicitly r
 | Gate | Assertion |
 |---|---|
 | V1 | ✅ **DONE 2026-09-23, both environments.** S0 confirmed § 2's cold start and corrected its definition — the trigger is "no publisher clears the bar", not "zero reserve history" (§ 13 F160) |
-| V2 | RPC returns the same publisher set as today's `getReservedPublishers()` at threshold 7, on both environments — proven by comparing against the old paging implementation, not assumed. **Must run BEFORE S4 deletes that function**, or there is nothing left to compare against (§ 5.1) |
+| V2 | RPC returns the same publisher set as today's `getReservedPublishers()` at threshold 7 — proven against the old paging implementation, not assumed (§ 5.1). **STILL RUNNABLE AFTER S4, and my twice-stated warning that it had to run first was WRONG.** § 5.1's snippet is a *self-contained* reimplementation using only `db`; it never called the live function, precisely so it could run anywhere. Deleting `getReservedPublishers()` cost nothing. Not yet run |
 | V3 | With no `catalog_filters` row, both surfaces show **everything** (§ 3.4) — tested by deleting the key, not by reasoning |
-| V4 | **REPLACES the old "print unchanged at 1,534 / 34" assertion, which the bar deletion makes false.** After S4 with no config row, the production print is **2,068 rows / 45 pages**; with the "Reserved ≥ 7" preset clicked it returns to **1,507 / 33**. Both asserted, because the second is what proves the preset reproduces the old behaviour rather than approximating it |
+| V4 | ⚠️ **REWRITTEN TWICE.** It first asserted "print unchanged at 1,534 / 34", which the bar deletion makes false. It then asserted a return to 1,507 / 33 via the "Reserved ≥ 7" preset — **and that preset was removed 2026-09-24 (Q3 reversed)**, so that half is gone too. What remains assertable: with no config row the production print is **2,068 rows / 45 pages**, and hiding by hand the 58 publishers that sat under the old bar returns it to **1,507 / 33**. Neither half run |
 | V4a | **Publisher exclusions survive a rename in the safe direction** (§ 3.2.1): with a publisher excluded, rewrite its `catalog.publisher` value on a scratch row and confirm the row **reappears** rather than staying hidden. Negative-control the assertion by confirming it fails if the config is inverted to an allowlist |
 | V5 | A reserved title stays visible to its customer with its publisher hidden (§ 3.3), asserted in a real browser |
-| V6 | Publisher filtering is confirmed to reach the **query**, not the client — assert the request's `publisher` param, and that the row count fetched drops |
+| V6 | ❌ **VOID — this gate asserted something that turned out to be impossible.** It required publisher filtering to reach the PostgREST query. It cannot: exclusions are stored as `lower(btrim(publisher))` keys while `not.in` compares raw mixed-case values (§ 3.2's correction). Replaced by V6a |
+| V6a | The filter is applied to the FULL result set **before** pagination, so pages stay full — the exact failure `catalog.html`'s own `hideVariants` note records ("filtering after slicing caused short pages and empty grid cells"). Assert a filtered page still renders `PAGE_SIZE` cards where more matches exist. Not yet run |
 | V7 | Malformed JSON in `catalog_filters` shows everything and logs, rather than emptying the catalog |
 | V8 | `node --check` clean on every touched inline `<script>`; nav + footer blocks on `settings.html` hash-identical to the other six |
 | V9 | Full Playwright suite green against deployed staging bytes **post-push**. Current baseline **147 passed** |
@@ -823,8 +825,13 @@ What does scale, and how it is handled here:
 - [ ] **S2b — the `Admin ▾` dropdown grouping.** Deliberately NOT in `cd88153`: the nav still carries seven flat links. Split out so an 874-line new page and a restructure of the app's most-shared surface are reviewable apart. Spec dependencies already swept — `.nav-links`, `.nav-links a.active`, `#nav-hamburger` and `.nav-links .nav-bubble` must survive; nothing references `#nav-admin` or `#nav-analytics`
 - [ ] **Follow-on, not S2:** migrate the seven inline copies of the standard-cover test onto `app.js`'s new `isStandardCoverType()` (§ 1.4). Deliberately deferred — they sit on customer-facing reserve paths
 - [ ] ~~S3 seed applied~~ — **step deleted, nothing to seed**
-- [ ] S4 merged to `staging` — bar deleted (a) and config applied (b); V3, V4, V4a, V5, V6, V7, V12 green
-- [ ] V8, V9 (147+ baseline), V10 green
+- [x] **S4 merged to `staging` and pushed 2026-09-24** (`886cab0`) — bar deleted (a), config applied (b), plus `CatalogFilters` in `app.js` as the single reader and the suite taking ownership of `catalog_filters`
+- [x] **V8 green** — `node --check` clean on `app.js` and all touched inline scripts
+- [x] **V9 green** — Playwright **147 passed, 0 failed, exit 0, 20.8m** against deployed S4 bytes, test count present in the log
+- [x] **V12 green** — `getReservedPublishers` ×0 and `MIN_RESERVED` non-comment ×0 in the bytes staging serves
+- [x] **Suite ownership verified by independent read**, not the teardown's own log line: `globalSetup` captured 1,439 bytes, `globalTeardown` restored 1,439 bytes, and a fresh service-role read confirms the founding tenant's real config (72 exclusions) is back rather than the suite's permissive one
+- [ ] ⚠️ **V2, V3, V4, V4a, V5, V6a, V7, V10 ALL STILL OPEN — the new behaviour is barely verified.** 147 green proves *nothing else broke*; it does not show the filters work, because **no committed spec asserts any of this** (§ Smoke Test Suite: "a green suite says the assertions hold, not that the feature is right"). This is the largest gap in the plan right now
+- [ ] V10's spec is the way to close most of them at once: V3 (no config → everything), V4a (rename → reappears), V5 (reserved title stays visible), V6a (pages stay full), V7 (malformed JSON fails open)
 - [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
       S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
       window already carries F146/F147's first live exercise and should not also carry a paper change
