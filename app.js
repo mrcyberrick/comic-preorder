@@ -1166,8 +1166,17 @@ async function fetchAllRows(buildQuery, pageSize = 1000) {
 // Plan: docs/admin-settings-catalog-visibility.md. settings.html writes the
 // config; this reads it.
 //
-// ⚠️ FAILS OPEN, ALWAYS. Missing row, unreadable row, malformed JSON, or a
-// config that would hide every title all resolve to SHOW EVERYTHING.
+// ⚠️ FAILS OPEN — and "open" means THE DEFAULTS, not literally everything.
+// Corrected 2026-09-24 after a verification run measured the difference: a
+// missing row, an unreadable row and malformed JSON all fall back to
+// defaults(), which are permissive on every dimension EXCEPT `hidePastFoc`
+// (true, so the print's existing FOC rule survives — see defaults() below).
+// So a corrupt config shows the same catalog an unconfigured tenant sees, not
+// the full unfiltered month. That is the honest contract, and this comment
+// claimed "SHOW EVERYTHING" until a test asserted it and failed.
+//
+// A config that would hide EVERY row is separately ignored — see apply().
+//
 // app_settings.value is untyped text with no CHECK constraint, and an empty
 // catalog is a broken store while an over-long print is only paper. This is the
 // deliberate inverse of Tier, which fails closed because *free* is its safe
