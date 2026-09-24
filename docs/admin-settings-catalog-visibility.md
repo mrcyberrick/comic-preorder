@@ -2,16 +2,25 @@
 
 **STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**
 
-**Evidence:** Playwright **147/0** (regression) plus `playwright/s4-visibility-verify.mjs` **7/7**
-(the behaviour itself — V3, V5, V6a, V7 and the zero-visibility guard, negative-controlled, measured
-against deployed bytes 2026-09-24).
+**Evidence:** Playwright **147/0** (regression, spec 24 skipped) plus
+`playwright/s4-visibility-verify.mjs` **9/9** — the behaviour itself, negative-controlled, measured
+against deployed bytes 2026-09-24, with the check count asserted so a skipped check cannot read as a
+pass.
 
-⚠️ **NOT READY FOR PRODUCTION, for two specific reasons.** (1) **V10 is open: no committed spec
-asserts any of this.** The 7/7 harness is local-only and untracked, so nothing in CI defends the
-feature — and the 147-test suite already proved it cannot catch a miss here, having stayed green
-while the entire default catalog path went unfiltered. (2) S4 is a **customer-visible** change (−109
-titles from the past-FOC default) and takes the print 33 → 45 pages, which should not land in the
-2026-09-25 October import window (§ 4 S4).
+⚠️ **NOT READY FOR PRODUCTION, for two specific reasons.**
+**(1) V10 is written but NOT LANDING.** `playwright/tests/24-catalog-visibility.spec.ts` is
+`describe.skip`ped: its results were inconsistent between runs with no code change, and the failures
+sit in the harness's page interaction rather than in any assertion about filtering (§ 9). So the only
+thing defending this behaviour is a `.mjs` harness that has to be run by hand. The 147-test suite
+already proved it cannot catch a miss here, having stayed green while the entire default catalog path
+went unfiltered.
+**(2) S4 is customer-visible** — −109 titles from the past-FOC default — and takes the print
+33 → 45 pages, which should not land in the 2026-09-25 October import window (§ 4 S4).
+
+*(An earlier version of this block said "no **committed** spec asserts any of this" and "nothing in
+CI defends the feature". Both were confused: the Playwright suite is **gitignored by design** and
+there is no CI. Nothing here can be committed or CI-defended; the real limit is that it lives on one
+machine and runs when someone runs it.)*
 
 **Q1–Q5 ANSWERED 2026-09-23 (Rick)** — see § 7. **The shaping decision is Q4: DELETE the ≥7 publisher
 bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the
