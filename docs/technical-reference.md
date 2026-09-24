@@ -6359,7 +6359,50 @@ reasoning — only the disposition changed, not the diagnosis.
   customers), **F145** (per-tenant hostname provisioning is likewise recorded nowhere), and the
   2026-08-24 print-consolidation session's self-reinforcement note, distinguished above.
 
-Next free finding ID: **F161**.
+#### F161 — production's My List scores 78 Lighthouse Performance where staging scores 98, on identical code
+
+- **Status:** **filed 2026-09-24, OPEN — not started.** Production only. `mylist.html`, no code change
+  involved. **Filed not fixed, Rick's explicit call** — it wants its own measurement session against
+  a large account rather than being bolted onto the admin-settings work that surfaced it.
+- **Measured, three runs each, Rick 2026-09-24:**
+
+  | | `mylist.html` |
+  |---|---|
+  | staging | **98 / 97 / 98** |
+  | production | **78 / 78 / 77** |
+
+  Consistent to a point across three runs on both sides, so this is a reading rather than lab noise.
+  **Same code on both environments** — `mylist.html` was untouched by the settings work apart from a
+  one-line nav `<li>`, and it does not load `CatalogFilters` at all.
+- **Found as a CONTROL, not by looking for it.** Rick compared Lighthouse on the catalog after S4
+  (staging 88, production 95) and asked whether that was a fair comparison. `mylist.html` was chosen
+  as a page the new work had not touched, to test whether staging simply trails production. It does
+  not: **on My List the direction reverses by 20 points.** That settled the catalog question — the
+  environments are not comparable in one direction, so the catalog gap is not an S4 regression — and
+  turned up this instead, which is a worse number than the one being investigated.
+- **Leading hypothesis, NOT confirmed: the account's data volume.** `mylist.html` renders the
+  customer's own reservations, and **F140 recorded the Book Stop admin account at 1,345 preorders**
+  while staging's accounts hold a handful. Same code, roughly two orders of magnitude more rows.
+- **⚠️ Probably NOT an unbounded read, and that matters for whoever picks this up.** The obvious guess
+  is the F82/F113/F139/F140/F156 pagination shape, but **F140 already paginated `mylist.html`'s
+  queries** (`:1876` carries the `range()` loop) — so a silently truncated read would show as
+  *missing* data, not slow rendering. Render and DOM cost for ~1,345 rows is the more likely story.
+  Worth eliminating the read path first anyway, since it is cheap to check.
+- **⚠️ F141 hit the mirror image of this and it is the reason to be careful.** Its first `mylist.html`
+  CLS measurement was **invalidated** because it had measured *"a brand-new user's empty-list
+  discovery grid, not a customer's pull list"* — the lightest possible account. This is the heaviest
+  real one. **Measure against a representative account, and say which one**, or the next reading will
+  be as wrong as that one was.
+- **Next step, in order:** (1) identify WHICH metric is down — the score is TBT 30% / LCP 25% /
+  CLS 25% / FCP 10% / SI 10%, and a 20-point gap is one or two metrics slipping a band, not a broad
+  regression; the 2026-08-24 sweep's own lesson is that closing two entire diagnostics moved the
+  score barely at all, because they were unscored. (2) Confirm the account size correlation by
+  measuring a small production account against Rick's. (3) Only then look for a fix.
+- **Related:** **F141** (the CLS work on this page, and its invalidated measurement), **F140** /
+  **F139** (the reserve-history growth that produced the 1,345 figure), **F90** (the 90-day
+  `usage_events` purge — the only place this project has deliberately bounded growth).
+
+Next free finding ID: **F162**.
 
 ---
 
