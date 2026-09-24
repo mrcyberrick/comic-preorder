@@ -513,6 +513,26 @@
         || c.hideZeroPrice === true;
   }
 
+  // A deliberately quiet note that a tenant-wide filter is in force, appended
+  // to the existing muted results line. Rick's brief was "very subtle", so:
+  // no colour, no icon, no border, no extra row — it inherits #results-count's
+  // own muted styling and reads as part of the same sentence.
+  //
+  // Accent was specifically avoided. The only badge that ever sat on the admin
+  // tab strip was an amber pending count, and PR #153 retired it precisely
+  // because a coloured marker reads as "act on me"; this is a statement of
+  // fact, not a call to action.
+  //
+  // NO COUNT in the text, on purpose. The number of hidden titles differs per
+  // view (each of the four paths narrows differently), so any single figure
+  // here would be wrong somewhere. Exact numbers live on the settings page's
+  // impact bar, which is where someone tuning the filters is already looking.
+  // This only has to answer "is a filter on?" — the question that cost three
+  // rounds of "it doesn't seem to do anything".
+  function visibilityNote() {
+    return visibilityActive() ? ' · filtered by store settings' : '';
+  }
+
   // The LIGHT id pass behind the default path's two-step. Six small columns for
   // the month, ordered exactly as Catalog.fetch() orders — so slicing this list
   // gives the same page the unfiltered query would have — then filtered through
@@ -822,7 +842,7 @@
       // Build a short label like "April 2026" for the count line
       const now = new Date();
       const focMonthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      countEl.textContent = `Showing ${displayed.length} of ${filteredTotal} items with FOC in ${focMonthLabel}`;
+      countEl.textContent = `Showing ${displayed.length} of ${filteredTotal} items with FOC in ${focMonthLabel}` + visibilityNote();
 
       grid.innerHTML = displayed.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
       renderPagination(filteredTotal, page);
@@ -900,7 +920,7 @@
 
       const label = hasPersonal ? 'recommended' : 'popular';
       countEl.textContent = `Showing ${Math.min(pageIds.length, filteredTotal - pageFrom)} of ${filteredTotal} ${label} items` +
-        (hideVariants ? ' (standard covers)' : '');
+        (hideVariants ? ' (standard covers)' : '') + visibilityNote();
 
       grid.innerHTML = orderedItems.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
       renderPagination(filteredTotal, page);
@@ -985,7 +1005,7 @@
 
       document.getElementById('stat-total').textContent = total;
 
-      countEl.textContent = `Showing ${Math.min(displayed.length, filteredTotal)} of ${filteredTotal} ${reserveFilter === 'reserved' ? 'reserved' : 'unreserved'} items`;
+      countEl.textContent = `Showing ${Math.min(displayed.length, filteredTotal)} of ${filteredTotal} ${reserveFilter === 'reserved' ? 'reserved' : 'unreserved'} items` + visibilityNote();
 
       if (!displayed.length) {
         grid.innerHTML = `
@@ -1084,7 +1104,7 @@
       document.getElementById('stat-prh').textContent   = prhCount.count  ?? 0;
     }
 
-    countEl.textContent = `Showing ${items.length} of ${total} items`;
+    countEl.textContent = `Showing ${items.length} of ${total} items` + visibilityNote();
 
     if (!items.length) {
       grid.innerHTML = `
