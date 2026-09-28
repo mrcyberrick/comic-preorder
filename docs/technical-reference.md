@@ -1541,10 +1541,12 @@ a year of accumulating orders and nobody had checked. `app.js`'s
 `getOrderedCodes()` called this RPC with no pagination, so it silently
 inherited PostgREST's default max-rows cap (1000) the moment the tenant's
 distinct `(distributor, order_code)` count passed it — measured on production
-at 1,895. Fixed by routing the call through `fetchAllRows()`. A companion
-migration (`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, not yet
-run on either environment) adds `ORDER BY distributor, order_code` to this
-function's body for deterministic pagination across separate page requests.
+at 1,895. Fixed by routing the call through `fetchAllRows()`, **promoted to
+production 2026-09-28 (PR #158)**. A companion migration
+(`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, **applied on
+staging, still pending on production**) adds `ORDER BY distributor, order_code`
+to this function's body for deterministic pagination across separate page
+requests.
 See § 13 F162 for the full writeup, including a real trap worth reading before
 touching pagination on any RPC in this project: `.range()` on this app's
 vendored supabase-js is query-string `offset`/`limit`, and this project's
@@ -6418,8 +6420,8 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F162 — a customer's My List can show a genuinely-ordered title as NOT ordered — `get_ordered_codes()` is the sixth unbounded-query instance of the F82/F113/F139/F140/F156 pagination cap, in a code path none of those sessions touched
 
-- **Status:** **filed AND fix written 2026-09-27, GREEN on staging (pending Rick's SQL step) — the
-  companion SQL has NOT yet run on either environment.** Found from a real Rick screenshot, not an
+- **Status:** **RESOLVED, both environments, 2026-09-28 (PR #158, merge `9c9629c`) — one non-blocking
+  residual open (companion SQL applied on staging only).** Found from a real Rick screenshot, not an
   audit: DICK TRACY #20 CVR B LEE WEEKS VAR (Lunar `0626MA0893`) showed **"✓ Ordered (3)"** on
   admin.html's Order Builder but rendered with **no "Order placed" badge** on a customer's My List
   Upcoming Arrivals card, despite genuinely being on order.
@@ -6500,9 +6502,23 @@ reasoning — only the disposition changed, not the diagnosis.
   `GROUP BY distributor, order_code ORDER BY distributor, order_code;`, and the grants query confirms
   `postgres`/`authenticated`/`service_role` only — no `anon`, no `PUBLIC`, unchanged from before.
   **Operator: Rick, Supabase SQL Editor — production is the remaining step.**
-- **Not yet done:** production still runs the un-paginated `getOrderedCodes()` and the pre-`ORDER BY`
-  function body today — this finding is filed with the fix staged and staging's companion SQL applied,
-  neither promoted/applied to production yet.
+- **Promoted to production 2026-09-28, NOT as a cherry-pick.** PR #158 (merge `9c9629c`), Rick's
+  explicit request, merged the same day it was opened. Staging was **110 commits ahead** of `main` at
+  the time, carrying F72/F155/F156/`register-customer`/`register-tenant` and much more — none of it
+  went. `app.js` carries the `merge=ours` driver that has silently dropped this exact file on prior
+  cherry-pick promotions (documented several times elsewhere in this file), so the fix was **applied
+  directly to `main`'s own copy** rather than cherry-picked — both call sites were confirmed
+  byte-identical to staging's pre-fix code before editing, and `fetchAllRows()` was already live on
+  production since F140, so nothing new was introduced. `app.js` only, +18/−3, PR file list re-checked
+  on GitHub itself. **Verified post-deploy against the served bytes**:
+  `fetchAllRows(() => db.rpc('get_ordered_codes')` ×2 (both call sites), a bare unwrapped
+  `db.rpc('get_ordered_codes')` ×0 beyond those two. **Rick also smoke-tested live on production**
+  (reserve + cancel), independent of the byte check.
+- **The one remaining residual: the companion SQL is applied on staging only.**
+  `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` has not yet run on production. This is a
+  hardening step, not a fix for anything currently broken — the app.js pagination fix is proven correct
+  on an unordered `GROUP BY` by the staging reproduction above — so it is non-blocking and can run on
+  Rick's own schedule.
 - **Related:** **F82**, **F113**, **F139**, **F140**, **F156** (the same unbounded-query-hits-
   PostgREST's-1000-row-cap defect, five prior instances); **F108**/**F102** (the over-order guard this
   bug undermines from the opposite direction); **F143**/**F144** (the ordering-side surfaces whose
