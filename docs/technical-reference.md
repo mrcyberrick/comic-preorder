@@ -1536,6 +1536,20 @@ correct, not a fault — the editor runs as `postgres` with no `auth.uid()`,
 so `current_tenant_id()` is NULL. Verify with a real authenticated session
 against PostgREST instead.
 
+⚠️ **F162 (2026-09-27):** the caller side of this contract was wrong for over
+a year of accumulating orders and nobody had checked. `app.js`'s
+`getOrderedCodes()` called this RPC with no pagination, so it silently
+inherited PostgREST's default max-rows cap (1000) the moment the tenant's
+distinct `(distributor, order_code)` count passed it — measured on production
+at 1,895. Fixed by routing the call through `fetchAllRows()`. A companion
+migration (`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, not yet
+run on either environment) adds `ORDER BY distributor, order_code` to this
+function's body for deterministic pagination across separate page requests.
+See § 13 F162 for the full writeup, including a real trap worth reading before
+touching pagination on any RPC in this project: `.range()` on this app's
+vendored supabase-js is query-string `offset`/`limit`, and this project's
+PostgREST does **not** honour an HTTP `Range` header on an RPC POST at all.
+
 ### 6.9 Tenant resolution
 
 #### `resolve_tenant_by_slug(p_slug text) → TABLE(id uuid, slug text, display_name text, branding jsonb)`
@@ -6402,7 +6416,87 @@ reasoning — only the disposition changed, not the diagnosis.
   **F139** (the reserve-history growth that produced the 1,345 figure), **F90** (the 90-day
   `usage_events` purge — the only place this project has deliberately bounded growth).
 
-Next free finding ID: **F162**.
+#### F162 — a customer's My List can show a genuinely-ordered title as NOT ordered — `get_ordered_codes()` is the sixth unbounded-query instance of the F82/F113/F139/F140/F156 pagination cap, in a code path none of those sessions touched
+
+- **Status:** **filed AND fix written 2026-09-27, GREEN on staging (pending Rick's SQL step) — the
+  companion SQL has NOT yet run on either environment.** Found from a real Rick screenshot, not an
+  audit: DICK TRACY #20 CVR B LEE WEEKS VAR (Lunar `0626MA0893`) showed **"✓ Ordered (3)"** on
+  admin.html's Order Builder but rendered with **no "Order placed" badge** on a customer's My List
+  Upcoming Arrivals card, despite genuinely being on order.
+- **Root cause.** `get_ordered_codes()` (§ 6.8) is a SECURITY DEFINER RPC returning one row per
+  `(distributor, order_code)` pair the tenant has ever submitted, with no `LIMIT`. `app.js`'s
+  `getOrderedCodes()` called it with **zero pagination** — a single `db.rpc('get_ordered_codes')`,
+  no `.range()` — so it inherited PostgREST's default max-rows cap exactly the way a plain
+  `.select()` does. **Measured live on production 2026-09-27:** `order_submissions` holds **2,017**
+  rows / **1,895 distinct** `(distributor, order_code)` pairs; an unranged request against the same
+  table independently confirmed the cap is **exactly 1000** (`HTTP 206`, `content-range: 0-999/2017`
+  from a body that actually returned 1000 rows). `0626MA0893`'s net-3 order is real and correctly in
+  the ledger — confirmed by reading `catalog`/`preorders`/`order_submissions` directly, all three
+  agreeing — it simply fell outside whichever ~1000 of the 1,895 codes the capped RPC call happened
+  to return that load. **`admin.html`'s own ledger read is unaffected** — `fetchPaged('order_submissions', …)`
+  (`admin.html:959`) has been paginated since the table was built, which is exactly why admin and the
+  customer page disagreed: one surface paginates, the other never did.
+- **Consequence is not merely cosmetic.** `mylist.html`'s `isOrdered = isFulfilled || isCodeOrdered(c)`
+  drives `isLocked` (`:1149`), which disables the quantity stepper AND swaps the Remove/Cancel button
+  for a locked chip. A code the truncated call fails to recognize as ordered leaves quantity controls
+  and an active **Remove** button live on a reservation the store has already submitted to the
+  distributor — a customer can self-cancel stock the shop has already ordered and, in the near term,
+  paid for. This is the same class of harm F108/F102's over-order guard exists to prevent, from the
+  opposite direction.
+- **This is the sixth instance of the F82/F113/F139/F140/F156 unbounded-query defect class**, and the
+  first to reach a code path none of those five sessions' audits touched — `get_ordered_codes()` is
+  called only from `mylist.html`, which F140's own audit swept for `.from(...)` call sites but not
+  for un-paginated **RPC** calls.
+- **Fix, `app.js` `getOrderedCodes()` (mylist.html's only caller):** routed through the shared
+  `fetchAllRows()` helper, same convention as every other paginated query in this file —
+  `fetchAllRows(() => db.rpc('get_ordered_codes'))` in place of the bare `db.rpc(...)` call.
+- **⚠️ A real trap found while verifying the fix, worth carrying forward: `.range()` on this vendored
+  supabase-js build is query-string `offset`/`limit`, NOT HTTP `Range` headers, and this project's
+  PostgREST does not honour a `Range` header on an RPC POST at all.** A first verification attempt
+  built a raw-fetch harness using `Range: 0-999` / `Range-Unit: items` (the textbook PostgREST
+  pagination header) against the live RPC and it **hung indefinitely** — every "page" silently
+  returned the identical first 1000 rows regardless of the requested range, so the loop's
+  short-page exit condition never fired. Read directly out of `vendor/supabase.min.js`:
+  `range(e,t,...)` sets `this.url.searchParams.set('offset', e)` / `.set('limit', t-e+1)` — query
+  string, never a header. Confirmed live against the real RPC: query-string `?offset=1000&limit=1000`
+  correctly returns the second page (`content-range: 1000-1912/1913`, first row genuinely different
+  from page one); the header form returns the identical first page every time regardless of the
+  requested range. **Had this not been caught before shipping, the "fix" would have hung every
+  customer's My List page load once their tenant crossed 1000 ordered codes — worse than the bug it
+  was meant to close.** Anyone touching `.range()`/pagination against an RPC in this project should
+  verify against the query-string form, not assume the header form applies.
+- **Verified live on staging, 2026-09-27** (`playwright/f162-verify.mjs`, local-only, same convention
+  as `f149-maintenance-verify.mjs`): seeded 1,050 throwaway `order_submissions` rows (prefixed
+  `ZZTEST162-`, never colliding with a real code) against the founding tenant, pushing it to **1,913**
+  true distinct pairs. **V1 reproduced the bug live**: the unpatched single-call shape returned
+  exactly **1,000** rows. **V2 confirmed the fix**: the paginated shape (2 pages, matching
+  `fetchAllRows`'s own `.range()` logic) recovered all **1,913**. **V3**: a specific late-sorting
+  throwaway code was absent from the unpatched call and present after the fix — the same shape as the
+  real DICK TRACY #20 symptom, reproduced and closed on command rather than merely reasoned about.
+  Teardown confirmed by a fresh read: 0 `ZZTEST162-*` rows and 0 throwaway profiles/auth users remain.
+  `node --check` clean on `app.js`.
+- **Companion SQL, NOT YET RUN on either environment:**
+  `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` adds `ORDER BY distributor, order_code` to
+  `get_ordered_codes()`'s body (return type unchanged, `CREATE OR REPLACE` is safe). This is a
+  robustness companion, not the load-bearing fix — the app.js pagination fix alone recovers the
+  missing codes, verified above, on an unordered `GROUP BY`. The gap it closes: two separate
+  paginated HTTP requests are two separate query executions, and without an explicit `ORDER BY` a
+  `GROUP BY`'s row order is not a standards-guaranteed repeatable contract between them — in practice
+  Postgres will normally replay the same plan for an unchanged table, but a concurrent write (an
+  admin recording a new order, or the monthly import) landing between a customer's two page requests
+  could in principle skip or duplicate a row at the page boundary. `(distributor, order_code)` is
+  already the function's `GROUP BY` key, so no extra tiebreaker column is needed. **Operator: Rick,
+  Supabase SQL Editor, staging first.**
+- **Not yet done:** production still runs the un-paginated `getOrderedCodes()` today — this finding
+  is filed with the fix staged, not yet promoted. The companion SQL has not run on either
+  environment (harmless on its own; it only matters once genuinely concurrent writes coincide with a
+  customer's paginated read).
+- **Related:** **F82**, **F113**, **F139**, **F140**, **F156** (the same unbounded-query-hits-
+  PostgREST's-1000-row-cap defect, five prior instances); **F108**/**F102** (the over-order guard this
+  bug undermines from the opposite direction); **F143**/**F144** (the ordering-side surfaces whose
+  correctness this same ledger read underpins).
+
+Next free finding ID: **F163**.
 
 ---
 
