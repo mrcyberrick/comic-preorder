@@ -1223,7 +1223,12 @@ const Preorders = {
     if (!isWithdrawn) {
       const orderCode = exportCode(c, c.distributor);
       if (orderCode) {
-        const { data: ordered } = await db.rpc('get_ordered_codes');
+        // F162 — same truncation risk as getOrderedCodes() above, and this
+        // is the call site that actually blocks the delete, not just a
+        // display label: an un-paginated call here means a genuinely-ordered
+        // code the response happened to drop lets the cancel through for
+        // real. Paginated via fetchAllRows(), same fix, same reasoning.
+        const { data: ordered } = await fetchAllRows(() => db.rpc('get_ordered_codes'));
         const alreadyOrdered = (ordered || []).some(o =>
           o.distributor === c.distributor && o.order_code === orderCode && o.order_state === 'ordered');
         if (alreadyOrdered) {
@@ -1858,9 +1863,19 @@ function confirmSupplierRejection(title, netQty) {
 // Every (distributor, order_code) pair the store has ever submitted, for the
 // caller's own tenant — via a SECURITY DEFINER RPC, since order_submissions
 // itself is admin-only under RLS (docs/sql/get-ordered-codes-rpc.sql).
+//
+// F162 — paginated via the shared fetchAllRows() helper, same as every other
+// unbounded query this codebase has already been bitten by (F82/F113/F139/
+// F140/F156). A single un-ranged call silently caps at PostgREST's default
+// 1000-row response limit, which applies to an RPC returning a table exactly
+// as it does to a plain select. Measured live on production 2026-09-27: 1,895
+// distinct (distributor, order_code) pairs against a 1000-row cap, so a
+// customer's My List could read "Order placed" as missing for any code the
+// truncated call happened to drop -- while admin.html's own ledger read
+// (fetchPaged()) was never affected, which is why the two surfaces disagreed.
 async function getOrderedCodes() {
-  const { data, error } = await db.rpc('get_ordered_codes');
-  if (error) { console.error('getOrderedCodes failed:', error.message); return []; }
+  const { data, error } = await fetchAllRows(() => db.rpc('get_ordered_codes'));
+  if (error) console.error('getOrderedCodes failed:', error.message);
   return data || [];
 }
 
