@@ -1,6 +1,11 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-09-27 | prod=PENDING
 --         F162. This line is the applied-state record -- update it the
---         moment this runs on each environment (F105).
+--         moment this runs on each environment (F105). Staging verified via
+--         pg_get_functiondef: body confirmed ending "GROUP BY distributor,
+--         order_code ORDER BY distributor, order_code;" -- the second run,
+--         after the BEGIN/COMMIT fix below; the first run's verification
+--         query had a syntax error that risked rolling back the real change
+--         along with it (see the comment above BEGIN).
 -- ============================================================================
 -- get_ordered_codes() -- add a deterministic ORDER BY (F162)
 -- Prepared 2026-09-27. Run: STAGING first, verify, then PRODUCTION.

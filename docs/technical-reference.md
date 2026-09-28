@@ -6475,7 +6475,7 @@ reasoning — only the disposition changed, not the diagnosis.
   real DICK TRACY #20 symptom, reproduced and closed on command rather than merely reasoned about.
   Teardown confirmed by a fresh read: 0 `ZZTEST162-*` rows and 0 throwaway profiles/auth users remain.
   `node --check` clean on `app.js`.
-- **Companion SQL, NOT YET RUN on either environment:**
+- **Companion SQL — APPLIED on staging 2026-09-27, PENDING on production:**
   `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` adds `ORDER BY distributor, order_code` to
   `get_ordered_codes()`'s body (return type unchanged, `CREATE OR REPLACE` is safe). This is a
   robustness companion, not the load-bearing fix — the app.js pagination fix alone recovers the
@@ -6485,12 +6485,24 @@ reasoning — only the disposition changed, not the diagnosis.
   Postgres will normally replay the same plan for an unchanged table, but a concurrent write (an
   admin recording a new order, or the monthly import) landing between a customer's two page requests
   could in principle skip or duplicate a row at the page boundary. `(distributor, order_code)` is
-  already the function's `GROUP BY` key, so no extra tiebreaker column is needed. **Operator: Rick,
-  Supabase SQL Editor, staging first.**
-- **Not yet done:** production still runs the un-paginated `getOrderedCodes()` today — this finding
-  is filed with the fix staged, not yet promoted. The companion SQL has not run on either
-  environment (harmless on its own; it only matters once genuinely concurrent writes coincide with a
-  customer's paginated read).
+  already the function's `GROUP BY` key, so no extra tiebreaker column is needed.
+- **⚠️ The file's FIRST run on staging tripped two bugs of its own, and the second is the more
+  serious one — recorded rather than quietly fixed, since it is a reusable trap.** (1) Its
+  verification query used `'public.get_ordered_codes'::regprocedure`, invalid Postgres syntax for a
+  zero-arg function (`22P02: expected a left parenthesis`) — needs the empty parens,
+  `'public.get_ordered_codes()'::regprocedure`. (2) **More importantly, the file had no explicit
+  transaction**, and the Supabase SQL Editor sends a pasted multi-statement block as one implicit
+  transaction — so that syntax error risked rolling back the `CREATE OR REPLACE FUNCTION` above it
+  too, silently discarding the real fix while looking like "just a broken check" failed. Corrected by
+  wrapping the actual DDL in `BEGIN; … COMMIT;` before any verification query runs, matching this
+  project's own established convention (`order-submissions-signed-quantity.sql` already does this).
+  **Re-run and independently verified clean on staging**: `pg_get_functiondef` confirms the body ends
+  `GROUP BY distributor, order_code ORDER BY distributor, order_code;`, and the grants query confirms
+  `postgres`/`authenticated`/`service_role` only — no `anon`, no `PUBLIC`, unchanged from before.
+  **Operator: Rick, Supabase SQL Editor — production is the remaining step.**
+- **Not yet done:** production still runs the un-paginated `getOrderedCodes()` and the pre-`ORDER BY`
+  function body today — this finding is filed with the fix staged and staging's companion SQL applied,
+  neither promoted/applied to production yet.
 - **Related:** **F82**, **F113**, **F139**, **F140**, **F156** (the same unbounded-query-hits-
   PostgREST's-1000-row-cap defect, five prior instances); **F108**/**F102** (the over-order guard this
   bug undermines from the opposite direction); **F143**/**F144** (the ordering-side surfaces whose
