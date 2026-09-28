@@ -165,7 +165,9 @@ orphaned tenant deleted. The spec was then re-run to completion without incident
 touched). **Targeted `15-order-export-ledger.spec.ts`: 36/36 passed, 6.9 min** — including the two
 tests that exercise exactly this code (`"an ordered code shows Order placed and cannot be removed"`
 and `"V-B2 — a zero-only ledger code does NOT read Order placed and remains cancellable"`).
-**Full Playwright suite run as the final gate post-push.**
+**Full Playwright suite: 147 passed, 3 skipped (pre-existing spec 24 skips, unrelated), 0 failed,
+exit 0, 22.6 min** — run against the deployed staging bytes post-push, `globalTeardown` confirmed
+clean. Zero regressions from either fix.
 
 **Not yet done:** production still runs the un-paginated code today. The companion SQL
 (`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, adds `ORDER BY` for pagination
