@@ -44,6 +44,17 @@
 -- existing grants survive it.
 -- ============================================================================
 
+-- ⚠️ EXPLICIT TRANSACTION, DELIBERATELY. The Supabase SQL Editor sends a
+-- pasted multi-statement block as one simple-query message, which Postgres
+-- runs as a single implicit transaction UNLESS an explicit COMMIT ends it
+-- first — so a syntax error in a LATER verification SELECT would otherwise
+-- roll back the CREATE OR REPLACE above it too, silently discarding the real
+-- fix while looking like "just a broken check." (This is exactly what
+-- happened on the first run of this file, 2026-09-27 — see the STATUS
+-- line's history below.) COMMIT ends the transaction before any
+-- verification query runs, so nothing after this point can undo the change.
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.get_ordered_codes()
 RETURNS TABLE(distributor text, order_code text, order_state text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
@@ -61,22 +72,31 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_ordered_codes() TO authenticated;
 REVOKE ALL ON FUNCTION public.get_ordered_codes() FROM PUBLIC, anon;
 
+COMMIT;
+
 -- ----------------------------------------------------------------------------
--- Post-DDL verification.
+-- Post-DDL verification. Runs AFTER the COMMIT above, so nothing here can
+-- roll back the real change even if a query below is malformed.
 -- ----------------------------------------------------------------------------
 
--- 1. Grants unchanged.
+-- 1. Grants unchanged. Expected rows: postgres, authenticated, service_role
+--    (the owner and the platform's own service role always carry EXECUTE on
+--    a function they didn't explicitly have it revoked from) -- the actual
+--    thing this checks is that `anon` and `PUBLIC` are ABSENT, which they
+--    are. Confirmed live 2026-09-27: exactly these three grantees, no anon,
+--    no PUBLIC -- unchanged from before this file ran.
 SELECT grantee, privilege_type
 FROM information_schema.routine_privileges
 WHERE routine_name = 'get_ordered_codes';
--- Expected: authenticated=EXECUTE only (no anon, no PUBLIC) -- unchanged from
--- before this file ran.
 
 -- 2. Shape unchanged (still three columns), and the function body now carries
 --    an ORDER BY -- eyeball pg_get_functiondef rather than trusting the
 --    editor's "success" message (F105's own lesson: a check that cannot fail
---    is not a check).
-SELECT pg_get_functiondef('public.get_ordered_codes'::regprocedure);
+--    is not a check). CORRECTED 2026-09-27: a regprocedure text cast needs
+--    the argument list even for a zero-arg function -- `'name'::regprocedure`
+--    is invalid syntax ("expected a left parenthesis"); `'name()'::regprocedure`
+--    is what Postgres actually parses. Caught on the first run of this file.
+SELECT pg_get_functiondef('public.get_ordered_codes()'::regprocedure);
 -- Expected: body ends "GROUP BY distributor, order_code ORDER BY
 -- distributor, order_code;"
 
