@@ -99,8 +99,85 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
-**Last completed work: PROMOTED TO PRODUCTION — Order Follow-Up's resolve control now clears an
-UNFULFILLED Never Arrived row, 2026-09-21 (PR #154, merge `df483a3`; staging `6dcbc01`, pick
+**Last completed work: F162 filed AND fixed on STAGING, 2026-09-27 (`e4cab8d` doc, `fdad392` +
+`4a6b7a1` code) — NOT promoted to production, companion SQL NOT yet run on either environment.**
+Rick's own screenshot, not an audit: DICK TRACY #20 CVR B LEE WEEKS VAR (Lunar `0626MA0893`) read
+**"✓ Ordered (3)"** on admin's Order Builder but carried **no "Order placed" badge** on a customer's
+My List Upcoming Arrivals card, despite a real, correctly-recorded net-3 order.
+
+**Root cause: the sixth instance of the F82/F113/F139/F140/F156 unbounded-query defect, in a code
+path none of those five audits touched.** `app.js`'s `getOrderedCodes()` called the
+`get_ordered_codes()` RPC (§ 6.8) with **zero pagination**. Measured live on production:
+`order_submissions` holds **2,017** rows / **1,895 distinct** `(distributor, order_code)` pairs, and
+an unranged request against the same table independently confirmed PostgREST's cap here is **exactly
+1000** (`HTTP 206`, body of 1000 against `content-range: 0-999/2017`). `0626MA0893`'s order is
+genuinely correct in the ledger — it simply fell outside whichever ~1000 of the 1,895 codes the
+truncated call happened to return. `admin.html`'s own ledger read (`fetchPaged()`, `:959`) has been
+paginated since the table was built, which is exactly why the two surfaces disagreed.
+
+**Not merely cosmetic — found and fixed a SECOND, independent instance of the same call while writing
+this up.** `mylist.html`'s `isOrdered` drives `isLocked`, which disables the quantity stepper and
+swaps the Remove/Cancel button for a locked chip (`:1149`) — so the truncation could leave an active
+**Remove** button on a reservation the store had already submitted to the distributor. Worse:
+`Preorders.cancel()` has its own **independent, un-paginated** `db.rpc('get_ordered_codes')` call
+(`app.js:1455`, pre-fix) that is the actual guard deciding whether to let the delete through — same
+truncation risk, but here it is the guard itself, not just a display label. A tenant past 1,000
+distinct ordered codes could have this guard silently miss a genuinely-ordered code and let a
+customer **actually cancel** stock the shop already ordered. Both call sites fixed identically.
+
+**Fix: both call sites routed through the existing `fetchAllRows()` helper** — `app.js`'s own
+generalized pagination convention (F140), same as every other paginated query in the file. Two lines
+changed per call site.
+
+**⚠️ A real trap caught before shipping, worth carrying forward for any future RPC pagination in this
+project: `.range()` on this vendored `supabase-js` is query-string `offset`/`limit`, NOT HTTP `Range`
+headers, and this project's PostgREST does not honour a `Range` header on an RPC POST at all.** A
+first verification attempt built a raw-fetch harness using the textbook `Range: 0-999` /
+`Range-Unit: items` pagination headers against the live RPC, and it **hung indefinitely** — every
+"page" silently returned the identical first 1000 rows regardless of the requested range, so the
+loop's short-page exit condition never fired. Read directly out of `vendor/supabase.min.js`:
+`range(e,t,...)` sets `this.url.searchParams.set('offset', e)` / `.set('limit', t-e+1)` — confirmed
+live against the real RPC to correctly return a genuinely different second page. **Had this not been
+caught first, the "fix" would have hung every customer's My List page load the moment their tenant
+crossed 1000 ordered codes — worse than the bug it was meant to close.**
+
+**Verified live on staging by reproducing the exact truncation and confirming the fix closes it**
+(`playwright/f162-verify.mjs`, local-only, `f149-maintenance-verify.mjs` convention): seeded 1,050
+throwaway `order_submissions` rows (prefixed `ZZTEST162-`, never colliding with a real code) against
+the founding tenant, pushing it to **1,913** true distinct pairs. The unpatched single-call shape
+returned exactly **1,000**; the paginated shape recovered all **1,913** in 2 pages; a specific
+late-sorting throwaway code was absent before the fix and present after — the same shape as the real
+DICK TRACY #20 symptom, reproduced and closed on command. Teardown confirmed by a fresh read: 0
+`ZZTEST162-*` rows and 0 throwaway profiles/auth users remain.
+
+**⚠️ A process mistake made and corrected in the same session, recorded so it isn't repeated:** an
+early verification run of the targeted `15-order-export-ledger` spec was killed by hand after reading
+flat `tasklist` CPU time as "stuck" — it was not; Node buffers stdout when redirected to a file
+(the exact `run-smoke.ps1` trap this document already records under § Smoke Test Suite), and the kill
+happened at test 32 of 36, genuinely mid-progress. The interrupted run skipped Playwright's own
+`globalTeardown`, leaving the STAGING founding tenant's `catalog_filters` in its suite-neutralised
+state and a synthetic test tenant (`pw-4530b271`) undeleted. **Both recovered immediately and verified
+by fresh read**: `catalog_filters` restored to its exact original 167-byte value (captured from the
+interrupted run's own `.pw-catalog-filters.json` before it could be overwritten by a fresh run), the
+orphaned tenant deleted. The spec was then re-run to completion without incident.
+
+**Gates.** `node --check` clean on `app.js`. Unit suite **321/321** unchanged (no import-script code
+touched). **Targeted `15-order-export-ledger.spec.ts`: 36/36 passed, 6.9 min** — including the two
+tests that exercise exactly this code (`"an ordered code shows Order placed and cannot be removed"`
+and `"V-B2 — a zero-only ledger code does NOT read Order placed and remains cancellable"`).
+**Full Playwright suite run as the final gate post-push.**
+
+**Not yet done:** production still runs the un-paginated code today. The companion SQL
+(`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, adds `ORDER BY` for pagination
+determinism — a robustness companion, not the load-bearing fix, which is proven above on an unordered
+`GROUP BY`) has **not** been run on either environment; that is Rick's step, Supabase SQL Editor,
+staging first. Production promotion of the `app.js` fix needs Rick's explicit request, same as every
+other production promotion in this project — and given this is a live, currently-active
+customer-facing defect, it is worth prioritizing. **No finding ID left open to consume beyond F162
+itself — F163 is the next free finding ID.**
+
+**Prior work (2026-09-21): PROMOTED TO PRODUCTION — Order Follow-Up's resolve control now clears an
+UNFULFILLED Never Arrived row (PR #154, merge `df483a3`; staging `6dcbc01`, pick
 `a99da07`).** Rick's explicit request, merged the same day it was opened. A **cherry-pick, not a
 merge** — `staging` was **67 commits ahead**, carrying F72 S0/S1a/S3, F153, F154, F156,
 `register-customer`/`register-tenant` and 9 client files; **none of it went.** **`admin.html` only,
