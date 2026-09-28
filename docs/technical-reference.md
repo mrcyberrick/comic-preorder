@@ -1543,10 +1543,9 @@ inherited PostgREST's default max-rows cap (1000) the moment the tenant's
 distinct `(distributor, order_code)` count passed it — measured on production
 at 1,895. Fixed by routing the call through `fetchAllRows()`, **promoted to
 production 2026-09-28 (PR #158)**. A companion migration
-(`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, **applied on
-staging, still pending on production**) adds `ORDER BY distributor, order_code`
-to this function's body for deterministic pagination across separate page
-requests.
+(`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, **applied on BOTH
+environments**) adds `ORDER BY distributor, order_code` to this function's
+body for deterministic pagination across separate page requests.
 See § 13 F162 for the full writeup, including a real trap worth reading before
 touching pagination on any RPC in this project: `.range()` on this app's
 vendored supabase-js is query-string `offset`/`limit`, and this project's
@@ -6420,8 +6419,8 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F162 — a customer's My List can show a genuinely-ordered title as NOT ordered — `get_ordered_codes()` is the sixth unbounded-query instance of the F82/F113/F139/F140/F156 pagination cap, in a code path none of those sessions touched
 
-- **Status:** **RESOLVED, both environments, 2026-09-28 (PR #158, merge `9c9629c`) — one non-blocking
-  residual open (companion SQL applied on staging only).** Found from a real Rick screenshot, not an
+- **Status:** **FULLY RESOLVED, both environments, 2026-09-28 (PR #158, merge `9c9629c`; companion SQL
+  applied on staging 2026-09-27 and production 2026-09-28) — nothing left open.** Found from a real Rick screenshot, not an
   audit: DICK TRACY #20 CVR B LEE WEEKS VAR (Lunar `0626MA0893`) showed **"✓ Ordered (3)"** on
   admin.html's Order Builder but rendered with **no "Order placed" badge** on a customer's My List
   Upcoming Arrivals card, despite genuinely being on order.
@@ -6514,11 +6513,12 @@ reasoning — only the disposition changed, not the diagnosis.
   `fetchAllRows(() => db.rpc('get_ordered_codes')` ×2 (both call sites), a bare unwrapped
   `db.rpc('get_ordered_codes')` ×0 beyond those two. **Rick also smoke-tested live on production**
   (reserve + cancel), independent of the byte check.
-- **The one remaining residual: the companion SQL is applied on staging only.**
-  `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` has not yet run on production. This is a
-  hardening step, not a fix for anything currently broken — the app.js pagination fix is proven correct
-  on an unordered `GROUP BY` by the staging reproduction above — so it is non-blocking and can run on
-  Rick's own schedule.
+- **Companion SQL applied on production 2026-09-28, verified via `pg_get_functiondef` the same way as
+  staging.** Rick ran `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` on production; the
+  returned body confirmed ending `GROUP BY distributor, order_code ORDER BY distributor, order_code;`,
+  identical to staging's confirmed body. Since `GRANT`/`REVOKE` sit in the same `BEGIN`/`COMMIT` block
+  as the `CREATE OR REPLACE`, their being committed follows from the body having landed — no separate
+  grants re-check was needed this time. **Nothing left open on this finding.**
 - **Related:** **F82**, **F113**, **F139**, **F140**, **F156** (the same unbounded-query-hits-
   PostgREST's-1000-row-cap defect, five prior instances); **F108**/**F102** (the over-order guard this
   bug undermines from the opposite direction); **F143**/**F144** (the ordering-side surfaces whose
