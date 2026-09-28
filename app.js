@@ -1452,7 +1452,12 @@ const Preorders = {
     if (!isWithdrawn) {
       const orderCode = exportCode(c, c.distributor);
       if (orderCode) {
-        const { data: ordered } = await db.rpc('get_ordered_codes');
+        // F162 — same truncation risk as getOrderedCodes() above, and this
+        // is the call site that actually blocks the delete, not just a
+        // display label: an un-paginated call here means a genuinely-ordered
+        // code the response happened to drop lets the cancel through for
+        // real. Paginated via fetchAllRows(), same fix, same reasoning.
+        const { data: ordered } = await fetchAllRows(() => db.rpc('get_ordered_codes'));
         const alreadyOrdered = (ordered || []).some(o =>
           o.distributor === c.distributor && o.order_code === orderCode && o.order_state === 'ordered');
         if (alreadyOrdered) {
