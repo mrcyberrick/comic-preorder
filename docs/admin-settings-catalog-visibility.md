@@ -1,6 +1,6 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v2 APPLIED and VERIFIED on production 2026-09-29**: the definition check prints the F164 verdict, after a first run that did not land and was caught by that check; no client PR yet) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
+**STATUS:** IN PROGRESS — **SHIPPED TO PRODUCTION 2026-09-29 (PR #159, merge `5b661ff`); what remains is S2b (the `Admin ▾` dropdown) and the `isStandardCoverType()` migration, both deliberately deferred.** S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=2026-09-29 (PR #159, merge `5b661ff`; S1 RPC **v2 APPLIED and VERIFIED on production 2026-09-29**: the definition check prints the F164 verdict, after a first run that did not land and was caught by that check) · PR=#159 · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
 
 **Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). **That run was on staging's September data; staging was then moved to October and the 7 false marks were cleared (§ 5.2, last subsection), so the suite was run AGAIN on that state (12:36-12:59 local): 151 passed, 0 failed, 0 flaky, no retries, 23.2 min, teardown restored normally. Both runs are clean.** *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
 plus `playwright/s4-visibility-verify.mjs` **9/9** (2026-09-24). Gates run this session, all on staging
@@ -9,7 +9,7 @@ by F164), **V4** (production October: 2,038 rows / 46 pages with no config, 1,54
 bar's publishers hidden), **V10** (3 runs, 3/3, `--retries=0`, two negative controls) and **V4a**.
 Record: § 5.2.
 
-⚠️ **STILL NOT PRODUCTION-READY, but nothing that blocks it is a staging verification gap any more.**
+✅ **PROMOTED TO PRODUCTION 2026-09-29 (PR #159, merge `5b661ff`).** Verified from the served bytes on both hostnames (ten files byte-identical to `main`; `index.html` identical once Cloudflare's email-obfuscation rewrite is stripped), the write-smoke run (`usage_events` reserve 17:21:48Z / cancel 17:22:00Z, tenant `rjbookstop`), and the live Print Catalog at 50 pages / 100%. Full record: `CLAUDE.md` § Current Migration Phase. *(This block previously read "STILL NOT PRODUCTION-READY, but nothing that blocks it is a staging verification gap any more", followed by the list below of what stood between the feature and Session C. All of it is done; the list is kept as history.)*
 What stands between this feature and Session C (the production promotion):
 
 1. **The S1 RPC (v2, with the F164 predicate) is applied and verified on BOTH environments.** Staging,
@@ -1132,12 +1132,12 @@ What does scale, and how it is handled here:
 - [x] **v2 APPLIED on STAGING and V2 RE-RUN, 2026-09-29.** Definition check printed `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present`; `s4-v2-parity-verify.mjs` with `EXPECT_V2=1`: **11/11**, the snippet prints `V2 PASS - identical`, 61 keys at exact parity (the harness's own independent recount also had to be corrected to apply v2's rule: it disagreed with a correct v2 by exactly the two cross-tenant rows, 120 vs 118)
 - [x] **v2 APPLIED on PRODUCTION, 2026-09-29, and the STATUS line flipped** to `staging=APPLIED 2026-09-29 | prod=APPLIED 2026-09-29`, in tokens the `/promote-prod` regex can see. The first run did NOT land (`has_f164_predicate = false`); the re-run printed `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present` and the smoke named `rjbookstop` and `comicstore`
 - [ ] **Session C expectation to tell the shop:** with no exclusions saved, the printed catalog goes from about **35 to about 50 pages** on October data (§ 5.2). The customer catalog now loses only titles whose FOC has passed
-- [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
+- [x] ✅ **PROMOTED 2026-09-29 (PR #159, merge `5b661ff`).** Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
       S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
       window already carries F146/F147's first live exercise and should not also carry a paper change
       *(2026-09-29: the October import ran on production 2026-09-27 — clean, no false marks; the window is CLOSED and no longer holds S4. Note F146/F147 were not meaningfully exercised there; see CLAUDE.md § Current Migration Phase.)*
-- [ ] V11 green against production's served bytes
-- [ ] This doc's STATUS token updated; CLAUDE.md § Current Migration Phase advanced
+- [x] V11 green against production's served bytes (2026-09-29: both hostnames; ten files byte-identical to `main`, positive and negative markers, `config.js` prod ref x1 / staging ref x0)
+- [x] This doc's STATUS token updated; CLAUDE.md § Current Migration Phase advanced (2026-09-29)
 
 ---
 
