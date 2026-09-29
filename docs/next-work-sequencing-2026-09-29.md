@@ -1,6 +1,6 @@
 # Next work — sequencing items 4–7 (F158 repoint, Admin Settings close-out + promotion, F161, F157)
 
-**STATUS:** IN PROGRESS — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B DONE 2026-09-29 (staging; V2/V4/V10 closed, no app code) · C DONE 2026-09-29 (PR #159, merge `5b661ff`) · D–E not started · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed), F164 (filed by Session B)
+**STATUS:** IN PROGRESS — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B DONE 2026-09-29 (staging; V2/V4/V10 closed, no app code) · C DONE 2026-09-29 (PR #159, merge `5b661ff`) · D DONE 2026-09-29 (F161: cause found, NOT data volume) · E not started · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed), F164 (filed by Session B)
 
 A sequencing plan, not a sub-deploy. It orders **five sessions** (A–E), one concern each, per
 CLAUDE.md's one-sub-deploy-per-session rule. Session C carries its own plan doc
@@ -257,6 +257,6 @@ built now,** that becomes a separate scripts-repo session against this doc.
       merge `5b661ff`. RPC v2 applied on production (first run did not land; the F164 check caught it). `app.js` was
       discarded by `merge=ours` a third time and restored in its own commit. V11 green on both hostnames; write-smoke run
       (`usage_events` reserve/cancel, tenant `rjbookstop`); Print Catalog 50 pages / 100%. No Edge Function deployed.
-- [ ] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified
+- [x] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified — **DONE 2026-09-29.** Cause: **CLS on desktop, triggered by 1-3 current-month rows, NOT data volume** (hypothesis refuted; 2x3 grid + 0-5 row curve, 51 interleaved Lighthouse runs in three batches (18 + 18 + 15), verified teardowns). 6 of 24 production reserving accounts are in the trigger range. **Owed by Rick:** his own DevTools per-metric readings on production (requested). Not fixed; fix directions recorded in F161
 - [ ] E: `docs/f157-distributor-scoping.md` committed (or Rick's override recorded)
 - [ ] This doc's STATUS token → COMPLETE
