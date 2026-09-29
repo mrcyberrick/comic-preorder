@@ -6574,7 +6574,27 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Evidence.** `playwright/s4-v2-parity-verify.mjs` (local-only): 11/11, including a negative control (the snippet's `MIN 7 → 6` on the new-side filter reports a publisher "only in NEW" and no PASS) and a check that the snippet's `V2 FAIL` verdict is exactly what the cross-tenant rows predict, so it would demand a plain PASS on clean data.
 - **Related:** **F160** (the feature whose S1 RPC this touches), **F109**/**F127** (the `preorders` authorization boundary and the trigger precedent), **F72** (the `demoshop` tenant), `docs/admin-settings-catalog-visibility.md` § 3.6 and § 5.
 
-Next free finding ID: **F165**.
+#### F165 — withdrawal detection marks reserved titles "Withdrawn" by IMPORT TIMING: consecutive monthly files share almost no FOC dates, so "absent + FOC passed" is the normal state of a live title
+
+- **Filed 2026-09-29. Status: OPEN, High, both environments (same code in `import.js` / `import-staging.js`). Harm realised on STAGING (7 confirmed false marks); not yet realised on production.** Filed, not fixed. Rick chose to file it. Found while trying to confirm the 7 marks his own staging October import produced; **it also corrects this project's F147 record**, which had called the FOC narrowing verified.
+- **Symptom.** Rick's 2026-09-29 October import on staging marked 7 titles "withdrawn" (6 Lunar: `0926AB0520`, `0926AB0523`, `0926AB0525`, `0926AT0561`, `0926AT0566`, `0926AW0572`; and PRH `84428401135820011`, Minor Arcana #20). **All 7 are live: CONFIRMED** by a fresh Lunar Available Products export (2026-09-29 12:02, after the 9/28 FOC) that lists all 6 Lunar codes with FOC and in-store dates unchanged (11/4 and 11/11), which I verified independently, and by Rick for the PRH title (in PRH's product catalog; I did not verify that one). All 7 share FOC 2026-09-28, the day before the import.
+- **Root cause.** `narrowWithdrawalCandidates()` marks a prior-month title that is absent from the new month, still holds an unfulfilled reservation with a future `on_sale_date`, and (F147) has a passed `foc_date`. Its comment holds that absence "only becomes evidence of withdrawal once that window has closed". **That premise is false for a one-time solicitation list.** Measured from the local files: Lunar's September file spans FOC 09-14 to 12-14 (165 titles on 09-28) and October's starts 10-12; PRH's September file spans 09-21 to 11-30 and October's 10-19 to 2027-01-04. A title is therefore absent from the next month's file *by construction*, before and after its FOC, withdrawn or not; the FOC condition only selects **whichever batch has just closed when the import happens to run**. F147 removed the first symptom (every future-FOC title marked, 519 on production) and left this one.
+- **Measured exposure, PRODUCTION, same predicate, today's reservations** (843 unfulfilled reservations sit on 2026-09 titles absent from 2026-10):
+
+  | if the October import had run | reservations marked | titles | customers | copies |
+  |---|---|---|---|---|
+  | 2026-09-27 (what actually happened) | **0** | 0 | 0 | 0 |
+  | 2026-09-29 | 4 | 2 | 3 | 4 |
+  | 2026-10-06 | 182 | 101 | 14 | 289 |
+  | 2026-10-13 | 368 | 217 | 18 | 591 |
+
+  The 09-27 row equals the recorded result, so the replication is sound. **Production's 0 was calendar luck**: the import landed the day before the first large FOC batch. **Next exposure: the November new-month import.** Production's 41 October reservations are all on FOC 2026-11-02 or later, so a late-October run marks 0 *today*; that grows as customers reserve the 10-12 and 10-26 batches, and jumps if the import slips.
+- **Customer impact when it fires on production.** F120's "Withdrawn" badge on My List and the `isWithdrawn` override that unlocks cancellation of an ordered title: the customer is invited to **irreversibly** cancel a live, ordered reservation (the F146/F147 harm shape). Admin's Withdrawn panel fills with live titles.
+- **This is not a failure of F147's tests.** They and the staging run correctly show the code marks *exactly* the FOC-passed candidates (17 candidates: 7 marked, 10 held back, 0 violations). That verified the implementation, not the premise.
+- **Fix direction (not designed).** (1) **Change the signal.** For Lunar, absence from the current *Available Products* export is real evidence: it keeps titles after FOC until they ship (2,146 past-FOC rows still listed on 09-29) and it does drop removals (49 of the 555 titles in the same 9/28 batch disappeared in one week). `check-dates.js` already downloads it weekly. PRH needs its own signal (Weekly Change Report / portal status; PRH's monthly file cannot serve, and F155 recorded that frozen PRH catalogs have no data channel). (2) **A confirm-first gate** listing the candidates before anything is written (F143's shape). (3) **Interim, no code, before the November import:** run it first with `--no-write`, which computes and prints the candidates with zero writes (verified by F110's V-A2), and do not let the mark step run unattended.
+- **Related:** **F110** (withdrawal detection), **F146** (false positives from a dropped-but-live title; its clear half is what will remove the 7 staging marks, and is still unexercised), **F147** (the narrowing this corrects), **F155** (the same one-time-solicitation blind spot in the date checker), **F120**, **F158**/**F159**.
+
+Next free finding ID: **F166**.
 
 ---
 
