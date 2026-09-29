@@ -242,16 +242,16 @@ built now,** that becomes a separate scripts-repo session against this doc.
       **The first full-suite run was 146 passed / 4 failed** (all spec 20, from a settings-page save at 10:07:51
       mid-run that the suite's teardown then overwrote); **the rerun after Q8 is CLEAN: 151 passed, 0 failed, 0
       flaky, 23.2 min.** Rick's decisions 2026-09-29: Q8 = default "FOC earlier than today" (landed `e64f3d8`);
-      F164 predicate = add it (written as RPC v2, `7c31e5c`, PENDING on both environments; v1 is deployed, and
-      Rick applied it on production the same day). Session C is unblocked on Rick's side once v2 is applied and
-      V2 re-run; see `admin-settings-catalog-visibility.md` § 5.2 and § 9
+      F164 predicate = add it (RPC v2, `7c31e5c`, now APPLIED and VERIFIED on both environments; see below).
+      Session C is unblocked on Rick's side except for the promotion request; see `admin-settings-catalog-visibility.md` § 5.2 and § 9
       **Later the same day:** RPC v2 APPLIED and VERIFIED on staging (definition check prints the F164 verdict;
       V2 re-run: the snippet prints a plain PASS, exact parity on 61 keys). Rick also ran the October import on
       **staging**, so it now matches production's catalog (2,215 rows); the October print is measured directly
       (no config 2,215 rows = 50 pages; month rule 2,038 = 46, equal to production's independently derived
       figure); and F147's mark path discriminated against live candidates there (7 marked / 10 held back, 0
-      violations). **Remaining for Session C on Rick's side: apply v2 on production and paste the definition
-      verdict; then an explicit `/promote-prod` request.** The clean 151/0 suite predates the staging import. **Later: the 7 staging marks were confirmed FALSE (F165, filed), and Rick's September backfill re-import cleared them, 7 of 7, verified by read-back: F146's clear half is now proven live on staging (production's still unexercised).**
+      violations). **RPC v2 is now applied and verified on production as well (a first run did not land and the
+      definition check caught it). Remaining for Session C on Rick's side: the promotion shape and an explicit
+      `/promote-prod` request.** The clean 151/0 suite predates the staging import. **Later: the 7 staging marks were confirmed FALSE (F165, filed), and Rick's September backfill re-import cleared them, 7 of 7, verified by read-back: F146's clear half is now proven live on staging (production's still unexercised).**
 - [ ] C: Rick's promotion-shape choice recorded; prod RPC applied and probed; PR merged; V11 green;
       write-smoke green; every affected STATUS line updated
 - [ ] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified
