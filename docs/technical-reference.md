@@ -5006,6 +5006,8 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F141 — the catalog grid renders after first paint with no reserved space, producing a 0.636 desktop CLS
 
+- **2026-09-29 (F161, Session D): a RESIDUAL of this fix, found by measurement.** The `.loading-reserve{min-height:100vh}` hold covers a placeholder replaced by taller content and (since `242fe3e`) the empty state, but **not a short non-empty list**: with **1-3 current-month rows on desktop** the placeholder collapses while the Upcoming Arrivals section pops in ABOVE the list, and CLS returns to **0.21-0.55** (score 78-90). 4+ rows and 0 rows are clean. This is why Rick's account scored 0.05 after PR #145 and 78 on 09-24. Full curve and geometry in F161.
+
 - **⚠️ RESIDUAL MEASURED 2026-08-30 — it is real on BOTH pages, and `arrivals.html` is WORSE than `catalog.html` ever was.** This entry previously said the same shape was “plausible on `mylist.html` / `arrivals.html`, **unmeasured**.” Measured now, against **authenticated staging** via `playwright/lighthouse-auth.mjs` (a signed-out run scores the marketing page — the 2026-08-24 blind alley):
 
   | Page | Desktop CLS | Desktop score | Mobile CLS | Mobile score |
@@ -6410,7 +6412,28 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F161 — production's My List scores 78 Lighthouse Performance where staging scores 98, on identical code
 
-- **Status:** **filed 2026-09-24, OPEN — not started.** Production only. `mylist.html`, no code change
+- **✅ SESSION D RESULT, 2026-09-29 — ROOT CAUSE FOUND, AND IT IS NOT DATA VOLUME.** Measurement only; no code changed. The gap is **one metric, CLS, on DESKTOP**, and it is triggered by **how many rows the current-month main table holds (1-3)**, not by how many reservations the account has or how many cards it renders. Everything below was measured with a synthetic Lighthouse probe on staging (a CHANGE DETECTOR, F141: read deltas, not absolutes) and then cross-checked against the two numbers Rick reported.
+  - **Which metric.** Five-metric weighted breakdown reconciles to the reported delta (21.5 lost vs -21; 20.5 vs -20). **CLS = 20.3 of the ~21 points lost** (0.038 -> 0.460, metric score 1.00 -> 0.19); LCP ~1; **TBT 0 on desktop**; FCP and SI 0.
+  - **Not volume, proven by the 2x3 grid** (desktop, 3 interleaved runs each, identical every run; rows = current-month main-table rows, columns = Upcoming Arrivals cards):
+
+    | main rows | 36 cards | 1,185 cards |
+    |---|---|---|
+    | 0 | 100 (CLS 0.038) | 100 (CLS 0.025-0.038) |
+    | 2 | **79** (CLS **0.460**) | **78** (CLS **0.448-0.460**) |
+    | 5 | 99 (CLS 0.038) | 98 (CLS 0.025-0.038) |
+
+    A 2-row account with **36 cards** (585 DOM elements) scores 79; a 5-row account with **1,185 cards** (8,858 elements) scores 98.
+  - **The dose-response curve** (desktop, 36 cards): **0 rows 100 | 1 row 78 (CLS 0.548) | 2 rows 79 (0.460) | 3 rows 89-90 (0.208) | 4 rows 99 (0.038) | 5 rows 99 (0.038).** The trigger is **1-3 current-month rows, worst at 1**; an empty list is fine (F141's held reservation) and 4+ rows are fine.
+  - **The account that produced the finding.** Production `734bfd7e` (an admin account, Rick's) holds **1,864 reservations** (not the 1,345 F140 recorded) and renders **1,187 cards**: **exactly 2 main rows + 1,185 upcoming**. Its production score 78 and the probe's 78 for that shape agree, and staging's reported 98/97/98 equals the probe's small-account 98-99. So "same code, different score" was true and the difference was **the account's current-month row count**, not the environment and not volume.
+  - **Ablation, first run.** heavy-render (1,185 cards, 0 unrendered rows) = heavy-full (1,864 = +679 fetched-but-unrendered): desktop 78 = 78, mobile 96 vs 97. **The read path and the unrendered rows cost nothing measurable**, so this is not the F82/F113/F139/F140/F156 shape, as the finding suspected.
+  - **What shifts (browser layout-shift entries, desktop 1350x940, 2-row account).** One shift of 0.217 at ~4.7 s: `#list-container` moves **y 469 -> 542** (pushed down 73 px) and its height goes **471 -> 234**, while `footer.site-footer` appears at y=840, **inside** the 940 px viewport. Cause, read from that geometry and the markup and **not proven by a fix**: `#month-arrivals-section` is `display:none` and sits **before** `#list-container` in the DOM, so it pops in above the list when data arrives, while the list's 100vh loading placeholder (F141) collapses to the real short table. With 4+ rows the list is tall enough that the footer stays below the fold and nothing enters the viewport. Mobile (412x823) shows the same 73 px push but the footer sits at y=1099, below the fold: **CLS 0.022, no loss.**
+  - **Volume does cost a little, and only on mobile:** TBT 4 ms -> ~200 ms at ~8,700 DOM elements = **3-4 points** (mobile 100 -> 96/97); desktop ~1 point (LCP). The collapsed Upcoming Arrivals section renders every card eagerly. Real, small, separate.
+  - **Exposure on PRODUCTION today (read-only, 24 accounts with any reservation, catalog month 2026-10):** **6 are in the 1-3-row trigger range**, 5 have 4+ rows, 13 have none. It is time-varying: every customer passes through 1-3 rows as their first reservations of a month land, so **desktop customers early in each month are the exposed population**, not one heavy account.
+  - **Not received:** Rick's own DevTools per-metric readings on production (the acceptance instrument), which were requested. The probe reproduces both scores he reported (98 and 78) and identifies CLS; a per-metric reading from him would confirm CLS is his metric too. Mobile-vs-desktop of his 09-24 runs is therefore inferred (his numbers match Desktop), not known.
+  - **Severity, for Rick's call:** a real, visible layout jump for a common state, but a score/UX issue, not a data or money one. It reads Low-Medium.
+  - **Fix directions (NOT designed, NOT started; F141's territory):** (a) reserve the arrivals section's space or render it BELOW the list so nothing is inserted above; (b) keep the list's `min-height` after load for short non-empty lists, extending F141's existing empty-state hold to 1-3 rows; (c) for the small mobile TBT effect, defer rendering of the collapsed section's cards. Verify with `playwright/f161-mylist-volume.mjs` (the 2x3 grid and the 0-5 curve are the regression test: 2 rows must stop scoring 79).
+  - **Local artifacts (gitignored):** `playwright/f161-mylist-volume.mjs` (seeds shaped accounts, interleaved runs, verified teardown), `f161-shift-sources.mjs`, `f161-prod-shape.mjs` (read-only production shape). Seeded accounts and 679 temporary catalog rows were torn down and re-read: 0 preorders, 0 profiles, auth 404, catalog back at its 8,576 baseline, 0 orphans, every run.
+- **Status (superseded by the SESSION D RESULT above):** **filed 2026-09-24, OPEN — not started.** Production only. `mylist.html`, no code change
   involved. **Filed not fixed, Rick's explicit call** — it wants its own measurement session against
   a large account rather than being bolted onto the admin-settings work that surfaced it.
 - **Measured, three runs each, Rick 2026-09-24:**
@@ -6429,7 +6452,7 @@ reasoning — only the disposition changed, not the diagnosis.
   not: **on My List the direction reverses by 20 points.** That settled the catalog question — the
   environments are not comparable in one direction, so the catalog gap is not an S4 regression — and
   turned up this instead, which is a worse number than the one being investigated.
-- **Leading hypothesis, NOT confirmed: the account's data volume.** `mylist.html` renders the
+- **Leading hypothesis (REFUTED 2026-09-29, Session D — see above): the account's data volume.** `mylist.html` renders the
   customer's own reservations, and **F140 recorded the Book Stop admin account at 1,345 preorders**
   while staging's accounts hold a handful. Same code, roughly two orders of magnitude more rows.
 - **⚠️ Probably NOT an unbounded read, and that matters for whoever picks this up.** The obvious guess
