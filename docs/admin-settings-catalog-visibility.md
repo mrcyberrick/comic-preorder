@@ -1,6 +1,6 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v1** applied there 2026-09-29 by Rick; **v2 with the F164 predicate (`7c31e5c`) is APPLIED and VERIFIED on staging 2026-09-29 (V2 now prints a plain PASS) and still owed on production**; no PR) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
+**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v2 APPLIED and VERIFIED on production 2026-09-29**: the definition check prints the F164 verdict, after a first run that did not land and was caught by that check; no client PR yet) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
 
 **Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). **That run was on staging's SEPTEMBER data; staging was then moved to October (§ 5.2, last subsection), so the suite has not yet been run on the current data.** *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
 plus `playwright/s4-visibility-verify.mjs` **9/9** (2026-09-24). Gates run this session, all on staging
@@ -12,14 +12,17 @@ Record: § 5.2.
 ⚠️ **STILL NOT PRODUCTION-READY, but nothing that blocks it is a staging verification gap any more.**
 What stands between this feature and Session C (the production promotion):
 
-1. **The S1 RPC: v2 is verified on staging; production is still v1.** Staging, 2026-09-29: Rick applied
-   v2 (grants `OK - authenticated only`; definition `OK - 1 definition, SECURITY DEFINER, search_path
-   pinned, F164 predicate present`; smoke `raysandjudys` **112** records where v1 counted 114), and **V2
-   re-run: the plan's own snippet prints `V2 PASS - identical`, exact parity on 61 publishers.** The same
-   snippet on v1, hours earlier, printed FAIL on the two cross-tenant publishers, so this is a real
-   before/after. **Remaining: apply v2 on production** (Rick). Production has no cross-tenant preorders,
-   so v1 and v2 behave identically there; only the definition check's F164 verdict proves which body is
-   deployed, and the SQL file's STATUS flips to `prod=APPLIED` only after it prints.
+1. **The S1 RPC (v2, with the F164 predicate) is applied and verified on BOTH environments.** Staging,
+   2026-09-29: definition `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate
+   present`; smoke `raysandjudys` 112 records where v1 counted 114; and **V2 re-run: the plan's own
+   snippet prints `V2 PASS - identical`, exact parity on 61 publishers** (the same snippet on v1 printed
+   FAIL, so it is a real before/after). **Production, same day: Rick's FIRST run did not land**: the check
+   query returned `has_f164_predicate = false` and production stayed on v1 (cause not established). The
+   old verdict string could not have caught it; the F164 check did. A re-run printed the F164 verdict
+   and the smoke named `rjbookstop` and `comicstore` (22 / 14 / 4,678, unchanged: production has no
+   cross-tenant preorders, so v1 and v2 behave identically there and only that marker proves which body
+   is deployed). The SQL file's STATUS reads `staging=APPLIED 2026-09-29 | prod=APPLIED 2026-09-29`.
+   **Nothing is left on the RPC.**
 2. **Q8 is RESOLVED (Rick, 2026-09-29): the default hides only titles whose FOC is earlier than today.**
    Landed `e64f3d8`; the customer catalog no longer loses the 177 still-orderable October titles.
    **Consequence he accepted:** the printed sheet follows the same default (§ 5.2).
@@ -51,7 +54,7 @@ machine and runs when someone runs it.)*
 bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the
 default state "store nothing". **Q5: store publisher EXCLUSIONS, never inclusions** (§ 3.2.1).
 S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, **applied to staging by Rick
-2026-09-24; `prod=PENDING`** *(2026-09-29: **v1 is now applied on production too**, by Rick, and probed present (anon `42501`). **v2, with the F164 same-tenant predicate, is the file's current content and is `PENDING` on both environments** — see § 5.2.)*.
+2026-09-24; `prod=PENDING`** *(2026-09-29: **v1 is now applied on production too**, by Rick, and probed present (anon `42501`). **v2, with the F164 same-tenant predicate, is the file's current content and is now APPLIED on both environments (staging and production, 2026-09-29)** — see § 5.2.)*.
 
 *(This block read "VERIFICATION INCOMPLETE … eight verification gates are still open … No code
 written, nothing applied to either database" — accurate when written on 2026-09-23 and stale within a
@@ -526,7 +529,7 @@ No code. Confirms § 2 and replaces this plan's estimates with figures.
 5. `SELECT pg_total_relation_size('public.catalog')` — § 8's storage estimate is derived from row
    counts and **must not be planned on until measured**.
 
-### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23 · APPLIED ON STAGING (by 2026-09-24; probed 2026-09-29, HTTP 200) · ~~NOT APPLIED ON PRODUCTION (probed 2026-09-29, PGRST202)~~ **v1 APPLIED ON PRODUCTION 2026-09-29 by Rick** (grants verdict OK, definition verdict OK, anon probe `42501`, smoke 22 / 14 / 4,678). **v2 (F164 predicate) PENDING on BOTH environments**
+### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23 · APPLIED ON STAGING (by 2026-09-24; probed 2026-09-29, HTTP 200) · ~~NOT APPLIED ON PRODUCTION (probed 2026-09-29, PGRST202)~~ **v1 APPLIED ON PRODUCTION 2026-09-29 by Rick** (grants verdict OK, definition verdict OK, anon probe `42501`, smoke 22 / 14 / 4,678). **v2 (F164 predicate) APPLIED and VERIFIED on BOTH environments 2026-09-29**
 
 **File: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`**, STATUS line
 `staging=PENDING | prod=PENDING`. Rick runs it; staging first, production before S4 deploys there
@@ -1125,7 +1128,7 @@ What does scale, and how it is handled here:
 - [x] **Q8 RESOLVED 2026-09-29 (Rick): default `focMode` = `'today'`.** Landed `e64f3d8`, served bytes confirmed (`focMode: 'today',` at `app.js:1242`), spec 24 gained a covering test. The print follows the default: 2,215 rows / 50 pages with no config on October data (§ 5.2)
 - [x] **F164 predicate: DECIDED 2026-09-29 (Rick: "Add it") and WRITTEN** (`7c31e5c`): the `live` CTE now requires `c.tenant_id = current_tenant_id()`. **Rick had already applied v1 on production before this** (the S1 RPC is deployed on production, without the predicate), so v2 is a re-apply on both environments.
 - [x] **v2 APPLIED on STAGING and V2 RE-RUN, 2026-09-29.** Definition check printed `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present`; `s4-v2-parity-verify.mjs` with `EXPECT_V2=1`: **11/11**, the snippet prints `V2 PASS - identical`, 61 keys at exact parity (the harness's own independent recount also had to be corrected to apply v2's rule: it disagreed with a correct v2 by exactly the two cross-tenant rows, 120 vs 118)
-- [ ] **Apply v2 on PRODUCTION** after the staging re-run; then the file's STATUS line flips to `staging=APPLIED … | prod=APPLIED …`, in tokens the `/promote-prod` regex can see
+- [x] **v2 APPLIED on PRODUCTION, 2026-09-29, and the STATUS line flipped** to `staging=APPLIED 2026-09-29 | prod=APPLIED 2026-09-29`, in tokens the `/promote-prod` regex can see. The first run did NOT land (`has_f164_predicate = false`); the re-run printed `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present` and the smoke named `rjbookstop` and `comicstore`
 - [ ] **Session C expectation to tell the shop:** with no exclusions saved, the printed catalog goes from about **35 to about 50 pages** on October data (§ 5.2). The customer catalog now loses only titles whose FOC has passed
 - [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
       S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
