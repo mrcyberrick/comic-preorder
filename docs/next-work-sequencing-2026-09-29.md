@@ -245,6 +245,13 @@ built now,** that becomes a separate scripts-repo session against this doc.
       F164 predicate = add it (written as RPC v2, `7c31e5c`, PENDING on both environments; v1 is deployed, and
       Rick applied it on production the same day). Session C is unblocked on Rick's side once v2 is applied and
       V2 re-run; see `admin-settings-catalog-visibility.md` § 5.2 and § 9
+      **Later the same day:** RPC v2 APPLIED and VERIFIED on staging (definition check prints the F164 verdict;
+      V2 re-run: the snippet prints a plain PASS, exact parity on 61 keys). Rick also ran the October import on
+      **staging**, so it now matches production's catalog (2,215 rows); the October print is measured directly
+      (no config 2,215 rows = 50 pages; month rule 2,038 = 46, equal to production's independently derived
+      figure); and F147's mark path discriminated against live candidates there (7 marked / 10 held back, 0
+      violations). **Remaining for Session C on Rick's side: apply v2 on production and paste the definition
+      verdict; then an explicit `/promote-prod` request.** The clean 151/0 suite predates the staging import
 - [ ] C: Rick's promotion-shape choice recorded; prod RPC applied and probed; PR merged; V11 green;
       write-smoke green; every affected STATUS line updated
 - [ ] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified
