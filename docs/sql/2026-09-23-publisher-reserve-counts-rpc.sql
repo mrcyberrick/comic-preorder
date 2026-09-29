@@ -1,4 +1,12 @@
--- STATUS: staging=APPLIED 2026-09-24 (behavioural probe 2026-09-29: HTTP 200) | prod=PENDING (probe 2026-09-29: PGRST202, function absent — must land BEFORE S4 client code, F105)
+-- STATUS: staging=PENDING | prod=PENDING
+--         THIS IS v2 (2026-09-29, F164): the `live` CTE now requires the catalog row to
+--         belong to THIS tenant. v1 (without that predicate) is what is deployed:
+--         staging APPLIED 2026-09-24, production APPLIED 2026-09-29 (Rick; grants and
+--         definition verdicts OK, anon probe 42501). Both are therefore PENDING for
+--         v2, whose only difference is the predicate. CREATE OR REPLACE is idempotent;
+--         re-running changes nothing else. Flip each environment to APPLIED only after
+--         the definition check below prints the F164 verdict -- the OLD verdict string
+--         ('OK - 1 definition, SECURITY DEFINER, search_path pinned') passes for v1 too.
 --         Admin Settings catalog-visibility S1. Plan:
 --         docs/admin-settings-catalog-visibility.md § 3.6 / § 4 S1.
 -- (F105) This line is the applied-state record. A gate that lives only in
@@ -103,6 +111,11 @@ AS $$
     FROM preorders p
     JOIN catalog c ON c.id = p.catalog_id
     WHERE p.tenant_id = current_tenant_id()
+      -- F164: the catalog row must belong to THIS tenant too. Two staging preorders
+      -- reference another tenant's catalog rows; this SECURITY DEFINER join saw them,
+      -- the RLS-bound code it replaces could not, so counts differed (marvel 25 vs
+      -- 24). The marker text 'F164' is what the definition check below looks for.
+      AND c.tenant_id = current_tenant_id()
       AND btrim(COALESCE(c.publisher, '')) <> ''
     GROUP BY 1
   ),
@@ -167,7 +180,10 @@ WHERE routine_name = 'get_publisher_reserve_counts';
 -- ambiguity already produced one false conclusion this session (S0's Q8 read as
 -- "production has no F160 instance" when it has one), so it is not repeated.
 --
--- EXPECTED: verdict = 'OK - 1 definition, SECURITY DEFINER, search_path pinned'
+-- EXPECTED (v2): verdict = 'OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present'
+-- v1 (no predicate) prints 'PROBLEM - body is the pre-F164 version ...': that is
+-- this check doing its job, not a new failure. The previous OK string could not
+-- tell the two bodies apart.
 SELECT
   CASE
     WHEN count(*) = 0 THEN 'MISSING - the CREATE did not run. Re-run this file from the top.'
@@ -175,7 +191,9 @@ SELECT
     WHEN bool_and(p.prosecdef) IS NOT TRUE THEN 'PROBLEM - not SECURITY DEFINER'
     WHEN bool_and(array_to_string(p.proconfig, ',') LIKE '%search_path%') IS NOT TRUE
       THEN 'PROBLEM - search_path is not pinned (F23/Pattern E footgun)'
-    ELSE 'OK - 1 definition, SECURITY DEFINER, search_path pinned'
+    WHEN bool_and(p.prosrc LIKE '%F164%') IS NOT TRUE
+      THEN 'PROBLEM - body is the pre-F164 version (no same-tenant catalog predicate). Re-run this file from the top.'
+    ELSE 'OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present'
   END                                                   AS verdict,
   count(*)                                              AS definitions,
   COALESCE(string_agg(pg_get_function_identity_arguments(p.oid), ' | '), '-') AS signatures,
@@ -219,6 +237,7 @@ live AS (
   FROM preorders p
   JOIN catalog c ON c.id = p.catalog_id
   WHERE btrim(COALESCE(c.publisher, '')) <> ''
+    AND c.tenant_id = p.tenant_id   -- F164: mirrors the function's same-tenant predicate
   GROUP BY 1, 2
 ),
 reserved AS (
