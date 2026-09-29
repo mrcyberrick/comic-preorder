@@ -1,6 +1,6 @@
 # Next work — sequencing items 4–7 (F158 repoint, Admin Settings close-out + promotion, F161, F157)
 
-**STATUS:** IN PROGRESS — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B DONE 2026-09-29 (staging; V2/V4/V10 closed, no app code) · C–E not started · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed), F164 (filed by Session B)
+**STATUS:** IN PROGRESS — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B DONE 2026-09-29 (staging; V2/V4/V10 closed, no app code) · C DONE 2026-09-29 (PR #159, merge `5b661ff`) · D–E not started · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed), F164 (filed by Session B)
 
 A sequencing plan, not a sub-deploy. It orders **five sessions** (A–E), one concern each, per
 CLAUDE.md's one-sub-deploy-per-session rule. Session C carries its own plan doc
@@ -252,8 +252,11 @@ built now,** that becomes a separate scripts-repo session against this doc.
       violations). **RPC v2 is now applied and verified on production as well (a first run did not land and the
       definition check caught it). Remaining for Session C on Rick's side: the promotion shape and an explicit
       `/promote-prod` request.** The clean 151/0 suite was then RE-RUN on the October-state staging and is clean again (151 passed, 0 failed, 0 flaky, 23.2 min). **Later: the 7 staging marks were confirmed FALSE (F165, filed), and Rick's September backfill re-import cleared them, 7 of 7, verified by read-back: F146's clear half is now proven live on staging (production's still unexercised).**
-- [ ] C: Rick's promotion-shape choice recorded; prod RPC applied and probed; PR merged; V11 green;
-      write-smoke green; every affected STATUS line updated
+- [x] C: Rick's promotion-shape choice recorded; prod RPC applied and probed; PR merged; V11 green;
+      write-smoke green; every affected STATUS line updated — **DONE 2026-09-29.** Full merge (Rick's choice), PR #159,
+      merge `5b661ff`. RPC v2 applied on production (first run did not land; the F164 check caught it). `app.js` was
+      discarded by `merge=ours` a third time and restored in its own commit. V11 green on both hostnames; write-smoke run
+      (`usage_events` reserve/cancel, tenant `rjbookstop`); Print Catalog 50 pages / 100%. No Edge Function deployed.
 - [ ] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified
 - [ ] E: `docs/f157-distributor-scoping.md` committed (or Rick's override recorded)
 - [ ] This doc's STATUS token → COMPLETE
