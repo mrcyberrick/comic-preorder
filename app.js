@@ -1179,7 +1179,9 @@ async function fetchAllRows(buildQuery, pageSize = 1000) {
 // Corrected 2026-09-24 after a verification run measured the difference: a
 // missing row, an unreadable row and malformed JSON all fall back to
 // defaults(), which are permissive on every dimension EXCEPT `hidePastFoc`
-// (true, so the print's existing FOC rule survives — see defaults() below).
+// (true, in 'today' mode — titles whose FOC has already passed; see defaults()
+// below. This said "so the print's existing FOC rule survives" until 2026-09-29,
+// when the default mode was reversed from 'month' to 'today').
 // So a corrupt config shows the same catalog an unconfigured tenant sees, not
 // the full unfiltered month. That is the honest contract, and this comment
 // claimed "SHOW EVERYTHING" until a test asserted it and failed.
@@ -1218,20 +1220,26 @@ const CatalogFilters = {
       // ⚠️ TRUE, and this resolves a conflict between two recorded decisions.
       // Q2 (Rick, 2026-09-23) is "hide past-FOC on BOTH surfaces". § 3.4 is
       // "no config means show everything". Both cannot hold for the default.
-      // Resolved in Q2's favour for the FOC dimension specifically, because:
-      //   * it PRESERVES the print's current behaviour. The hardcoded clause at
-      //     admin.html:5330 already hides FOC <= the catalog month, and
-      //     `hidePastFoc: true` + `focMode: 'month'` reproduces it exactly. A
-      //     false default would instead lengthen the sheet to ~51 pages, a
-      //     change nobody asked for.
-      //   * § 3.4's fail-open rule exists to stop a bad config EMPTYING a
-      //     surface. Hiding 109 of 2,302 rows is not an empty surface; reading
-      //     "show everything" onto every dimension is over-literal.
-      // COST, stated rather than buried: the customer catalog loses those 109
-      // titles on S4's deploy even with no config saved (Q6, production
-      // 2026-09). That is the trade Q2 accepted, now applied by default.
+      // Resolved in Q2's favour for the FOC dimension specifically, because
+      // § 3.4's fail-open rule exists to stop a bad config EMPTYING a surface,
+      // and hiding titles that can no longer be ordered is not an empty surface.
       hidePastFoc: true,
-      focMode: 'month',
+      // ⚠️ 'today', NOT 'month' — REVERSED 2026-09-29 (Rick, Q8). This line read
+      // `focMode: 'month'`, chosen because it reproduced the print's old
+      // hardcoded rule exactly (admin.html hid FOC <= the catalog month).
+      // Measured on production's October catalog it was wrong for the CUSTOMER
+      // surface: it hid 177 titles (8.0%), every one with an FOC of 2026-10-12
+      // to 10-26, i.e. none past and all still reservable, since isFocPast()
+      // is date-based (foc_date < today). Q2's rationale was that a title past
+      // FOC is unreservable; only 'today' matches that. Existing saved configs
+      // are unaffected: load() merges over these defaults, and settings.html
+      // saves focMode explicitly.
+      // COST, stated rather than buried: the PRINT follows the same default, so
+      // with no config it now lists every title whose FOC has not passed. On
+      // October data that is all 2,215 rows (50 pages, measured on the real
+      // print) instead of 2,038 (46). The month rule is still one radio away on
+      // settings.html.
+      focMode: 'today',
       hideZeroPrice: false,
     };
   },

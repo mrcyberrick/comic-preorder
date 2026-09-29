@@ -5268,6 +5268,12 @@
   //
   // CONSEQUENCE: this sheet is LONGER. Production goes 1,507 rows / 33 pages to
   // 2,068 / 45 with no config saved. That is intended and is the whole trade.
+  // (Superseded 2026-09-29: those figures were September's and the page counts
+  // were ceil(rows/46), which understates. Measured on the real print, October
+  // production is 1,546 rows / 35 pages under the old bar and 2,038 / 46 with
+  // the month rule and no exclusions. And the DEFAULT FOC rule is now 'today',
+  // so with no config saved the sheet lists every title whose FOC has not
+  // passed: 2,215 rows / 50 pages on October data.)
 
   async function fetchAllCatalogForDistributor(distributor) {
     if (!currentCatalogMonth) {
@@ -5310,6 +5316,10 @@
     // The FOC rule this used to hardcode — keep only titles whose FOC month is
     // LATER than the catalog month — is reproduced exactly by the default
     // `hidePastFoc: true` + `focMode: 'month'`, so that dimension is unchanged.
+    // (No longer true as of 2026-09-29: the default mode is now 'today' -
+    // FOC earlier than today - so a tenant with no saved config sees this
+    // month's still-orderable titles on the sheet too. 'month' is one radio away
+    // on settings.html.)
     // What changed is the publisher dimension: with no exclusions saved, every
     // publisher now prints.
     //
