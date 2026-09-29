@@ -1,4 +1,4 @@
--- STATUS: staging=APPLIED 2026-09-29 | prod=PENDING
+-- STATUS: staging=APPLIED 2026-09-29 | prod=APPLIED 2026-09-29
 --         THIS IS v2 (2026-09-29, F164): the `live` CTE requires the catalog row to
 --         belong to THIS tenant. v1 (without that predicate) was applied first:
 --         staging 2026-09-24, production 2026-09-29 (Rick; grants and definition
@@ -7,10 +7,14 @@
 --         verdict ('OK - 1 definition, SECURITY DEFINER, search_path pinned, F164
 --         predicate present'), and V2 was re-run: the plan's snippet flipped from
 --         FAIL (v1, 11:20) to 'V2 PASS - identical' (v2), exact parity on 61 keys.
---         PRODUCTION: still v1, so PENDING. Flip it only after the definition check
---         prints the F164 verdict there. Production has NO cross-tenant preorders
---         (0 of 3,495), so v1 and v2 behave identically on its data: only that
---         marker can tell them apart, which is why the check exists.
+--         PRODUCTION: v2 APPLIED 2026-09-29 by Rick. His FIRST run did NOT land: the check
+--         query returned has_f164_predicate = false, so production stayed on v1 (cause not
+--         established; wrong project or stale editor text are the candidates). The old
+--         verdict string could not have caught that; the F164 check did. A re-run then
+--         printed the F164 verdict and the smoke named rjbookstop and comicstore
+--         (22 / 14 / 4,678, unchanged: production has NO cross-tenant preorders, 0 of
+--         3,495, so v1 and v2 behave identically on its data and only that marker can
+--         tell them apart, which is why the check exists).
 --         Admin Settings catalog-visibility S1. Plan:
 --         docs/admin-settings-catalog-visibility.md § 3.6 / § 4 S1.
 -- (F105) This line is the applied-state record. A gate that lives only in
