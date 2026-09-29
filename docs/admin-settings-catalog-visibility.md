@@ -2,7 +2,7 @@
 
 **STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v2 APPLIED and VERIFIED on production 2026-09-29**: the definition check prints the F164 verdict, after a first run that did not land and was caught by that check; no client PR yet) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
 
-**Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). **That run was on staging's SEPTEMBER data; staging was then moved to October (§ 5.2, last subsection), so the suite has not yet been run on the current data.** *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
+**Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). **That run was on staging's September data; staging was then moved to October and the 7 false marks were cleared (§ 5.2, last subsection), so the suite was run AGAIN on that state (12:36-12:59 local): 151 passed, 0 failed, 0 flaky, no retries, 23.2 min, teardown restored normally. Both runs are clean.** *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
 plus `playwright/s4-visibility-verify.mjs` **9/9** (2026-09-24). Gates run this session, all on staging
 or read-only: **V2** (threshold-7 sets identical; the snippet's stricter gate printed FAIL, explained
 by F164), **V4** (production October: 2,038 rows / 46 pages with no config, 1,546 / 35 with the old
@@ -929,8 +929,10 @@ have hidden 177. The Q8 change does what it was for.
 
 **F146's clear half, exercised for the first time (2026-09-29, 16:17 UTC).** Rick's older-month backfill re-import on staging (September's Lunar and PRH files, `--skip-autoreserve`; the procedure F146 was originally verified with) logged '7 previously-withdrawn title(s) reappeared - clearing', and a fresh read afterwards confirms it: withdrawn marks tenant-wide 0 (was 7), both mark columns null on all 7, their 7 reservations intact and still open, October's 2,215 rows, preorders (80), `order_deadline` and `catalog_filters` unchanged, September back to its original 2,302 rows. So the clear half works live on staging, by pair reappearance across months, exactly as its own comment says. **Still true:** production's clear half is unexercised (0 marks there), and this does not make F165 go away: the false marks were cheap to clear on staging, but on production customers would have seen them first.
 
-**The clean full suite (151 passed) ran on staging's September data.** The data has changed since, and it
-has not been re-run on this state.
+**The clean full suite (151 passed) first ran on staging's September data, and was re-run on the October
+state** (after the import, the September backfill and the mark clear): **151 passed, 0 failed, 0 flaky, no
+retries, 23.2 min** (2026-09-29, 12:36-12:59 local), teardown restored normally, so the concurrent-save
+guard had nothing to protect.
 
 ---
 
