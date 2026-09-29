@@ -290,8 +290,19 @@
     }
     .recon-row:last-child { border-bottom: none; }
     .recon-row-title {
-      flex: 1;
+      /* F167: a real basis, NOT `flex: 1`. `flex: 1` is `flex: 1 1 0%`, and
+         under `flex-wrap: wrap` a wrap decision uses each item's flex-BASIS, so
+         a zero-basis title counted as zero width and never forced a wrap: on a
+         phone the code + qty + status fit the line beside a title squeezed to
+         ~30px (measured 31px of a 311px row at 393px, 2px at 320px). 18rem is
+         wider than a phone's row, so on a phone the title takes a line to
+         itself and the code / qty / status drop below it; on a wide screen the
+         basis is exceeded and the title grows exactly as before.
+         `overflow-wrap: anywhere` is the second half: an unbreakable word
+         ("AMAZING") wider than its box otherwise paints over the code beside it. */
+      flex: 1 1 18rem;
       min-width: 0;
+      overflow-wrap: anywhere;
       font-weight: 600;
       color: var(--text-primary);
     }
@@ -318,7 +329,10 @@
     /* F156 follow-on — order state + the rejection action. Sits at the end of
        the row so the title/code/qty columns keep the alignment staff already
        scan. `.recon-row` wraps rather than squeezing, so a narrow screen
-       drops this onto its own line instead of crushing the title. */
+       drops this onto its own line instead of crushing the title.
+       (Corrected 2026-09-29, F167: that sentence was FALSE while the title was
+       `flex: 1` -- a zero flex-basis never forces a wrap, so the title WAS
+       crushed. It is true now that `.recon-row-title` carries a real basis.) */
     .recon-row { flex-wrap: wrap; }
     .recon-row-order {
       display: flex;

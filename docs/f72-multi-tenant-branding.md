@@ -1,6 +1,6 @@
 # F72 — multi-tenant branding: remove the founding tenant's identity from every tenant-facing surface
 
-**STATUS:** **IN PROGRESS — RESEQUENCED 2026-09-03, Rick: ship free-tier-only first for a demo.**
+**STATUS:** **IN PROGRESS — RESEQUENCED 2026-09-03, Rick: ship free-tier-only first for a demo.** **2026-09-29: S0 (tier mechanism), S1a (web gating) and S3 (print gating) are PROMOTED TO PRODUCTION (PR #159, merge `5b661ff`). S2a's SOURCE is promoted but `register-customer` is NOT deployed on production, and the other five mail functions (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`) remain founding-branded.**
 **S0 EXECUTED 2026-09-02. S1a (free-tier web) + S2a (register-customer, free-tier email) EXECUTED
 2026-09-03; S3 (print) EXECUTED 2026-09-04 — all on STAGING** (`d7669b0`, `efadbf0`, `b1e1445`) —
 see § 4.1a/§ 4.2a/§ 4.3a, the live record for this resequence. **A demo tenant exists on staging**
