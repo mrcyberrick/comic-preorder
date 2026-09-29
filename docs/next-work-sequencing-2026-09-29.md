@@ -160,7 +160,7 @@ Only after B is green and Rick explicitly requests it via `/promote-prod`.
 ### 3.2 Sequence (either option)
 
 1. **Production RPC first (F105).** Rick runs `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`
-   on production. The agent confirms with the behavioural probe (PGRST202 → absent; anything else →
+   on production. *(2026-09-29: Rick applied **v1**; probed present. **v2**, with the F164 predicate, is owed on staging then production, and V2 is re-run between them.)* The agent confirms with the behavioural probe (PGRST202 → absent; anything else →
    present) and updates the file's STATUS line to `prod=APPLIED <date>`. No client merge before this.
 2. `/promote-prod` end to end: `config.js` preserved, F59 merge-**result** assertion,
    `supabase/migrations/` still 2 files, PR file list re-read on GitHub.
@@ -239,9 +239,12 @@ built now,** that becomes a separate scripts-repo session against this doc.
       consecutive runs 3/3, `--retries=0`; the recorded F107 diagnosis was wrong (an overlapping-load race in
       `settle()`); Rick approved one bounded attempt. **Two things Session C now owes Rick (both in § 9):**
       **Q8** (the default hides 177 still-orderable October titles) and the **F164 RPC-predicate** choice.
-      **The one full-suite run was 146 passed / 4 failed, NOT clean** (all spec 20, from a settings-page save
-      at 10:07:51 mid-run that the suite's teardown then overwrote; spec 20 alone 6/6). No clean full run exists;
-      see `admin-settings-catalog-visibility.md` § 5.2
+      **The first full-suite run was 146 passed / 4 failed** (all spec 20, from a settings-page save at 10:07:51
+      mid-run that the suite's teardown then overwrote); **the rerun after Q8 is CLEAN: 151 passed, 0 failed, 0
+      flaky, 23.2 min.** Rick's decisions 2026-09-29: Q8 = default "FOC earlier than today" (landed `e64f3d8`);
+      F164 predicate = add it (written as RPC v2, `7c31e5c`, PENDING on both environments; v1 is deployed, and
+      Rick applied it on production the same day). Session C is unblocked on Rick's side once v2 is applied and
+      V2 re-run; see `admin-settings-catalog-visibility.md` § 5.2 and § 9
 - [ ] C: Rick's promotion-shape choice recorded; prod RPC applied and probed; PR merged; V11 green;
       write-smoke green; every affected STATUS line updated
 - [ ] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified
