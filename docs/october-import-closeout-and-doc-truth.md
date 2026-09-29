@@ -1,6 +1,6 @@
 # October import close-out, doc-truth fixes, and filing F163
 
-**STATUS:** NOT STARTED · planned 2026-09-29 · staging=— · prod=— (read-only on prod; no writes) · PR=— · findings: F163 (to be filed by S3)
+**STATUS:** COMPLETE · 2026-09-29 · staging=doc-only commits (fd78909 S1, S2a, S2b, F163 8956d88) · prod=— (read-only on prod; no writes) · PR=— · findings: F163 (filed)
 
 One session, three items, all **read-only against the databases** and **doc-only in the repo**. No
 code, no schema, no deploy, no production write. They are grouped because each one closes a
@@ -177,11 +177,11 @@ on). **Before trusting the CLAUDE.md you re-read, check `git rev-parse --abbrev-
 `staging`.**
 
 **Done when:**
-- [ ] S1: both environments measured (M1–M6), the result recorded in CLAUDE.md and § 13
+- [x] S1: both environments measured (M1–M6), the result recorded in CLAUDE.md and § 13
       F146/F147/F157, or the gate re-armed per § 2.4
-- [ ] S2a: no CLAUDE.md sentence still claims F162 has an open production residual
-- [ ] S2b: SQL STATUS, plan STATUS token and § 4 S1 heading all agree with a measured probe on both
+- [x] S2a: no CLAUDE.md sentence still claims F162 has an open production residual
+- [x] S2b: SQL STATUS, plan STATUS token and § 4 S1 heading all agree with a measured probe on both
       projects. The V2 box stays open, with its new caveat noted. `/preflight` is clean
-- [ ] S3: F163 filed with a fresh, reconciled production count. Next free ID → F164
-- [ ] This doc's STATUS token → COMPLETE with the date
+- [x] S3: F163 filed with a fresh, reconciled production count. Next free ID → F164
+- [x] This doc's STATUS token → COMPLETE with the date
 - [ ] `/wrap-up` run
