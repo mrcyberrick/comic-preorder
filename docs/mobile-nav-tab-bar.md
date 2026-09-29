@@ -662,6 +662,14 @@ skip `analytics.html`.
 
 ---
 
+### 7.3 Addendum 2026-09-29 -- the bar now HIDES ON SCROLL DOWN and returns on scroll up (STAGING ONLY, not promoted)
+
+This plan built the bar as **always pinned** (`position: fixed; bottom: 0`) and nothing in it hides it. Rick asked for the opposite on 2026-09-29 -- *"mobile menu is not hiding on scroll"*, then, asked what it should do, **"Hide on scroll down, return on scroll up"**. A **feature build, not a defect fix**: the pinned bar was specified behaviour.
+
+`TabBar._autoHide()` (`app.js`) decides when; `.tab-bar.is-hidden` (`style.css`, `<=640px` only, `translateY(100%)`, 0.22 s) is the slide. It ignores finger jitter (8 px threshold), stays visible in the top 60 px and the last 24 px of the page, ignores iOS rubber-band overscroll, **freezes while a text field has focus** (the keyboard is up), re-shows on `pageshow`, does not animate under `prefers-reduced-motion`, and is revealed to keyboard users by `:focus-within`. The reserved `body` padding (84 px + safe area) is unchanged, so nothing reflows. Desktop is untouched (`.tab-bar` stays `display:none`).
+
+**Not verified, and this is the important part:** everything above was measured in **Chromium's iPhone emulation**, not WebKit and **not iOS standalone (Home Screen) mode**. Rick's report -- the bar drawn about half-way up the screen with no top nav, staying wrong until the app is closed -- happens on his **Home Screen app (production)** and not in Brave on staging, with byte-identical code on both. **That symptom is not reproduced, not diagnosed and not fixed by this change.** See `CLAUDE.md` § Current Migration Phase, "MOBILE TAB BAR AUTO-HIDE".
+
 ## 8. Deploy log
 
 **Executed 2026-08-15 (Sonnet CLI).** Branch `feat/mobile-tab-bar`, cut from

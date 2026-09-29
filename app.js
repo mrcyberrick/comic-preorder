@@ -429,6 +429,50 @@ const TabBar = {
     });
 
     document.body.appendChild(bar);
+    this._autoHide(bar);
+  },
+
+  // Hide on scroll DOWN, return on scroll UP (Rick, 2026-09-29). Before this the
+  // bar was pinned at all times; docs/mobile-nav-tab-bar.md specifies no hiding.
+  // The slide itself is CSS (.tab-bar.is-hidden in style.css, <=640px only) --
+  // this only decides WHEN. Rules, each of which exists for a reason:
+  //   * THRESHOLD: a direction change must travel 8px before the state flips, so
+  //     finger jitter and momentum tails do not make the bar flicker.
+  //   * TOP_ZONE / END_ZONE: always visible near the top and at the very end of
+  //     the page, so the bar is reachable where a thumb ends up.
+  //   * y < 0 or y > max is iOS rubber-band overscroll, not a user direction.
+  //   * A focused text field (keyboard up) freezes the state: scrolling the
+  //     results while typing in the search field must not hide navigation.
+  //   * pageshow re-shows the bar: a back/forward-cache restore can otherwise
+  //     bring the page back with a stale hidden state.
+  _autoHide(bar) {
+    if (bar.dataset.autohide) return; // idempotent, like mount()
+    bar.dataset.autohide = '1';
+    const THRESHOLD = 8, TOP_ZONE = 60, END_ZONE = 24;
+    let lastY = window.scrollY;
+    let ticking = false;
+    const typing = () => {
+      const a = document.activeElement;
+      return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+    };
+    const setHidden = (h) => bar.classList.toggle('is-hidden', h);
+    const update = () => {
+      ticking = false;
+      const y = window.scrollY;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (y < 0 || y > max) return;
+      if (typing()) { lastY = y; return; }
+      if (y <= TOP_ZONE || y >= max - END_ZONE) { setHidden(false); lastY = y; return; }
+      const dy = y - lastY;
+      if (Math.abs(dy) < THRESHOLD) return; // lastY kept, so a slow drag still accumulates
+      setHidden(dy > 0);
+      lastY = y;
+    };
+    window.addEventListener('scroll', () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
+    window.addEventListener('resize', () => { if (window.innerWidth > 640) setHidden(false); }, { passive: true });
+    window.addEventListener('pageshow', () => { setHidden(false); lastY = window.scrollY; });
   },
 };
 
