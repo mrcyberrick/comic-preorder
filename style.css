@@ -1586,6 +1586,17 @@ button { cursor: pointer; font-family: var(--font-body); }
     /* Same weight as the icon strokes — an inked panel border, not a tray. */
     border-top: 2.4px solid var(--border);
     padding: 10px 4px max(10px, env(safe-area-inset-bottom));
+    transition: transform 0.22s ease;
+  }
+  /* Hide on scroll down / return on scroll up -- TabBar._autoHide() (app.js)
+     toggles the class. translateY(100%) is the bar's own height, safe-area
+     padding included, so it leaves the screen completely; the reserved
+     body padding below stays put so nothing reflows when it comes and goes. */
+  .tab-bar.is-hidden { transform: translateY(100%); }
+  /* A keyboard user tabbing into a hidden bar must see where focus is. */
+  .tab-bar.is-hidden:focus-within { transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .tab-bar { transition: none; }
   }
 
   .tab-cell {
