@@ -1,12 +1,16 @@
--- STATUS: staging=PENDING | prod=PENDING
---         THIS IS v2 (2026-09-29, F164): the `live` CTE now requires the catalog row to
---         belong to THIS tenant. v1 (without that predicate) is what is deployed:
---         staging APPLIED 2026-09-24, production APPLIED 2026-09-29 (Rick; grants and
---         definition verdicts OK, anon probe 42501). Both are therefore PENDING for
---         v2, whose only difference is the predicate. CREATE OR REPLACE is idempotent;
---         re-running changes nothing else. Flip each environment to APPLIED only after
---         the definition check below prints the F164 verdict -- the OLD verdict string
---         ('OK - 1 definition, SECURITY DEFINER, search_path pinned') passes for v1 too.
+-- STATUS: staging=APPLIED 2026-09-29 | prod=PENDING
+--         THIS IS v2 (2026-09-29, F164): the `live` CTE requires the catalog row to
+--         belong to THIS tenant. v1 (without that predicate) was applied first:
+--         staging 2026-09-24, production 2026-09-29 (Rick; grants and definition
+--         verdicts OK, anon probe 42501).
+--         STAGING: v2 APPLIED 2026-09-29 by Rick. Definition check printed the F164
+--         verdict ('OK - 1 definition, SECURITY DEFINER, search_path pinned, F164
+--         predicate present'), and V2 was re-run: the plan's snippet flipped from
+--         FAIL (v1, 11:20) to 'V2 PASS - identical' (v2), exact parity on 61 keys.
+--         PRODUCTION: still v1, so PENDING. Flip it only after the definition check
+--         prints the F164 verdict there. Production has NO cross-tenant preorders
+--         (0 of 3,495), so v1 and v2 behave identically on its data: only that
+--         marker can tell them apart, which is why the check exists.
 --         Admin Settings catalog-visibility S1. Plan:
 --         docs/admin-settings-catalog-visibility.md § 3.6 / § 4 S1.
 -- (F105) This line is the applied-state record. A gate that lives only in
