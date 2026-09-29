@@ -1536,6 +1536,21 @@ correct, not a fault — the editor runs as `postgres` with no `auth.uid()`,
 so `current_tenant_id()` is NULL. Verify with a real authenticated session
 against PostgREST instead.
 
+⚠️ **F162 (2026-09-27):** the caller side of this contract was wrong for over
+a year of accumulating orders and nobody had checked. `app.js`'s
+`getOrderedCodes()` called this RPC with no pagination, so it silently
+inherited PostgREST's default max-rows cap (1000) the moment the tenant's
+distinct `(distributor, order_code)` count passed it — measured on production
+at 1,895. Fixed by routing the call through `fetchAllRows()`, **promoted to
+production 2026-09-28 (PR #158)**. A companion migration
+(`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`, **applied on BOTH
+environments**) adds `ORDER BY distributor, order_code` to this function's
+body for deterministic pagination across separate page requests.
+See § 13 F162 for the full writeup, including a real trap worth reading before
+touching pagination on any RPC in this project: `.range()` on this app's
+vendored supabase-js is query-string `offset`/`limit`, and this project's
+PostgREST does **not** honour an HTTP `Range` header on an RPC POST at all.
+
 ### 6.9 Tenant resolution
 
 #### `resolve_tenant_by_slug(p_slug text) → TABLE(id uuid, slug text, display_name text, branding jsonb)`
@@ -5332,6 +5347,9 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Fix shipped, 2026-08-28; staging verification RESOLVED 2026-08-29** (see Status above). Both `import.js` and `import-staging.js` updated identically; no schema change, no `admin.html` change — the withdrawn panel already reads `withdrawn_at`, so it reflects the clear automatically once it happens, confirmed both by DB re-verification and by code inspection of the panel's filter.
 - **Where:** `scripts/import.js` / `import-staging.js` — `clearReappearedWithdrawals()` (new), `detectWithdrawals()` (mark-only now), `planWithdrawalDetection()` (new, exported), and the Step 4b call site (private scripts repo, `main` `415bb38`); no `admin.html` or schema change.
 - **Related:** **F110** (created withdrawal detection and the new-month gating this finding narrows), **F108**/**F117**/**F120** (the same "cancel is irreversible" property this finding's exposure rides on), **F134**/**F142**/**F143** (other cases in this codebase where a ledger/panel state silently goes stale until the right trigger re-runs).
+- **First live production exercise — 2026-09-29 record, and it was NOT exercised.** October's import ran on production 2026-09-27 (production, `node import.js`, catalog_month 2026-09 → 2026-10; Rick's console output plus a read-only service-role measurement the same day. Staging still reads 2026-09 — October was not run there.) Console: *"No currently-withdrawn titles on record — nothing to check."* Production held **0** withdrawn marks before the run, so the unconditional clear half had nothing to act on. **The gate's F146 half is therefore still unproven live**; it will first fire when a run starts with marks present. Measured after: 0 marks.
+
+- **2026-09-29, STAGING: the clear half was exercised against live marks for the first time, and worked.** Rick's older-month backfill re-import on staging (September's Lunar and PRH files, `--skip-autoreserve`; the procedure F146 was originally verified with) logged '7 previously-withdrawn title(s) reappeared - clearing', and a fresh read afterwards confirms it: withdrawn marks tenant-wide 0 (was 7), both mark columns null on all 7, their 7 reservations intact and still open, October's 2,215 rows, preorders (80), `order_deadline` and `catalog_filters` unchanged, September back to its original 2,302 rows. The marks it cleared were FALSE ones written by the same day's October import (F165), so this also closes that loop: the recovery path F146 built is the right one. **Still open on this finding's own terms:** production's clear half has never run (production has held 0 marks since the 2026-08-28 cleanup).
 
 #### F147 — withdrawal detection flagged 33% of production's open reservations as "Withdrawn — cannot be ordered" on its first-ever real run, because a title still inside its own ordering window is indistinguishable, under the old logic, from a genuine withdrawal
 
@@ -5356,6 +5374,10 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Production data correction: applied and verified 2026-08-28.** The 519 ids were captured to a local snapshot before any write, for exact revertibility. The CLI session's own permission classifier blocked a direct write attempt (a bulk PATCH against production) — correctly, by design; a production write of this shape should not go through unreviewed. `clear-f147-withdrawn.js` (local-only, this repo's allowlist `.gitignore` doesn't track it) was handed to Rick, who ran it directly: `y` to the confirmation, all 519 cleared in chunks of 50, script reported `519/519` and remaining count `0`. **Independently re-verified, not just trusted from the script's own output**: a fresh live query confirmed `withdrawn_at IS NOT NULL` count is `0` for the tenant, and BATMAN #14 (`0826DC0111`) specifically confirmed `withdrawn_at: null, withdrawn_last_seen_month: null`. Maintenance Mode was ON throughout the entire episode — no customer ever saw any of the 519 marks.
 - **Where:** `scripts/import.js` / `import-staging.js` — `narrowWithdrawalCandidates()`, the `priorMonthRows` `select` in `detectWithdrawals()` (private scripts repo, `main` `e4f968d`). No schema or `admin.html` change.
 - **Related:** **F110** (created the detection this corrects — its original motivating case, MIDNIGHT X-MEN #2, is now the positive-control unit test), **F146** (found and fixed the same session, same code path, different narrower defect — CSV-lag false positives that don't self-clear), **F108**/**F117**/**F120** (the irreversible-cancel exposure this rode on), **F115** (the other half of "this was F110's/F115's first-ever real run" — both were watched closely for exactly this reason).
+- **First live production exercise — 2026-09-29 record: clean, but a weak test.** October's import ran on production 2026-09-27 (production, `node import.js`, catalog_month 2026-09 → 2026-10; Rick's console output plus a read-only service-role measurement the same day. Staging still reads 2026-09 — October was not run there.) Console: *"2299 code(s) left 2026-09's catalog; none hold an unfulfilled future reservation."* Measured after: **0** withdrawn marks tenant-wide (vs 519 on the 2026-08-28 run), so no false mark was written. Caveat, stated plainly: the console shows no candidate held an unfulfilled future reservation *at all*, so the FOC narrowing was not what discriminated here — the mark half has still not been exercised against a live candidate that carries a future FOC. Not a regression; not a proof either.
+
+- **2026-09-29, STAGING: the mark path met live candidates and discriminated (first time).** Rick's October import on staging (2026-09 → 2026-10) produced 17 unfulfilled reservations on 2026-09 titles absent from 2026-10, the detector's whole population. **7 were marked withdrawn, all with FOC 2026-09-28 (passed); 10 were held back, all with FOC 2026-10-05 to 10-19 (not yet passed); 0 violate "marked iff FOC passed".** The 10 are the 9 codes the import asked Rick to confirm as orders. Without the fix all 17 would have been marked, the 519-mark shape. **Still open on this finding's own terms:** this is *staging*, so production's mark path has still never met a live candidate; F146's clear half was EXERCISED later that day on staging (7 of 7 cleared, verified by read-back) and is still unexercised on production; and whether the 7 marked titles are truly withdrawn, as opposed to F146's false-positive shape, is unchecked against the distributors' sites. Read back by a service-role query scoped to the prior month, the detector's actual scope; a first scoping that swept in 2026-06/07/08 titles reported 22 false "violations" and was corrected. Record: `docs/admin-settings-catalog-visibility.md` § 5.2, last subsection.
+- **⚠️ CORRECTION, same evening — the addendum above verified the implementation, NOT the rule.** Evidence against the premise: all 6 Lunar marked codes were on Lunar's own *Available Products* export on 09-14 and 09-22 (In-Store 11/4-11/11), and consecutive monthly files share almost no FOC dates (Lunar's September file spans FOC 09-14 to 12-14, its October file starts 10-12), so a title is absent from the next month's file by construction, withdrawn or not. The same predicate on production's data, using today's reservations, marks **0** for an import on 09-27 (the actual run, which matches the record), **4 reservations / 2 titles / 3 customers** on 09-29, **182 / 101 titles / 14 customers / 289 copies** on 10-06 and **368 / 217 / 18 / 591** on 10-13: the outcome depends on WHEN the import runs relative to FOC dates, not on anything a distributor did, and production's 0 was calendar luck. **UPDATE, later the same day: the 7 staging marks are CONFIRMED FALSE POSITIVES.** A fresh Lunar Available Products export (2026-09-29 12:02, after the 9/28 FOC) lists all 6 Lunar codes with their FOC and in-store dates unchanged (11/4 and 11/11), which I verified independently. The test has teeth: the export still lists 2,146 past-FOC titles, and 49 of the 555 titles from that same 9/28 batch DID drop out since 09-22 (mostly incentive variants and unlock bundles), so a real removal shows. Rick confirmed the PRH title (Minor Arcana #20) is in PRH's product catalog; I did not verify that one myself. Not yet filed as a finding. **The premise in `narrowWithdrawalCandidates()`'s own comment ("absence only becomes evidence of withdrawal once the FOC window has closed") does not hold for a one-time solicitation list:** after FOC passes the title is *still* absent from every later file, so the condition changes when the false positive fires, not whether. A better signal already exists in this project: `check-dates.js` downloads Lunar's Available Products export weekly, and absence from THAT is real evidence.
 
 #### F148 — `notify-customers` sends one MailerSend API request per recipient, so the monthly blast is bounded by the account's **daily API request** quota, not its monthly email quota
 
@@ -5765,8 +5787,11 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F155 — the monthly-refresh runbook tells the operator PRH does not revise dates in place, so PRH catalogs are never re-pulled and a revised in-store date is never detected
 
-- **Status:** filed 2026-09-04, **open, not started.** Owner doc:
-  `docs/f155-catalog-date-revision-detection.md`. Found by Rick from a live symptom, not an audit:
+- **Status:** filed 2026-09-04, **fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-05.** S1 (runbook),
+  S2 (`check-dates.js` + 30 production date corrections) and S3 (bounded deferral + panel ordering)
+  all shipped. Production promotion **PR #150**, merge `787b0ee`; SQL applied by Rick the same day,
+  client-first. Owner doc: `docs/f155-catalog-date-revision-detection.md` (STATUS: COMPLETE, both
+  environments). Found by Rick from a live symptom, not an audit:
   a reserved title that had quietly stopped being visible to its customers.
 - **The defect proper is one sentence.** `docs/monthly-catalog-refresh.md:130-132` reads *"PRH's
   export omits withdrawn titles rather than revising dates in place (see F110), so this step
@@ -5951,7 +5976,627 @@ reasoning — only the disposition changed, not the diagnosis.
   **2026-07** — one of the two stale months) and read **`⚠ 1:25`** back out of `arrivals.html`'s
   "Not in shipment" list: the exact surface and the exact missing badge that was reported.
 
-Next free finding ID: **F157**.
+#### F157 — a catalog file that normalises to zero rows is accepted silently, aiming the new-month set-difference steps at the distributor that is missing
+
+- **Status:** filed AND **FIXED 2026-09-07, same session** — scripts repo `main` **`9d9aa40`**,
+  committed and pushed (`git log origin/main` confirmed, not assumed). Code defect in both
+  `import.js` and `import-staging.js`, so both environments; the fix landed in both together.
+  **Not found from a live incident** — found while designing a browser-based import for
+  non-technical tenants, by asking what the two-mandatory-catalog-arguments rule actually
+  guarantees. It guarantees less than it looks like it does.
+- **The fix.** A new pure `classifyEmptyCatalogSources()`, exported from both scripts and wired
+  into `main()` after normalisation — **before** `normalized_catalog.json` is written and before any
+  RPC — aborting with exit 1. It also prints the **normalised** count per distributor beside the raw
+  count, which is the comparison that did not exist. Fails closed: a missing, non-finite or negative
+  count counts as empty. **No override flag, deliberately.**
+- **Verification.** Unit suite **295/295, exit 0** (up from 279 — 8 new tests × 2 modules, in
+  `test/empty-catalog-source-guard.test.mjs`, run against **both** scripts per the 2026-05-08
+  hot-patch drift convention). **Negative-control tested:** neutering the guard to `return []` turns
+  V2/V3/V4/V5 red (`ERR_ASSERTION, actual 0, expected 1`); restoring it returns 295/295.
+  `builders.test.mjs`'s export-set parity assertion still holds, both scripts changed together.
+  **Wiring proven live, not inferred from the unit tests** — two `--no-write` dry runs against
+  staging: a real Lunar file paired with a re-formatted PRH file (**3 raw rows, 0 normalised**)
+  aborted with exit 1 before any write, and the genuine Lunar + PRH 2026-05 pair passed clean at
+  **1202/1202 and 1078/1078 — no false positive**, the property that actually matters for a guard.
+- **Not fixed here, and deliberately:** the distributor-scoping of `delete_dropped_catalog_items`
+  and `computeWithdrawalCandidates()` (Effects 1 and 2 below). This guard closes the *reachable*
+  path — a bad file — without touching withdrawal logic; the scoping work changes the very code the
+  2026-09-25 October import exists to observe, and is therefore held until after that gate. **The
+  two set-difference steps are still distributor-blind.**
+- **The gap, in one sentence:** nothing asserts that either supplied catalog file produced any
+  records, so a wrong, empty, or re-formatted distributor export becomes an empty contribution to a
+  set-difference that is then read as "the distributor dropped everything."
+- **Why the existing checks do not cover it.** `main()`'s usage check is `args.length < 2` — it
+  verifies a file was **named**, never that it parsed or normalised to anything. The month-mismatch,
+  Lunar item-code (F136 A2) and cross-month collision (F136 A3) guards all reason about *records
+  that exist*; none of them fires on records that are simply absent.
+- **⚠️ The printed row counts do not reveal it either, and this is the sharp part.**
+  `import.js:1903-1904` prints `Lunar catalog: N rows` / `PRH catalog: N rows` from the **raw**
+  parse, *before* normalisation. A file with changed headers parses into plausible-looking raw rows
+  and then normalises to **zero** records, because the normalisers filter on required fields. The
+  only post-normalisation figure printed is the **combined** `Total catalog records`, which merely
+  looks low with nothing to compare it against. **A per-distributor normalised count is never
+  printed at all.**
+- **Effect 1 — the absent distributor's just-imported month is deleted.** On a new-month import
+  (`import.js:763-771`) `refreshCatalog()` calls `delete_dropped_catalog_items` with
+  `newItemCodes = records.map(r => r.item_code)` — the codes of the **whole** import. The function
+  is `DELETE FROM catalog WHERE tenant_id = … AND catalog_month = … AND item_code != ALL(p_item_codes)`
+  and takes **no distributor parameter** (definition read at
+  `docs/phase-1-schema-migration.md:671-689` — a Phase 1 snapshot; **read the live definition before
+  relying on this**, per § Document Integrity). So a Lunar-only record set deletes every PRH row in
+  that month.
+- **Effect 2 — and this is the one that actually reaches customers.**
+  `computeWithdrawalCandidates()` (`import.js:1015`) builds `currentPairs` as
+  `distributor||item_code` across the whole import and flags every prior-month row not in it. With
+  a distributor absent, its entire prior month becomes candidate. `narrowWithdrawalCandidates()`
+  (`import.js:1045`) then requires an unfulfilled reservation, a future `on_sale_date` and a passed
+  `foc_date` — which bounds the blast radius but does not empty it. What survives is
+  **reserved titles falsely marked "Withdrawn — cannot be ordered"**, showing F120's customer-facing
+  badge and unlocking irreversible self-cancellation on books that are genuinely still coming.
+  **That is F147's damage shape exactly**, reached by a different cause.
+- **What this is NOT, stated because the obvious reading is wrong.** `preorders.catalog_id` is
+  `ON DELETE CASCADE` (`schema-prod-4.8.sql:809`, local snapshot 2026-06-10), so deleting catalog
+  rows *does* delete reservations. **But Effect 1 cannot reach live reservations**, because
+  `delete_dropped_catalog_items` is scoped to the month **just imported**, and on a genuinely new
+  month no reservation exists yet — auto-reserve (Step 5) runs *after* `refreshCatalog()` (Step 4).
+  The month's rows were inserted moments earlier. Effect 1 is therefore **recoverable by re-importing
+  the correct file** (a same-month upsert, which does not re-run `delete_dropped`), and its real cost
+  is a distributor's titles silently missing from a new catalog. Effect 2 is the durable harm.
+  *Recorded so nobody re-derives a worse conclusion than the evidence supports — the CASCADE is a
+  latent amplifier if the `isNewMonth` gate is ever widened, not an active one today.*
+- **It also blocks single-distributor tenants outright**, which is why this was found. A shop
+  holding only a Lunar account has one catalog file, every month — not a partial import but their
+  complete one. `args.length < 2` refuses to start, and the shipment path likewise requires both
+  invoices. **Relevant to Phase 6:** distributor-scoping the two steps above is what makes such a
+  tenant possible at all, and is tracked separately from this finding.
+- **Fix (this finding): refuse to proceed when a supplied catalog file normalises to zero records.**
+  A handful of lines, fail-closed, no design decisions, and independent of the scoping work. Print
+  the **normalised** count per distributor alongside the raw count so the two can be compared. An
+  explicit override flag is deliberately *not* proposed — a legitimate zero-record catalog file does
+  not exist.
+- **Sequencing (2026-09-07):** land before the **2026-09-25 October catalog import**, with soak
+  across the 09-08 and 09-15 weekly runs. It sits in parse-time code, touches no withdrawal logic,
+  and can only ever stop an import — so it does not blur that gate's purpose as F146/F147's first
+  live exercise. It also protects the runbook's **Step 3 revision sweep**, the highest
+  file-handling-density step in the cycle, which runs immediately before that import. The
+  distributor-scoping fix must wait until **after** 09-25, because it modifies the very code the
+  gate exists to observe.
+- **Related:** F147 (same customer-facing damage — 519 false withdrawal marks — different cause),
+  F146 (the clear-half counterpart), F136 (the entry guards this one sits beside, and does not
+  duplicate), F131 (single-operator import; the tenant-facing motivation), F155 (the
+  never-re-pull assumption that makes older months fragile).
+- **First live production exercise — 2026-09-29 record: guard clean, no false positive.** October's import ran on production 2026-09-27 (production, `node import.js`, catalog_month 2026-09 → 2026-10; Rick's console output plus a read-only service-role measurement the same day. Staging still reads 2026-09 — October was not run there.) Console: raw `Lunar 1402 / PRH 813`, normalised `Lunar 1402 record(s) from 1402 raw row(s)` / `PRH 813 record(s) from 813 raw row(s)` — i.e. the per-distributor normalised counts print and match. Measured after: `catalog` 2026-10 = Lunar 1402 / PRH 813 (exact). Also observed: Maintenance Mode was **OFF throughout** (`updated_at` unchanged since 2026-09-01), so the import ran with customers live.
+
+#### F158 — `check-dates.js` only watches UNFULFILLED reservations, so it is blind to every row that has already suffered the F155 harm — and it re-reports already-resolved rows forever
+
+- **Status:** **filed 2026-09-18, OPEN — not started.** Scripts repo, `check-dates.js` only; no app
+  code, no schema. Found by Rick asking about one Lunar code (`0526AZ0505`) that the weekly check had
+  never mentioned. **One live instance repaired the same day** (see below); the defect is untouched.
+  **A second live instance was found 2026-09-22 — its own sibling cover, never checked on 09-18 —
+  and is NOT yet repaired** (see below).
+- **The scope, in one line:** the drift query is
+  `preorders?tenant_id=eq.<t>&fulfilled=eq.false` (`check-dates.js` ~line 245). **The F155 harm
+  sequence ENDS in auto-fulfilment** — stale date passes → row leaves both halves of My List → never
+  matches a bagging week → `auto_fulfill_past_on_sale()` marks it fulfilled. So the row leaves the
+  watch set at exactly the moment the harm completes. **The checker protects a row right up until it
+  breaks, then stops looking at it.**
+- **Live instance, measured 2026-09-18.** `0526AZ0505` CIMMERIAN XUTHAL OF THE DUSK #1 (OF 3) CVR B
+  (Lunar, `catalog_month` 2026-05, ABLAZE):
+
+  | | |
+  |---|---|
+  | Both reservations | `fulfilled=true`, `fulfilled_at` **`2026-07-25T14:29:12.113942+00:00` — identical on both**, i.e. one batch write (`auto_fulfill_past_on_sale()`) |
+  | `weekly_shipment` | **zero rows, ever** |
+  | Our `on_sale_date` | `2026-09-23` |
+  | Lunar's own file, 09/18 | **`9/30/2026`** — twelve days in the future on the day this was found |
+  | `order_submissions` | one `monthly` row, **qty 2**, `2026-05-24` — genuinely ordered, so a slipped title, not a cancelled one |
+
+  Two customers were shown a collected state from 2026-07-25 onward for a book that had not shipped
+  and had not gone on sale. **No check-dates.js run has ever mentioned it, and by construction none
+  ever will.**
+- **The same scope over-reports in the other direction.** The `>> N are PAST on-sale with NO shipment
+  evidence and NO date source` block listed the **identical six titles** on 2026-09-14 and again on
+  2026-09-18. Verified live: `0726IM0315`–`0319` (the five SPAWN 77 incentive covers) each carry a
+  **supplier rejection recorded 2026-09-05** netting the code to 0, and `0726AC0632` carries
+  **`arrival_outcome='not_arrived'`**. All six were resolved *before* the first of those runs.
+  `check-dates.js` reads neither `order_submissions` nor `arrival_outcome`, so nothing about those
+  rows will ever change and **they will be re-reported every week indefinitely** — a permanent false
+  alarm sitting inside the one block that exists to catch a real F155 case.
+- **⚠️ The same scope also produced a silent near-miss, which is worth reading as a warning about
+  luck.** On 2026-09-18 **F159** overwrote a hand-corrected date on `75960621519500122`. Its sibling
+  `75960621519500111` — same frozen month, hand-corrected the same day, same stale value in the same
+  file — **escaped only because its reservations are `fulfilled=true / arrival_outcome='arrived'`, so
+  this scope dropped it before the diff ran.** A row was protected by the very filter that is the
+  defect. That is coincidence, not a safety property, and it must not be mistaken for one.
+- **Fix direction (not designed, and the bound is the hard part).** Widening to *all* fulfilled rows
+  is not viable — production held **859** `fulfilled=true, arrival_outcome IS NULL` orphans at F115
+  S6. A bounded widening is what is wanted: include fulfilled rows that have **no shipment evidence**
+  and were fulfilled within the last N days, and *suppress* rows whose ledger nets ≤ 0 or which carry
+  a non-null `arrival_outcome`. That single suppression rule fixes the over-reporting half too.
+- **Live instance REPAIRED 2026-09-18** via local one-off `fix-cimmerian-false-fulfil-2026-09-18.js`
+  (before-state in `fix-cimmerian-log-2026-09-18.json`). `on_sale_date` `2026-09-23` → **`2026-09-30`**
+  (Lunar's own 09/18 file), both reservations `fulfilled` → **false** with `fulfilled_at` cleared,
+  `arrival_outcome` deliberately left NULL — NULL means *no arrival judgement has been made*, which
+  is exactly true for a book that has not shipped. **Independently verified by a fresh read, not the
+  script's own output:** `foc_date` unchanged at `2026-06-15`, and the row is **back inside
+  `check-dates.js`'s own `fulfilled=eq.false` watch set (2 rows)** — which is the point of the
+  un-fulfil, not a side effect. The script refuses outright if any `weekly_shipment` row exists (that
+  would mean it really arrived) or if `fulfilled_at` is not the exact auto-fulfil batch stamp.
+  **⚠️ This buys twelve days, not a cure:** if the title slips past 2026-09-30,
+  `auto_fulfill_past_on_sale()` re-fulfils it and it drops straight back out of the checker. **The
+  defect itself is untouched.**
+- **Interim, no code:** none. There is no operator action that surfaces these rows — that is the
+  finding.
+- ***CORRECTED 2026-09-22.** This entry originally read "F155 S3's bounded deferral would stop new
+  instances arriving but is **not on production**." **That is false. S3(a) has been live on
+  production since 2026-09-05**, applied by Rick immediately after PR #150 merged
+  (`docs/sql/auto_fulfill_past_on_sale.sql`: `prod=APPLIED 2026-09-05 (F155 S3a body)`), and
+  `f155-catalog-date-revision-detection.md`'s own STATUS token has read COMPLETE, BOTH
+  ENVIRONMENTS since that date. **Confirmed behaviourally on 2026-09-22, not from the doc:** 15
+  reservations past their on-sale date with **no shipment evidence at all** are surviving
+  unfulfilled — which the pre-F155 body could not produce, since it fulfilled everything past
+  on-sale unconditionally.*
+- **What that changes, and what it does not.** New instances of this finding now arrive more
+  slowly: a stale-dated row with no evidence is **deferred up to 14 days** rather than fulfilled on
+  the first weekly run, and S3(b) keeps it visible in Never Arrived meanwhile. **The finding
+  stands unchanged past that window** — once the deferral lapses and the row is fulfilled, this
+  scope drops it permanently, exactly as described above. S3 narrows the intake; it does not close
+  the hole.
+- **Why the error happened, because it is the documented failure mode.** CLAUDE.md's narrative
+  still carries the 2026-09-04 *recommendation* ("S3 to staging now with its production promotion
+  held until October is verified green"), which was superseded the next day. The plan doc's own
+  § 5 body also still says "production still runs the pre-F155 body." Both were trusted over the
+  STATUS token — the precise inversion CLAUDE.md § Document Integrity warns against.
+- **⚠️ SECOND LIVE INSTANCE FOUND 2026-09-22, unrepaired — the defect's own prediction, confirmed
+  on the very next row.** `0526AZ0504` CIMMERIAN XUTHAL OF THE DUSK #1 (OF 3) **CVR A** — `0505`'s
+  own sibling cover, one row away — carries the identical shape and was never checked during the
+  2026-09-18 investigation, which only looked at the one code Rick asked about. `fulfilled_at`
+  `2026-07-25T14:29:12.113942+00:00` — **byte-identical to `0505`'s stamp**, i.e. the same batch
+  write caught both — zero `weekly_shipment` rows ever, our `on_sale_date` still `2026-09-23`
+  against Lunar's 09-22 file's `9/30/2026` (read from the same download that already carries
+  `0505`'s corrected value). **Also invisible to `neverArrivedFromFulfilled()`**
+  (`admin.html:1861`), not only to `check-dates.js`: that filter explicitly excludes a NULL
+  `arrival_outcome` ("not yet judged, not judged unknown"), which is exactly what this row carries
+  — so there is genuinely no admin surface anywhere in the app for it today. Found by asking about
+  `0505`'s own sibling directly, not by any systemic check — itself more evidence for the fix
+  direction above, not a new fact about the mechanism. **Complication found alongside, not yet
+  resolved:** `0504` also carries a second, orphaned `catalog_month=2026-06` duplicate catalog row
+  (predates F136's 2026-08-22 dedupe fix; `on_sale_date` dead at `2026-07-22`, untouched by
+  anything) holding its own separate `fulfilled=true` reservation for a different customer (Albert
+  Abaunza) in the identical zero-evidence shape — two different people each shown a collected state
+  for what is physically one book, split across two disconnected catalog rows. `order_submissions`
+  shows exactly 2 copies ordered total (`qty 2`, `monthly`, `2026-05-24`), matching the 1+1
+  reservations, so the shop's own ledger is correct even though the two reservations aren't unified
+  on one row. **The 2026-06 orphaned-duplicate row (Albert Abaunza's reservation) is still
+  uncorrected — a merge/repoint judgment call, not a mechanical date fix, and still Rick's decision
+  to make.**
+- **`0504`'s LIVE (2026-05) row REPAIRED 2026-09-22** via local one-off
+  `fix-cimmerian-cvr-a-2026-09-22.js` (same convention as `fix-cimmerian-false-fulfil-2026-09-18.js`;
+  before-state in `fix-cimmerian-cvr-a-log-2026-09-22.json`; both local-only, matching every prior
+  one-off in this class). `on_sale_date` `2026-09-23` → **`2026-09-30`** (Lunar's own 09-22 file),
+  the one reservation `fulfilled` → **false** with `fulfilled_at` cleared, `arrival_outcome`
+  deliberately left NULL. **Independently verified by a fresh read, not the script's own output:**
+  `foc_date` unchanged at `2026-06-15`; the 2026-06 orphaned duplicate row confirmed **byte-identical
+  to its pre-fix state** (`fulfilled=true`, `fulfilled_at` unchanged, `arrival_outcome` NULL) — this
+  script's own out-of-scope guard held, and Albert Abaunza's reservation was never touched.
+- **⚠️ SYSTEMIC FIX LANDED 2026-09-22, scripts repo `main` `e267233` — but read this as a REPORT
+  widening, not a remediation.** New pure, exported `shouldWatchFulfilledRow(row, today, maxDays)`
+  in both `import.js`/`import-staging.js` (same duplicate-and-test-both convention as
+  `classifyReservedDateDrift`, after the 2026-05-08 hot-patch drift incident). A fulfilled row now
+  qualifies for the weekly watch only if it is **unjudged** (`arrival_outcome` NULL), **unshipped**
+  (no `weekly_shipment` evidence), **unresolved** (ledger net > 0 — a recorded F143 rejection or
+  correction is its own resolution, not this defect), and **recent** (fulfilled within
+  `FULFILLED_WATCH_DAYS = 14` of today — bounding against F115 S6's 859-row orphan population,
+  which this must not re-surface every run). `check-dates.js` wires this in as a new **read-only**
+  report section; it never writes — un-fulfilling still needs the same per-row guards
+  `fix-cimmerian-false-fulfil-2026-09-18.js` used, which stays a human decision, not a weekly
+  default.
+  - **26 new unit tests** (13 cases × 2 modules), negative-control verified (disabled the
+    shipment-evidence guard, exactly the expected test went red, restored, 26/26 green again).
+  - **Verified against BOTH live production and staging** (`--no-write`), no errors, no regression
+    to any existing report section. **The bounded weekly path correctly found NOTHING on
+    production today** — both `0526AZ0505` and `0526AZ0504` are 59 days stale, outside the 14-day
+    window by design. That is not the fix failing; it is F115 S6's territory (a one-time
+    historical sweep), deliberately not this weekly check's job.
+  - **A standalone one-time UNBOUNDED sweep** (same tested function, `maxDays=Infinity`, read-only,
+    not part of `check-dates.js`) confirmed it finds `0526AZ0504` for real — and surfaced far more
+    than the two known instances: **60 rows tenant-wide** currently match this shape. Most read as
+    ordinary data-completeness gaps (fulfilled a few days *after* on-sale, i.e. probably genuinely
+    arrived, just never got a `weekly_shipment` row logged) rather than the CIMMERIAN pattern
+    (fulfilled while the date was later revised further out) — distinguishing the two needs the
+    same title-by-title care F115 S6 applied. **Explicitly parked, not triaged** — Rick's call,
+    2026-09-22, to hold this for a separate session rather than fold it into this fix.
+- **✅ ORPHANED-DUPLICATE DECISION RESOLVED 2026-09-29 — Albert Abaunza's reservation REPOINTED onto
+  the live row.** Made urgent by a fact found that morning, not by the finding itself: the 09-27
+  shipment import (`Shipment-detail-LUNAR.csv`) lists **`0526AZ0504` CVR A, on-sale 9/30/2026**, so
+  the book physically arrives Wednesday 09-30 — while This Week's bagging query selects on
+  `catalog.on_sale_date` within the Mon–Sun week (`admin.html:3946-3947`), and Albert's reservation
+  sat on the orphan row (`f9acb743…`, `catalog_month` 2026-06, `on_sale_date` 2026-07-22). **His copy
+  would have arrived with no bag on the list.** Rick ran one guarded UPDATE in the production SQL
+  Editor (`BEGIN` → pre-check → `UPDATE preorders SET catalog_id = 'aa2ecf77…' WHERE catalog_id =
+  'f9acb743…' RETURNING …` → `COMMIT`): pre-check 2 rows / 2 distinct users (Book Stop on the live row,
+  Albert on the orphan — no collision), UPDATE returned **exactly 1 row**. No trigger applied (the
+  only `preorders` trigger is F109's `BEFORE DELETE`). Same repoint shape as F136 S3's two.
+  **Independently re-verified by a fresh service-role read, not the editor's output:** `aa2ecf77…`
+  holds 2 reservations, `f9acb743…` holds 0, and a query of the same shape as the bagging query for
+  week 2026-09-28..10-04 returns **Book Stop + Albert Abaunza** for CVR A. `fulfilled` left `true` on
+  both — now genuinely backed by shipment evidence; Albert's `fulfilled_at` (2026-06-12) was left as
+  history rather than rewritten. The orphan catalog row stays, with zero reservations — F136's
+  accepted-residual category.
+  **⚠️ Recorded so it is not misread as a recurrence:** the live row's other reservation (the Book
+  Stop account) shows `fulfilled_at` **2026-09-27T23:32** — two days *before* its 09-30 on-sale date.
+  That is the October import's auto-fulfil acting on **real** shipment evidence (the same invoice),
+  i.e. F155 S3(a)'s evidence-present path working as designed — **not** the F158 false-fulfil shape.
+  **The 60-row triage above remains parked.** Plan: `docs/next-work-sequencing-2026-09-29.md` § 1.
+- **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
+  same day, same script, different root cause), F115 (`arrival_outcome`, and the 859-row orphan
+  population that bounds any widening), F143 (why a ledger rejection and an arrival judgement are
+  separate statements — the reason both must be consulted).
+
+#### F159 — `check-dates.js` treats a FROZEN PRH catalog as authoritative and silently overwrites hand-corrections with a date that can never be current
+
+- **Status:** **filed 2026-09-18, OPEN — not started. One production row was wrongly written and was
+  reverted the same day.** Scripts repo, `check-dates.js` only.
+- **What happened.** The 2026-09-18 run applied 9 date corrections. **Eight were genuine** (PRH
+  2026-06/07/08, live catalogs, all moving later, none previously hand-corrected). The ninth:
+
+  ```
+  75960621519500122  DNX #1 JIM LEE HIDDEN GEM VARIANT  (PRH, 2026-05)
+    2026-09-04  hand-corrected  2026-09-02 -> 2026-09-16   (fix-stale-dates-f155-log-2026-09-04.json)
+    2026-09-18  check-dates.js  2026-09-16 -> 2026-09-02   <-- WRONG
+  ```
+- **Why the source cannot be right, ever.** PRH 2026-05 is **frozen**, measured four ways by F155:
+  two downloads 44 minutes apart are byte-identical (MD5 `438958a0b69b961ab140ab63c9b3f3bf`), **0 of
+  1,078** rows differ from the May import, its Weekly Change Reports run 2026-04-24 → **2026-07-31
+  and stop**, and **0 of 5,123** PRH `MainIdentifier`s ever re-list in a later monthly file. The file
+  reports the original solicitation date and **cannot report anything else**. `check-dates.js` has no
+  frozen-month check and no awareness that a value was set by hand, so it read the stale date as
+  current and wrote it back — with no prompt distinguishing it from the eight genuine changes.
+- **The script's own closing warning describes this exact hazard** — *"Re-importing any of these
+  catalog months RESTORES whatever that distributor file says — the stale date, for a frozen PRH
+  month"* — but aims it at `import.js`. **The script did it to itself**, and printed the warning
+  *after* applying.
+- **Reverted 2026-09-18** via local one-off `revert-frozen-prh-overwrite-2026-09-18.js` (before-state
+  in `revert-frozen-prh-log-2026-09-18.json`). **Independently verified by fresh read, not the
+  script's own output:** both 2026-09-04 hand-corrections now read `2026-09-16`, and **all 8 genuine
+  corrections confirmed still intact** — the revert touched nothing else.
+- **⚠️ `unchanged ×N` cannot serve as the guard, and that is worth stating because it looks like it
+  could.** Only a file seen on a *previous* run carries a stored hash: on 2026-09-18, **five of seven
+  files were first-seen and had no signal at all**. The counter also cannot distinguish *"the
+  distributor stopped publishing"* from *"the operator re-supplied the same file"* — re-running a
+  stale file a few weeks running will make the script declare a **live** catalog frozen.
+- **Interim mitigation, live, no code:** the frozen PRH files are moved out of the recheck folder into
+  `catalogs/recheck/_frozen-do-not-use/` (2026-04 and 2026-05, with a README recording why). They are
+  **moved, not deleted** — `import.js` may still legitimately need them for an older-month backfill,
+  which is a different job with different rules. **2026-06 was deliberately left in place**: it enters
+  the freeze window around now but produced a genuine correction on 2026-09-18 (Mimi Green #4, moved
+  later), so it was still carrying real revisions that day.
+- **Fix direction:** refuse to apply a change whose source catalog is older than roughly three months
+  past its catalog date, or whose file hash has been unchanged across N runs — and, separately, check
+  the correction logs before overwriting a value a human set. Prompt per-source rather than applying
+  all changes under one y/n, so a frozen-source change cannot ride along with eight good ones.
+- **Related:** F155 (measured the freeze; its § Step 3 item 6 already warns that a re-import reverts a
+  hand-correction — this is that hazard reached from the checker instead of the importer), F158 (same
+  script, same day, different root cause; its scope is why the sibling row escaped), F146 (whose
+  withdrawal-clearing backfill is the other documented way a hand-correction gets reverted).
+
+#### F160 — a tenant with no reservation history gets a BLANK Print Catalog: `getReservedPublishers()` returns an empty set and every row is filtered out
+
+- **⚠️ STATUS CORRECTED 2026-09-29 — the bullets below were written 2026-09-23 and several are now stale; they are kept visible, this is the current state.** **FIXED ON STAGING** by S4(a) (`886cab0`, 2026-09-24): the bar, `getReservedPublishers()` and `MIN_RESERVED` are deleted; served staging bytes carry each at ×0. **NOT promoted to production** (S1's RPC is not yet applied there; Session C of `docs/next-work-sequencing-2026-09-29.md`). Three figures below no longer hold: (1) **the page count.** "33 → 45 pages" was `ceil(rows / 46)`, and measuring the real print (2026-09-29, `admin-settings-catalog-visibility.md` § 5.2) showed **44.0-44.3 rows per page**; on production's **October** catalog the bar's deletion takes the sheet from about **35 to about 46 pages** (1,546 → 2,038 rows) *(and to **50 pages / 2,215 rows** under the default Rick chose later that day, Q8: "FOC earlier than today", `e64f3d8`)*. (2) **The "Reserved ≥ 7" preset was REMOVED 2026-09-24** (that plan's Q3 reversal), so no one-click path back to the old sheet exists. (3) The plan's STATUS is IN PROGRESS, not NOT STARTED. Gate V2 (RPC vs the old bar's publisher set) ran 2026-09-29: threshold-7 sets identical; see F164 for the one count difference it found.
+- **Status:** **filed 2026-09-23, CONFIRMED LIVE the same day, OPEN — not started.** Both
+  environments (identical code). `admin.html` only, no schema involvement. Filed at Rick's
+  instruction after the settings-page planning session surfaced it, then **confirmed by measurement
+  rather than left on a code reading** — see *Confirmed* below. *(This entry read "Derived from
+  reading the code path end to end, NOT yet confirmed against a live zero-history tenant" for a few
+  hours between filing and measurement. The words are kept here rather than deleted so the
+  correction is visible.)*
+- **⚠️ CONFIRMED on staging 2026-09-23, and the affected tenant is the DEMO one.** Q1 of
+  `docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql`, run by Rick:
+
+  | slug | plan | month | catalog rows | publishers | with any history | passing bar | predicted print rows |
+  |---|---|---|---|---|---|---|---|
+  | `demoshop` | free | 2026-09 | **2,288** | 72 | **0** | **0** | **0** |
+  | `raysandjudys` | pro | 2026-09 | 2,302 | 72 | 17 | 5 | 688 |
+
+  `demoshop` holds a complete 2,288-row catalog across 72 publishers and its Print Catalog renders
+  **completely blank**. That is the predicted failure, observed.
+- **The prediction model was validated before the demoshop figure was trusted**, which is why that
+  zero can be believed. Q1 reimplements the print's own filters in SQL, so it cannot validate the
+  client — the client validates it. Against the real print of 2026-08-24 (4 publishers → 638 rows →
+  **15 pages**), staging now returns 5 publishers → 688 rows → **15 pages**. Pages match exactly;
+  the +1 publisher and +50 rows are one publisher crossing the bar on a month of additional reserve
+  history, in a different catalog month. Had the founding row *not* landed there, this finding would
+  still be unconfirmed.
+- **⚠️ PRACTICAL CONSEQUENCE, worth more than the severity rating: `demoshop` is the tenant Rick
+  shows prospects.** F72 S1a (2026-09-03) built it precisely so a free-tier walkthrough carries no
+  founding-tenant identity, and its own closeout lists print output as "unreachable from a
+  screen-share demo, but real if a physical handout is ever part of the pitch." It is worse than
+  unreachable — it is **blank**. Any prospect asking to see the paper catalog gets an empty sheet.
+- **Staging's exclusion rate is more severe than production's.** Of 72 publishers in the month, only
+  **17 have any reserve history at all** and only **5** clear the bar — so **67 of 72 (93%)** are
+  hidden from the printed sheet, against production's recorded 64 of 78 (82%). The 12 publishers
+  sitting between 1 and 6 reservations are the near-miss population the settings page exists to make
+  visible.
+- **Severity: Low today, High the moment a second tenant onboards.** Only the founding tenants use
+  Paper Orders, and both have reserve history, so nobody has seen it. The Print Catalog is the paper
+  artifact customers write their orders on — a new tenant's first use of it produces an empty sheet,
+  **silently**, because the filter has no error path.
+- **The code path, in full.** `getReservedPublishers()` (`admin.html:5251`) builds a `counts` Map by
+  paging `reservation_history.publisher` and `preorders → catalog(publisher)`. It then keeps only the
+  publishers clearing the bar (`:5280`):
+
+  ```js
+  const MIN_RESERVED = 7;                                       // :5249
+  counts.forEach((n, key) => { if (n >= MIN_RESERVED) set.add(key); });   // :5280
+  ```
+
+  and `fetchAllCatalogForDistributor()` filters the month against it (`:5329`):
+
+  ```js
+  return items.filter(c =>
+    c.publisher && reserved.has(c.publisher.trim().toLowerCase()) &&      // :5329
+    (!c.foc_date || c.foc_date.slice(0, 7) > currentCatalogMonth)         // :5330
+  );
+  ```
+
+  **A tenant with no reservations produces an empty `counts`, therefore an empty `set`, therefore an
+  empty array.** There is no fallback, no floor and no warning anywhere in that path; the print
+  window opens on a document with zero rows.
+- **The existing gradient points straight at it**, which is why this needs no speculation about the
+  mechanism — only confirmation that a tenant sits at the end of it. Same catalog month, same code:
+
+  | Tenant | Publishers passing | Rows printed | Pages |
+  |---|---|---|---|
+  | production founding (`rjbookstop`) | 14 of 78 | 1,534 | 34 |
+  | staging founding (`raysandjudys`) | 4 of 78 | 638 | 15 |
+  | **any tenant with no reserve history** | **0** | **0** | **0** |
+
+  The production/staging figures are the ones already recorded at `admin.html:5371-5380` and in
+  CLAUDE.md; the third row is this finding.
+- **This is NOT a re-opening of the self-reinforcement trade, and the distinction matters.** The
+  2026-08-24 single-combined-catalog-print session measured that the bar excludes **64 of 78**
+  publishers on production (Oni Press, Viz Media, Yen Press, Seven Seas and Vault among them) and
+  that the exclusion is self-reinforcing — a publisher that never prints is never seen, so never
+  earns reservations. It deliberately **filed no finding**, because whether that trade is right is a
+  product judgement and Rick's call. **F160 is the degenerate case of the same mechanism, not the
+  same question:** at zero history the bar excludes 78 of 78 and the feature produces nothing at all.
+  A surface that renders empty is wrong behaviour regardless of where the trade is set.
+- **✅ PRODUCTION CONFIRMED TOO, 2026-09-23 — and the finding's own definition needed correcting.**
+  Q1 on production: `comicstore` holds **2 catalog rows, 1 publisher, 1 reservation, 0 publishers
+  passing the bar → 0 predicted print rows.** Its Print Catalog is blank. Production's founding
+  tenant validated the model alongside it: **14 publishers passing, matching the 2026-08-24 print's
+  14 exactly** (1,534 rows → 34 pages then; 1,507 → 33 now, on a later catalog month).
+- **⚠️ THE DEFINITION WAS WRONG, AND MY OWN CHECK RETURNED A FALSE NEGATIVE.** This entry and S0's
+  Q8 both framed the trigger as **zero reserve history**. It is not — the real condition is **no
+  publisher clears `MIN_RESERVED`**, and zero history is merely the most obvious route to it.
+  `comicstore` has *one* reservation, so Q8's `archived_reservations = 0` predicate excluded it and
+  the query returned **no rows on production** — which reads as "no live instance" and is false.
+  Only cross-reading Q1's `publishers_passing_bar` column caught it. **The correct test is
+  `month_rows > 0 AND publishers_passing_bar = 0`.** Q8 is kept in the file with this recorded
+  rather than deleted, because it is a clean instance of the § Smoke Test Suite rule it violates:
+  *before asking anyone to run a check, ask what its output looks like when the thing has FAILED.*
+- **Practical impact on production is nil; the meaningful instance is staging's `demoshop`.**
+  `comicstore` is a two-row demo tenant, so nothing real is broken there — but the mechanism is now
+  confirmed live on both environments, and the widened definition means any tenant whose
+  reservations are spread thinly across publishers is exposed, not only a brand-new one.
+- **Fix — DELETE THE BAR, decided by Rick 2026-09-23. Not the floor this entry first proposed.**
+  `MIN_RESERVED` (`admin.html:5249`), `getReservedPublishers()` (`:5251`) and the `reserved.has(...)`
+  clause at `:5329` all go. With no bar, an empty or thinly-spread reserve history cannot produce a
+  blank sheet, so the defect is removed rather than guarded.
+  *(This entry originally read "Fix direction — a floor, not a redesign. When `counts` is empty …
+  fall through to all publishers rather than none." That floor was a patch on a heuristic that is
+  being deleted; the wording is kept so the change of direction is visible.)*
+- **The bar only ever existed on the print**, so deleting it changes **nothing for customers** — they
+  have always seen every publisher. The cost is paper: production's sheet goes **33 → 45 pages**
+  (2,068 FOC-eligible rows ÷ 46). The trimming capability returns as explicit, admin-set publisher
+  exclusions on the new Settings page, with "Reserved ≥ 7" available as a one-click preset that
+  reproduces today's 1,507 rows / 33 pages exactly.
+- **Carried by `docs/admin-settings-catalog-visibility.md` § 4 S4(a)**, which also records the
+  sequencing constraint: gate V2 must compare the new RPC against `getReservedPublishers()` **before**
+  S4 deletes it, and the page-count change should not land in the 2026-09-25 October import window,
+  which already carries F146/F147's first live production exercise.
+- **Superseded in full by `docs/admin-settings-catalog-visibility.md`** (STATUS: NOT STARTED), whose
+  § 2 records this as its blocking entry condition. That plan replaces `MIN_RESERVED` with explicit
+  per-tenant configuration defaulting to show-all, which closes this by construction — but **the
+  one-line floor above is worth landing independently if that plan does not ship soon**, because the
+  exposure begins at the next tenant onboarding, not at the plan's schedule.
+- **Related:** **F131** (single-operator import SPOF — the other structural blocker on tenant
+  growth), **F72** (branding: the other thing that must be true before a second tenant takes real
+  customers), **F145** (per-tenant hostname provisioning is likewise recorded nowhere), and the
+  2026-08-24 print-consolidation session's self-reinforcement note, distinguished above.
+
+#### F161 — production's My List scores 78 Lighthouse Performance where staging scores 98, on identical code
+
+- **Status:** **filed 2026-09-24, OPEN — not started.** Production only. `mylist.html`, no code change
+  involved. **Filed not fixed, Rick's explicit call** — it wants its own measurement session against
+  a large account rather than being bolted onto the admin-settings work that surfaced it.
+- **Measured, three runs each, Rick 2026-09-24:**
+
+  | | `mylist.html` |
+  |---|---|
+  | staging | **98 / 97 / 98** |
+  | production | **78 / 78 / 77** |
+
+  Consistent to a point across three runs on both sides, so this is a reading rather than lab noise.
+  **Same code on both environments** — `mylist.html` was untouched by the settings work apart from a
+  one-line nav `<li>`, and it does not load `CatalogFilters` at all.
+- **Found as a CONTROL, not by looking for it.** Rick compared Lighthouse on the catalog after S4
+  (staging 88, production 95) and asked whether that was a fair comparison. `mylist.html` was chosen
+  as a page the new work had not touched, to test whether staging simply trails production. It does
+  not: **on My List the direction reverses by 20 points.** That settled the catalog question — the
+  environments are not comparable in one direction, so the catalog gap is not an S4 regression — and
+  turned up this instead, which is a worse number than the one being investigated.
+- **Leading hypothesis, NOT confirmed: the account's data volume.** `mylist.html` renders the
+  customer's own reservations, and **F140 recorded the Book Stop admin account at 1,345 preorders**
+  while staging's accounts hold a handful. Same code, roughly two orders of magnitude more rows.
+- **⚠️ Probably NOT an unbounded read, and that matters for whoever picks this up.** The obvious guess
+  is the F82/F113/F139/F140/F156 pagination shape, but **F140 already paginated `mylist.html`'s
+  queries** (`:1876` carries the `range()` loop) — so a silently truncated read would show as
+  *missing* data, not slow rendering. Render and DOM cost for ~1,345 rows is the more likely story.
+  Worth eliminating the read path first anyway, since it is cheap to check.
+- **⚠️ F141 hit the mirror image of this and it is the reason to be careful.** Its first `mylist.html`
+  CLS measurement was **invalidated** because it had measured *"a brand-new user's empty-list
+  discovery grid, not a customer's pull list"* — the lightest possible account. This is the heaviest
+  real one. **Measure against a representative account, and say which one**, or the next reading will
+  be as wrong as that one was.
+- **Next step, in order:** (1) identify WHICH metric is down — the score is TBT 30% / LCP 25% /
+  CLS 25% / FCP 10% / SI 10%, and a 20-point gap is one or two metrics slipping a band, not a broad
+  regression; the 2026-08-24 sweep's own lesson is that closing two entire diagnostics moved the
+  score barely at all, because they were unscored. (2) Confirm the account size correlation by
+  measuring a small production account against Rick's. (3) Only then look for a fix.
+- **Related:** **F141** (the CLS work on this page, and its invalidated measurement), **F140** /
+  **F139** (the reserve-history growth that produced the 1,345 figure), **F90** (the 90-day
+  `usage_events` purge — the only place this project has deliberately bounded growth).
+
+#### F162 — a customer's My List can show a genuinely-ordered title as NOT ordered — `get_ordered_codes()` is the sixth unbounded-query instance of the F82/F113/F139/F140/F156 pagination cap, in a code path none of those sessions touched
+
+- **Status:** **FULLY RESOLVED, both environments, 2026-09-28 (PR #158, merge `9c9629c`; companion SQL
+  applied on staging 2026-09-27 and production 2026-09-28) — nothing left open.** Found from a real Rick screenshot, not an
+  audit: DICK TRACY #20 CVR B LEE WEEKS VAR (Lunar `0626MA0893`) showed **"✓ Ordered (3)"** on
+  admin.html's Order Builder but rendered with **no "Order placed" badge** on a customer's My List
+  Upcoming Arrivals card, despite genuinely being on order.
+- **Root cause.** `get_ordered_codes()` (§ 6.8) is a SECURITY DEFINER RPC returning one row per
+  `(distributor, order_code)` pair the tenant has ever submitted, with no `LIMIT`. `app.js`'s
+  `getOrderedCodes()` called it with **zero pagination** — a single `db.rpc('get_ordered_codes')`,
+  no `.range()` — so it inherited PostgREST's default max-rows cap exactly the way a plain
+  `.select()` does. **Measured live on production 2026-09-27:** `order_submissions` holds **2,017**
+  rows / **1,895 distinct** `(distributor, order_code)` pairs; an unranged request against the same
+  table independently confirmed the cap is **exactly 1000** (`HTTP 206`, `content-range: 0-999/2017`
+  from a body that actually returned 1000 rows). `0626MA0893`'s net-3 order is real and correctly in
+  the ledger — confirmed by reading `catalog`/`preorders`/`order_submissions` directly, all three
+  agreeing — it simply fell outside whichever ~1000 of the 1,895 codes the capped RPC call happened
+  to return that load. **`admin.html`'s own ledger read is unaffected** — `fetchPaged('order_submissions', …)`
+  (`admin.html:959`) has been paginated since the table was built, which is exactly why admin and the
+  customer page disagreed: one surface paginates, the other never did.
+- **Consequence is not merely cosmetic.** `mylist.html`'s `isOrdered = isFulfilled || isCodeOrdered(c)`
+  drives `isLocked` (`:1149`), which disables the quantity stepper AND swaps the Remove/Cancel button
+  for a locked chip. A code the truncated call fails to recognize as ordered leaves quantity controls
+  and an active **Remove** button live on a reservation the store has already submitted to the
+  distributor — a customer can self-cancel stock the shop has already ordered and, in the near term,
+  paid for. This is the same class of harm F108/F102's over-order guard exists to prevent, from the
+  opposite direction.
+- **This is the sixth instance of the F82/F113/F139/F140/F156 unbounded-query defect class**, and the
+  first to reach a code path none of those five sessions' audits touched — `get_ordered_codes()` is
+  called only from `mylist.html`, which F140's own audit swept for `.from(...)` call sites but not
+  for un-paginated **RPC** calls.
+- **Fix, `app.js` `getOrderedCodes()` (mylist.html's only caller):** routed through the shared
+  `fetchAllRows()` helper, same convention as every other paginated query in this file —
+  `fetchAllRows(() => db.rpc('get_ordered_codes'))` in place of the bare `db.rpc(...)` call.
+- **⚠️ A real trap found while verifying the fix, worth carrying forward: `.range()` on this vendored
+  supabase-js build is query-string `offset`/`limit`, NOT HTTP `Range` headers, and this project's
+  PostgREST does not honour a `Range` header on an RPC POST at all.** A first verification attempt
+  built a raw-fetch harness using `Range: 0-999` / `Range-Unit: items` (the textbook PostgREST
+  pagination header) against the live RPC and it **hung indefinitely** — every "page" silently
+  returned the identical first 1000 rows regardless of the requested range, so the loop's
+  short-page exit condition never fired. Read directly out of `vendor/supabase.min.js`:
+  `range(e,t,...)` sets `this.url.searchParams.set('offset', e)` / `.set('limit', t-e+1)` — query
+  string, never a header. Confirmed live against the real RPC: query-string `?offset=1000&limit=1000`
+  correctly returns the second page (`content-range: 1000-1912/1913`, first row genuinely different
+  from page one); the header form returns the identical first page every time regardless of the
+  requested range. **Had this not been caught before shipping, the "fix" would have hung every
+  customer's My List page load once their tenant crossed 1000 ordered codes — worse than the bug it
+  was meant to close.** Anyone touching `.range()`/pagination against an RPC in this project should
+  verify against the query-string form, not assume the header form applies.
+- **Verified live on staging, 2026-09-27** (`playwright/f162-verify.mjs`, local-only, same convention
+  as `f149-maintenance-verify.mjs`): seeded 1,050 throwaway `order_submissions` rows (prefixed
+  `ZZTEST162-`, never colliding with a real code) against the founding tenant, pushing it to **1,913**
+  true distinct pairs. **V1 reproduced the bug live**: the unpatched single-call shape returned
+  exactly **1,000** rows. **V2 confirmed the fix**: the paginated shape (2 pages, matching
+  `fetchAllRows`'s own `.range()` logic) recovered all **1,913**. **V3**: a specific late-sorting
+  throwaway code was absent from the unpatched call and present after the fix — the same shape as the
+  real DICK TRACY #20 symptom, reproduced and closed on command rather than merely reasoned about.
+  Teardown confirmed by a fresh read: 0 `ZZTEST162-*` rows and 0 throwaway profiles/auth users remain.
+  `node --check` clean on `app.js`.
+- **Companion SQL — APPLIED on staging 2026-09-27, PENDING on production:**
+  `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` adds `ORDER BY distributor, order_code` to
+  `get_ordered_codes()`'s body (return type unchanged, `CREATE OR REPLACE` is safe). This is a
+  robustness companion, not the load-bearing fix — the app.js pagination fix alone recovers the
+  missing codes, verified above, on an unordered `GROUP BY`. The gap it closes: two separate
+  paginated HTTP requests are two separate query executions, and without an explicit `ORDER BY` a
+  `GROUP BY`'s row order is not a standards-guaranteed repeatable contract between them — in practice
+  Postgres will normally replay the same plan for an unchanged table, but a concurrent write (an
+  admin recording a new order, or the monthly import) landing between a customer's two page requests
+  could in principle skip or duplicate a row at the page boundary. `(distributor, order_code)` is
+  already the function's `GROUP BY` key, so no extra tiebreaker column is needed.
+- **⚠️ The file's FIRST run on staging tripped two bugs of its own, and the second is the more
+  serious one — recorded rather than quietly fixed, since it is a reusable trap.** (1) Its
+  verification query used `'public.get_ordered_codes'::regprocedure`, invalid Postgres syntax for a
+  zero-arg function (`22P02: expected a left parenthesis`) — needs the empty parens,
+  `'public.get_ordered_codes()'::regprocedure`. (2) **More importantly, the file had no explicit
+  transaction**, and the Supabase SQL Editor sends a pasted multi-statement block as one implicit
+  transaction — so that syntax error risked rolling back the `CREATE OR REPLACE FUNCTION` above it
+  too, silently discarding the real fix while looking like "just a broken check" failed. Corrected by
+  wrapping the actual DDL in `BEGIN; … COMMIT;` before any verification query runs, matching this
+  project's own established convention (`order-submissions-signed-quantity.sql` already does this).
+  **Re-run and independently verified clean on staging**: `pg_get_functiondef` confirms the body ends
+  `GROUP BY distributor, order_code ORDER BY distributor, order_code;`, and the grants query confirms
+  `postgres`/`authenticated`/`service_role` only — no `anon`, no `PUBLIC`, unchanged from before.
+  **Operator: Rick, Supabase SQL Editor — production is the remaining step.**
+- **Promoted to production 2026-09-28, NOT as a cherry-pick.** PR #158 (merge `9c9629c`), Rick's
+  explicit request, merged the same day it was opened. Staging was **110 commits ahead** of `main` at
+  the time, carrying F72/F155/F156/`register-customer`/`register-tenant` and much more — none of it
+  went. `app.js` carries the `merge=ours` driver that has silently dropped this exact file on prior
+  cherry-pick promotions (documented several times elsewhere in this file), so the fix was **applied
+  directly to `main`'s own copy** rather than cherry-picked — both call sites were confirmed
+  byte-identical to staging's pre-fix code before editing, and `fetchAllRows()` was already live on
+  production since F140, so nothing new was introduced. `app.js` only, +18/−3, PR file list re-checked
+  on GitHub itself. **Verified post-deploy against the served bytes**:
+  `fetchAllRows(() => db.rpc('get_ordered_codes')` ×2 (both call sites), a bare unwrapped
+  `db.rpc('get_ordered_codes')` ×0 beyond those two. **Rick also smoke-tested live on production**
+  (reserve + cancel), independent of the byte check.
+- **Companion SQL applied on production 2026-09-28, verified via `pg_get_functiondef` the same way as
+  staging.** Rick ran `docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` on production; the
+  returned body confirmed ending `GROUP BY distributor, order_code ORDER BY distributor, order_code;`,
+  identical to staging's confirmed body. Since `GRANT`/`REVOKE` sit in the same `BEGIN`/`COMMIT` block
+  as the `CREATE OR REPLACE`, their being committed follows from the body having landed — no separate
+  grants re-check was needed this time. **Nothing left open on this finding.**
+- **Related:** **F82**, **F113**, **F139**, **F140**, **F156** (the same unbounded-query-hits-
+  PostgREST's-1000-row-cap defect, five prior instances); **F108**/**F102** (the over-order guard this
+  bug undermines from the opposite direction); **F143**/**F144** (the ordering-side surfaces whose
+  correctness this same ledger read underpins).
+
+#### F163 — a reservation that genuinely never arrived appears in NEITHER My List section, so the customer can never be shown its arrival status
+
+- **Filed 2026-09-29. Status: OPEN, Medium, production and staging (code-level; measured on production).** Filed, not fixed; found 2026-09-21 (PR #154 session) and recorded there as "remains unfiled" until now.
+- **Symptom.** A prior-month reservation whose on-sale date has passed and whose title did not arrive is on no customer surface. `mylist.html:965` narrows `allItems` to `catalog_month === currentMonth`, and the split at `:1001-1002` puts a row in Upcoming Arrivals only if `on_sale_date >= today` (`inMainTable` / `inUpcoming`). A prior-month, past-on-sale row fails both. The customer-facing copy already exists and has no row to render on: `⚠ Did not arrive — contact the store.` (`mylist.html:1167`, `:1241`; also `:1548`, `:1714`). *(Line numbers re-read from disk 2026-09-29; the 2026-09-21 record cited ≈`:937-940` and `:1099`, which had moved.)*
+- **Root cause.** F155's stranding mechanism at its terminal case. F155 fixed date *drift* (a title whose date moves); it does not help a title that will never arrive, which still ages out of both sections. Admin can mark the outcome (F134/F143) and the Follow-Up panel clears, but the outcome cannot reach the customer.
+- **Measured fresh on production 2026-09-29 (service-role, read-only, tenant-scoped, paginated).** Stranded shape = joined `catalog_month` ≠ `2026-10` AND `on_sale_date < 2026-09-29`: **1,602** of 3,494 preorders. Breakdown `fulfilled` × `arrival_outcome`, reconciled to that total: true/NULL **939** + true/`arrived` **621** + true/`unknown` **24** + true/`not_arrived` **15** + false/`unknown` **3** = **1,602**. **Customer-relevant rows (outcome ∈ `not_arrived`,`unknown`,`damaged`): 42** = 24 + 15 + 3 (`damaged` 0), across **36 distinct titles**, by `catalog_month`: 2026-07 17, 2026-06 10, 2026-03 6, 2026-05 5, 2026-04 4. Unfulfilled with NULL outcome in the stranded set: **0**, so the "unfulfilled, no shipment evidence" shape has no instances today.
+- **⚠️ Why 42 and not the 23 recorded 2026-09-21 — not a like-for-like growth.** The 2026-09-21 figure counted *unfulfilled* rows carrying an outcome. Today's set adds **fulfilled** rows with `not_arrived` (15, admin resolutions made since) and fulfilled `unknown` (24). October's import moving `catalog_month` to 2026-10 did not add rows to this set (none in 2026-08/09), because those months' non-arrived rows were not yet past-on-sale-and-flagged. Read the two numbers as different definitions.
+- **Severity: Medium.** Customer-facing and silent, but nothing is lost — admin surfaces show every row. **Fix direction (one line, not designed):** a third My List bucket for prior-month reservations carrying a customer-relevant `arrival_outcome`. Own session.
+- **Related:** **F155** (the stranding mechanism), **F115** (`arrival_outcome` persistence), **F134**/**F143** (the admin resolve controls), **F120** (rejected badge, the sibling customer signal).
+
+#### F164 — two staging `preorders` rows reference ANOTHER tenant's catalog rows; `get_publisher_reserve_counts()` counts them and the RLS-bound code it replaces cannot see them
+
+- **Filed 2026-09-29. Status: OPEN, Low (tentative), staging data + one design question; filed, not fixed.** Found by gate V2 of `docs/admin-settings-catalog-visibility.md` (§ 5.1), whose own verdict printed `V2 FAIL`. Rick chose to file it.
+- **Symptom.** V2's snippet compares the S1 RPC against a copy of the old `getReservedPublishers()` in one signed-in admin session. The threshold-7 publisher **sets were identical (5 = 5)**, but the snippet's stricter per-publisher check failed on two counts: `marvel` RPC 25 vs old 24, `boom entertainment` RPC 19 vs old 18. The old path was deterministic (5 of 5 runs identical), so this is data, not ordering.
+- **Root cause (measured).** Two `preorders` rows carry `tenant_id` = the founding tenant (`72e29f67…`) but their `catalog_id` joins a `catalog` row whose `tenant_id` is `demoshop` (`5edb0ab4…`): `16bfdcb6…` (Power Rangers Unlimited #5 A Main, Boom Entertainment, item `84428401340605011`, catalog month 2026-09; user a non-admin test account) and `ef0b74f3…` (AMAZING SPIDER-MAN #1004, Marvel, item `75960623001300411`, 2026-09; user a test admin), created 2026-09-11 22:56 and 22:55 UTC. Under the admin's RLS the `catalog(publisher)` embed for those rows comes back NULL, so the old code drops them. The RPC is `SECURITY DEFINER` and its `live` CTE joins `catalog c ON c.id = p.catalog_id` with no tenant test, so it counts them. **Fully reconciled, both directions:** in-browser OLD counts equal RPC counts minus the cross-tenant references for **all 72 publisher keys**, and an independent service-role recount (36 `reservation_history` + 78 `preorders` = 114 records) equals the RPC on all 17 publishers with history.
+- **Scope, scanned across ALL tenants.** Staging: **2 of 79** preorders. **Production: 0 of 3,495** (read-only, paged, `content-range` verified). So nothing on production is affected today and the RPC's threshold-7 result is unaffected on either environment.
+- **⚠️ NOT TRACED: how the rows were created.** Two candidates, neither confirmed: a service-role/seeding write during the F72 demo work, or a real client path. `preorders` RLS is documented (§ 7.1, quoted in F109) as `users manage own preorders`, `ALL` where `auth.uid() = user_id AND tenant_id = current_tenant_id()`, and the `catalog_id → catalog.id` FK is single-column, so **by that text neither checks that the referenced catalog row belongs to the same tenant.** A customer cannot normally learn another tenant's catalog ids (catalog SELECT is tenant-scoped), which is why this is Low; if a client path *can* produce it, it becomes Medium, a cross-tenant integrity gap rather than a display quirk. Re-read the live policy before concluding either way.
+- **Fix direction (not designed, not started).** (1) Trace the creation path first. (2) If reachable, enforce same-tenant references in the database, the F109 precedent (a `BEFORE INSERT` trigger, since a policy cannot join cleanly). (3) **The RPC predicate — DECIDED AND WRITTEN 2026-09-29 (Rick: "Add it").** `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` is now **v2**: the `live` CTE requires `c.tenant_id = current_tenant_id()`, making the function parity-exact with the RLS-bound code it replaces. Commit `7c31e5c`. **Applied and verified on BOTH environments, 2026-09-29.** v1 had been deployed first (staging 2026-09-24; production 2026-09-29), so v2 was a `CREATE OR REPLACE` re-apply. Staging: the definition check printed the F164 verdict and V2 flipped from FAIL to a plain PASS. Production: Rick's first run did NOT land (`has_f164_predicate = false`, cause not established), a re-run did, and the definition check printed the F164 verdict (smoke: `rjbookstop`/`comicstore` 22 / 14 / 4,678, unchanged: production has no cross-tenant preorders, so only the marker can prove it). The file's STATUS line reads `staging=APPLIED 2026-09-29 | prod=APPLIED 2026-09-29`, and its definition check prints a *new* verdict only when the body carries the F164 marker, because the v1 verdict passes for either body. *(This bullet previously read "Decision for Session C (Rick): the S1 RPC is not yet on production … That edit was not made: V2 found it, and this session was barred from fixing what V2 exposed." True when written, superseded the same day.)* **Steps (1) and (2), tracing the creation path and enforcing same-tenant references in the database, remain open, so the finding stays OPEN.**
+- **Evidence.** `playwright/s4-v2-parity-verify.mjs` (local-only): 11/11, including a negative control (the snippet's `MIN 7 → 6` on the new-side filter reports a publisher "only in NEW" and no PASS) and a check that the snippet's `V2 FAIL` verdict is exactly what the cross-tenant rows predict, so it would demand a plain PASS on clean data.
+- **Related:** **F160** (the feature whose S1 RPC this touches), **F109**/**F127** (the `preorders` authorization boundary and the trigger precedent), **F72** (the `demoshop` tenant), `docs/admin-settings-catalog-visibility.md` § 3.6 and § 5.
+
+#### F165 — withdrawal detection marks reserved titles "Withdrawn" by IMPORT TIMING: consecutive monthly files share almost no FOC dates, so "absent + FOC passed" is the normal state of a live title
+
+- **Filed 2026-09-29. Status: OPEN, High, both environments (same code in `import.js` / `import-staging.js`). Harm realised on STAGING (7 confirmed false marks); not yet realised on production.** Filed, not fixed. Rick chose to file it. Found while trying to confirm the 7 marks his own staging October import produced; **it also corrects this project's F147 record**, which had called the FOC narrowing verified.
+- **Symptom.** Rick's 2026-09-29 October import on staging marked 7 titles "withdrawn" (6 Lunar: `0926AB0520`, `0926AB0523`, `0926AB0525`, `0926AT0561`, `0926AT0566`, `0926AW0572`; and PRH `84428401135820011`, Minor Arcana #20). **All 7 are live: CONFIRMED** by a fresh Lunar Available Products export (2026-09-29 12:02, after the 9/28 FOC) that lists all 6 Lunar codes with FOC and in-store dates unchanged (11/4 and 11/11), which I verified independently, and by Rick for the PRH title (in PRH's product catalog; I did not verify that one). All 7 share FOC 2026-09-28, the day before the import.
+- **Root cause.** `narrowWithdrawalCandidates()` marks a prior-month title that is absent from the new month, still holds an unfulfilled reservation with a future `on_sale_date`, and (F147) has a passed `foc_date`. Its comment holds that absence "only becomes evidence of withdrawal once that window has closed". **That premise is false for a one-time solicitation list.** Measured from the local files: Lunar's September file spans FOC 09-14 to 12-14 (165 titles on 09-28) and October's starts 10-12; PRH's September file spans 09-21 to 11-30 and October's 10-19 to 2027-01-04. A title is therefore absent from the next month's file *by construction*, before and after its FOC, withdrawn or not; the FOC condition only selects **whichever batch has just closed when the import happens to run**. F147 removed the first symptom (every future-FOC title marked, 519 on production) and left this one.
+- **Measured exposure, PRODUCTION, same predicate, today's reservations** (843 unfulfilled reservations sit on 2026-09 titles absent from 2026-10):
+
+  | if the October import had run | reservations marked | titles | customers | copies |
+  |---|---|---|---|---|
+  | 2026-09-27 (what actually happened) | **0** | 0 | 0 | 0 |
+  | 2026-09-29 | 4 | 2 | 3 | 4 |
+  | 2026-10-06 | 182 | 101 | 14 | 289 |
+  | 2026-10-13 | 368 | 217 | 18 | 591 |
+
+  The 09-27 row equals the recorded result, so the replication is sound. **Production's 0 was calendar luck**: the import landed the day before the first large FOC batch. **Next exposure: the November new-month import.** Production's 41 October reservations are all on FOC 2026-11-02 or later, so a late-October run marks 0 *today*; that grows as customers reserve the 10-12 and 10-26 batches, and jumps if the import slips.
+- **Customer impact when it fires on production.** F120's "Withdrawn" badge on My List and the `isWithdrawn` override that unlocks cancellation of an ordered title: the customer is invited to **irreversibly** cancel a live, ordered reservation (the F146/F147 harm shape). Admin's Withdrawn panel fills with live titles.
+- **This is not a failure of F147's tests.** They and the staging run correctly show the code marks *exactly* the FOC-passed candidates (17 candidates: 7 marked, 10 held back, 0 violations). That verified the implementation, not the premise.
+- **Fix direction (not designed).** (1) **Change the signal.** For Lunar, absence from the current *Available Products* export is real evidence: it keeps titles after FOC until they ship (2,146 past-FOC rows still listed on 09-29) and it does drop removals (49 of the 555 titles in the same 9/28 batch disappeared in one week). `check-dates.js` already downloads it weekly. PRH needs its own signal (Weekly Change Report / portal status; PRH's monthly file cannot serve, and F155 recorded that frozen PRH catalogs have no data channel). (2) **A confirm-first gate** listing the candidates before anything is written (F143's shape). (3) **Interim, no code, before the November import:** run it first with `--no-write`, which computes and prints the candidates with zero writes (verified by F110's V-A2), and do not let the mark step run unattended.
+- **Related:** **F110** (withdrawal detection), **F146** (false positives from a dropped-but-live title; its clear half removed the 7 staging marks, 7 of 7, verified by read-back 2026-09-29), **F147** (the narrowing this corrects), **F155** (the same one-time-solicitation blind spot in the date checker), **F120**, **F158**/**F159**.
+
+Next free finding ID: **F166**.
 
 ---
 

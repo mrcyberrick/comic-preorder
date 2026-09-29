@@ -1,6 +1,6 @@
 # F155 — Catalog date-revision detection
 
-**STATUS:** STAGING COMPLETE (S1 + S2 + S3 both halves) · staging=2026-09-05 · prod=— · PR=— · findings: F155
+**STATUS:** COMPLETE, BOTH ENVIRONMENTS · staging=2026-09-05 · prod=2026-09-05 · PR=#150 (merge `787b0ee`) · findings: F155
 **S3 APPROVED by Rick, 2026-09-04** — see § 5.1. **§ 9 remediation script delivered** — see § 10.
 
 Owner doc for F155. Full finding narrative lives in `docs/technical-reference.md` § 13 F155;
@@ -195,10 +195,20 @@ every title passes through the 30-day window before its on-sale date.
 
 ## 5. S3 — bounded deferral (the guard)
 
-**CLIENT HALF SHIPPED to staging 2026-09-04** (`b5ad0e4`, merged `--ff-only`, pushed, new bytes
-confirmed served on the plain URL). **SQL HALF IS PENDING — Rick must apply
-`docs/sql/auto_fulfill_past_on_sale.sql` to staging.** The file's own `-- STATUS:` line says so, and
-production still runs the pre-F155 body.
+**BOTH HALVES SHIPPED, BOTH ENVIRONMENTS.** Client half to staging 2026-09-04 (`b5ad0e4`, merged
+`--ff-only`, pushed, new bytes confirmed served on the plain URL); SQL half applied by Rick to
+**staging and production on 2026-09-05**, immediately after PR #150 merged
+(`docs/sql/auto_fulfill_past_on_sale.sql`: `prod=APPLIED 2026-09-05 (F155 S3a body)`).
+
+> ***Corrected 2026-09-22.** This paragraph read "**SQL HALF IS PENDING — Rick must apply
+> `docs/sql/auto_fulfill_past_on_sale.sql` to staging.** The file's own `-- STATUS:` line says so,
+> and production still runs the pre-F155 body" for seventeen days after both halves had landed —
+> contradicting this doc's **own STATUS token**, which has read COMPLETE, BOTH ENVIRONMENTS since
+> 2026-09-05. It was read as current on 2026-09-18 and again on 2026-09-22 and produced a false
+> claim in a filed finding (§ 13 F158, since corrected). **Verified behaviourally before
+> rewriting, not from the STATUS token either:** on 2026-09-22, 15 reservations past their
+> on-sale date with no shipment evidence were surviving unfulfilled — which the pre-F155 body
+> cannot produce.*
 
 **Sequencing is client-first here, deliberately, and it is the reverse of F149's.** S3(b) calls
 nothing new, so it is safe standing alone — it only widens what the Never Arrived panel shows. S3(a)
@@ -533,3 +543,25 @@ S3 is no longer the unproven change that reasoning assumed: it has a live 3/3 fu
 fixture A fails against the old body, plus a genuine observed red on the panel half (§ 6). Promoting
 it now gives it three weeks of production soak *before* October rather than making October its first
 outing.
+
+---
+
+## 14. Production verification of the SQL half (2026-09-05)
+
+Rick applied `docs/sql/auto_fulfill_past_on_sale.sql` to production immediately after PR #150 merged,
+client-first per § 5.2. **Verified independently rather than taken on report** — the whole finding
+exists about a stale claim nobody checked, so accepting one here would have been the wrong ending.
+
+- **`pg_get_functiondef()` on production returns the F155 body.** Both new clauses present: the
+  three-key `weekly_shipment` `EXISTS` and `OR s.on_sale_date < CURRENT_DATE - 14`.
+- **Signature is still single-argument.** § 5.1 flagged the risk that adding a `GRACE_DAYS`
+  parameter would leave a second overload behind while `import.js` kept calling the one-arg version;
+  keeping it a literal avoided that, and the live definition confirms it.
+- **`SECURITY DEFINER` and `SET search_path TO 'public'` survived the replace.**
+- **Grants verified behaviourally, because `pg_get_functiondef()` does not show them (F124).** An
+  anon POST to `/rest/v1/rpc/auto_fulfill_past_on_sale` returns **`42501 permission denied`**. Nil
+  risk to run: production held 0 eligible rows, so the call would have been a no-op even if it had
+  been permitted.
+
+**F155 is closed, both environments.** The only residual is `0726DC0300` (DC CONNECT #76 bundle) —
+no date source exists for it, so S3's guard is what now holds it rather than a correction.

@@ -525,6 +525,7 @@
       <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
       <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
       <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
+      <li id="nav-settings" style="display:none"><a href="settings.html">Settings</a></li>
     </ul>
     <div class="nav-user">
       <span>Welcome, <strong id="nav-username"></strong></span>
@@ -544,8 +545,8 @@
         <div id="print-subtitle" style="font-size:0.8rem;color:#666;margin-top:2px"></div>
       </div>
       <div style="text-align:right;font-size:0.8rem;color:#666">
-        <div style="font-weight:700;font-size:0.95rem;color:#111">Ray &amp; Judy's Book Stop</div>
-        <div style="margin-top:2px">973-586-9182</div>
+        <!-- F72 S3: populated by JS at print time, tier-gated — see btn-print handler -->
+        <div id="print-store-info"></div>
         <div style="margin-top:6px" id="print-date"></div>
       </div>
     </div>
@@ -559,7 +560,7 @@
   <!-- Pickup notice — always visible, hidden in admin impersonation context -->
   <div class="pickup-notice" id="pickup-notice">
     <span class="pickup-notice-icon">ℹ</span>
-    <span>Items on your pull list are ordered specifically for you. Please stop in to <strong>pick up and pay</strong> for your items when they arrive. Questions? Call us at <a href="tel:9735869182">973-586-9182</a>.</span>
+    <span>Items on your pull list are ordered specifically for you. Please stop in to <strong>pick up and pay</strong> for your items when they arrive.<span data-paid-only> Questions? Call us at <a href="tel:9735869182">973-586-9182</a>.</span></span>
   </div>
 
   <!-- Summary -->
@@ -685,7 +686,7 @@
 </div>
 
 <footer class="site-footer">
-  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
 </footer>
 
 <div id="toast-container"></div>
@@ -796,6 +797,8 @@ function confirmDialog(message, okLabel = 'Remove') {
   const isPending = !profile?.is_admin && profile?.status === 'pending';
   const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
   const isBlocked = isPending || isPaused;
+  // Free tier shows no phone/address (F72) — only a paid tenant's own contact info.
+  const _isPaidTenant = Tier.isPaid(TenantContext.current());
   const BLOCKED_TITLE = isPaused
     ? 'Your account is paused — call the store to resume'
     : 'Available once your account is approved';
@@ -817,8 +820,14 @@ function confirmDialog(message, okLabel = 'Remove') {
           '</div>' +
           '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
             (isPaused
-              ? 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
-                'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+              ? _isPaidTenant
+                ? 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
+                  'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+                : 'You can still view and remove your reservations, but changing quantities is paused for now. ' +
+                  'Contact the shop to get going again.'
+              : !_isPaidTenant
+              ? 'You can view your reservations while we confirm your details. ' +
+                'Quantity changes will be available once ' + (TenantContext.current().display_name || 'the shop') + ' approves your account.'
               : 'You can view your reservations while we confirm your details. ' +
                 'Quantity changes will be available once Ray&nbsp;&amp;&nbsp;Judy’s Book Stop approves your account. ' +
                 'Questions? Call us at (973)&nbsp;586-9182.') +
@@ -1347,10 +1356,43 @@ function confirmDialog(message, okLabel = 'Remove') {
       : document.getElementById('nav-username').textContent;
 
     document.getElementById('print-title').textContent  = listOwner + "'s Pull List";
+    // F154: currentMonth is null for a tenant with no catalog rows yet (a normal
+    // state before their first import, not an error) — Catalog.getLatestMonth()
+    // returns null explicitly, and interpolating it unguarded prints the literal
+    // string "null". The non-print subtitle six lines below already guards this
+    // (`if (currentMonth)`); this print-only path never got the same guard.
+    const monthLabel = currentMonth || 'no catalog imported yet';
     document.getElementById('print-subtitle').textContent =
       AdminContext.isActive()
-        ? `Catalog for ${currentMonth} — printed by store admin`
-        : `Catalog for ${currentMonth}`;
+        ? `Catalog for ${monthLabel} — printed by store admin`
+        : `Catalog for ${monthLabel}`;
+
+    // F72 S3: the store-identity block was fully static markup, never touched
+    // by JS — paid tenant is free tier's exact leak on paper. Built here via
+    // textContent (never innerHTML), matching Branding.apply()'s own
+    // [data-tenant-name] convention, so there is no HTML-escaping surface to
+    // maintain. Phone stays the hardcoded literal (contact_phone isn't in
+    // TenantContext yet — Q1/Q3's population work is still open); the name
+    // reads the tenant's own resolved display_name, which is already
+    // byte-identical to the literal for the one paid tenant that exists today.
+    const printTenant = TenantContext.current();
+    const printIsPaid = Tier.isPaid(printTenant);
+    const infoEl = document.getElementById('print-store-info');
+    infoEl.textContent = '';
+    if (printIsPaid) {
+      const nameDiv = document.createElement('div');
+      nameDiv.style.cssText = 'font-weight:700;font-size:0.95rem;color:#111';
+      nameDiv.textContent = printTenant.display_name || "Ray & Judy's Book Stop";
+      infoEl.appendChild(nameDiv);
+      const phoneDiv = document.createElement('div');
+      phoneDiv.style.cssText = 'margin-top:2px';
+      phoneDiv.textContent = '973-586-9182';
+      infoEl.appendChild(phoneDiv);
+    }
+    const linkDiv = document.createElement('div');
+    linkDiv.style.cssText = 'margin-top:6px';
+    linkDiv.textContent = 'View Online: ' + Tier.publicUrl(printTenant);
+    infoEl.appendChild(linkDiv);
     document.getElementById('print-date').textContent   =
       'Printed: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
