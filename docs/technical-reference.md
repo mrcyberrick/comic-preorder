@@ -6527,7 +6527,17 @@ reasoning — only the disposition changed, not the diagnosis.
   bug undermines from the opposite direction); **F143**/**F144** (the ordering-side surfaces whose
   correctness this same ledger read underpins).
 
-Next free finding ID: **F163**.
+#### F163 — a reservation that genuinely never arrived appears in NEITHER My List section, so the customer can never be shown its arrival status
+
+- **Filed 2026-09-29. Status: OPEN, Medium, production and staging (code-level; measured on production).** Filed, not fixed; found 2026-09-21 (PR #154 session) and recorded there as "remains unfiled" until now.
+- **Symptom.** A prior-month reservation whose on-sale date has passed and whose title did not arrive is on no customer surface. `mylist.html:965` narrows `allItems` to `catalog_month === currentMonth`, and the split at `:1001-1002` puts a row in Upcoming Arrivals only if `on_sale_date >= today` (`inMainTable` / `inUpcoming`). A prior-month, past-on-sale row fails both. The customer-facing copy already exists and has no row to render on: `⚠ Did not arrive — contact the store.` (`mylist.html:1167`, `:1241`; also `:1548`, `:1714`). *(Line numbers re-read from disk 2026-09-29; the 2026-09-21 record cited ≈`:937-940` and `:1099`, which had moved.)*
+- **Root cause.** F155's stranding mechanism at its terminal case. F155 fixed date *drift* (a title whose date moves); it does not help a title that will never arrive, which still ages out of both sections. Admin can mark the outcome (F134/F143) and the Follow-Up panel clears, but the outcome cannot reach the customer.
+- **Measured fresh on production 2026-09-29 (service-role, read-only, tenant-scoped, paginated).** Stranded shape = joined `catalog_month` ≠ `2026-10` AND `on_sale_date < 2026-09-29`: **1,602** of 3,494 preorders. Breakdown `fulfilled` × `arrival_outcome`, reconciled to that total: true/NULL **939** + true/`arrived` **621** + true/`unknown` **24** + true/`not_arrived` **15** + false/`unknown` **3** = **1,602**. **Customer-relevant rows (outcome ∈ `not_arrived`,`unknown`,`damaged`): 42** = 24 + 15 + 3 (`damaged` 0), across **36 distinct titles**, by `catalog_month`: 2026-07 17, 2026-06 10, 2026-03 6, 2026-05 5, 2026-04 4. Unfulfilled with NULL outcome in the stranded set: **0**, so the "unfulfilled, no shipment evidence" shape has no instances today.
+- **⚠️ Why 42 and not the 23 recorded 2026-09-21 — not a like-for-like growth.** The 2026-09-21 figure counted *unfulfilled* rows carrying an outcome. Today's set adds **fulfilled** rows with `not_arrived` (15, admin resolutions made since) and fulfilled `unknown` (24). October's import moving `catalog_month` to 2026-10 did not add rows to this set (none in 2026-08/09), because those months' non-arrived rows were not yet past-on-sale-and-flagged. Read the two numbers as different definitions.
+- **Severity: Medium.** Customer-facing and silent, but nothing is lost — admin surfaces show every row. **Fix direction (one line, not designed):** a third My List bucket for prior-month reservations carrying a customer-relevant `arrival_outcome`. Own session.
+- **Related:** **F155** (the stranding mechanism), **F115** (`arrival_outcome` persistence), **F134**/**F143** (the admin resolve controls), **F120** (rejected badge, the sibling customer signal).
+
+Next free finding ID: **F164**.
 
 ---
 
