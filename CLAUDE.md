@@ -203,6 +203,7 @@ order_code;`, grants unchanged (`postgres`/`authenticated`/`service_role`, no `a
 too — both since changed. See the "Last completed work" entry above this one for the production
 promotion: PR #158, merge `9c9629c`, 2026-09-28. The companion SQL's production run remains the one
 open residual.)*
+*(Corrected 2026-09-29: that residual is CLOSED — the companion SQL was applied on production 2026-09-28, verified by `pg_get_functiondef`; the SQL file's STATUS line reads `prod=APPLIED 2026-09-28`, and the "Last completed work: F162" entry above records it. Only this parenthetical was stale; every other F162 statement in this file already reads fully resolved.)*
 
 **Prior work (2026-09-21): PROMOTED TO PRODUCTION — Order Follow-Up's resolve control now clears an
 UNFULFILLED Never Arrived row (PR #154, merge `df483a3`; staging `6dcbc01`, pick
