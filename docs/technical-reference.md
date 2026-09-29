@@ -5700,6 +5700,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F153 — `register-tenant` created a new tenant's admin account with no way to sign in at all
 
+- **2026-09-29: the SOURCE is promoted to production (PR #159, merge `5b661ff`) but the fix is NOT DEPLOYED.** It lives in the `register-tenant` Edge Function, and Edge Functions deploy from the working tree, not from a branch. Production still runs the 2026-09-02 S0 deploy (v10), so a tenant created there today still gets no invite email. Deploying is Rick's call; read the live `verify_jwt` from the dashboard first (F93).
 - **Status:** filed AND RESOLVED same session, 2026-09-03. Found while answering a plain question
   ("how does first login work?") — not a scoping session, not a scheduled audit.
 - **What happened, measured, not inferred.** `register-tenant/index.ts` (259 lines, full file read)
@@ -5757,6 +5758,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F154 — `mylist.html`'s print header reads "Catalog for null" when a tenant has no catalog rows
 
+- **2026-09-29: PROMOTED TO PRODUCTION (PR #159, merge `5b661ff`).** Client-only fix; served `mylist.html` on `pulllist.app` and `rjbookstop.pulllist.app` is byte-identical to `origin/main`.
 - **Status:** filed AND RESOLVED same session, 2026-09-03. Found live by Rick, printing My List for
   a brand-new tenant (`riverside-comics`, created moments earlier via the walkthrough this session
   — free tier, zero catalog rows seeded, a normal pre-first-import state, not an edge case anyone
@@ -6282,6 +6284,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F160 — a tenant with no reservation history gets a BLANK Print Catalog: `getReservedPublishers()` returns an empty set and every row is filtered out
 
+- **✅ FULLY RESOLVED, BOTH ENVIRONMENTS, 2026-09-29 — PROMOTED TO PRODUCTION via PR #159 (merge `5b661ff`).** The bar, `getReservedPublishers()` and `MIN_RESERVED` are deleted on production (served `admin.html`: none in code, on both hostnames), the S1 RPC v2 is applied and verified there, and the Print Catalog now follows `CatalogFilters`. Verified from the served bytes, not the merge; Rick confirmed the live print is **50 pages at 100%**, matching the measured 2,215 rows. The status bullet below is the staging-era record and is kept visible.
 - **⚠️ STATUS CORRECTED 2026-09-29 — the bullets below were written 2026-09-23 and several are now stale; they are kept visible, this is the current state.** **FIXED ON STAGING** by S4(a) (`886cab0`, 2026-09-24): the bar, `getReservedPublishers()` and `MIN_RESERVED` are deleted; served staging bytes carry each at ×0. **NOT promoted to production** (S1's RPC is not yet applied there; Session C of `docs/next-work-sequencing-2026-09-29.md`). Three figures below no longer hold: (1) **the page count.** "33 → 45 pages" was `ceil(rows / 46)`, and measuring the real print (2026-09-29, `admin-settings-catalog-visibility.md` § 5.2) showed **44.0-44.3 rows per page**; on production's **October** catalog the bar's deletion takes the sheet from about **35 to about 46 pages** (1,546 → 2,038 rows) *(and to **50 pages / 2,215 rows** under the default Rick chose later that day, Q8: "FOC earlier than today", `e64f3d8`)*. (2) **The "Reserved ≥ 7" preset was REMOVED 2026-09-24** (that plan's Q3 reversal), so no one-click path back to the old sheet exists. (3) The plan's STATUS is IN PROGRESS, not NOT STARTED. Gate V2 (RPC vs the old bar's publisher set) ran 2026-09-29: threshold-7 sets identical; see F164 for the one count difference it found.
 - **Status:** **filed 2026-09-23, CONFIRMED LIVE the same day, OPEN — not started.** Both
   environments (identical code). `admin.html` only, no schema involvement. Filed at Rick's
