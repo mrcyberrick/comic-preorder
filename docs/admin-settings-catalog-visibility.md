@@ -871,6 +871,7 @@ What does scale, and how it is handled here:
 - [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
       S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
       window already carries F146/F147's first live exercise and should not also carry a paper change
+      *(2026-09-29: the October import ran on production 2026-09-27 — clean, no false marks; the window is CLOSED and no longer holds S4. Note F146/F147 were not meaningfully exercised there; see CLAUDE.md § Current Migration Phase.)*
 - [ ] V11 green against production's served bytes
 - [ ] This doc's STATUS token updated; CLAUDE.md § Current Migration Phase advanced
 
