@@ -107,6 +107,7 @@
       <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
       <li id="nav-admin" style="display:none"><a href="admin.html">Admin</a></li>
       <li id="nav-analytics" style="display:none"><a href="analytics.html">Analytics</a></li>
+      <li id="nav-settings" style="display:none"><a href="settings.html">Settings</a></li>
     </ul>
     <div class="nav-user">
       <span>Welcome, <strong id="nav-username"></strong></span>
@@ -263,7 +264,7 @@
 </div>
 
 <footer class="site-footer">
-  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span> &middot; Rockaway, NJ
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
 </footer>
 
 <div id="toast-container"></div>
@@ -304,9 +305,13 @@
   const isPaused  = !profile?.is_admin && profile?.status === 'suspended';
   const isBlocked = isPending || isPaused;
   const PAUSED_BTN_LABEL = '\uD83D\uDD12 Account paused';
-  const PAUSED_BANNER_BODY =
-    'You can still browse the catalog, but reservations are paused for now. ' +
-    'Give us a call and we can get you going again — (973)&nbsp;586-9182.';
+  // Free tier shows no phone/address (F72) — only a paid tenant's own contact info.
+  const _isPaidTenant = Tier.isPaid(TenantContext.current());
+  const PAUSED_BANNER_BODY = _isPaidTenant
+    ? 'You can still browse the catalog, but reservations are paused for now. ' +
+      'Give us a call and we can get you going again — (973)&nbsp;586-9182.'
+    : 'You can still browse the catalog, but reservations are paused for now. ' +
+      'Contact the shop to get going again.';
   if (isBlocked) {
     // Inject the pending banner below the page header
     const header = document.querySelector('.page-header');
@@ -327,6 +332,9 @@
           '<div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6">' +
             (isPaused
               ? PAUSED_BANNER_BODY
+              : !_isPaidTenant
+              ? 'You can browse the upcoming catalog while we confirm your details. ' +
+                'Reservations will be available once ' + (TenantContext.current().display_name || 'the shop') + ' approves your account.'
               : 'You can browse the upcoming catalog while we confirm your details. ' +
             'Reservations will be available once Ray\u0026nbsp;&amp;\u0026nbsp;Judy\u2019s Book Stop approves your account. ' +
             'Questions? Call us at (973)\u0026nbsp;586-9182.') +
@@ -463,7 +471,172 @@
     return !vt || vt === 'Standard' || vt === 'Primary Title';
   }
 
-  currentMonth = await Catalog.getLatestMonth();
+  // The admin's saved catalog-visibility config, loaded once below.
+  let catalogFilterCfg = null;
+
+  // Applies it to a full result set BEFORE pagination — which is why all three
+  // call sites sit exactly where the per-customer variant filter already ran.
+  // Filtering after slicing is what caused short pages and empty grid cells
+  // before (see path B's own note), and it would do so again.
+  //
+  // ⚠️ THE RESERVATION EXEMPTION LIVES HERE, and it is the one rule that is not
+  // configurable. A title this customer has already reserved is never hidden,
+  // whatever the admin has filtered. Without it, hiding a publisher would
+  // strand an existing reservation exactly the way F155 stranded DNX #1:
+  // present in the database, absent from every surface the customer can reach —
+  // and on this page it would also remove the only route to cancelling it.
+  // `reservedIds` is assigned later in init than this function is defined, but
+  // it is only ever READ at call time, from inside loadCatalog(); guarded
+  // anyway so an early call degrades to "no exemptions" rather than throwing.
+  function applyVisibility(rows) {
+    if (!catalogFilterCfg) return rows;
+    return CatalogFilters.apply(
+      rows,
+      catalogFilterCfg,
+      currentMonth,
+      r => !!(reservedIds && reservedIds.has && reservedIds.has(r.id))
+    );
+  }
+
+  // Would the saved config hide anything at all? When it would not, the
+  // server-paginated default path takes its original single-query route and
+  // this feature costs a tenant with no config precisely nothing.
+  // ⚠️ `hidePastFoc` is DELIBERATELY ABSENT from this test, and that absence is
+  // load-bearing. It used to be here, and because it defaults to TRUE the test
+  // was true for every tenant including one with no saved config at all — so
+  // the "fast path" below was unreachable dead code and every catalog load paid
+  // the two-step. Measured 2026-09-24: 2 extra paged requests, 181 KB, and
+  // 8,011 ms to first card against 3,130 ms on the fast path. It is what Rick's
+  // Lighthouse comparison was actually showing.
+  // FOC is now a query PREDICATE instead (focCutoffForQuery below), so it costs
+  // nothing and does not force the two-step. Only the dimensions that genuinely
+  // cannot be expressed server-side remain here — publisher exclusions
+  // (lowercased keys vs a mixed-case column) and the cover/ratio/price rules —
+  // and all of those are opt-in rather than on by default.
+  function visibilityActive() {
+    const c = catalogFilterCfg;
+    if (!c) return false;
+    return (Array.isArray(c.publishersHidden) && c.publishersHidden.length > 0)
+        || c.showStandard === false
+        || c.showVariants === false
+        || c.showRestricted === false
+        || c.ratioMax != null
+        || c.hideZeroPrice === true;
+  }
+
+  // The past-FOC rule as a date the query can compare against, or null when the
+  // rule is off. 'today' is the literal reading; 'month' is the print's rule and
+  // hides anything whose FOC month is the catalog month or earlier, so the
+  // cutoff is the first day of the NEXT month.
+  function focCutoffForQuery() {
+    const c = catalogFilterCfg;
+    if (!c || c.hidePastFoc !== true) return null;
+    if (c.focMode === 'today') return DateUtils.todayLocal();
+    const [y, m] = (currentMonth || '').split('-').map(Number);
+    if (!y || !m) return null;
+    const ny = m === 12 ? y + 1 : y;
+    const nm = m === 12 ? 1 : m + 1;
+    return `${ny}-${String(nm).padStart(2, '0')}-01`;
+  }
+
+  // A deliberately quiet note that a tenant-wide filter is in force, appended
+  // to the existing muted results line. Rick's brief was "very subtle", so:
+  // no colour, no icon, no border, no extra row — it inherits #results-count's
+  // own muted styling and reads as part of the same sentence.
+  //
+  // Accent was specifically avoided. The only badge that ever sat on the admin
+  // tab strip was an amber pending count, and PR #153 retired it precisely
+  // because a coloured marker reads as "act on me"; this is a statement of
+  // fact, not a call to action.
+  //
+  // NO COUNT in the text, on purpose. The number of hidden titles differs per
+  // view (each of the four paths narrows differently), so any single figure
+  // here would be wrong somewhere. Exact numbers live on the settings page's
+  // impact bar, which is where someone tuning the filters is already looking.
+  // This only has to answer "is a filter on?" — the question that cost three
+  // rounds of "it doesn't seem to do anything".
+  function visibilityNote() {
+    return visibilityActive() ? ' · filtered by store settings' : '';
+  }
+
+  // The LIGHT id pass behind the default path's two-step. Six small columns for
+  // the month, ordered exactly as Catalog.fetch() orders — so slicing this list
+  // gives the same page the unfiltered query would have — then filtered through
+  // the one shared predicate.
+  //
+  // Cached on the filter signature, NOT on the page: turning pages is the
+  // common action and must not re-fetch. Any change to month, distributor,
+  // publisher, search or the saved config invalidates it.
+  let _visCache = { key: null, rows: null };
+
+  async function visibleIdsForFilters(filters) {
+    const key = JSON.stringify([
+      filters.month, filters.distributor, filters.publisher, filters.search,
+      filters.hideVariants, filters.focCutoff, catalogFilterCfg,
+    ]);
+    if (_visCache.key === key) return { rows: _visCache.rows, error: null };
+
+    const { data, error } = await fetchAllRows(() => {
+      let q = db.from('catalog')
+        .select('id, publisher, variant_type, order_requirement, price_usd, foc_date')
+        .eq('catalog_month', filters.month);
+      if (filters.distributor) q = q.eq('distributor', filters.distributor);
+      if (filters.publisher)   q = q.eq('publisher', filters.publisher);
+      if (filters.search) {
+        q = q.or(
+          `title.ilike.%${filters.search}%,series_name.ilike.%${filters.search}%,writer.ilike.%${filters.search}%,publisher.ilike.%${filters.search}%,upc.ilike.%${filters.search}%,isbn.ilike.%${filters.search}%,item_code.ilike.%${filters.search}%`
+        );
+      }
+      if (filters.hideVariants) {
+        q = q.or('variant_type.is.null,variant_type.eq.Standard,variant_type.eq.Primary Title');
+      }
+      // Same FOC predicate as the fast path. hides() re-checks it client-side,
+      // which is harmless and idempotent — but narrowing here means the id pass
+      // carries fewer rows over the wire.
+      if (filters.focCutoff) {
+        q = q.or(`foc_date.is.null,foc_date.gte.${filters.focCutoff}`);
+      }
+      // Same three-key order as Catalog.fetch(), plus id so page boundaries are
+      // deterministic across the paged reads (the F140 tiebreaker rule).
+      return q.order('publisher', { ascending: true })
+              .order('series_name', { ascending: true })
+              .order('title', { ascending: true })
+              .order('id', { ascending: true });
+    });
+    if (error) return { rows: [], error };
+
+    const rows = applyVisibility(data || []);
+    _visCache = { key, rows };
+    return { rows, error: null };
+  }
+
+  // ── Catalog month + tenant-wide visibility config ─────────────
+  // ⚠️ PARALLEL, NOT SEQUENTIAL, and that is the point. The visibility config
+  // (S4b, 2026-09-24) is the admin's saved filters from settings.html, read
+  // through the ONE helper the printed sheet also uses (app.js
+  // CatalogFilters) so the two surfaces cannot disagree.
+  //
+  // It first shipped as its own `await` after getLatestMonth(), which made it a
+  // SEVENTH serialized step on a page whose init was already 6 round trips deep
+  // — precisely what this plan's § 4 S4 said not to do ("fold the read into an
+  // existing parallel batch rather than adding a 7th serialized step"). The two
+  // reads are independent: load() only needs the tenant, which RLS supplies,
+  // and currentMonth is not consulted until hides() runs much later. Overlapping
+  // them makes the config cost ZERO added latency on the fast path.
+  //
+  // Read once per page load, never inside loadCatalog(), or it would run on
+  // every search keystroke.
+  //
+  // Fails OPEN — a missing or unreadable config yields the defaults, which
+  // hide nothing but past-FOC. A customer seeing too much is a curation miss;
+  // a customer seeing nothing is a broken store.
+  const [_month, _cfg] = await Promise.all([
+    Catalog.getLatestMonth(),
+    CatalogFilters.load(),
+  ]);
+  currentMonth      = _month;
+  catalogFilterCfg  = _cfg;
+
   if (currentMonth) {
     document.getElementById('catalog-subtitle').textContent =
       `Catalog for ${currentMonth} — browse and reserve items`;
@@ -595,12 +768,22 @@
   // Load publishers for filter
   if (currentMonth) {
     const publishers = await Catalog.getPublishers(currentMonth);
-    publishers.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p;
-      opt.textContent = p;
-      pubEl.appendChild(opt);
-    });
+    // ⚠️ Offer only publishers the tenant-wide config actually shows. Without
+    // this, a hidden publisher stays selectable and picking it returns "No
+    // items found" — a dead end that reads like a broken page. (Before the
+    // read-side guard was removed it was worse than a dead end: it SERVED the
+    // hidden titles. See CatalogFilters.apply()'s note.)
+    // A pinned publisher that is now hidden simply finds no matching <option>,
+    // so the select falls back to "All Publishers" on its own.
+    const hiddenPubs = new Set((catalogFilterCfg && catalogFilterCfg.publishersHidden) || []);
+    publishers
+      .filter(p => !hiddenPubs.has((p || '').trim().toLowerCase()))
+      .forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        pubEl.appendChild(opt);
+      });
     // Restore pinned publisher now that options exist
     if (pinned?.publisher) pubEl.value = pinned.publisher;
   }
@@ -672,7 +855,7 @@
       // Client-side: keep only items whose FOC date is this calendar month,
       // then apply the variant filter on top.
       const hideVariants = variantEl.value === 'standard';
-      const filtered = items
+      const filtered = applyVisibility(items)
         .filter(i => isFocThisMonth(i.foc_date))
         .filter(i => !hideVariants || isStandardCover(i));
 
@@ -704,7 +887,7 @@
       // Build a short label like "April 2026" for the count line
       const now = new Date();
       const focMonthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      countEl.textContent = `Showing ${displayed.length} of ${filteredTotal} items with FOC in ${focMonthLabel}`;
+      countEl.textContent = `Showing ${displayed.length} of ${filteredTotal} items with FOC in ${focMonthLabel}` + visibilityNote();
 
       grid.innerHTML = displayed.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
       renderPagination(filteredTotal, page);
@@ -739,9 +922,10 @@
       // Apply variant filter to the FULL ranked list BEFORE paginating.
       // Filtering after slicing caused short pages and empty grid cells.
       const hideVariants = variantEl.value === 'standard';
+      const visible = applyVisibility(rankedItems);
       const filteredItems = hideVariants
-        ? rankedItems.filter(i => isStandardCover(i))
-        : rankedItems;
+        ? visible.filter(i => isStandardCover(i))
+        : visible;
 
       const filteredTotal = filteredItems.length;
       const pageFrom      = (page - 1) * PAGE_SIZE;
@@ -781,7 +965,7 @@
 
       const label = hasPersonal ? 'recommended' : 'popular';
       countEl.textContent = `Showing ${Math.min(pageIds.length, filteredTotal - pageFrom)} of ${filteredTotal} ${label} items` +
-        (hideVariants ? ' (standard covers)' : '');
+        (hideVariants ? ' (standard covers)' : '') + visibilityNote();
 
       grid.innerHTML = orderedItems.map(c => buildComicCard(c, reservedIds.get(c.id) || 0)).join('');
       renderPagination(filteredTotal, page);
@@ -850,9 +1034,10 @@
 
       // Apply client-side variant + reserved filters across ALL items
       const hideVariants = variantEl.value === 'standard';
+      const visibleItems = applyVisibility(items);
       const filtered = (reserveFilter === 'reserved'
-        ? items.filter(i => reservedIds.has(i.id))
-        : items.filter(i => !reservedIds.has(i.id))
+        ? visibleItems.filter(i => reservedIds.has(i.id))
+        : visibleItems.filter(i => !reservedIds.has(i.id))
       ).filter(i => !hideVariants || isStandardCover(i));
 
       // Now paginate the filtered result ourselves
@@ -865,7 +1050,7 @@
 
       document.getElementById('stat-total').textContent = total;
 
-      countEl.textContent = `Showing ${Math.min(displayed.length, filteredTotal)} of ${filteredTotal} ${reserveFilter === 'reserved' ? 'reserved' : 'unreserved'} items`;
+      countEl.textContent = `Showing ${Math.min(displayed.length, filteredTotal)} of ${filteredTotal} ${reserveFilter === 'reserved' ? 'reserved' : 'unreserved'} items` + visibilityNote();
 
       if (!displayed.length) {
         grid.innerHTML = `
@@ -893,11 +1078,57 @@
       publisher:    pubEl.value,
       search:       searchEl.value.trim(),
       hideVariants: variantEl.value === 'standard',
+      // The past-FOC rule as a server-side predicate, so the common
+      // hide-past-FOC-only config keeps the single-query fast path.
+      focCutoff:    focCutoffForQuery(),
       page,
       pageSize:     PAGE_SIZE,
     };
 
-    const { items, total, error } = await Catalog.fetch(filters);
+    // ⚠️ THIS PATH IS SERVER-PAGINATED, which is why it cannot reuse
+    // applyVisibility() the way the three branches above do. Catalog.fetch()
+    // asks PostgREST for one page of 50 and a total count; filtering those 50
+    // in the browser would produce short pages and a wrong total — the exact
+    // failure the `hideVariants` note above records.
+    //
+    // ⚠️ AND IT IS THE DEFAULT VIEW. The three branches above only run for
+    // "FOC Expiring", "Recommended" and "Reserved/Not reserved"; an ordinary
+    // visit lands here. Wiring the other three and missing this one left the
+    // normal catalog completely unfiltered — found by Rick testing a saved
+    // config and seeing no change at all, 2026-09-24.
+    //
+    // Fixed with the same two-step the `recommended` branch already uses:
+    // filter a LIGHT id pass with the one shared predicate, then fetch that
+    // page's full rows by id. One predicate across all four paths beats four
+    // hand-built PostgREST expressions that can silently disagree — and the
+    // publisher exclusion cannot be a server predicate anyway (§ 3.2's
+    // correction: lowercased keys against a mixed-case column).
+    let items, total, error;
+
+    if (!visibilityActive()) {
+      // FAST PATH — nothing is filtered, so this is the original call
+      // unchanged. A tenant with no saved config pays nothing for this feature.
+      ({ items, total, error } = await Catalog.fetch(filters));
+    } else {
+      const visibleRows = await visibleIdsForFilters(filters);
+      if (visibleRows.error) {
+        error = visibleRows.error;
+      } else {
+        total = visibleRows.rows.length;
+        const from     = (page - 1) * PAGE_SIZE;
+        const pageIds  = visibleRows.rows.slice(from, from + PAGE_SIZE).map(r => r.id);
+        if (!pageIds.length) {
+          items = [];
+        } else {
+          const res = await db.from('catalog').select('*').in('id', pageIds);
+          error = res.error;
+          // `.in()` returns rows in arbitrary order — restore the paged order,
+          // same as the recommended branch does.
+          const byId = new Map((res.data || []).map(r => [r.id, r]));
+          items = pageIds.map(id => byId.get(id)).filter(Boolean);
+        }
+      }
+    }
 
     if (error) {
       grid.innerHTML = `<div class="alert alert-error" style="grid-column:1/-1">Failed to load catalog: ${error.message}</div>`;
@@ -921,7 +1152,7 @@
       document.getElementById('stat-prh').textContent   = prhCount.count  ?? 0;
     }
 
-    countEl.textContent = `Showing ${items.length} of ${total} items`;
+    countEl.textContent = `Showing ${items.length} of ${total} items` + visibilityNote();
 
     if (!items.length) {
       grid.innerHTML = `

@@ -27,21 +27,11 @@ the ambient value F133's date-dependent specs trip over. **Check the value befor
 surface** — `app_settings` is not anon-readable, so it needs a service-role read or the admin
 Settings screen.
 
-**⏰ GATE SCHEDULED: October catalog import — target Fri 2026-09-25 (Rick, 2026-08-30).** One-time
-cloud reminder armed for 12:00 UTC / 8:00 AM ET that day (`trig_01FQesEHRh9XdRXgwASFJoh7`,
-`run_once_at` verified set, enabled). The date sits one day after September's `order_deadline`
-(Thu 2026-09-24), so September's orders close first; it is a Friday, clear of the Tue/Wed
-shipment-and-bagging window. **The stale September reminder was disarmed the same day**
-(`trig_01QwSJJf65mYTy2mNkTYsSKk`) — it was still armed for 2026-09-07 to prompt work that
-actually completed on 2026-08-28, and would have sent Rick to redo a finished import.
+**✅ OCTOBER IMPORT GATE — RAN 2026-09-27 on PRODUCTION; recorded 2026-09-29.** `node import.js` with the 2026-10 Lunar/PRH files, `catalog_month` 2026-09 → 2026-10 (Rick's console output, cross-checked by a read-only service-role measurement; **staging was not run and still reads 2026-09** *(superseded the same evening: Rick ran the October import on staging on 2026-09-29, which now reads 2026-10 with the same 2,215 rows)*). **Measured (M1–M6):** production `catalog` 2026-10 = **Lunar 1,402 / PRH 813** (exactly the printed counts; F157's guard printed matching raw/normalised figures, no false positive); **0 withdrawn marks** tenant-wide; `maintenance_mode` = false (`updated_at` 2026-09-01, so it was **OFF during the import — customers were live**); `order_deadline` is empty, cleared by the import at 2026-09-27T23:32Z and **not yet re-set — Rick's planned step, after the next weekly shipment** (Step 7 open); preorders 3,494 total. Auto-reserved 32, archived 342, purged 3,973, deduped 30, auto-fulfilled 157 (18 with no shipment record, flagged not blocked).
 
-**October's import is an attended-session gate, not a formality.** Two fixes get their first-ever
-live production exercise there: **F147**'s corrected FOC check (its mark half could not be
-re-exercised this cycle — flipping `catalog_month` to `2026-09` closed the new-month window the
-moment the run finished) and **F146**'s unconditional clear half (production holds 0 withdrawn
-marks today, so there is nothing for it to act on until marking runs again). Both findings have
-only ever fired once each, and both fired wrong — 519 marks and 16. Re-open the admin-ordering
-freeze for that window.
+**⚠️ What the gate did NOT prove, stated plainly.** **F146's clear half was not exercised** — production held 0 marks going in ("nothing to check"). **F147's mark half was a weak test** — "2299 code(s) left 2026-09's catalog; none hold an unfulfilled future reservation" means no candidate reached the FOC check, so the FOC narrowing did not discriminate. Clean result, no regression, but neither fix has yet met a live candidate. Both stay "first real exercise pending" until a run starts with marks present or a candidate with a future FOC. *(2026-09-29, STAGING only: its October import supplied exactly that candidate mix for F147, and the FOC narrowing discriminated: 17 candidates, 7 marked with passed FOC, 10 held back with unpassed FOC. F146's clear half was EXERCISED on staging later that day (7 of 7 cleared, verified by read-back); PRODUCTION's mark path remains pending. **CORRECTION: that verified the implementation, not the rule; the 7 marks are CONFIRMED false positives (fresh Lunar export lists all 6 Lunar codes; PRH title confirmed by Rick) and the rule fires by import timing. See the 'CORRECTED' note in `admin-settings-catalog-visibility.md` § 5.2.**)* **The October hold on F157's distributor-scoping half and on the Admin Settings S4 production promotion is lifted by this result** (each remains Rick's call to schedule).
+
+*(Superseded text, kept visible: this paragraph previously read "⏰ GATE SCHEDULED: October catalog import — target Fri 2026-09-25 … one-time cloud reminder `trig_01FQesEHRh9XdRXgwASFJoh7`" and "October's import is an attended-session gate, not a formality … Re-open the admin-ordering freeze for that window." The import actually ran 2026-09-27, two days after the target, and nothing in the repo recorded it for two days.)*
 
 **S0 CLOSED OUT 2026-09-02, later the same session — the data fix landed, `register-tenant` deployed
 to BOTH projects, and V11's server half found a real discrepancy that turned out to be in the TEST,
@@ -99,6 +89,701 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
 
+**Last completed work: ADMIN SETTINGS GATES V2 / V4 / V10 CLOSED ON STAGING, 2026-09-29 (Session B of `docs/next-work-sequencing-2026-09-29.md`).** Verification only: **no app code changed, no production write** (production was read-only for V4). Full record: `docs/admin-settings-catalog-visibility.md` § 5.2.
+
+**V2 (parity):** the threshold-7 publisher sets are **identical (5 = 5)**, but the plan's own snippet printed **`V2 FAIL`** on its stricter per-publisher check (`marvel` 25 vs 24, `boom entertainment` 19 vs 18). Run down, not waved through: 2 founding-tenant `preorders` on staging reference `demoshop` catalog rows, which the RLS-bound old code cannot see and the `SECURITY DEFINER` RPC counts. Reconciled for all 72 keys, independently recounted by service role. **Filed as F164** (production: 0 of 3,495). **V4 (production, October, read-only):** no config **2,038 rows → 46 pages**; the 46 formerly-under-bar publishers hidden **1,546 → 35 pages**; 2,215 = 2,038 + 177 and 2,038 = 1,546 + 492, with an independent server-side predicate agreeing. **The page counts are MEASURED on the real print (staging, rendered to PDF) and correct the plan: it runs 44.0-44.3 rows per page, not 46**, so the old "45 pages" was 47. **Tell the shop to expect about 46 pages, up from about 35.** *(Superseded the same day by Q8's default change: with no exclusions saved it is now **50 pages**, 2,215 rows; 46 applies only if the month rule is chosen on the settings page.)*
+
+**V10 landed, and the recorded diagnosis was wrong.** Spec 24 had been skipped blaming F107 magic-link pressure; switching to a password-grant session (`pwTest` in `fixtures/auth.ts`) did not fix it. The real cause was an **overlapping-load race in the spec's own `settle()`** (a filter change and a debounced search start two `loadCatalog()` calls; `catalog.html` has no out-of-order guard, so the slower earlier one renders last). Rick approved **one bounded attempt**: 3 consecutive runs, `--retries=0`, 3/3 each; two negative controls observed red and restored byte-identical. **The page race itself is real, unfixed and unfiled (Rick's call).**
+
+**Full suite, CLEAN on the rerun: 151 passed, 0 failed, 0 flaky, 23.2 min** (147 + spec 24's 4), after Q8. *(The first run that day was 146 passed / 4 failed, all spec 20: `catalog_filters` was saved through the real settings page at 10:07:51 mid-run, leaving a filter live, and `globalTeardown` then restored the pre-run value over that save, so that save is gone. Spec 20 alone was 6/6.)* The rerun needed protection against a repeat, so the suite's **teardown now refuses to restore if the row's `updated_at` moved** (only the app's `Settings.set()` stamps it; fixture writes never do). Proven both ways: silent on a normal run, and with a simulated mid-run bump it named the moved timestamp, left the value alone and kept the state file. Local-only, uncommitted.
+
+**Rick's decisions, same day (2026-09-29), and where each stands.** **Q8 RESOLVED: the default past-FOC rule is "FOC earlier than today"** (`e64f3d8`, served bytes confirmed at `app.js:1242`). The month rule would have hidden 177 October titles from customers that were all still reservable (FOC 2026-10-12 to 10-26; 0 past, because `isFocPast()` is date-based). **The price he accepted: the print follows the same default**, so with no exclusions saved October is **2,215 rows / 50 pages** (measured), against 46 under the month rule and 35 under the old bar. Spec 24 gained a 4th test covering the default, negative-controlled. **F164 predicate: "Add it", WRITTEN as RPC v2** (`7c31e5c`), **PENDING on both environments**. **Production HAS the S1 RPC, v1**, applied by Rick 2026-09-29 (grants `OK - authenticated only`, definition `OK`, anon probe `42501`, smoke `rjbookstop` 22 / 14 / 4,678, equal to my independent measurement). *(This paragraph previously said "S1's RPC is still absent from production": true when written, false the same afternoon.)* **v2 has since landed on production too (see the next paragraph).** The **promotion shape** decision (full merge recommended) and an explicit `/promote-prod` request are still Rick's.
+
+**Later the same day (2026-09-29): RPC v2 APPLIED and VERIFIED on staging, and Rick moved staging to October.** **V2 now passes:** the plan's own snippet prints `V2 PASS - identical`, exact parity on 61 publishers; at 11:20 the same snippet on v1 printed FAIL on the two cross-tenant publishers, so it is a real before/after (definition check `...F164 predicate present`; smoke `raysandjudys` 112 records against v1's 114). My independent recount had to be corrected to apply v2's rule (it disagreed by exactly the two cross-tenant rows). **RPC v2 is now on PRODUCTION too, and the SQL file's STATUS reads `staging=APPLIED 2026-09-29 | prod=APPLIED 2026-09-29`.** Rick's first production run did NOT land: the check query returned `has_f164_predicate = false` (cause not established), and the old verdict string could not have caught it; the F164 check did. A re-run printed the F164 verdict and the smoke named `rjbookstop`/`comicstore` (22 / 14 / 4,678, unchanged); with 0 cross-tenant preorders on production only that marker can prove v2 landed. **Staging is now the same October catalog as production (2,215 rows).** Read back from the databases, not the logs: production is exactly as measured that morning; staging archived 4 reservations, purged 4,402 stale rows, recorded 9 order confirmations, cleared `order_deadline`, `maintenance_mode` still false.
+
+**F147's mark path met live candidates for the first time (staging) and discriminated:** 17 unfulfilled reservations on 2026-09 titles absent from 2026-10; **7 marked withdrawn, all with FOC 2026-09-28 (passed); 10 held back, all with FOC 2026-10-05..10-19 (not yet passed); 0 violations.** Without the F147 fix all 17 would have been marked (the 519 shape). **CORRECTED the same evening: "discriminated" verified the IMPLEMENTATION (the code marks exactly the FOC-passed candidates), NOT the premise.** Evidence against the premise: all 6 Lunar marked codes were on Lunar's own *Available Products* export on 09-14 and 09-22 (In-Store 11/4-11/11), and consecutive monthly files share almost no FOC dates (Lunar's September file spans FOC 09-14 to 12-14, its October file starts 10-12), so a title is absent from the next month's file by construction, withdrawn or not. The same predicate on production's data, using today's reservations, marks **0** for an import on 09-27 (the actual run, which matches the record), **4 reservations / 2 titles / 3 customers** on 09-29, **182 / 101 titles / 14 customers / 289 copies** on 10-06 and **368 / 217 / 18 / 591** on 10-13: the outcome depends on WHEN the import runs relative to FOC dates, not on anything a distributor did, and production's 0 was calendar luck. **UPDATE, later the same day: the 7 staging marks are CONFIRMED FALSE POSITIVES.** A fresh Lunar Available Products export (2026-09-29 12:02, after the 9/28 FOC) lists all 6 Lunar codes with their FOC and in-store dates unchanged (11/4 and 11/11), which I verified independently. The test has teeth: the export still lists 2,146 past-FOC titles, and 49 of the 555 titles from that same 9/28 batch DID drop out since 09-22 (mostly incentive variants and unlock bundles), so a real removal shows. Rick confirmed the PRH title (Minor Arcana #20) is in PRH's product catalog; I did not verify that one myself. Not yet filed as a finding. Still true: **production's mark path is unproven.** **F146's clear half was EXERCISED on staging at 16:17 UTC (first live exercise anywhere): Rick's older-month backfill re-import on staging (September's Lunar and PRH files, `--skip-autoreserve`; the procedure F146 was originally verified with) logged '7 previously-withdrawn title(s) reappeared - clearing', and a fresh read afterwards confirms it: withdrawn marks tenant-wide 0 (was 7), both mark columns null on all 7, their 7 reservations intact and still open, October's 2,215 rows, preorders (80), `order_deadline` and `catalog_filters` unchanged, September back to its original 2,302 rows.** Production's clear half is still unexercised (0 marks there). Whether the 7 were truly withdrawn is answered above: they were not. **The October print, measured directly on staging: no config 2,215 rows = 50 pages; explicit month rule 2,038 rows = 46 pages, equal to the figure derived independently from production's database.** The customer default on real October data: absent = malformed = permissive = 2,215 titles (the month rule would have hidden 177); `s4-visibility-verify.mjs` 9/9 (its month is now derived, not hardcoded). **The clean 151/0 suite ran on staging's September data and was RE-RUN on the October state (after the import, the September backfill and the mark clear): 151 passed, 0 failed, 0 flaky, no retries, 23.2 min, teardown restored normally.**
+
+**Last completed work: OCTOBER IMPORT GATE CLOSED OUT, 2026-09-29 (doc-only, read-only against both databases).** See the ✅ gate paragraph above for the measured result. Production ran the real October import 2026-09-27; F157's guard behaved, no false withdrawal marks were written, F146's clear half and F147's mark half were **not** meaningfully exercised (0 marks going in; no candidate with an unfulfilled future reservation). Production `order_deadline` is empty pending Rick's post-shipment planning; `maintenance_mode` false. Plan: `docs/october-import-closeout-and-doc-truth.md`.
+
+**Last completed work: F162 PROMOTED TO PRODUCTION, 2026-09-28 (staging `fdad392` + `4a6b7a1`; PR #158,
+merge `9c9629c`).** Rick's explicit request, merged the same day it was opened. **Not a cherry-pick —
+staging is 110 commits ahead of `main`, carrying F72/F155/F156/register-customer/register-tenant and
+much more, none of which went.** `app.js` carries the `merge=ours` driver that has silently dropped
+this exact file on prior cherry-pick promotions (documented several times in this project's history),
+so the fix was **applied directly to `main`'s own copy** instead of cherry-picked — both call sites
+were confirmed byte-identical to staging's pre-fix code before editing, and `fetchAllRows()` (the
+helper both fixes route through) was already live on production since F140, so nothing new was
+introduced. **`app.js` only, +18/−3. No schema, no RLS, no Edge Function, no `config.js`, no other
+page.** PR file list re-checked **on GitHub itself** — exactly 1 file.
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves**, not inferred from the
+merge: `app.js` carries `fetchAllRows(() => db.rpc('get_ordered_codes')` ×**2** (both call sites) and
+a bare, unwrapped `db.rpc('get_ordered_codes')` ×**0** beyond those two — confirming neither call site
+was missed and nothing shipped half-fixed. **Rick smoke-tested live on production himself** (reserve
++ cancel path), independent of the byte-level check above.
+
+**Companion SQL now APPLIED on BOTH environments, 2026-09-28.**
+`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql` (adds `ORDER BY` to `get_ordered_codes()`
+for pagination determinism across separate page requests) ran on production the same day, verified the
+same way as staging: Rick pasted back `pg_get_functiondef`'s output, body confirmed ending
+`GROUP BY distributor, order_code ORDER BY distributor, order_code;`, identical to staging's. Since
+`GRANT`/`REVOKE` sit in the same `BEGIN`/`COMMIT` block as the `CREATE OR REPLACE`, their landing
+follows from the body having landed — no separate grants re-check was needed.
+
+**F162 is FULLY RESOLVED, both environments — nothing left open.** *(F163 was filed 2026-09-29; F164 is now the next free finding ID.)*
+
+**Prior work (2026-09-27, same finding, staging-only phase): F162 filed AND fixed on STAGING.**
+Rick's own screenshot, not an audit: DICK TRACY #20 CVR B LEE WEEKS VAR (Lunar `0626MA0893`) read
+**"✓ Ordered (3)"** on admin's Order Builder but carried **no "Order placed" badge** on a customer's
+My List Upcoming Arrivals card, despite a real, correctly-recorded net-3 order.
+
+**Root cause: the sixth instance of the F82/F113/F139/F140/F156 unbounded-query defect, in a code
+path none of those five audits touched.** `app.js`'s `getOrderedCodes()` called the
+`get_ordered_codes()` RPC (§ 6.8) with **zero pagination**. Measured live on production:
+`order_submissions` holds **2,017** rows / **1,895 distinct** `(distributor, order_code)` pairs, and
+an unranged request against the same table independently confirmed PostgREST's cap here is **exactly
+1000** (`HTTP 206`, body of 1000 against `content-range: 0-999/2017`). `0626MA0893`'s order is
+genuinely correct in the ledger — it simply fell outside whichever ~1000 of the 1,895 codes the
+truncated call happened to return. `admin.html`'s own ledger read (`fetchPaged()`, `:959`) has been
+paginated since the table was built, which is exactly why the two surfaces disagreed.
+
+**Not merely cosmetic — found and fixed a SECOND, independent instance of the same call while writing
+this up.** `mylist.html`'s `isOrdered` drives `isLocked`, which disables the quantity stepper and
+swaps the Remove/Cancel button for a locked chip (`:1149`) — so the truncation could leave an active
+**Remove** button on a reservation the store had already submitted to the distributor. Worse:
+`Preorders.cancel()` has its own **independent, un-paginated** `db.rpc('get_ordered_codes')` call
+(`app.js:1455`, pre-fix) that is the actual guard deciding whether to let the delete through — same
+truncation risk, but here it is the guard itself, not just a display label. A tenant past 1,000
+distinct ordered codes could have this guard silently miss a genuinely-ordered code and let a
+customer **actually cancel** stock the shop already ordered. Both call sites fixed identically.
+
+**Fix: both call sites routed through the existing `fetchAllRows()` helper** — `app.js`'s own
+generalized pagination convention (F140), same as every other paginated query in the file. Two lines
+changed per call site.
+
+**⚠️ A real trap caught before shipping, worth carrying forward for any future RPC pagination in this
+project: `.range()` on this vendored `supabase-js` is query-string `offset`/`limit`, NOT HTTP `Range`
+headers, and this project's PostgREST does not honour a `Range` header on an RPC POST at all.** A
+first verification attempt built a raw-fetch harness using the textbook `Range: 0-999` /
+`Range-Unit: items` pagination headers against the live RPC, and it **hung indefinitely** — every
+"page" silently returned the identical first 1000 rows regardless of the requested range, so the
+loop's short-page exit condition never fired. Read directly out of `vendor/supabase.min.js`:
+`range(e,t,...)` sets `this.url.searchParams.set('offset', e)` / `.set('limit', t-e+1)` — confirmed
+live against the real RPC to correctly return a genuinely different second page. **Had this not been
+caught first, the "fix" would have hung every customer's My List page load the moment their tenant
+crossed 1000 ordered codes — worse than the bug it was meant to close.**
+
+**Verified live on staging by reproducing the exact truncation and confirming the fix closes it**
+(`playwright/f162-verify.mjs`, local-only, `f149-maintenance-verify.mjs` convention): seeded 1,050
+throwaway `order_submissions` rows (prefixed `ZZTEST162-`, never colliding with a real code) against
+the founding tenant, pushing it to **1,913** true distinct pairs. The unpatched single-call shape
+returned exactly **1,000**; the paginated shape recovered all **1,913** in 2 pages; a specific
+late-sorting throwaway code was absent before the fix and present after — the same shape as the real
+DICK TRACY #20 symptom, reproduced and closed on command. Teardown confirmed by a fresh read: 0
+`ZZTEST162-*` rows and 0 throwaway profiles/auth users remain.
+
+**⚠️ A process mistake made and corrected in the same session, recorded so it isn't repeated:** an
+early verification run of the targeted `15-order-export-ledger` spec was killed by hand after reading
+flat `tasklist` CPU time as "stuck" — it was not; Node buffers stdout when redirected to a file
+(the exact `run-smoke.ps1` trap this document already records under § Smoke Test Suite), and the kill
+happened at test 32 of 36, genuinely mid-progress. The interrupted run skipped Playwright's own
+`globalTeardown`, leaving the STAGING founding tenant's `catalog_filters` in its suite-neutralised
+state and a synthetic test tenant (`pw-4530b271`) undeleted. **Both recovered immediately and verified
+by fresh read**: `catalog_filters` restored to its exact original 167-byte value (captured from the
+interrupted run's own `.pw-catalog-filters.json` before it could be overwritten by a fresh run), the
+orphaned tenant deleted. The spec was then re-run to completion without incident.
+
+**Gates.** `node --check` clean on `app.js`. Unit suite **321/321** unchanged (no import-script code
+touched). **Targeted `15-order-export-ledger.spec.ts`: 36/36 passed, 6.9 min** — including the two
+tests that exercise exactly this code (`"an ordered code shows Order placed and cannot be removed"`
+and `"V-B2 — a zero-only ledger code does NOT read Order placed and remains cancellable"`).
+**Full Playwright suite: 147 passed, 3 skipped (pre-existing spec 24 skips, unrelated), 0 failed,
+exit 0, 22.6 min** — run against the deployed staging bytes post-push, `globalTeardown` confirmed
+clean. Zero regressions from either fix.
+
+**⚠️ The SQL file's first run tripped two bugs, the second more serious than the first — both fixed
+the same day.** (1) Its verification query used `'name'::regprocedure` with no argument list, invalid
+for a zero-arg function (`22P02: expected a left parenthesis`). (2) **The file had no explicit
+transaction**, and the Supabase SQL Editor sends a pasted block as one implicit transaction — so that
+syntax error risked silently rolling back the `CREATE OR REPLACE FUNCTION` above it too. Fixed by
+wrapping the DDL in `BEGIN; … COMMIT;` before any verification runs (matching
+`order-submissions-signed-quantity.sql`'s own convention), and re-verified clean:
+**`get_ordered_codes()`'s companion `ORDER BY` migration is now APPLIED and confirmed on staging** —
+`pg_get_functiondef` shows the body ending `GROUP BY distributor, order_code ORDER BY distributor,
+order_code;`, grants unchanged (`postgres`/`authenticated`/`service_role`, no `anon`/`PUBLIC`).
+
+*(At this point in the session the `app.js` fix was staging-only and the companion SQL was staging-only
+too — both since changed. See the "Last completed work" entry above this one for the production
+promotion: PR #158, merge `9c9629c`, 2026-09-28. The companion SQL's production run remains the one
+open residual.)*
+*(Corrected 2026-09-29: that residual is CLOSED — the companion SQL was applied on production 2026-09-28, verified by `pg_get_functiondef`; the SQL file's STATUS line reads `prod=APPLIED 2026-09-28`, and the "Last completed work: F162" entry above records it. Only this parenthetical was stale; every other F162 statement in this file already reads fully resolved.)*
+
+**Prior work (2026-09-21): PROMOTED TO PRODUCTION — Order Follow-Up's resolve control now clears an
+UNFULFILLED Never Arrived row (PR #154, merge `df483a3`; staging `6dcbc01`, pick
+`a99da07`).** Rick's explicit request, merged the same day it was opened. A **cherry-pick, not a
+merge** — `staging` was **67 commits ahead**, carrying F72 S0/S1a/S3, F153, F154, F156,
+`register-customer`/`register-tenant` and 9 client files; **none of it went.** **`admin.html` only,
++33/−2. No schema, no RLS, no Edge Function, no `config.js`, no other page.**
+
+**Found live by Rick, from a real symptom, not an audit.** `0726AC0632` (LIFE WITH ARCHIE #1
+FACSIMILE CVR A, Lunar, "Cancelled" on Lunar's own site) stayed on Order Follow-Up after he clicked
+**Didn't arrive**. The write landed, the toast read "Marked didn't arrive", `loadData()` reloaded —
+and the row came straight back, permanently.
+
+**The cause is a second producer nobody extended.** Never Arrived is fed from **two** places:
+`neverArrivedFromFulfilled()` requires `p.fulfilled` and filters on `arrival_outcome`, so the control
+works there — and **F155 S3(b) (2026-09-05) added a second producer inside
+`computeBackorderRisk()`'s own `forEach`** for a released-but-unfulfilled title, which **read
+`arrival_outcome` nowhere**. So the resolve buttons were rendered on rows they structurally could not
+clear. **F134's own comment — *"any value other than 'unknown' drops the row out of
+`neverArrivedFromFulfilled()`'s filter, so no additional clearing logic is needed here"* — was TRUE
+when written and was falsified the moment S3(b) landed**; that filter governs only the FULFILLED
+path. Corrected in place, old wording kept visible per convention.
+
+**The fix is one line**, placed with the settled-outcome exits rather than inside the S3(b) branch so
+a judged title also clears Backordered and At risk — it is not an open case on any of the three.
+**`'unknown'` deliberately still does NOT clear** (judged, and we still don't know — the open state
+the panel exists to surface); **NULL is "not yet judged"** (F115 § 3.1) and does not clear either.
+
+**⚠️ THE ASSERTION WAS OBSERVED RED BEFORE IT WENT GREEN, and that was free rather than engineered.**
+Staging was still serving pre-fix bytes when the test was written, so that run **was** the negative
+control: `Expected: 0, Received: 1`, the row resolving **23 times over 10s**. Everything ahead of it
+passed — row present, `data-state="neverArrived"`, `fulfilled=false`, `arrival_outcome=null` — so the
+failure was the clearing itself, nothing incidental.
+
+**The coverage gap that let this ship is now closed, and it is the reusable lesson.** Spec 21's V4
+was the **only** test asserting the resolve control clears the panel, and **its fixture is
+`fulfilled: true`** — so it only ever exercised the producer that already worked. A green suite said
+"nothing else broke" for two weeks while the control was dead on the other path. New **V7** drives
+the unfulfilled path, with the fixture shaped to reach **only** the S3(b) line (no shipment row, no
+ledger row) so the clearing cannot be credited to F129's exit instead, and it asserts **`fulfilled`
+stays false** — clearing the panel must never be bought by marking the row fulfilled, which is the
+exact lie F115 exists to stop.
+
+**Gates.** `node --check` clean on the single inline `<script>`. Unit **295/295** (unchanged — no
+import-script code). **Full Playwright suite: 147 passed, 0 failed, exit 0, 20.7 min** against
+deployed staging bytes post-push — **146 → 147 reconciles exactly as V7**. Spec 21 **7/7**. **Zero
+orphaned auth users** confirmed by fresh read (one leftover found is dated 2026-08-24, pre-existing
+F130, left alone per that finding's own rule — and now classified as originating from spec 21's V4
+block).
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — the documented
+302 trap), not inferred from the merge: `admin judged it — settled` ×1, `pending-accounts-panel` ×2
+(PR #153's, preserved). **Negative assertions hold** — the excluded staging work did not ride along:
+`Tier.isPaid` ×**0**, `data-paid-only` ×**0**, `print-store-info` ×**0**, `window.Tier` ×**0**.
+`config.js` prod ref ×1, staging ref ×**0**. PR file list re-read **on GitHub itself** — exactly
+1 file.
+
+**⚠️ ONE PRODUCTION GREP COUNT MOVED AND IT IS COMMENTS, NOT CODE — recorded so a future session does
+not read it as drift.** `neverArrivedFromFulfilled` goes **×4 → ×6**. Run down against the diff
+rather than waved through: **3 added lines mention it, 1 removed, net +2**, and **0 of the additions
+are non-comment** — all three are `//` lines (the new exit returns early, it never calls the
+function). Comments ship in the HTML. Exactly PR #151's `catalog_month` ×3-where-×2 and PR #153's
+`recordSupplierRejection` ×3→×4 shape.
+
+**Blast radius measured on production BEFORE promoting, and it held: exactly 1 row.** Of **23**
+unfulfilled rows carrying an `arrival_outcome`, **22 read `'unknown'` and correctly stay**; only
+`0726AC0632` clears, and its mark was already in the database, so it cleared with no re-click and no
+data fix. **Rick confirmed it live on production: *"I see that the marked followup row has been
+hidden as expected."*** Production data is unchanged by this promotion — the fix is a pure render
+change and writes nothing (re-read post-deploy: still 23/22/1).
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150/#151/#152/#153
+record: the diff is `admin.html` only and never touches the customer reserve path, confirmed from the
+diff itself before deciding.
+
+**⚠️ THE CUSTOMER-FACING HALF IS NOT FIXED, IS NOT FILED, AND IS THE MORE USEFUL RESULT.** Rick's
+question had two halves — *move it off Follow-Up* (done) and *show this status to the customer* (**not
+done**). Measured: **a stranded row is in NEITHER My List section**, so **no** arrival status can
+reach the customer no matter what an admin marks. `mylist.html:937` scopes the main table to
+`catalog_month === currentMonth` (this row is `2026-07`, current is `2026-09`) and `:938-940` scopes
+Upcoming Arrivals to `on_sale_date >= today` (`2026-09-09 < 2026-09-21`). **The copy already exists
+and simply has no row to render on** — `⚠ Did not arrive — contact the store.` (`mylist.html:1099`).
+This is **F155's own stranding mechanism reaching its terminal case**: F155 S1/S2 addressed date
+*drift*, but a title that genuinely will never arrive still vanishes from the customer's view.
+**All 23 of the rows above are stranded this way.** Filing was offered and Rick chose to fix the panel
+first; **it remains unfiled, so it will be lost unless someone files it.**
+
+**⚠️ Two smaller residuals, stated rather than left to be rediscovered.** (1) **The resolve buttons
+have no confirm and no un-resolve.** On the unfulfilled path a mis-click used to be harmless — the row
+just came back — and is now consequential, with no UI to undo it. That is a real change in exposure,
+and it is the same gap F143's confirm gate closed for the rejection write. (2) The **22 `'unknown'`
+unfulfilled rows** behave correctly and stay on the panel, but **where that value came from on an
+unfulfilled row was not traced** — F115's import writes it at fulfilment time, so their origin is
+unexplained.
+
+**No finding ID consumed.** This is a genuine shipped **defect** — the control was dead on one path,
+which is wrong behaviour, not merely different behaviour — but it was reported and fixed in the same
+session and is now RESOLVED on **both** environments with nothing left open to track on *this* half,
+the same disposition the 2026-08-24 Lighthouse sweep and PR #153's marker fix record. **F160 remains
+the next free finding ID — and the customer-facing half above is the thing most worth spending it
+on.**
+
+**Last completed work: PROMOTED TO PRODUCTION — admin Customers tab badges, the Pending Accounts
+Follow-Up panel, and the Order Follow-Up disclosure-marker fix, 2026-09-12 (PR #153, merge
+`c2f9f42`; staging `cde24cf` + `515721a`).** Rick's explicit `/promote-prod` request, merged the
+same day it was opened. **A cherry-pick, not a merge** — `staging` was **61 commits ahead** of
+`main`, carrying F72 S0/S1a/S2a/S3, F153, F154, F156, `register-customer`/`register-tenant` and 9
+client files; **none of it went.** **`admin.html` + `style.css`, +381/−62. No schema, no RLS, no
+Edge Function, no `config.js`, no other page.**
+
+**What shipped, in one line each.** (1) Pull Lists / Accounts / Subscriptions each carry a **muted**
+count badge stating that tab's TOTAL — the Pull Lists figure is taken from `fullTotals` *before*
+`renderByCustomer()` applies its search, so it cannot become a filtered subtotal wearing a total's
+clothes, which is F121's own defect on the very strip F121 rebuilt. (2) The amber `#pending-badge`
+is **retired**; pending approvals are a Follow-Up panel above Order Follow-Up with **Approve /
+Decline / Hide**, where Approve and Decline call the *same* writers the Accounts tab uses
+(`approveAccount()`/`declineAccount()`), so the decline confirm wording — the actual safeguard —
+cannot drift between two copies. (3) The disclosure marker no longer renders a control character
+plus the literal text `BE`.
+
+**Hide is VIEW STATE ONLY — Rick confirmed the design 2026-09-12, and it is deliberately not a
+column.** Per-admin, per-browser `localStorage`, tenant-scoped, every access wrapped. It writes
+nothing server-side: the account stays `pending`, stays fully actionable on the Accounts tab, and
+nothing in the database can tell Hide was ever pressed. **Hidden rows do not light the Customers
+attention dot** — a dismissal that still nags is not a dismissal. Nothing is silently lost: a
+standing **"N hidden — Show them"** line persists while any are hidden, and the set is **pruned
+against what is actually pending on every fetch**, so a stale id cannot suppress a live row.
+
+**The marker bug's cause is the reusable part.** The source wanted the CSS escapes `\25B8` / `\25BE`
+(▸ ▾); **something on the way in read `\25` as a legacy OCTAL escape — octal 25 is `0x15`, the NAK
+control character** — leaving a control char followed by the characters "B8". **Same class as the
+`\00b7` print-CTA bug caught pre-deploy 2026-08-27, except this one shipped and sat live.** Fixed
+with literal glyphs, which have no backslash to misread.
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — the
+documented 302 trap), not inferred from the merge: `admin.html` returns `pending-accounts-panel` ×2,
+`class="tab-count"` ×3, `setTabCount` ×7, `pending-hide-btn` ×2, `approveAccount` ×3,
+`declineAccount` ×3, `readHiddenPending` ×6, `pending-unhide-btn` ×2, and the marker lines carrying
+literal **▸ / ▾**; `id="pending-badge"` is ×**0**, confirming the retirement. `style.css` carries
+`printing-this-week #pending-accounts-panel` ×1. **Negative assertions hold — the excluded staging
+work did not ride along:** `Tier.isPaid` ×0, `data-paid-only` ×0, `print-store-info` ×0,
+`window.Tier` ×0. `config.js` carries the prod ref `plgegklqtdjxeglvyjte` ×1 and the staging ref
+×**0**. PR file list re-read **on GitHub itself** — exactly 2 files.
+
+**⚠️ TWO PRODUCTION GREP COUNTS MOVED, AND BOTH ARE COMMENTS, NOT CODE — recorded so a future
+session does not read them as drift.** `recordSupplierRejection` goes **×3 → ×4** (PR #149's
+recorded figure) and `ofu-never-scroll` **×2 → ×3** (PR #146's). Both were run down against the
+diff rather than waved through: the extra occurrences are this change's own explanatory comments,
+and comments ship in the HTML. Exactly PR #151's `catalog_month` ×3-where-×2-was-predicted shape.
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150/#151/#152
+record: the diff is `admin.html` + `style.css` and never touches the customer reserve path,
+confirmed from the diff itself before deciding.
+
+**⚠️ THE PENDING PANEL HAS HAD NOTHING TO DISPLAY ON PRODUCTION SINCE IT SHIPPED — measured
+read-only 2026-09-18, six days in: 31 accounts, **0 pending**, 60 subscriptions.** So the badges are
+live and correct (Accounts reads 31, Subscriptions 60), but the panel is correctly *hidden*, and
+**its rows, its Approve/Decline/Hide controls and the hidden-set persistence have never been
+exercised against production data.** That is the same "first live exercise still pending" shape
+F146 and F147 carry, and it is stated rather than left to be assumed from a green promotion: the
+next real signup is the first time any of it renders for a customer-facing decision.
+
+**⚠️ One verification is SKIPPED, not passed, and it stays open: whether hiding every pending
+account clears the amber attention dot.** Staging's Customers dot is already `dot-alert`, raised by
+Order Follow-Up / Withdrawn, so the pending contribution cannot be isolated there; production has no
+pending accounts at all, so it cannot be isolated here either. The logic is covered in an isolated
+render harness; **the live path is unproven on both environments.** Worth a real check the first
+time production carries a pending account and Never Arrived is empty.
+
+**The evidence that covers this change is a local harness, because the suite has none.** No
+committed spec asserts a tab badge (they did not exist), the Pending panel (new), or a `::before`
+glyph. `playwright/admin-tab-counts-pending-verify.mjs` (local-only, `f149-maintenance-verify.mjs`
+convention, password grant + `addInitScript` rather than a magic link, per F107): **36 checks green,
+1 skipped.** Badges reconcile **three ways** — against a service-role count, the rendered customer
+groups, and the Accounts tab's own summary line. **F121's trap is tested directly**: a nonsense
+search narrows the list 2→0 while the Pull Lists badge holds at 2. Decline genuinely deleted a
+profile, Approve genuinely flipped `status`, a hostile display name is escaped, no horizontal scroll
+at 390px, **zero orphaned auth users** on teardown. The marker fix was **negative-control tested** —
+re-injecting the original rule computes `"\15 BE"` and the assertion goes red, which also confirms
+the diagnosis. Full suite **146 passed, 0 failed, exit 0, 23.7 min**; unit **295/295**.
+
+**⚠️ Two assertions failed on the harness's first run and the TEST was wrong, not the code — F133
+variant (b), reproduced.** Staging carries **2 real pending accounts of its own**, so "the panel is
+now empty" was never a property of that environment; both assertions assumed the panel held only
+their own fixture. Re-scoped, and the replacement is a **better** check: *Hide is per-row — the other
+pending accounts are untouched.*
+
+**⚠️ A process trap that cost real time twice, recorded so it is not rediscovered.** (1) `TaskStop`
+— and killing an agent shell generally — stops the **shell wrapper, not the Playwright process
+tree**, so a "stopped" run keeps going and races the next one against the same staging tenant, where
+`15-order-export-ledger` mutates `app_settings.order_deadline` globally; `Get-CimInstance
+Win32_Process` showed two live `npx playwright test` trees. Compounding it, `npx playwright test >
+file` is **block-buffered**, so `tail` reads stale and progress looks frozen when it is not — the
+run's own `N passed (Xm)` summary is the only trustworthy figure, which is the same rule
+§ Smoke Test Suite already records for `run-smoke.ps1`. **Two healthy runs were killed on that
+misreading.** (2) **Resuming a session days later left the working tree on the `*-prod` promotion
+branch, so `CLAUDE.md` re-read into context as `main`'s copy — 61 commits stale, still claiming
+F157 was the next free ID.** Nothing was written from it, but an edit made against that tree would
+have reverted four other sessions' doc work. **Check `git rev-parse --abbrev-ref HEAD` before
+trusting any re-read of this file.**
+
+**No finding ID consumed.** (1) and (2) are **feature builds to request** — the prior behaviour was
+not miscalculating or hiding anything; it was different behaviour Rick wanted. (3) is a genuine
+shipped **defect**, but it was reported and fixed in the same session with nothing left open to
+track, the same disposition the 2026-08-24 Lighthouse sweep records. **F160 remains the next free
+finding ID.**
+
+**Last completed work: admin Customers surface — tab count badges, Pending Accounts moved to
+Follow-Up, and the Order Follow-Up disclosure marker fixed, GREEN on STAGING, 2026-09-12**
+(`cde24cf` code, `515721a` print-CSS follow-up, both merged `--ff-only`, pushed). Rick's request,
+three items in one pass. **`admin.html` +376/−62 and `style.css` +5. No schema, no RLS, no Edge
+Function, no `config.js`, no other page.** ***PROMOTED TO PRODUCTION 2026-09-12 via PR #153
+(merge `c2f9f42`) — see the entry above. This sentence read "Production untouched" and was left
+standing after it stopped being true, which is the F132/F138/F139/F145 stale-claim pattern; the
+words are kept here rather than deleted so the correction is visible.***
+
+**(1) Secondary count badges on the three Customers tabs** — Pull Lists, Accounts, Subscriptions.
+Deliberately **muted, not accent**: the only badge that had ever sat on that strip was the amber
+pending count, and that is now a panel, so nothing up there should read as "act on me" any more.
+Each states its tab's **TOTAL**, never the filtered or searched subset — `count-pull-lists` is set
+from `fullTotals` *before* `renderByCustomer()` applies its search (and before its empty-result
+early return), so the number does not move as you type. A number that silently narrows while still
+looking like a total is the whole of F121, and these badges sit on the very tab strip that finding
+rebuilt. `null` renders as **no badge**, a measured 0 renders as **"0"** — `.is-set` is what keeps
+those two claims apart, the same not-loaded-is-not-zero rule `pendingCount` already followed.
+Subscriptions gets a cheap **head-only** count at page load (`count: 'exact', head: true`), which
+`loadSubscriptions()` overwrites with the real figure on first open; it counts **subscriptions, not
+series rows**, so it reconciles with the sum of that table's own Count column.
+
+**(2) The amber `#pending-badge` is RETIRED; pending approvals are now a Follow-Up panel** —
+`#pending-accounts-panel`, a third `data-chrome="customers"` sibling placed **above**
+`#backorder-risk-panel`, with **Approve / Decline / Hide**. A count is not an action, and that one
+sat on a tab you had to be looking at already. Placed first because it is the smallest of the three
+(usually zero rows, hidden entirely) and the only one where a *person* is waiting; bounded by scroll
+at 260px like `.ofu-never-scroll`, and for the same reason — these rows carry the decision, so
+hiding all but the first N would put a real action behind an invisible boundary.
+
+**Approve and Decline are the SAME writers the Accounts tab uses**, extracted to
+`approveAccount()` / `declineAccount()` + `refreshAccountSurfaces()`. The decline confirm **wording
+is the safeguard** — it deletes a profile and says so — and two copies of a safeguard is one copy of
+a safeguard (the single-`recordSupplierRejection()` reasoning, F143/F156). Each button's own label
+is captured and restored on the error path rather than hardcoded, which is the bug F156 fixed in
+`wireArrivalRejectActions()`. **The Accounts tab keeps its own Approve/Decline unchanged**, so
+`19-admin-account-actions.spec.ts` is untouched, and the pending number still appears in the
+Accounts summary line and the Pending filter.
+
+**Hide is VIEW STATE ONLY — Rick confirmed the design 2026-09-12.** A per-admin, per-browser
+`localStorage` dismissal, tenant-scoped key, every access wrapped (storage throws outright in some
+privacy modes, and a dead panel is worse than a forgotten dismissal). It writes **nothing**
+server-side: the account stays `pending` and stays fully actionable on the Accounts tab, and nothing
+in the database can tell Hide was ever pressed. **Hidden rows deliberately do NOT light the
+Customers attention dot** — that is what Hide means, and a dismissal that still nags is not one.
+Nothing is silently lost: the panel keeps a standing **"N hidden — Show them"** line for as long as
+any are hidden, and the set is **pruned against what is actually pending on every fetch**, so a
+stale id cannot suppress a live row and approve/decline need no cleanup of their own.
+
+**(3) The Order Follow-Up disclosure marker, and the cause is worth carrying forward.** Rick
+screenshotted the collapsible link rendering an unprintable box followed by the literal text `BE`.
+The source wanted the CSS escapes `\25B8` / `\25BE` (▸ ▾); **something on the way in read `\25` as a
+legacy OCTAL escape — octal 25 is `0x15`, the NAK control character** — leaving a control char plus
+the characters "B8". **Same class as the `\00b7` print-CTA bug caught pre-deploy 2026-08-27, except
+this one shipped and sat live.** Now literal glyphs, which have no backslash to misread; **zero
+control characters remain anywhere in the file**, verified.
+
+**A real gap found alongside, not asked for: the bagging-list print.** `style.css` explicitly hides
+`#backorder-risk-panel` and `#withdrawn-panel` from `body.printing-this-week` because they sit above
+`.admin-tabs` and are not `.admin-section`s — a fix made **after** one of them was found on a real
+printed sheet (2026-08-06). The new panel has the identical shape and was caught by none of those
+rules. Listed at birth instead (`515721a`). Belt-and-braces today, since printing is only reachable
+from Bagging mode where `.chrome-off` already applies — but that mechanism arrived two days *after*
+the print fix, and this panel should not be the one that regresses if it changes.
+
+**Gates.** `node --check` clean on the single inline `<script>` block. Unit suite **295/295**
+(unchanged — no import-script code touched). **Full Playwright suite: 146 passed, 0 failed, exit 0,
+23.7 min**, run against deployed staging bytes post-push, with `globalTeardown` clearing its own
+synthetic tenant. Deployed bytes verified directly (`curl -L`): `pending-accounts-panel` ×2,
+`class="tab-count"` ×3, `setTabCount` ×7, `id="pending-badge"` ×**0**, and the marker lines carrying
+the real E2 96 B8 / E2 96 BE bytes.
+
+**The evidence that actually covers this change is a local harness, because the suite has none.** No
+committed spec asserts a tab badge (they did not exist), the Pending panel (new), or a `::before`
+glyph — so a green suite says "nothing else broke", which is worth having and is not the same as
+"this works". `playwright/admin-tab-counts-pending-verify.mjs` (local-only,
+`f149-maintenance-verify.mjs` convention, password grant + `addInitScript` rather than a magic link,
+per F107): **36 checks green, 1 honestly skipped**. Badges reconcile **three ways** — against a
+service-role count, against the rendered customer groups, and against the Accounts tab's own summary
+line. **The F121 trap is tested directly**: typing a nonsense search narrows the list 2→0 while the
+Pull Lists badge holds at 2. Decline genuinely deleted a profile, Approve genuinely flipped `status`
+to active (edge function stubbed *with its DB effect*, as spec 19 does), a hostile display name is
+escaped, no horizontal page scroll at 390px, teardown left **zero orphaned auth users**.
+
+**⚠️ Two assertions failed on the first run and the TEST was wrong, not the code — the F133 trap,
+reproduced.** Staging carries **2 real pending accounts of its own**, so "the panel is now empty"
+was never a property of this environment; both assertions assumed the panel held only their own
+fixture, which is exactly what § 13 F133 variant (b) describes. Re-scoped to the fixtures, and the
+replacement is a **better** check: *Hide is per-row — the other pending accounts are untouched*.
+
+**The marker fix was negative-control tested rather than trusted.** Re-injecting the original rule
+over a live page computes `"\15 BE"` and the assertion goes **red**; the fixed rule computes `"▾"`
+and goes green — which also confirms the diagnosis, since that is precisely the box-plus-BE Rick
+photographed. The panel renderer was separately exercised in an isolated Node harness (22/22) across
+not-loaded, zero-pending, all-hidden and stale-hidden-id, and negative-control tested by breaking
+the code in a scratch copy and observing 5 assertions go red.
+
+**⚠️ ONE CHECK IS SKIPPED, NOT PASSED, and it is stated rather than glossed: V21 — whether hiding
+every pending account clears the amber dot.** Staging's Customers dot is already `dot-alert`, raised
+by Order Follow-Up / Withdrawn, so the pending contribution **cannot be isolated on this data**. The
+logic is covered in the isolated harness; the live path is unproven. Worth a real check the next
+time staging's Never Arrived panel is empty.
+
+**⚠️ A process trap that cost this session real time, recorded so it is not rediscovered.**
+`TaskStop` (and killing an agent shell generally) stops the **shell wrapper, not the Playwright
+process tree** — the run keeps going. Two runs then raced each other against the same staging
+tenant, where `15-order-export-ledger` mutates `app_settings.order_deadline` globally. Compounding
+it, `npx playwright test > file` is **block-buffered**, so `tail` on the log shows stale content and
+progress looks frozen when it is not; the run's own `N passed (Xm)` summary line is the only
+trustworthy figure — the same "check for a test count before believing either colour" rule
+§ Smoke Test Suite already records for `run-smoke.ps1`. **Two healthy runs were killed on that
+misreading before it was diagnosed** (by `Get-CimInstance Win32_Process`, which showed two
+`npx playwright test` trees alive at once). Kill by process tree, and read the summary line rather
+than the tail.
+
+**Two fixture tenants created by those interrupted runs were cleaned up** (`pw-5308211e`,
+`pw-67c2e26c`), using the suite's own `deleteTestTenant` shape. **Four older ones remain**
+(`pw-56132e92`, `pw-fc2e3fc7`, `pw-a62e4116`, `pw-2d3c4d60`, all August) — pre-existing **F130**
+territory, deliberately left alone, since that finding's own next step is to classify by originating
+spec before deleting anything. Staging's own data was confirmed unchanged afterwards by a fresh
+service-role read: 43 accounts, both real pending accounts intact, zero harness leftovers.
+
+**No finding ID consumed.** (1) and (2) are feature builds to request — the prior behaviour was not
+miscalculating or hiding anything, it was different behaviour Rick wanted. (3) is a genuine shipped
+defect, but it was reported and fixed in the same session with nothing left open to track, the same
+disposition the 2026-08-24 Lighthouse sweep records. **F158 remains the next free finding ID.**
+
+**Last completed work: PROMOTED TO PRODUCTION — newsletter S6c, the post-auth return path,
+2026-09-08 (PR #152, merge `1b2cc90`; staging `aaa6ca8`).** Rick's explicit `/promote-prod` request,
+later the same day as S6b. **`app.js` + `index.html`, +61/−4. No schema, no RLS, no Edge Function,
+no `config.js`.**
+
+**What shipped.** `initNav()` redirected a signed-out visitor to `index.html` and **discarded the
+requested URL** — there was no `?next=` — so a newsletter or social link carrying `?series=` lost its
+intent at the sign-in wall. A new **`PostAuthRedirect`** helper in `app.js` (one implementation,
+shared, so `initNav()` and `index.html` cannot drift) stashes the intended path; the **four** places
+`index.html` hardcoded `catalog.html` after successful auth now honour it. `localStorage`, **not**
+`sessionStorage` — a magic link opened from a mail client frequently lands in a *new tab*, which
+starts with an empty `sessionStorage` and would silently lose the intent, the exact failure this
+fixes.
+
+**⚠️ THE `merge=ours` DRIVER SILENTLY DROPPED `app.js`, AND IT WOULD HAVE BROKEN PRODUCTION SIGN-IN.**
+`.gitattributes` sets `app.js merge=ours`; a cherry-pick is a 3-way merge, so the driver kept `main`'s
+copy and discarded the entire helper. **The tell was the stat line, exactly as in PR #149** — staging
+`aaa6ca8` was *"2 files changed, 61 insertions"*, the pick landed *"1 file changed, 8 insertions"*.
+Uncorrected this ships `index.html` calling `PostAuthRedirect.take()` **four times against an
+undefined object** — a ReferenceError on the sign-in page. **That is worse than PR #149's silent
+no-op button**, and it is the second time this driver has bitten a cherry-pick promotion. Restored as
+its own visible commit (`7695f70`).
+
+**`git apply` then REFUSED, and the refusal was correct rather than an obstacle.** Staging's `app.js`
+carries **F72 S0's `Tier` helper, which `main` does not have**, so the hunk's context did not exist
+here — and taking staging's whole `app.js` would have dragged **F72 S0 to production**, unrequested.
+The block was instead lifted **verbatim from `origin/staging`** and inserted at `main`'s own
+equivalent anchor. **Proven, not assumed: the helper hashes `6339a8aa6edbe031` on `origin/staging`,
+on the promotion branch, AND in the bytes production serves** — production runs exactly the code the
+harness and suite exercised. No leakage: `window.Tier` ×**0**, `Tier.isPaid` ×**0**.
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves, and functionally in a real
+browser — which mattered here because the failure mode was a broken sign-in page.** Served bytes:
+`app.js` `const PostAuthRedirect` ×1, `window.PostAuthRedirect` ×1, `PostAuthRedirect.stash()` ×1;
+`index.html` `PostAuthRedirect.take` ×4 with **0** remaining hardcoded `href = 'catalog.html'`.
+`config.js` prod ref ×1, staging ref ×**0**. **Real-browser check on production, no account created:**
+`typeof window.PostAuthRedirect` is `object`, `stash`/`take` are both functions, **a poisoned
+`//evil.example.com/` stash was rejected by live production code** (returned `catalog.html`), and
+**zero console/page errors** on both front doors. **`#email` is correctly invisible on the apex and
+visible on `rjbookstop.pulllist.app`** (`data-front-door` = `apex` vs `tenant`) — a first assertion
+called that a FAIL, and the assertion was wrong, not the code: the apex renders the platform
+marketing page by design.
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150/#151 record: the
+diff never touches the customer reserve path. The meaningful check here was the sign-in page, done
+above. **Rick confirmed the flow himself on staging before merging: *"Links works as expected."***
+
+**Staging verification that earned it.** `playwright/s6c-post-auth-return-verify.mjs` **11/11** in a
+real browser against deployed staging bytes — the intent stashed and restored, the stash **one-shot**,
+a **2h-old stash ignored** (1h TTL), **three open-redirect payloads rejected**
+(`//evil.example.com/`, `https://evil.example.com/`, `javascript:alert(1)`), a **regression guard**
+that a login with no stash still lands on `catalog.html`, and teardown with zero orphaned auth users.
+**V2a was negative-control tested** — inverted to the pre-S6c expectation and confirmed to go red.
+**Full Playwright suite 146 passed, 0 failed, exit 0, 23.6 min**, which is the evidence that matters
+since `initNav()` runs on every nav page.
+
+**⚠️ Account creation is deliberately NOT covered, and the code is why.** A new signup lands
+`status='pending'` (`register-customer:121`) awaiting approval, and a pending profile makes
+`subscriptions.html`'s `isBlocked` true (`:405-407`), which **disables the search input**. Carrying
+intent through a signup form, an email round trip and an approval delay would deposit the newcomer on
+a page they cannot act on. **Rick's call, 2026-09-08:** existing accounts get their link back; a new
+visitor follows the standard onboarding process.
+
+**The funnel is now complete on production for signed-in AND signed-out customers with accounts.**
+Remaining: **S6a**, the producer half that emits the links, is in the **scripts repo** (`main`
+`f0189a8`) and publishes at the next shipment import, expected **Fri 2026-09-11** — until then the
+live newsletter still carries the old links. **S1x** (the cover cap) stays open, still needing a real
+send measurement.
+
+**These links are now a social-media tool too** (Rick's observation): `?series=` is shareable, but
+**use the tenant hostname** — `rjbookstop.pulllist.app/subscriptions.html?series=…` — because a bare
+apex link resolves no tenant slug and renders the platform marketing page instead of the branded
+sign-in, measured above.
+
+**No finding ID consumed (feature build, not a defect).** Discarding the URL at the sign-in wall was
+not miscalculating or hiding anything; this is different behaviour, wanted for the acquisition goal
+Rick stated 2026-09-08. Plan doc: `docs/newsletter-acquisition-funnel.md`. **F158 remains the next
+free finding ID.**
+
+**Last completed work: PROMOTED TO PRODUCTION — newsletter S6b, the `?series=` deep link,
+2026-09-08 (PR #151, merge `4548fc4`; staging `68e3144`, cherry-pick `ead8df9`).** Rick's explicit
+`/promote-prod` request. **One file, `subscriptions.html`, +28/−0. No schema, no RLS, no Edge
+Function, no `config.js`.**
+
+**What shipped.** `subscriptions.html` now reads a `?series=` query param, prefills its search box
+and runs the existing `searchSeries()`, so a cover clicked in the weekly newsletter lands on that
+series with its Subscribe button. It drives the **same** code path a typed query uses — no second
+query, no separate rendering — so deep-linked and typed results cannot diverge. It honours
+`isBlocked`, so a pending/paused account's deliberately-disabled search is not routed around.
+
+**Why this page and not the catalog, which is the whole finding.** The weekly newsletter is built
+from `weekly_shipment` — what *arrives* this Wednesday, solicited two to three months ago — while
+`catalog.html` hard-scopes to the current `catalog_month` (`:634`). **Measured on production
+2026-09-08: 0 of that week's 68 arriving titles existed in the current catalog month** (55 sat in
+2026-07, 9 in 2026-06, 4 had no catalog row). The two surfaces are disjoint by design, so a catalog
+deep link could never have shown the clicked title. `arrivals.html` was the next guess and Rick
+rejected it correctly — it renders the same week the email already shows, so the click returns the
+reader to the covers they just looked at. `searchSeries()` has **no** month filter (its own comment
+reads *"across all catalog months"*), which is exactly why subscribing works where the catalog could
+not. On production, **10 of this week's 30 shipment series are absent from the current month**.
+
+**A cherry-pick, not a merge, and the scope decision was real.** `staging` is **54 commits ahead**
+of `main`, carrying F72 S0/S1a/S2a/S3, F153, F154, F156, `register-customer`, `register-tenant` and
+9 client files. **None of it went.**
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — the documented
+302 trap): `subscriptions.html` returns `deepLinkSeries` ×4, `get('series')` ×1,
+`searchSeries(deepLinkSeries)` ×1, `scrollIntoView` ×1. **Negative assertions hold** — the excluded
+staging work did not ride along: `data-paid-only` ×**0**, `Tier.isPaid` ×**0**, `print-store-info`
+×**0**. `config.js` carries the prod ref `plgegklqtdjxeglvyjte` with **zero** staging ref. PR file
+list re-checked **on GitHub itself** — 1 file, +28/−0, `config.js` and `supabase/` both absent.
+**`catalog_month` came back ×3 where ×2 was predicted; run down rather than waved through** — the
+third is this change's own explanatory comment (comments ship in the HTML). The `searchSeries()`
+query in the served bytes carries **no** `catalog_month` filter, confirmed by reading it directly.
+
+**Two cherry-pick-specific checks worth reusing.** (1) **Stat lines matched** — staging `68e3144`
+*"1 file changed, 28 insertions(+)"*, picked `ead8df9` identical; that is the PR #149 tell, and
+`.gitattributes` carries `merge=ours` only on `app.js`/`config.js`, so `subscriptions.html` was never
+at risk of the silent drop. (2) **A cherry-pick can apply cleanly and still break at runtime**, so
+every identifier the new code references (`isBlocked`, `BLOCKED_TITLE`, `searchInput`,
+`resultsPanel`, `searchSeries`) was confirmed defined in **`main`'s** copy, all before the insertion
+point — and `searchSeries()` was confirmed **byte-identical between `main` and `staging`**, so
+production behaves exactly as tested.
+
+**Staging verification that earned it.** Targeted harness `s6b-series-deeplink-verify.mjs` **11/11**
+against deployed staging bytes in a real browser (password grant + `addInitScript`, not a magic link
+— F107), including a Subscribe click that **wrote the row** with the correct `user_id`, a negative
+control (no param → no search), an unknown series degrading to "No series found", zero console
+errors, and teardown with **zero orphaned auth users** confirmed by fresh read. **Full Playwright
+suite 146 passed, 0 failed, exit 0, 24.9 min.** **⚠️ V2 failed on its first run and the FIXTURE was
+wrong, not the code** — *Absolute Green Lantern* is an ongoing series present in every month
+including the current one, so it discriminated nothing; re-keyed to *Absolute Batman*. That failure
+forced a measurement worth keeping: **1,470 of staging's 3,287 series (45%) are absent from the
+current catalog month.** **Rick confirmed it in his own browser: *"The URL works as expected when I
+signin first."***
+
+**Write-smoke deliberately skipped**, same disposition PRs #141/#145/#147/#149/#150 record: the diff
+is `subscriptions.html` only and never touches the customer reserve path, confirmed from the diff
+itself before deciding.
+
+**⚠️ KNOWN LIMIT, shipped knowingly: this works only for a SIGNED-IN customer.** A logged-out
+visitor is bounced to the front door by `initNav()` (`app.js:508-511`), which **discards the
+requested URL** — there is no `?next=` return path, and `index.html` hardcodes
+`window.location.href = 'catalog.html'` in four places after auth (`:601`, `:661`, `:807`, `:852`).
+So a newcomer's intent is lost, and **that is the half that serves acquisition**, since a newcomer is
+by definition logged out. Tracked as **S6c**, scoped and not started.
+
+**⚠️ The producer half (S6a) is NOT in this repo and lands separately.** `build-pull-feed.js` lives
+in the scripts repo (`main` `f0189a8`, pushed) and is invoked by `import.js`, so the cover links
+themselves publish at the **next shipment import**, expected **Fri 2026-09-11**. Until then
+production's live newsletter still carries the old links.
+
+**No finding ID consumed (feature build, not a defect).** The prior behaviour — covers linking to a
+distributor's cover image — was not miscalculating or hiding anything; this is different behaviour,
+wanted for an acquisition goal Rick stated 2026-09-08. Plan doc:
+`docs/newsletter-acquisition-funnel.md`. **F158 remains the next free finding ID.**
+
+**Last completed work: PROMOTED TO PRODUCTION — F155 S3, the bounded arrival guard, 2026-09-05
+(PR #150, merge `787b0ee`; staging code `b5ad0e4`).** Rick's explicit request. A **cherry-pick**
+promotion, not a merge: staging carries a large amount of unrequested work (F72 S0/S1a/S2a/S3, F153,
+F154, F156, `register-customer` + `register-tenant`), none of which went. **5 files —
+`admin.html`, `docs/sql/auto_fulfill_past_on_sale.sql`, and three doc-journal files. No `config.js`,
+no `supabase/`, no `app.js`, no other page.**
+
+**What shipped, in one sentence each.** **S3(b)** reorders `computeBackorderRisk()`'s tests so an
+**ordered** title that has been released with no arrival record reaches Never Arrived instead of
+being cleared by the `ledgerNetQty > 0` exit that used to run first — the reason DNX #1 appeared on
+no panel at all while Mark Ordered was correctly `disabled`. **S3(a)** gives
+`auto_fulfill_past_on_sale()` a **bounded 14-day deferral** when nothing shows a title arrived:
+evidence present → fulfil immediately (unchanged, 212 of 218 rows in F115's own September figures);
+no evidence → wait, then fulfil exactly as before. **It defers, it never blocks** — F115 Option A was
+rejected for trading "a silent miss for a silent stall", and that objection is preserved.
+**The two halves are inseparable**: S3(a) without S3(b) defers rows no panel displays, which *is*
+that stall. **Sequencing was therefore client-first, the reverse of F149's** — PR merged, then Rick
+applied the SQL.
+
+**The SQL half was verified on production independently, not taken on report** — which matters,
+because this whole finding exists about a stale claim nobody checked. `pg_get_functiondef()` on
+production returns the F155 body: the grace predicate `OR s.on_sale_date < CURRENT_DATE - 14` and
+the three-key `weekly_shipment` EXISTS are both present, `SECURITY DEFINER` and
+`SET search_path TO 'public'` survived, and the signature is still **single-argument** — so
+`CREATE OR REPLACE` left no stray overload behind while `import.js` calls the one-arg version.
+**Grants checked behaviourally, since the definition cannot show them (F124):** an anon POST to
+`/rest/v1/rpc/auto_fulfill_past_on_sale` returns **`42501 permission denied`**, so the
+REVOKE-from-`anon`/`authenticated` hardening survived the replace. Nil-risk to run — production held
+0 eligible rows at the time.
+
+**Verified post-deploy against the bytes `pulllist.app` actually serves** (`curl -L` — `/admin.html`
+302s to `/admin` and without `-L` the empty body reads as a stale build): `admin.html` returns
+`THE ORDER OF THESE TESTS IS THE FIX` ×1 and `ordered, not yet released` ×1; **negative assertions
+hold** — F72's `Tier.isPaid` ×**0** (the ten print hunks did not ride along) and PR #149's
+`recordSupplierRejection` still ×**3** (preserved); `config.js` carries the prod ref
+`plgegklqtdjxeglvyjte` ×1 and the staging ref ×**0**. PR file list re-checked **on GitHub itself** —
+5 files, exactly the intended scope. **Write-smoke deliberately skipped**, same disposition as PRs
+#141/#145/#147/#149: the diff is `admin.html` plus docs and never touches the customer reserve path,
+confirmed from the diff itself before deciding.
+
+**⚠️ TWO REAL PROBLEMS THE PROMOTION GATES CAUGHT, both worth carrying forward.**
+**(1) `/promote-prod` step 0 returned CLEAN and was WRONG.** The SQL file's own STATUS line read
+`prod=APPLIED 2026-08-08 (pre-F155 body)`; the gate matches `prod=(APPLIED|N/A)`, so it passed while
+production was missing the body entirely — **the "gate that lives only in prose" failure F105 is
+named for, reproduced by the file that documents it.** A qualifier the regex cannot see is not a
+qualifier. Worse, PR #149's wholesale `docs/` sync (`bd1724a`) had **already carried the F155 SQL
+body to `main`**, so `main` had been claiming applied for a body production did not run. Fixed:
+the line now says `prod=APPLIED 2026-09-05` and said `PENDING` until it truly was.
+**(2) The cherry-pick's stat lines did not match** — staging's `b5ad0e4` was *"2 files changed, 98
+insertions"*, the pick landed *"1 file changed, 31 insertions"*. **That is exactly the PR #149 tell**,
+and it was investigated rather than waved through: the SQL file was already on `main` from that same
+doc sync, so there was genuinely nothing to apply, and `admin.html` matched byte-for-byte (31+/13−).
+**Anyone doing another cherry-pick promotion should keep comparing stat lines commit by commit.**
+
+**Staging verification that earned the promotion.** SQL verified **live 3/3** by seeding three
+discriminating fixtures and calling the function — **the RPC returned `2`, not `3`**; the
+no-evidence, recently-released row was held back, which the pre-F155 body fulfils. **V9 was observed
+RED** against the pre-fix code via a **Cloudflare Pages preview branch** (`toHaveCount` expected 1,
+received **0** — the row absent from the panel entirely), then green 3/3 on staging; **`staging`'s
+tip never moved**, so staging never carried the reverted code. That technique is reusable and costs
+one branch push. Read-only impact measured first, per the F122 precedent: production OLD would fulfil
+**131**, NEW **124**, **7 deferred**. Full suite **143 Playwright passed, 0 failed, 21.3 min**; unit
+**279/279**.
+
+**The case S3 exists for was observed live the day before it shipped.** Production's weekly import
+ran **2026-09-04** and fulfilled **131** rows on the pre-F155 body — exactly the predicted number.
+Seven had no shipment evidence. **F115's net held** — six carry `arrival_outcome = 'unknown'` and sit
+in Never Arrived with resolve controls, the seventh was already resolved `not_arrived` by hand — so
+nothing was lost, but six customers were told "Order placed" for books with no arrival evidence.
+**That run is why the October sequencing advice was reversed**: this failure fires **weekly**, not
+monthly, so promoting now buys S3 three weeks of production soak *before* the 2026-09-25 gate rather
+than making October its first outing.
+
+**No finding ID consumed (this closes F155, which already owned the work).** **F156 is filed and
+separately resolved; F157 was the next free ID at the time — **consumed 2026-09-07, see § 13 F157; F158 is now next.**
+
 **Last completed work: PROMOTED TO PRODUCTION — supplier-rejection surfaces + confirmation gate +
 7-day order-correction window, 2026-09-05 (PR #149, merge `1212f04`).** Rick's explicit request, and
 a **cherry-pick** promotion rather than a merge: staging carries a large amount of unpromoted work
@@ -146,7 +831,7 @@ statements. The six titles' customers now correctly see F120's Rejected badge on
 collision the new surfaces close) and **F143** (whose § 13 entry documented the four-navigation
 workaround the 7-day window retires). Both already own the work. **F156 is unrelated to this PR's
 code** — it was a pure data fix, already applied and verified on both environments earlier the same
-day. **F157 remains the next free finding ID.**
+day. **F157 was then the next free finding ID — consumed 2026-09-07, see § 13 F157; F158 is now next.**
 
 **Last completed work: F156 filed + the supplier-rejection write reached from two more surfaces,
 GREEN on STAGING, 2026-09-05** (`482778d` doc-only, `37d1383` code, merged `--ff-only`, pushed).
@@ -291,8 +976,7 @@ the file. The lesson is the cheap one: a total and a breakdown written side by s
 reconciled against each other, and an expected value must come from the same query it will be
 compared against.
 
-**Last completed work: F155 filed + S1 shipped + 15 PRODUCTION date corrections applied,
-2026-09-04** (`8700a65`, `0f4be33`, `2e2feac`, all doc-only on staging, pushed). **⚠️ PRODUCTION DATA
+**Prior work (2026-09-04): F155 filed + S1 shipped + 15 PRODUCTION date corrections applied** (`8700a65`, `0f4be33`, `2e2feac`, all doc-only on staging, pushed). **⚠️ PRODUCTION DATA
 WAS CHANGED** — 15 `catalog.on_sale_date` values, applied by Rick, independently re-verified by a
 fresh read afterwards, not taken from the write script's own output. No code, no schema, no deploy.
 
@@ -373,6 +1057,16 @@ production exercise** — both have fired exactly once each and both fired wrong
 **recommended, Rick's call: S1 + S2 to production before 09-25 (S2 actively de-risks it by cleaning
 stale dates going in), S3 to staging now with its production promotion held until October is
 verified green.** **F155 is the finding this consumed. F156 is the next free ID.**
+
+> ***SUPERSEDED THE NEXT DAY, recorded 2026-09-22.** The recommendation above — "S3 to staging now
+> with its production promotion held until October is verified green" — was written 2026-09-04 and
+> **did not happen that way. Both S3 halves went to production on 2026-09-05**, PR #150 plus Rick
+> applying `docs/sql/auto_fulfill_past_on_sale.sql` immediately after. `f155-catalog-date-revision-detection.md`'s
+> STATUS token has read COMPLETE, BOTH ENVIRONMENTS since. **This stale recommendation was read as
+> current on 2026-09-18 and 2026-09-22 and produced a false claim in § 13 F158** (since corrected)
+> — the F132/F138/F139/F145 pattern again, in the section that warns about it. **The bounded
+> deferral IS live on production**: confirmed behaviourally 2026-09-22, 15 past-on-sale
+> reservations with no shipment evidence surviving unfulfilled.*
 
 **Prior work (2026-09-04, earlier): F72 S3 — print outputs tier-gated, GREEN on STAGING** (`b1e1445`,
 merged `--ff-only`, pushed). Closes the last open item from this session's F72 work — every paper
@@ -1571,7 +2265,28 @@ distributor-agnostic cross-month collision pre-check) + Part C(1) (`classifyRese
 gains a third `unreserved` list) + **F137** (Step 3's month-detection query scoped by `tenant_id`,
 **fully RESOLVED**) + `f136-audit.js`. Merged to `main` in the scripts repo (`f1f90be`).
 2026-08-22.
-**Next free finding ID:** **F157**. **F156 filed 2026-09-05** (Lunar restricted-variant ratios never reached `catalog.order_requirement` on rows imported before F132 added the derivation 2026-08-20 — the ratio stays in `variant_type`, the derived column stays NULL forever because an older catalog month is never re-pulled, and **every** restriction surface therefore renders nothing: the customer's catalog badge (`app.js:1906`) and modal notice (`catalog.html:1261`), the Order Builder's restricted count (`admin.html:1126`), and both arrivals badges (`:1278`/`:1339`). Measured live: **67 production rows** (58 in `2026-07`, 5 in `2026-06`; staging 66), **6 with live unfulfilled reservations** — the exact unbadged rows Rick screenshotted. The reverse direction is clean (**0** Lunar rows carry `order_requirement` without a ratio), so the backfill replays the import's own rule rather than guessing. Backfill written, **not yet applied**: `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql`. See § 13 F156.) **F155 filed 2026-09-04** (the monthly-refresh runbook tells the operator PRH does not revise in-store dates in place, so PRH catalogs are never re-pulled and a revised date is never detected — measured false: **108** PRH 2026-07 titles carry a different `OnSaleDate` than the DB, plus 27/19/4 in 06/08/09. Found live by Rick: DNX #1 `75960621519500111`, in-store revised 2026-09-02 → **2026-09-16**, invisible to its two customers on every surface and about to be falsely fulfilled. **The larger result: for a FROZEN PRH catalog no data channel exists at all** — May master data is byte-identical across downloads, its change reports stop 2026-07-31, and 0 of 5,123 ids ever re-list. Lunar is the opposite: **one** All-Products file (17,490 rows) covers 98.4% of open codes and found 13 stale dates immediately. Filed not fixed — plan doc `docs/f155-catalog-date-revision-detection.md`, NOT STARTED. See § 13 F155.) **F154 filed AND RESOLVED, same session, 2026-09-03**
+**Next free finding ID:** **F166**. **F165 filed 2026-09-29** (withdrawal detection marks reserved titles "Withdrawn" by IMPORT TIMING: consecutive monthly files share almost no FOC dates, so "absent + FOC passed" is the normal state of a live title. Found confirming the 7 marks Rick's staging October import produced, all CONFIRMED live. On production's data the same predicate marks 0 reservations for a 09-27 import (the actual run, calendar luck), 4 on 09-29, 182 on 10-06, 368 on 10-13; customers could irreversibly self-cancel live, ordered titles. Corrects F147's "verified" claim. Filed not fixed; see § 13 F165.) *(Previously: F165 next free.)* **F164 filed 2026-09-29** (two staging `preorders` rows in the founding tenant reference `demoshop` catalog rows; found by Admin Settings gate V2, whose snippet printed `V2 FAIL`: the S1 RPC is `SECURITY DEFINER` and counts them while the RLS-bound old code cannot see them, so `marvel` reads 25 vs 24 and `boom entertainment` 19 vs 18. Threshold-7 sets are identical. **Production: 0 of 3,495 preorders**, so nothing is affected today. How the rows were created is NOT traced. Filed not fixed; see § 13 F164.) *(Previously: F164 next free.)* **F163 filed 2026-09-29** (a reservation that genuinely never arrived appears in neither My List section — main table is current-month only, Upcoming Arrivals is future-dated only — so no arrival status can reach the customer. Measured on production: 42 customer-relevant rows / 36 titles among 1,602 stranded-shape rows, breakdown reconciled. Filed not fixed; see § 13 F163.) *(Previously: F163 next free.)* **F162 filed 2026-09-27, FULLY RESOLVED both environments
+2026-09-28 (PR #158, merge `9c9629c`; companion SQL applied staging + production) — nothing left
+open** (a customer's My List could show a
+genuinely-ordered title as NOT ordered — `mylist.html`'s "Order placed" badge, plus the qty-lock and
+Remove-button guard it drives, depends on `app.js`'s `getOrderedCodes()`, which called the
+`get_ordered_codes()` RPC with **zero pagination**. Found from a real Rick screenshot: DICK TRACY #20
+CVR B LEE WEEKS VAR showed "✓ Ordered (3)" on admin's Order Builder but no "Order placed" badge on a
+customer's My List, despite a genuine, correctly-recorded net-3 order. Root cause measured live on
+production: 1,895 distinct `(distributor, order_code)` pairs in `order_submissions` against
+PostgREST's 1000-row cap — the sixth instance of the F82/F113/F139/F140/F156 unbounded-query defect
+class, in a code path none of those audits touched. **Consequence is not cosmetic**: a falsely
+"not ordered" code leaves the quantity stepper and Remove button live, letting a customer self-cancel
+stock the shop already ordered. Fixed in `app.js` by routing through the existing `fetchAllRows()`
+helper; **verified live on staging by reproducing the exact truncation and confirming the fix
+recovers it** (`playwright/f162-verify.mjs` — seeded 1,050 throwaway ledger rows, watched the
+unpatched call cap at 1,000, watched the paginated call recover all 1,913, teardown confirmed by
+fresh read). A companion migration adding `ORDER BY` for pagination determinism is **APPLIED on BOTH
+environments** (staging's first run tripped a `regprocedure` syntax error in a verification query
+which, absent an explicit transaction, risked rolling back the real fix too — caught, fixed with
+`BEGIN`/`COMMIT`, re-run and confirmed via `pg_get_functiondef` on staging 2026-09-27 and production
+2026-09-28):
+`docs/sql/2026-09-27-f162-get-ordered-codes-order-by.sql`. See § 13 F162.) **F161 filed 2026-09-24** (production's `mylist.html` scores **78** Lighthouse Performance against staging's **98** on identical code — found as a CONTROL while checking whether the catalog's staging-88-vs-prod-95 gap was an S4 regression. It is not: on My List the direction **reverses by 20 points**, so the environments are not comparable in one direction. Leading hypothesis is the account's data volume (F140 measured 1,345 preorders on the Book Stop admin account); probably NOT the pagination shape, since F140 already paginated this page. Filed not fixed, Rick's call. See § 13 F161.) **F160 filed 2026-09-23** (a tenant with **no reservation history** gets a **blank Print Catalog** — `getReservedPublishers()` keeps only publishers with `>= MIN_RESERVED` (7), so an empty reserve history yields an empty set and `admin.html:5329` filters out every row, with no fallback and no warning. Low today because both founding tenants have history; **High the moment a second tenant onboards**, since the printed sheet is the paper artifact customers write orders on. Found during the admin-settings planning session and **CONFIRMED LIVE on staging the same day**: `demoshop` — the tenant F72 S1a built to show prospects — holds 2,288 catalog rows across 72 publishers, 0 with reserve history, and prints **0 rows**. The prediction model was validated against the real 2026-08-24 print first (15 pages, matched exactly), so that zero is trustworthy. Production's half is still owed; `comicstore` is its only candidate. Deliberately distinguished from the self-reinforcement trade the 2026-08-24 session left unfiled: this is its degenerate case, where the surface renders nothing at all. Fix is a fail-open floor; superseded in full by `docs/admin-settings-catalog-visibility.md` § 2. See § 13 F160.) **F159 + F158 filed 2026-09-18** (both in `check-dates.js`, both found from one question about one Lunar code, different root causes so filed separately. **F159** — a FROZEN PRH catalog is treated as authoritative: the 09-18 run's 9th correction reverted a hand-corrected date to a value that file can never stop reporting; 8 of 9 were genuine; **reverted and independently verified the same day**, frozen files quarantined out of the recheck folder as an interim mitigation. **F158** — the drift query only watches `fulfilled=eq.false`, so the checker abandons a row at the exact moment the F155 harm completes; live instance `0526AZ0505` had two customers shown a collected state since July for a book with zero shipment rows and a distributor date twelve days out. See § 13 F158/F159.)  **F157 filed 2026-09-07** (a catalog file that normalises to zero rows is accepted silently, aiming the new-month `delete_dropped_catalog_items` and withdrawal-marking set-differences at the distributor that is missing; found by design review, not a live incident; fix designed — a fail-closed zero-row guard — and sequenced to land BEFORE the 2026-09-25 October import. See § 13 F157.) **F156 filed 2026-09-05** (Lunar restricted-variant ratios never reached `catalog.order_requirement` on rows imported before F132 added the derivation 2026-08-20 — the ratio stays in `variant_type`, the derived column stays NULL forever because an older catalog month is never re-pulled, and **every** restriction surface therefore renders nothing: the customer's catalog badge (`app.js:1906`) and modal notice (`catalog.html:1261`), the Order Builder's restricted count (`admin.html:1126`), and both arrivals badges (`:1278`/`:1339`). Measured live: **67 production rows** (58 in `2026-07`, 5 in `2026-06`; staging 66), **6 with live unfulfilled reservations** — the exact unbadged rows Rick screenshotted. The reverse direction is clean (**0** Lunar rows carry `order_requirement` without a ratio), so the backfill replays the import's own rule rather than guessing. Backfill written, **not yet applied**: `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql`. See § 13 F156.) **F155 filed 2026-09-04** (the monthly-refresh runbook tells the operator PRH does not revise in-store dates in place, so PRH catalogs are never re-pulled and a revised date is never detected — measured false: **108** PRH 2026-07 titles carry a different `OnSaleDate` than the DB, plus 27/19/4 in 06/08/09. Found live by Rick: DNX #1 `75960621519500111`, in-store revised 2026-09-02 → **2026-09-16**, invisible to its two customers on every surface and about to be falsely fulfilled. **The larger result: for a FROZEN PRH catalog no data channel exists at all** — May master data is byte-identical across downloads, its change reports stop 2026-07-31, and 0 of 5,123 ids ever re-list. Lunar is the opposite: **one** All-Products file (17,490 rows) covers 98.4% of open codes and found 13 stale dates immediately. Filed not fixed — plan doc `docs/f155-catalog-date-revision-detection.md`, NOT STARTED. See § 13 F155.) **F154 filed AND RESOLVED, same session, 2026-09-03**
 (`mylist.html`'s print header read *"Catalog for null"* for a tenant with zero catalog rows —
 `Catalog.getLatestMonth()` correctly returns `null` pre-first-import, but the print handler
 interpolated it unguarded while the normal page, six lines away, already guarded the identical
@@ -1683,8 +2398,26 @@ residual to another finding as open until that other finding demonstrably absorb
 
 | ID | One line | Next step |
 |---|---|---|
+| F165 | **High, filed 2026-09-29, OPEN.** Withdrawal detection marks a reserved title "Withdrawn - cannot be ordered" when it is absent from the new month's file, its FOC has passed and a reservation is pending. Consecutive monthly files share almost no FOC dates (Lunar Sept 09-14..12-14, Oct starts 10-12), so absence is guaranteed and the rule just picks whichever batch has closed when the import runs. **7 staging marks CONFIRMED false positives.** Production data, same predicate: **0 / 4 / 182 / 368** reservations for an October import on 09-27 (actual) / 09-29 / 10-06 / 10-13 | Owner: § 13 F165. Filed, not fixed. **Next exposure: the November new-month import.** Interim, no code: run it first with `--no-write` and read the candidate list; do not run the mark step unattended. Fix direction: use Lunar's Available Products export as the signal (`check-dates.js` already fetches it weekly), a confirm-first gate, and a PRH-specific signal |
+| F164 | **Low (tentative), filed 2026-09-29, OPEN.** Two staging `preorders` rows carry the founding `tenant_id` but reference `demoshop` catalog rows (test accounts, 2026-09-11). Found by Admin Settings V2: the S1 RPC counts them (`SECURITY DEFINER`, join has no tenant test), the RLS-bound code it replaces cannot see them. Sets at threshold 7 identical; `marvel` 25 vs 24, `boom entertainment` 19 vs 18, reconciled for all 72 keys. **Production: 0 of 3,495** | Owner: § 13 F164. Filed, not fixed. **Creation path NOT traced**; if a client path can produce it, it is a cross-tenant integrity gap (Medium). **Predicate DECIDED (Rick, 2026-09-29) and WRITTEN** as RPC **v2** (`7c31e5c`, `AND c.tenant_id = current_tenant_id()` in the `live` CTE), **APPLIED and VERIFIED on both environments 2026-09-29** (staging: V2 flipped from FAIL to a plain PASS; production: the definition check prints the F164 verdict, after a first run that did not land). The finding stays OPEN for the creation-path trace |
+| F163 | **Medium, filed 2026-09-29, OPEN.** A reservation that genuinely never arrived is in NEITHER My List section (`mylist.html:965` current-month scope; `:1001-1002` future-dated Upcoming), so the existing `⚠ Did not arrive — contact the store.` copy (`:1167`) has no row to render on — F155's stranding at its terminal case. Production: **42** customer-relevant rows / 36 titles (24 fulfilled-`unknown`, 15 `not_arrived`, 3 unfulfilled-`unknown`) within 1,602 stranded-shape rows | Owner: § 13 F163. Filed, not fixed. Fix direction: a third My List bucket for prior-month rows with a customer-relevant `arrival_outcome`; design in its own session |
+| F162 | **Medium-High, filed 2026-09-27, FULLY RESOLVED both environments 2026-09-28 (PR #158, merge `9c9629c`; companion SQL applied staging + production) — nothing left open.** `mylist.html`'s "Order placed" badge (and the qty-lock/Remove-button guard it drives) could read a genuinely-ordered title as unordered, and `Preorders.cancel()`'s own copy of the same call was the actual guard that could let a customer cancel already-ordered stock. `app.js`'s `getOrderedCodes()` called `get_ordered_codes()` with zero pagination — sixth instance of the F82/F113/F139/F140/F156 unbounded-query cap, in a path none of those audits touched. Production measured at 1,895 distinct ordered codes against PostgREST's 1000-row cap | Owner: § 13 F162. Found from Rick's screenshot of DICK TRACY #20 CVR B LEE WEEKS VAR — "Ordered (3)" on admin, no badge on the customer's My List. Fixed via the existing `fetchAllRows()` helper at both call sites; **reproduced and closed live on staging** before promoting (`playwright/f162-verify.mjs`: seeded 1,050 throwaway ledger rows, watched the unpatched call cap at 1,000/1,913, watched the paginated call recover all 1,913). **Two reusable traps caught along the way**: this vendored supabase-js's `.range()` is query-string `offset`/`limit`, not HTTP `Range` headers (a header-based verification attempt hung indefinitely); and the companion SQL file's first live run tripped a `regprocedure` syntax error in a verification query which, absent an explicit transaction, risked rolling back the real `ORDER BY` fix along with it — both fixed. **Promoted to production NOT as a cherry-pick** (staging was 110 commits ahead; `app.js` carries `merge=ours`, which has silently dropped this exact file on prior cherry-pick promotions) — applied directly to `main`'s copy instead, verified byte-identical pre-fix at both call sites first. Verified post-deploy against served bytes (`fetchAllRows(() => db.rpc('get_ordered_codes')` ×2, bare unwrapped call ×0) and by Rick's own live smoke test. **Companion `ORDER BY` migration applied on BOTH environments 2026-09-28**, verified via `pg_get_functiondef` on each — nothing left open |
+| F161 | **Medium, filed 2026-09-24, OPEN — production only.** `mylist.html` scores **78 / 78 / 77** Lighthouse Performance on production against **98 / 97 / 98** on staging, **on identical code** — the page was untouched by the settings work apart from a one-line nav `<li>` and does not load `CatalogFilters`. Three consistent runs each side, so a reading rather than lab noise | Owner: § 13 F161. **Found as a CONTROL, not by hunting:** Rick compared the catalog after S4 (staging 88 / prod 95) and asked if that was fair; `mylist.html` was picked as an untouched page to test whether staging simply trails production. **It does not — on My List the direction reverses by 20 points**, which settled the catalog question (environments are not comparable in one direction, so the catalog gap is not an S4 regression) and surfaced a worse number than the one under investigation. **Leading hypothesis, unconfirmed: account data volume** — F140 recorded the Book Stop admin account at **1,345 preorders** against a handful on staging. **⚠️ Probably NOT the pagination shape** (F82/F113/F139/F140/F156): F140 already paginated this page (`mylist.html:1876`), so a truncated read would show as missing data, not slowness — render/DOM cost for ~1,345 rows is likelier. **⚠️ F141 hit the mirror image** — its first mylist measurement was invalidated for measuring an empty-list new user; this is the heaviest real account, so name the account being measured. **Next step:** identify WHICH metric is down (TBT 30 / LCP 25 / CLS 25 / FCP 10 / SI 10) before looking for a fix — the 2026-08-24 sweep's lesson is that closing unscored diagnostics moves the score barely at all |
+| F160 | **Low today, High at second-tenant onboarding, filed 2026-09-23, OPEN.** A tenant with **no reservation history** gets a **blank Print Catalog**. `getReservedPublishers()` (`admin.html:5251`) builds its publisher set from `reservation_history` + `preorders` and keeps only those with `>= MIN_RESERVED` (7, `:5249`); with no history the Map is empty, so the set is empty, so `:5329`'s `reserved.has(...)` filter drops **every** row. No fallback, no floor, no warning — the print window just opens empty. The existing gradient points straight at it: production 14 of 78 publishers pass → 1,534 rows → 34 pages; staging 4 of 78 → 638 → 15; **zero history → 0 → 0 → 0** | Owner: § 13 F160. **⚠️ CONFIRMED LIVE ON STAGING 2026-09-23, same day as filing** — S0 Q1 (`docs/sql/2026-09-23-s0-catalog-visibility-baseline.sql`), Rick: **`demoshop` holds 2,288 catalog rows across 72 publishers, 0 with any reserve history, 0 passing the bar, and therefore 0 predicted print rows — a completely blank sheet.** The prediction model was validated first, so that zero is trustworthy: against the real 2026-08-24 print (4 publishers → 638 rows → 15 pages) staging now returns 5 → 688 → **15 pages**, matching exactly, the delta being one publisher crossing the bar on a month of added history. **⚠️ The affected tenant is the DEMO one** — `demoshop` is what F72 S1a built to show prospects, and its own closeout called print "unreachable from a screen-share demo, but real if a physical handout is ever part of the pitch"; it is not unreachable, it is blank. **Staging is worse than production: 67 of 72 publishers (93%) hidden, vs 64 of 78 (82%)**, with 12 sitting between 1 and 6 reservations. **✅ PRODUCTION CONFIRMED 2026-09-23 too, and the finding's DEFINITION was corrected in the process.** `comicstore` holds 2 catalog rows, 1 publisher, 1 reservation, **0 passing the bar → 0 print rows**; production's founding tenant validated the model beside it (**14 passing, matching the 2026-08-24 print's 14 exactly**; 1,507 rows / 33 pages on a later month). **⚠️ The trigger is NOT "zero reserve history" — it is "no publisher clears MIN_RESERVED".** S0's Q8 tested zero-history, so `comicstore`'s single reservation excluded it and Q8 returned **no rows on production**, reading as "no live instance" — false, caught only by cross-reading Q1's `publishers_passing_bar`. Correct test: `month_rows > 0 AND publishers_passing_bar = 0`. Q8 kept with the lesson recorded, being a clean instance of the § Smoke Test Suite rule it broke. Practical production impact is nil (2-row demo tenant); the meaningful instance stays staging's `demoshop`, but the widened definition means **any tenant whose reservations are spread thinly is exposed, not only a brand-new one**. **NOT a re-opening of the self-reinforcement trade** the 2026-08-24 print-consolidation session deliberately left unfiled (64 of 78 publishers excluded, Rick's call whether that trade is right) — F160 is the *degenerate* case of the same mechanism, where the surface renders nothing at all, which is wrong behaviour wherever the trade sits. **FIX DECIDED 2026-09-23 (Rick): DELETE THE BAR** — `MIN_RESERVED` (`:5249`), `getReservedPublishers()` (`:5251`) and the `reserved.has(...)` clause (`:5329`) all go, so a blank sheet becomes impossible rather than guarded. *(This row previously proposed "a floor, not a redesign — empty `counts` falls through to ALL publishers"; that was a patch on a heuristic now being removed, and the wording is kept so the change of direction is visible.)* **The bar only ever existed on the print, so customers are unaffected** — they have always seen every publisher. Cost is paper: production **33 → 45 pages** (2,068 FOC-eligible rows ÷ 46). Trimming returns as admin-set publisher **exclusions** (never an allowlist — a stored allowlist breaks silently on a distributor re-spelling, and `Titan`/`Titan Comics` already coexist), with "Reserved ≥ 7" as a one-click preset reproducing today's 1,507/33 exactly. Carried by `docs/admin-settings-catalog-visibility.md` § 4 S4(a); **gate V2 must compare the new RPC against `getReservedPublishers()` BEFORE S4 deletes it**, and the page-count change must stay clear of the 2026-09-25 October import window*(**Status corrected 2026-09-29:** FIXED ON STAGING by S4(a) (`886cab0`), not promoted. The figures above are September's and the page arithmetic was wrong: measured on the real print, October production goes from about **35 to about 46 pages** (1,546 → 2,038 rows), at 44.0-44.3 rows per page (**50 pages, 2,215 rows, under the default Rick chose later that day: Q8**). The "Reserved ≥ 7" preset was removed 2026-09-24. See `admin-settings-catalog-visibility.md` § 5.2.)* |
+| F159 | **Medium–High, filed 2026-09-18, OPEN — but one production row was wrongly written and REVERTED the same day.** `check-dates.js` treats a **frozen** PRH catalog as authoritative. Its 2026-09-18 run applied 9 corrections; 8 were genuine (PRH 2026-06/07/08, live), the 9th pushed `75960621519500122` (DNX #1 JIM LEE HIDDEN GEM VARIANT, PRH **2026-05**) from its 2026-09-04 hand-corrected `2026-09-16` back to the stale `2026-09-02`. PRH 2026-05 is frozen — F155 measured it four ways — so that file reports the original solicitation date and **cannot ever report anything else**. No frozen-month check, no awareness a value was set by hand, and **no prompt separating the frozen-source change from the eight good ones** | Owner: § 13 F159. **Reverted 2026-09-18** (`revert-frozen-prh-overwrite-2026-09-18.js`, before-state logged), **independently verified by fresh read**: both 2026-09-04 hand-corrections back at `2026-09-16`, **all 8 genuine corrections confirmed intact**. **⚠️ `unchanged ×N` is NOT the guard** — only previously-seen files carry a hash (5 of 7 were first-seen that run), and it cannot tell *"the distributor stopped publishing"* from *"the operator re-supplied the same file"*. **Interim mitigation live, no code:** frozen PRH files moved (not deleted — `import.js` may still need them) to `catalogs/recheck/_frozen-do-not-use/` with a README; 2026-04 and 2026-05 quarantined, **2026-06 deliberately kept** (it produced a genuine correction that day). Fix: refuse a change sourced from a catalog >~3 months past its catalog date, and check the correction logs before overwriting a human-set value |
+| F158 | **Medium, filed 2026-09-18 · systemic DETECTION fix landed 2026-09-22 (scripts repo `e267233`) · both known live instances repaired · orphaned-duplicate-row decision RESOLVED 2026-09-29 (Albert Abaunza's reservation repointed onto the live row before the 09-30 arrival; only the 60-row triage stays parked)** — `check-dates.js`'s drift query is scoped `preorders?...&fulfilled=eq.false` (~line 245). **The F155 harm sequence ENDS in auto-fulfilment**, so a row leaves the watch set at exactly the moment the harm completes — the checker protects a row right up until it breaks, then stops looking. Live instance `0526AZ0505` (CIMMERIAN XUTHAL #1 CVR B, Lunar 2026-05): both reservations auto-fulfilled `2026-07-25T14:29:12` (identical stamp = one batch write), **zero shipment rows ever**, our date `2026-09-23` against Lunar's own **`9/30/2026`**, genuinely ordered (ledger `monthly` qty 2). Two customers shown a collected state since July for a book not yet on sale — **never once reported, and by construction never can be** | Owner: § 13 F158. **The same scope over-reports in the other direction:** the *"PAST on-sale with NO shipment evidence"* block listed the **identical six titles** on 09-14 and 09-18 — verified live, all six already resolved (five SPAWN 77 covers carry supplier rejections from 2026-09-05 netting to 0; `0726AC0632` carries `arrival_outcome='not_arrived'`). It reads neither `order_submissions` nor `arrival_outcome`, so those six re-report **every week indefinitely**. **⚠️ It also caused a near-miss worth reading as luck, not safety:** F159's overwrite spared `75960621519500111` *only* because its reservations are fulfilled, so this filter dropped it first. **Live instance repaired 2026-09-18** (`fix-cimmerian-false-fulfil-2026-09-18.js`) — the defect is untouched. Fix must be BOUNDED: production held **859** such orphans at F115 S6, so include only fulfilled rows with no shipment evidence within N days, and suppress rows whose ledger nets ≤ 0 or carry an `arrival_outcome`. **⚠️ SECOND LIVE INSTANCE FOUND 2026-09-22, REPAIRED THE SAME SESSION:** `0526AZ0504` — `0505`'s own sibling cover, same batch `fulfilled_at` stamp, never checked on 09-18 — carried the identical shape and was also invisible to `neverArrivedFromFulfilled()` (`admin.html:1861` excludes NULL `arrival_outcome`), not just this checker; genuinely no admin surface for it existed anywhere. Fixed via `fix-cimmerian-cvr-a-2026-09-22.js` (local-only, same convention as the 09-18 fix): `on_sale_date` `2026-09-23` → `2026-09-30`, un-fulfilled, `arrival_outcome` left NULL — independently re-verified. Also surfaced a pre-F136 orphaned duplicate catalog row on the same item_code holding a second customer's (Albert Abaunza) reservation in the identical shape — **that row is deliberately NOT touched, confirmed byte-identical post-fix; still Rick's decision (repoint vs. correct independently).** ***RESOLVED 2026-09-29: repointed** — the book arrives Wed 09-30 on the 09-27 Lunar invoice, and the orphan row's dead 2026-07-22 date kept Albert off This Week's bagging list. Rick ran one guarded UPDATE (1 row returned); a fresh read confirms 2 reservations on the live row, 0 on the orphan, and both customers in the week's bagging query. See § 13 F158.* **Systemic fix landed 2026-09-22** — `shouldWatchFulfilledRow()` widens the weekly watch to bounded (14-day) fulfilled-but-unverified rows, report-only, 26 tests green; correctly found nothing that day since both known instances were 59+ days stale (F115 S6's territory, not this check's job). A one-time unbounded sweep found **60 tenant-wide rows** matching this shape, mostly likely benign data gaps rather than confirmed defects — **triage explicitly parked, Rick's call**. Full detail: § 13 F158 |
+| F157 | **Medium–High, filed AND the zero-row guard FIXED 2026-09-07, same session** (scripts repo `main` `9d9aa40`, pushed and verified on `origin/main`); **the distributor-scoping half remains OPEN and is deliberately held until after the 2026-09-25 October import.** Nothing asserts that a supplied catalog file produced any records, so a wrong / empty / re-formatted distributor export becomes an empty contribution to the new-month set-difference steps and is read as "the distributor dropped everything." `args.length < 2` only checks a file was **named**; the printed `Lunar catalog: N rows` / `PRH catalog: N rows` are **raw** counts taken *before* normalisation (`import.js:1903-1904`), so a header-changed file shows a plausible number and still normalises to zero — and **no per-distributor normalised count is ever printed**. Two effects: `delete_dropped_catalog_items` (no distributor parameter) deletes the absent distributor's just-imported month, and `computeWithdrawalCandidates()` falsely marks its prior-month **reserved** titles withdrawn — F120's customer badge plus irreversible self-cancellation, i.e. **F147's damage shape from a different cause** | Owner: § 13 F157. **Found by design review, not a live incident** — while working out what the two-catalog-argument rule actually guarantees. **Reservations are NOT at risk from the delete half**, and that is recorded deliberately so nobody re-derives a worse conclusion: `preorders.catalog_id` is `ON DELETE CASCADE`, but the delete is scoped to the month *just imported*, where no reservation exists yet (auto-reserve is Step 5, `refreshCatalog()` is Step 4) — recoverable by re-importing the correct file. **The withdrawal half is the durable harm.** Also **blocks single-distributor tenants outright** (one catalog file is their *complete* import, not a partial one) — Phase 6 relevant, tracked separately. **Fix: refuse to proceed when a supplied catalog file normalises to zero records**, and print the normalised per-distributor count beside the raw one. Fail-closed, no override flag — a legitimate zero-record catalog does not exist. **Landed 2026-09-07, ahead of the 2026-09-25 October import as planned** — unit suite 295/295 (was 279), negative-control tested, and wiring proven by two live `--no-write` dry runs (a re-formatted PRH file with 3 raw / 0 normalised rows aborts with exit 1; the genuine 2026-05 pair passes clean at 1202/1202 and 1078/1078, i.e. **no false positive**). Soak across the 09-08 and 09-15 weekly runs still wanted before the gate. **Sequencing rationale:** (parse-time code, touches no withdrawal logic, can only ever stop an import — so it does not blur that gate's purpose as F146/F147's first live exercise) with soak across the 09-08 and 09-15 weekly runs; it also protects Step 3's revision sweep. **Distributor-scoping must wait until AFTER 09-25** — it modifies the code the gate exists to observe **October import 2026-09-27 (production): guard printed matching raw/normalised counts, no false positive — first live exercise clean (§ 13 F157). Distributor-scoping half's October hold is lifted; still Rick's call to schedule** |
 | F156 | **Medium, filed AND fully RESOLVED both environments 2026-09-05** — Lunar stores its allocation ratio in `variant_type`; `parseLunarVariantRestriction()` (`import.js:272`) derives `order_requirement` from it, but only since **2026-08-20**. Rows imported before that keep the ratio and carry a NULL derived column **permanently** — older months are never re-pulled (F155's own assumption, different column). So no restriction signal renders anywhere: not the customer's badge (`app.js:1906`) or modal notice (`catalog.html:1261`), not the Order Builder count (`admin.html:1126`), not either arrivals badge (`:1278`/`:1339`). **`arrivals.html` is not the defect** — it reads the column and never parses the title, exactly as F144 requires | Owner: § 13 F156 + `docs/sql/2026-09-05-f156-lunar-order-requirement-backfill.sql`. **Measured live 2026-09-05:** prod **67** rows (2026-07=58, 2026-06=5, 2026-04=3, 2026-03=1), staging **66**; **6 carry live unfulfilled reservations** — `0626DE0825` plus SPAWN 77 CVR F–J (`0726IM0315`–`0319`), i.e. every unbadged row in Rick's screenshot. `0726AC0632` is unbadged **correctly** (`variant_type` null — no ratio anywhere). **Safe because the reverse direction is empty:** 0 Lunar rows hold `order_requirement` without a `^[0-9]+:[0-9]+$` match, so the UPDATE replays the import's own predicate. Every consumer is read-only display — no schema, no RLS, no deploy. **Staging APPLIED 2026-09-05 by Rick and verified end-to-end** — founding tenant 488 → 554 (**+66, exactly as predicted**); a live browser check read **`⚠ 1:25`** off `0726DC0016` (`catalog_month` 2026-07) in the very panel that was reported. **The post-check's own expected value was wrong and is corrected:** it quoted the founding-tenant count against a query with no tenant filter, so staging returned **718** (554 + `demoshop`'s 164) and looked like a failure. Production is unaffected by that ambiguity — `comicstore` holds no Lunar ratio rows, so expect `still_null 0 / lunar_with_requirement 555` there. **PRODUCTION APPLIED 2026-09-05 by Rick: `still_null 67 → 0`, `lunar_with_requirement 488 → 555`**, matching the prediction exactly. Independently re-read afterwards rather than trusting the post-check: **all 555 ratio rows now satisfy `order_requirement === variant_type` (0 mismatched)**, all six reserved titles carry their ratio, PRH unchanged at 724. **Nothing further owed on this finding** |
-| F155 | **Medium, filed 2026-09-04, open, not started** — `monthly-catalog-refresh.md:130-132` states PRH "omits withdrawn titles rather than revising dates in place… this step matters most for Lunar." **Measured false** (108 PRH 2026-07 titles differ from the DB), so the Revision Sweep has never run for PRH and a revised in-store date is never detected. Found live: DNX #1 `75960621519500111` revised 09-02 → **09-16**; once the stale date passed it left BOTH `mylist.html`'s current-month table (`:937`) and its future-dated Upcoming Arrivals (`:884`) — invisible to its two customers — and the next import marks it fulfilled. No panel caught it because `computeBackorderRisk()` (`admin.html:1749`) clears any code with `ledgerNetQty > 0` first, so an **ordered** title is invisible, and Mark Ordered was correctly `disabled` | Owner: `docs/f155-catalog-date-revision-detection.md` (STATUS: NOT STARTED) + § 13 F155. **The pivot: for a FROZEN PRH catalog there is NO channel** — May master data byte-identical across two downloads (MD5 `438958a0…`), 0 of 1,078 rows differ from the May import, change reports stop **2026-07-31**, **0 of 5,123** ids ever re-list (so F122 cannot help), yet **84 May titles are still future-dated**. Lunar inverts this: **one** All-Products file (17,490 rows, back to 2025) covers **559/568 (98.4%)** open codes and surfaced **13** stale dates at once — incl. `FIRE AND ICE #5` moved a month *earlier*, the direction nothing watches. Plan: S1 fix the doc, S2 weekly `check-dates.js` (2 files, 3 actions, Fri/Sat) reusing `classifyReservedDateDrift()`, S3 **bounded deferral** in `auto_fulfill_past_on_sale()` + panel-ordering fix. **S3 revisits F115 Option A** (rejected as "a silent miss for a silent stall") — hence *defer*, never block; needs Rick's explicit sign-off. **3 titles exposed on production today; the 2 DNX #1 rows are still `fulfilled=false`**. **FOLLOW-ON SHIPPED 2026-09-05 (staging), no new ID:** the "no surface" half now has controls — F143's write, split into one `recordSupplierRejection()`, is reachable from the admin distributor-table Status column and from `arrivals.html`'s recon exceptions list, guarded on `ledgerNetQty > 0` and (for the table) `!hasShipmentEvidence()`. S3(b) fixes the panel *ordering* but only 14 days past on-sale; the recon panel sees it on invoice day. 18/18 targeted, 146/0 full suite |
+| F155 | **Medium, filed 2026-09-04, fully RESOLVED both environments 2026-09-05 (PR #150, merge `787b0ee`)** — `monthly-catalog-refresh.md:130-132` states PRH "omits withdrawn titles rather than revising dates in place… this step matters most for Lunar." **Measured false** (108 PRH 2026-07 titles differ from the DB), so the Revision Sweep has never run for PRH and a revised in-store date is never detected. Found live: DNX #1 `75960621519500111` revised 09-02 → **09-16**; once the stale date passed it left BOTH `mylist.html`'s current-month table (`:937`) and its future-dated Upcoming Arrivals (`:884`) — invisible to its two customers — and the next import marks it fulfilled. No panel caught it because `computeBackorderRisk()` (`admin.html:1749`) clears any code with `ledgerNetQty > 0` first, so an **ordered** title is invisible, and Mark Ordered was correctly `disabled` | Owner: `docs/f155-catalog-date-revision-detection.md` (STATUS: NOT STARTED) + § 13 F155. **The pivot: for a FROZEN PRH catalog there is NO channel** — May master data byte-identical across two downloads (MD5 `438958a0…`), 0 of 1,078 rows differ from the May import, change reports stop **2026-07-31**, **0 of 5,123** ids ever re-list (so F122 cannot help), yet **84 May titles are still future-dated**. Lunar inverts this: **one** All-Products file (17,490 rows, back to 2025) covers **559/568 (98.4%)** open codes and surfaced **13** stale dates at once — incl. `FIRE AND ICE #5` moved a month *earlier*, the direction nothing watches. Plan: S1 fix the doc, S2 weekly `check-dates.js` (2 files, 3 actions, Fri/Sat) reusing `classifyReservedDateDrift()`, S3 **bounded deferral** in `auto_fulfill_past_on_sale()` + panel-ordering fix. **S3 revisits F115 Option A** (rejected as "a silent miss for a silent stall") — hence *defer*, never block; needs Rick's explicit sign-off. **RESOLVED.** S1 runbook corrected; S2 `check-dates.js` built + **30 production date corrections**
+applied and independently re-verified; S3 shipped both halves — SQL verified **live 3/3** (the RPC
+returned **2, not 3**) and V9 **observed RED** against pre-fix code via a CF Pages preview branch, so
+staging never carried the revert. **Two promotion gates caught real problems:** step 0 returned CLEAN
+while wrong (the STATUS line said `prod=APPLIED` with the caveat in prose the regex cannot see — the
+F105 failure, reproduced by the file documenting it), and the cherry-pick's **stat lines did not
+match** (the PR #149 tell; investigated, benign — the SQL body was already on `main` from #149's doc
+sync). **The case was observed live 2026-09-04**, the day before it shipped: the weekly import
+fulfilled 131 rows on the old body, 7 with no evidence; F115's net held (6 `unknown` in Never
+Arrived). That weekly cadence is why the October hold was reversed. **FOLLOW-ON SHIPPED 2026-09-05 (staging), no new ID:** the "no surface" half now has controls — F143's write, split into one `recordSupplierRejection()`, is reachable from the admin distributor-table Status column and from `arrivals.html`'s recon exceptions list, guarded on `ledgerNetQty > 0` and (for the table) `!hasShipmentEvidence()`. S3(b) fixes the panel *ordering* but only 14 days past on-sale; the recon panel sees it on invoice day. 18/18 targeted, 146/0 full suite |
 | F154 | **Low, fully RESOLVED, staging, 2026-09-03** — `mylist.html`'s print header read literal *"Catalog for null"* for a tenant with zero catalog rows (a normal pre-first-import state). `Catalog.getLatestMonth()` correctly returns `null`; the print handler interpolated it unguarded while the same file's normal-page code, six lines away, already guarded the identical value. Found live by Rick printing `riverside-comics`' My List moments after creating it | Owner: § 13 F154. **Fixed same session**: `` `Catalog for ${currentMonth \|\| 'no catalog imported yet'}` `` — same fallback shape `getLatestMonth()` itself uses. `node --check` clean. **Not yet re-verified against a live print post-deploy** |
 | F153 | **Medium, fully RESOLVED, staging, 2026-09-03** — `register-tenant` created a new tenant's admin auth user with `email_confirm:true` and **no password, no invite, no email of any kind** — zero automated first-login path ever existed, despite the onboarding runbook's Step 5 claiming an invite sent automatically. Found by answering a plain question, not a scoped audit | Owner: § 13 F153. **Fixed same session**: generates a GoTrue `recovery`-type link (a first attempt used `type:'invite'`, live-verified WRONG — `422 email_exists`, since the admin already exists here — before landing on `recovery`, matching `reset-password`'s own proven type) and sends a branded, platform-identity ("PULLLIST") invite via Resend. Response gained `invite_sent`. Link always points at the apex `?t=<slug>`, never an unprovisioned subdomain. Runbook Step 5 corrected in the same commit. Verified live end-to-end (7/7, zero orphaned auth users) and mechanically (template harness, 10/10) |
 | F152 | **Low** — a real production `reset-password` send to an Outlook recipient landed in spam despite fully clean `dkim=pass d=pulllist.app`/`spf=pass`/`dmarc=pass`/`compauth=pass reason=100` — found during F99 M7's post-cutover production verification, right after the Resend cutover. Not a K1–K6 trip (link rewriting/tracking/alignment all clean); reads as a cold-start reputation cost for the brand-new `pulllist.app` sender identity specifically with Microsoft, not confirmed as the sole cause. Gmail and a third-party relay both delivered cleanly in this same session — only this one Outlook send has gone to spam so far | Owner: § 13 F152. **Open — Rick's explicit call: monitor, don't act.** Mitigated by `forgot-password.html:194`'s pre-existing "Didn't get it? Check your spam folder, or send again" copy — not added because of this finding. Watch real customer traffic (not test sends) over the following days/weeks as `pulllist.app` builds reputation with Microsoft; escalate only if it doesn't self-resolve |
@@ -1692,8 +2425,8 @@ residual to another finding as open until that other finding demonstrably absorb
 | F150 | **Low today, confirmed by a live test not inferred.** Production's `app_settings` grants `anon` full table-level DML (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER) — staging grants `anon` nothing on the same table (hard 401). Found by F149's own migration pre-flight, which halted exactly as designed. A live anon read against production returns `200, []` — RLS still filters every row (only SELECT policy is `TO authenticated`), so no data is actually exposed today, just a thinner defense-in-depth layer than staging | Owner: § 13 F150. **Open, not started — Rick's call: file now, fix later.** Still unconfirmed: whether RLS is actually *enabled* (`pg_class.relrowsecurity`) on this table vs. merely having zero anon-applicable policies (both give the same empty-read symptom); writes were not probed against production. Not investigated: how the divergence arose, or whether other tables share it |
 | F149 | **Low today, directly relevant at F99 S3 — fully RESOLVED, BOTH ENVIRONMENTS, 2026-09-01.** Maintenance Mode (`checkMaintenanceMode()`) is still only called from `catalog.html`/`mylist.html`/`arrivals.html`/`subscriptions.html` — all four already-authenticated, untouched by this fix. `index.html`'s registration submit and `forgot-password.html`'s reset submit are now gated by a separate mechanism: a new anon-callable `is_maintenance_mode()` RPC (the naive "just call the existing method" fix couldn't work — `app_settings` returns a hard permission-denied to an anon read, confirmed live) plus `app.js Settings.isMaintenanceModePublic()`, additive, not touching the existing four-page pattern | Owner: § 13 F149. **Fixed:** `docs/sql/2026-08-31-f149-maintenance-mode-anon-check.sql`, `app.js`, `index.html` `doSignup()`, `forgot-password.html` `sendReset()` — staging `ca8c481`, **production PR #147 `36b79ff`**. **Verified staging**: 12/12 checks in a local Playwright harness — both submit paths blocked with their Edge Function confirmed never called while ON, plain sign-in and magic-link completion both confirmed still working while ON, full suite 142 passed/1 skipped (unrelated)/0 failed. **Verified production post-deploy**: served bytes confirmed carrying the fix, RPC re-confirmed live (`200/false`), `config.js` still prod ref, PR file list matched intent on GitHub itself (F99 S1's Edge Function changes deliberately excluded, confirmed byte-identical to `main`). Write-smoke skipped (doesn't touch the reserve path, same disposition as PR #141/#145/#133). Surfaced **F150** during the promotion's own pre-flight (filed, not fixed) |
 | F148 | **Low today, Medium at ~100 customers, High at 2+ tenants** — `notify-customers` sends **one API request per recipient** in a serial loop, so a monthly blast costs N requests for N customers. MailerSend free allows **100 daily API requests** / 500 emails-per-month / **no overage** — so the *daily* cap binds first, and quotas are **per-account**, shared across tenants whose imports all land in the same window. Not a defect; works as designed and is ~3x under cap today | Owner: § 13 F148. **Open, not started.** Fix direction: MailerSend's bulk endpoint (many messages, one request) — **free-tier availability unverified, confirm against the live account first**. Cheaper mitigation regardless: make `import.js` Step 7 *prompt* on a non-zero `failed` count instead of logging it behind a green check. Sequence with **F99**/**F72** — same MailerSend account. **⚠️ 2026-09-02: the bulk-endpoint fix direction assumes MailerSend is RETAINED.** F99's direction is now **Resend** (its plan doc § 10), whose free tier is 3,000/month but still **100/day** — so a provider move raises the monthly ceiling and does **not** dissolve this finding. Re-derive the fix against whichever provider is actually chosen |
-| F147 | **High, fully RESOLVED 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. **Production data corrected and independently re-verified** — Rick ran `clear-f147-withdrawn.js`, 519/519 cleared, confirmed via a fresh live query afterward (count 0, BATMAN #14 spot-checked). **Maintenance Mode was ON throughout — no customer ever saw it.** See § 13 F147 |
-| F146 | **Medium–High, fix shipped 2026-08-28, fully RESOLVED on staging 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **A first verification attempt (fresh September re-pull) was correctly halted**: Lunar item codes are permanently scoped to their solicitation month and PRH's are issue-scoped, so none of the 16 marks could ever clear that way, at any freshness. **Corrected re-test, same day: re-imported August's own files (fresh re-pull) as an older-month backfill (`--skip-autoreserve`)** — dry run and real run both reported all 16 reappeared and cleared; independently re-verified against the live DB (`withdrawn_at NOT NULL` count 16→0, 3 titles spot-checked including `0826AB0593`). **Staging: RESOLVED, 16/16 cleared.** Production still holds 0 withdrawn marks; its first real exercise of this path is October's import. See § 13 F146 |
+| F147 | **High, fully RESOLVED 2026-08-28** — F110's first-ever real run, on production, marked **519 of 1,571 open reservations (33%)** withdrawn — every one still inside its own ordering window (`foc_date` not yet passed; example BATMAN #14, FOC two weeks out). `narrowWithdrawalCandidates()` never checked FOC at all | **Fixed, scripts repo `main` `e4f968d`** — now requires `foc_date` present and passed; 6 new tests incl. BATMAN #14's real shape, negative-control tested, 279/279 green. **Production data corrected and independently re-verified** — Rick ran `clear-f147-withdrawn.js`, 519/519 cleared, confirmed via a fresh live query afterward (count 0, BATMAN #14 spot-checked). **Maintenance Mode was ON throughout — no customer ever saw it.** See § 13 F147 **2026-09-27 October import: 0 marks, clean — but no candidate reached the FOC check, so the mark half is still not proven against a live candidate (§ 13 F147)** *(2026-09-29, STAGING: the mark half DID meet live candidates and discriminated: 17 reservations on 2026-09 titles absent from 2026-10, 7 marked all with passed FOC, 10 held back all with unpassed FOC, 0 violations. Production is still unproven. **CORRECTION: that verified the implementation, not the rule: the 7 marks are CONFIRMED false positives (fresh Lunar export lists all 6 Lunar codes; PRH title confirmed by Rick) and the rule fires by import timing (production data: 0 marks on 09-27, 4 reservations on 09-29, 182 on 10-06). See `admin-settings-catalog-visibility.md` § 5.2.**)* |
+| F146 | **Medium–High, fix shipped 2026-08-28, fully RESOLVED on staging 2026-08-29** — same-month catalog refreshes never re-ran withdrawal detection's clear half, so a title dropped mid-month from the distributor's export but still live on their site stayed incorrectly marked "Withdrawn — cannot be ordered" until the next new-month import, if ever. **16 false positives found on staging's September import** (e.g. `0826AB0593`, confirmed live on the distributor's site); the false flag let a customer **irreversibly** self-cancel via the override that legitimately unlocks cancellation on a real withdrawal | **Code fixed, scripts repo `main` `415bb38`**, unit tested + negative-control tested, 273/273 green. **A first verification attempt (fresh September re-pull) was correctly halted**: Lunar item codes are permanently scoped to their solicitation month and PRH's are issue-scoped, so none of the 16 marks could ever clear that way, at any freshness. **Corrected re-test, same day: re-imported August's own files (fresh re-pull) as an older-month backfill (`--skip-autoreserve`)** — dry run and real run both reported all 16 reappeared and cleared; independently re-verified against the live DB (`withdrawn_at NOT NULL` count 16→0, 3 titles spot-checked including `0826AB0593`). **Staging: RESOLVED, 16/16 cleared.** Production still holds 0 withdrawn marks; its first real exercise of this path is October's import. See § 13 F146 **2026-09-27 October import: NOT exercised — production held 0 marks going in, nothing to clear (§ 13 F146)** *(2026-09-29: staging now holds 7 marks after its own October import, so the clear half is testable there; still unexercised.)* *(Later that day: those 7 marks were FALSE (F165), and Rick's older-month backfill re-import cleared 7 of 7, verified by read-back, so the clear half is now proven live on STAGING. Production's is still unexercised: 0 marks there.)* |
 | F145 | **Low today, Medium if acted on** — **there is no wildcard DNS on `pulllist.app`.** `foo.pulllist.app` and `zzz-does-not-exist-9182.pulllist.app` both return **NXDOMAIN**; `rjbookstop` and `comicstore` resolve only because each is an individually provisioned Cloudflare Pages custom hostname. `CLAUDE.md` claimed a wildcard covered it, and `apex-landing-tenant-subdomains.md` S4 still calls that hostname "deferred" — while the print CTA now puts it on **paper in customers' hands** | **Doc + one operational record, no code.** CLAUDE.md **and** `apex-landing-tenant-subdomains.md` S4 both corrected 2026-08-27 at filing. **Still owed (one item):** record both hostnames in `tenant-onboarding-runbook.md` as durable infra, noting `rjbookstop.pulllist.app` appears on printed material — held for Rick's Cloudflare-side inventory rather than inferred from two `curl` results. Provisioning date unrecovered (Cloudflare audit log). **Leave Phase 6 S0 as-is — it is correct, and this measurement confirms that gate is still closed** |
 | F141 | **Medium** — the catalog grid under-reserved its own height: `renderSkeletons(10, …)` against `PAGE_SIZE = 50`, and a skeleton shorter than a real card. **Desktop CLS 0.636** (good is < 0.1) — essentially the whole gap between the authenticated catalog's desktop score of **75** and a passing one | Owner: `docs/technical-reference.md` § 13 F141. **Fully RESOLVED 2026-08-24, both environments** (staging `a2a2583`, prod **PR #133**) — desktop **75 → 98** (CLS 0.636 → 0.02), mobile **86 → 93** (CLS 0.097 → 0.008), full `run-smoke.ps1` green, prod verified post-deploy. **Pattern A LIVE ON PRODUCTION (PR #145); Patterns B/C on staging or open. The residual was APP-WIDE and is THREE defects, not one.** Rick measured all six shared-nav pages on his own account; catalog **0.02** (already fixed) was the positive control. **A — placeholder replaced by taller content:** `.loading-reserve{min-height:100vh}` on the placeholder, in **static CSS** (it must exist at first paint — CLS sums per shift, so a JS reservation splits one shift into two; reserving *more* scored *worse*, reverted `979eb7d`). mylist **0.53→0.05**, arrivals **0.81→0.09**, LIVE. **B — a `display:none` section revealed ABOVE content:** subscriptions **0.80→0.32** (capped the suggestions block to top 5 — it was 1,760px; a slot reservation on top made it *worse*, 0.33→0.55, reverted), admin **0.90→0.17** (Never Arrived open in a capped scroll region since it carries the resolve controls; Backordered + At Risk collapsed — specs pass **unmodified**). **C — analytics** (seven independently-filling panels) 0.49, untouched. **Admin's residual is a DATA backlog, not code:** ~17 Never Arrived titles from the F115 backfill; triaging them should take it under 0.1. **Staging-only, not promoted:** the subscriptions and admin work. Old note: RESOLVED on staging 2026-08-30 for the three customer-facing pages; the residual was APP-WIDE.** Rick measured all six shared-nav pages on his own account: catalog **0.02** (already fixed — the positive control) vs mylist 0.53, arrivals 0.81, subscriptions 0.80, admin 0.90, analytics 0.49. Fix = `.loading-reserve{min-height:100vh}` on each **loading placeholder** in **static CSS** — it must exist at first paint, because **CLS sums an impact fraction per shift** and a JS-applied reservation splits one shift into two (reserving *more* scored *worse*: 620px→0.347 vs viewport→0.578; reverted `979eb7d`). Results: mylist 0.969→0.038, arrivals 0.966→0.003, subscriptions →0.003, empty-account mylist 0.613→0.013. **143 Playwright passed, 0 failures.** **admin.html and analytics.html were tried, measured and REVERTED** — admin's shifts are `display:none` panels being revealed and pushing content down; analytics has seven independently-filling panels. Both staff-only, both need different designs. **LIVE ON PRODUCTION 2026-08-30, PR #145** — accepted on Rick's own account (mylist 0.53→0.05, arrivals 0.81→0.09, catalog 0.02 control) and re-verified against the served prod bytes. **Still open:** `subscriptions.html` 0.80→0.53 (a second cause — `#reserved-suggestions` revealed above the list), plus `admin.html` and `analytics.html`, all scoped as separate work. Old note: measurement INVALIDATED 2026-08-30 — the My List numbers describe a brand-new user's empty-list discovery grid (`first-issues` present, `list-table` absent in the Lighthouse JSON), not a customer's pull list. A fix was built, measured 620px→0.347 / viewport→0.578 (reserving *more* scored *worse*), found to also break the empty-state branch, and **reverted** (`979eb7d`; files byte-identical to pre-change). Same class as the 2026-08-24 wrong-page measurement, one step further in — authenticated, but not a *representative* user. `arrivals.html`'s 0.966 is likely closer to real (the store grid renders regardless of reservations) but unconfirmed. **Open question is now “is there a problem on a real customer's page at all”, not “how do we fix it”.** Two mechanical facts kept: Lighthouse runs a cold profile so any per-viewer memory is unmeasurable by it, and an unthrottled Playwright load reads CLS 0.000 — measure under throttling. Old text: it is real on both — `arrivals.html` desktop CLS **0.966** (score 75) and `mylist.html` **0.613** (score 78), against authenticated staging.** For scale, the defect this finding fixed on `catalog.html` was 0.636, so **arrivals is worse than the original**. Mobile is fine on both. **Not fixed — new work item, Rick's call.** Read each page's shift culprits before assuming catalog's fix transfers |
 | F115 | **Medium, fully RESOLVED, both environments, 2026-08-28.** A never-arrived title used to auto-fulfil on schedule, so My List told the customer "✓ Order placed" for a book that never came — now `arrival_outcome` persists what actually happened. Staging: S1/S5/S6 ran for real, V1/V4/V5 all green, 32/30 backfilled. Production: real Sept import ran (`arrived=212, unknown=6, not_arrived=0`), then **S6 backfill closed 2026-08-28** — 859 orphans re-measured, narrowed to 26 genuinely-unproven rows (771 shipment-evidenced + 51 ledgered correctly left NULL), written and independently re-verified (859→833, `not_arrived` still 0) | Owner: `docs/f115-arrival-truth-persistence.md` (STATUS: COMPLETE). **Not open work.** One residual, not a defect: writing `'unknown'` surfaced all 23 backfilled titles in `admin.html`'s Never Arrived panel — real triage, staff-only, expected. See § 13 |
@@ -1977,8 +2710,10 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
   arrivals.html                    ← │ stay in sync (see § Files That Must
   subscriptions.html               ← │ Stay in Sync)
   admin.html                       ← │
-  analytics.html                   ← ┘ admin-gated nav link — but it DOES
-                                   ←   carry the shared nav+footer blocks
+  analytics.html                   ← │ admin-gated nav link — but it DOES
+                                   ← │ carry the shared nav+footer blocks
+  settings.html                    ← ┘ admin-gated; added 2026-09-23 (S2),
+                                   ←   the SEVENTH member of the sync set
   forgot-password.html             ← linked from the index.html sign-in footer
   app.js
   style.css
@@ -2466,10 +3201,32 @@ branch, and in fuller, more current form in the docs this table points to.)*
 
 ## Files That Must Stay in Sync
 
-The nav block must be identical across **six** pages: `catalog.html`,
-`mylist.html`, `arrivals.html`, `subscriptions.html`, `admin.html`, and
-**`analytics.html`**. When updating nav, copy from the most recently-updated
-file — the canonical version is whichever HTML file was last touched.
+The nav block must be identical across **seven** pages: `catalog.html`,
+`mylist.html`, `arrivals.html`, `subscriptions.html`, `admin.html`,
+**`analytics.html`**, and **`settings.html`**. When updating nav, copy from the
+most recently-updated file — the canonical version is whichever HTML file was
+last touched.
+
+**`settings.html` joined the set 2026-09-23** (S2 of
+`docs/admin-settings-catalog-visibility.md`), added in the same commit as the
+page itself, deliberately: this list going stale is the documented drift source,
+and `analytics.html` sat missing from it for months. Verify with a hash, not by
+reading — all seven nav blocks and all seven footers must match:
+
+```powershell
+foreach ($f in 'catalog','mylist','arrivals','subscriptions','admin','analytics','settings') {
+  $nav = (Get-Content "$f.html" -Raw) -replace '(?s)^.*?(<nav class="nav" id="main-nav">.*?</nav>).*$','$1'
+  "{0,-16} {1}" -f $f, (Get-FileHash -InputStream ([IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($nav)))).Hash.Substring(0,12)
+}
+```
+
+**A seventh member was a real cost, weighed and accepted** — see that plan's
+§ 3.1. `settings.html` is its own page rather than a fourth `admin.html` mode
+because 264 KB of `admin.html`'s 318 KB is inline script, `_headers` names no
+`.html` file (so HTML is uncacheable across deploys and every settings tweak
+would re-download the lot), and `runInitialTabLoad()` carries a documented
+silent-failure ordering hazard. The trade was made on performance, knowing it
+puts one more file on this list.
 
 **`analytics.html` was omitted from this list until 2026-08-15**, and this
 section plus § Repository Structure both described it as having no shared nav
@@ -2481,11 +3238,18 @@ identically (`EB2513E8ED474B3CE5251F2540A69852`), all six load
 contract in this section. Found while planning `docs/mobile-nav-tab-bar.md`,
 where a five-file nav edit would have silently skipped it.
 
-The footer block must be identical across all six pages, placed immediately
+The footer block must be identical across all seven pages, placed immediately
 before `<div id="toast-container"></div>`.
 
 The `<script>` load order must be the same on every page: Supabase UMD bundle
 → `config.js` → `app.js` → page-specific code.
+
+**The mobile gear is part of this contract now.** `NavSettingsLink.mount()`
+(`app.js`) self-gates on `#search` being **absent**, so it renders on exactly
+the pages that have no search box — `admin.html`, `analytics.html` and
+`settings.html` — and never beside the search magnifier. Adding a `#search` to
+one of those three silently removes its gear; removing `#search` from one of the
+other four silently adds one. Either is a nav change, not a page-local one.
 
 ---
 
@@ -2508,8 +3272,15 @@ isolation (F15, F20), per-tenant branding unit spec, catalog info-card reserve
 (spec 14, added after F103), and the **order-export / order-ledger path**
 (spec 15, added 2026-08-03 — see below). `run-smoke.ps1` runs the scripts
 repo's committed unit suite (`npm test`, step [1/2]) before Playwright; the old
-local `node-tests/` copy was retired 2026-07-16. **56 Playwright tests as of
-2026-08-03.**
+local `node-tests/` copy was retired 2026-07-16.
+
+**Current counts, measured 2026-09-23: 321 unit + 147 Playwright (20.0 min),
+23 spec files.** *(This line read "**56 Playwright tests as of 2026-08-03**" —
+correct when written and then left for seven weeks while the suite roughly
+tripled. The unit figure had also drifted: entries below record 269 and then
+295, and it is now 321. **Both numbers are baselines a session compares its own
+run against, so a stale one invites "close enough" on a genuinely short run** —
+re-measure rather than trusting this line if the date above is old.)*
 
 **Spec 15 — `15-order-export-ledger.spec.ts` (F101/F102).** Covers the path
 that shipped to production on 2026-08-03: the Order Builder opens with a
