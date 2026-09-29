@@ -1,8 +1,8 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B) · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC absent there, no PR) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
+**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v1** applied there 2026-09-29 by Rick; **v2 with the F164 predicate is written (`7c31e5c`) and owed on BOTH environments**; no PR) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
 
-**Evidence (2026-09-29, Session B):** full Playwright suite **146 passed, 4 failed (27.7 min): NOT a clean pass**, all 4 in spec 20 and caused by a mid-run settings save, not by this work (§ 5.2). Spec 24 is now landed (3 tests, all passed inside that run),
+**Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
 plus `playwright/s4-visibility-verify.mjs` **9/9** (2026-09-24). Gates run this session, all on staging
 or read-only: **V2** (threshold-7 sets identical; the snippet's stricter gate printed FAIL, explained
 by F164), **V4** (production October: 2,038 rows / 46 pages with no config, 1,546 / 35 with the old
@@ -12,14 +12,19 @@ Record: § 5.2.
 ⚠️ **STILL NOT PRODUCTION-READY, but nothing that blocks it is a staging verification gap any more.**
 What stands between this feature and Session C (the production promotion):
 
-1. **Production has no S1 RPC** (`get_publisher_reserve_counts`; PGRST202 on 2026-09-29). Rick applies
-   it first (F105), confirmed by the behavioural probe. **Decide the F164 tenant predicate before
-   applying it** (§ 9).
-2. **Q8, Rick's decision:** the default hides **177 October titles from customers that are all still
-   reservable** (FOC 2026-10-12 to 10-26; none past). § 5.2.
+1. **The S1 RPC is on production, but it is v1.** Rick applied it 2026-09-29 (grants verdict `OK -
+   authenticated only`, definition verdict `OK - 1 definition, SECURITY DEFINER, search_path pinned`,
+   smoke `rjbookstop` 22 publishers / 14 at the bar / 4,678 records, equal to my independent measurement;
+   anon probe `42501`). **v2 adds the F164 same-tenant predicate** (`7c31e5c`, approved by Rick), is
+   **PENDING on both environments**, and its definition check prints a *new* verdict string only when
+   the body carries the F164 marker (the v1 verdict passes for either body). Order: apply on staging,
+   re-run V2 (it should now print a plain `V2 PASS`), then apply on production.
+2. **Q8 is RESOLVED (Rick, 2026-09-29): the default hides only titles whose FOC is earlier than today.**
+   Landed `e64f3d8`; the customer catalog no longer loses the 177 still-orderable October titles.
+   **Consequence he accepted:** the printed sheet follows the same default (§ 5.2).
 3. **The promotion shape**, full `staging → main` merge vs cherry-pick
    (`next-work-sequencing-2026-09-29.md` § 3.1).
-4. **The printed catalog goes from about 35 to about 46 pages** on October data. Tell the shop.
+4. **The printed catalog, with no exclusions saved, is now 50 pages on October data** (2,215 rows, every title whose FOC has not passed), against 35 under the old bar. Choosing "FOC falls in this catalog month or earlier" on the settings page gives 46. Tell the shop.
 5. **Still owed after promotion, not before:** V11 against the served bytes, and the write-smoke, which
    cannot be skipped this time (`catalog.html` and `app.js` are on the reserve path).
 
@@ -45,7 +50,7 @@ machine and runs when someone runs it.)*
 bar** (§ 2.1), which collapsed a three-way fork, deleted S3, made F160's fix a deletion, and made the
 default state "store nothing". **Q5: store publisher EXCLUSIONS, never inclusions** (§ 3.2.1).
 S1 SQL: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`, **applied to staging by Rick
-2026-09-24; `prod=PENDING`**.
+2026-09-24; `prod=PENDING`** *(2026-09-29: **v1 is now applied on production too**, by Rick, and probed present (anon `42501`). **v2, with the F164 same-tenant predicate, is the file's current content and is `PENDING` on both environments** — see § 5.2.)*.
 
 *(This block read "VERIFICATION INCOMPLETE … eight verification gates are still open … No code
 written, nothing applied to either database" — accurate when written on 2026-09-23 and stale within a
@@ -520,7 +525,7 @@ No code. Confirms § 2 and replaces this plan's estimates with figures.
 5. `SELECT pg_total_relation_size('public.catalog')` — § 8's storage estimate is derived from row
    counts and **must not be planned on until measured**.
 
-### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23 · APPLIED ON STAGING (by 2026-09-24; probed 2026-09-29, HTTP 200) · NOT APPLIED ON PRODUCTION (probed 2026-09-29, PGRST202)
+### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23 · APPLIED ON STAGING (by 2026-09-24; probed 2026-09-29, HTTP 200) · ~~NOT APPLIED ON PRODUCTION (probed 2026-09-29, PGRST202)~~ **v1 APPLIED ON PRODUCTION 2026-09-29 by Rick** (grants verdict OK, definition verdict OK, anon probe `42501`, smoke 22 / 14 / 4,678). **v2 (F164 predicate) PENDING on BOTH environments**
 
 **File: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`**, STATUS line
 `staging=PENDING | prod=PENDING`. Rick runs it; staging first, production before S4 deploys there
@@ -616,7 +621,7 @@ Deploy staging → verify → **production promotion is a separate, explicitly r
 | V6a | The filter is applied to the FULL result set **before** pagination, so pages stay full — the exact failure `catalog.html`'s own `hideVariants` note records ("filtering after slicing caused short pages and empty grid cells"). Assert a filtered page still renders `PAGE_SIZE` cards where more matches exist. ✅ **Green 2026-09-24** in `s4-visibility-verify.mjs` (50 cards after hiding a 314-title publisher). **Not in spec 24** — that spec seeds two rows, so it cannot assert a full page; V6a's only standing evidence is the `.mjs` harness |
 | V7 | Malformed JSON in `catalog_filters` shows everything and logs, rather than emptying the catalog |
 | V8 | `node --check` clean on every touched inline `<script>`; nav + footer blocks on `settings.html` hash-identical to the other six |
-| V9 | Full Playwright suite green against deployed staging bytes **post-push**. Current baseline **147 passed** *(2026-09-29: spec 24 landed, so the count is now the 147 plus its 3 tests; the result of that run is recorded in the STATUS block)* |
+| V9 | Full Playwright suite green against deployed staging bytes **post-push**. Current baseline **151 passed** *(147, plus spec 24's 4 tests; clean run 2026-09-29, 23.2 min, 0 failed, 0 flaky)* |
 | V10 | New spec asserting V3, V4a, V5 and V7 — the suite has **zero** coverage of any of this today, so a green run otherwise proves only that nothing else broke. ✅ **LANDED 2026-09-29** (`playwright/tests/24-catalog-visibility.spec.ts`, `describe.skip` removed): **3 consecutive runs, `--retries=0`, 3/3 each**, plus two negative controls observed red and restored byte-identical (V5 inverted; V4a under allowlist semantics). It covers V3, V4a, V5, V7 and the ratio cap; **V6a is not in it** (see that row). The skip's cause was **not** what this doc recorded: see § 9 |
 | V12 | **`getReservedPublishers` and `MIN_RESERVED` return ×0** in the served `admin.html` after S4, and `06-admin-this-week-bagging` / `17-admin-modes` are swept for references before the deletion (CLAUDE.md's rule after the single-catalog-print session turned the suite red by deleting a classed element) |
 | V11 | Post-deploy: served bytes verified with `curl -L` (the documented 302 trap), positive **and** negative assertions |
@@ -770,12 +775,34 @@ the tenant, which is why staging can calibrate production. **Earlier figures cor
 was 47; "1,507 → 33" would be ~34-35. **Caveat:** PDF from headless Chromium, so a physical printer or
 another paper size can differ by a page.
 
-**What Rick should expect on paper at promotion: about 46 pages, up from about 35 under the old bar
-(+11 pages, +492 titles).** The largest titles this un-hides: Seven Seas 88, Oni Press 61, Yen Press
+**What Rick should expect on paper at promotion — SUPERSEDED BY Q8 BELOW: with the month rule, about 46
+pages, up from about 35 under the old bar (+11 pages, +492 titles).** *(Q8 was then resolved to the
+"earlier than today" default, under which the sheet with no exclusions saved is **2,215 rows / 50
+pages**, measured; the 46-page figure now applies only if an admin picks the month rule on settings.html.)* The largest titles this un-hides: Seven Seas 88, Oni Press 61, Yen Press
 46, Vault 26, Ignition Press 24, Prana 24, Kodansha 23, Tokyopop 20, BAD IDEA 16, Udon 13, Viz 12,
 Zenescope 12. October has **60** publishers (September: 72), **46** under the old bar (September: 58).
 
-#### ⚠️ Q8 — OPEN, for Rick before Session C: the default hides titles that are still orderable
+#### Q8 — RESOLVED 2026-09-29 (Rick): the default is "FOC earlier than today"
+
+**Decision:** default `focMode` is `'today'`. Landed `e64f3d8` (`app.js`; comments in `admin.html`). One
+line of behaviour: the customer catalog no longer hides the 177 still-orderable October titles, and
+`focCutoffForQuery()` now sends `foc_date >= today` as a server-side predicate on the default path.
+Saved configs are unaffected (`load()` merges over the defaults; `settings.html` saves `focMode`).
+
+**The price of the decision, measured on the real print (staging, rendered to PDF):** the printed
+sheet follows the same default, so with no config it lists every title whose FOC has not passed. On
+October's shape that is **2,215 rows = 50 pages**, against 46 under the month rule and 35 under the old
+bar. It is date-dependent by construction: it shrinks as FOC dates pass. Per-surface defaults were
+option (3) and were not chosen.
+
+**Coverage added:** spec 24's 4th test, "the DEFAULT hides only titles whose FOC is before today (Q8)"
+(date-relative fixtures: yesterday, and the last day of the catalog month; the second half runs the OLD
+month rule explicitly so the assertion can tell the two apart). Negative-controlled: inverted, it goes
+red (`Expected: 0, Received: 1`).
+
+*The original open-question text follows, kept visible:*
+
+#### (Original) Q8 — OPEN, for Rick before Session C: the default hides titles that are still orderable
 
 The default `hidePastFoc: true` + `focMode: 'month'` reproduces the *print's* rule (FOC month `<=`
 catalog month). Q2's recorded rationale for applying it to the *customer* catalog was "a title past FOC
@@ -823,9 +850,14 @@ documented (it "owns" the setting for the run) colliding with a human using the 
 suite detects a concurrent write. A small local improvement, **not made**: have `globalTeardown` skip
 the restore, and say so loudly, if the row's `updated_at` moved since setup.
 
-**So the honest statement is:** no regression is attributable to this session's changes, and there is
-no clean full-suite run. A clean one needs a quiet window on staging's settings page. Whether to spend
-another ~28 minutes on it is Rick's call, since the instruction was one full run.
+**RESOLVED the same day: a clean rerun exists.** Rick asked for it; after the Q8 default change it ran
+**151 passed, 0 failed, 0 flaky, 23.2 min** (147 + spec 24's 4). Two things came with it. (1) The
+"suggested, not made" teardown guard **was built**, because the rerun needed it: `globalSetup` records
+the row's `updated_at`, and `globalTeardown` refuses to restore if it moved. It was proven in both
+directions: silent on a normal run (the restore line printed), and, with a background process bumping
+`updated_at` mid-run to simulate an app save, it printed `!!! catalog_filters was CHANGED THROUGH THE APP`,
+left the value alone and kept the state file. (2) The config row was untouched across the rerun (same
+`updated_at` before and after), so nobody saved during it. Local-only files; nothing committed.
 
 #### V10 — spec 24 landed; the recorded diagnosis was wrong
 
@@ -1025,7 +1057,7 @@ What does scale, and how it is handled here:
 - [x] Q1–Q5 answered by Rick and recorded in § 7 (2026-09-23) — incl. Q4 bar deletion and Q5 exclusion storage; Q6/Q7 renumbered
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
 - [x] S1 RPC applied to staging, verified by **V2 — which must run BEFORE S4 deletes `getReservedPublishers()`**, or the comparison has no baseline *(**CLOSED 2026-09-29, Session B, with a caveat that must not be dropped:** V2 ran against the pre-`886cab0` algorithm, which the plan's snippet reimplements from `db` alone, so it did not need the deleted function. **Threshold-7 sets identical; the snippet's own per-publisher gate printed `V2 FAIL`**, explained by F164. See § 5.2.)*
-      *(2026-09-29: the RPC IS applied on staging — behaviourally probed, HTTP 200 — but this box stays UNTICKED because V2 has not run, and S4 (`886cab0`) has already deleted `getReservedPublishers()`. V2 must now compare the RPC against the pre-`886cab0` implementation recovered from git history, not against live code. Production: RPC absent (PGRST202) and must land before S4's client code.)*
+      *(2026-09-29: the RPC IS applied on staging — behaviourally probed, HTTP 200 — but this box stays UNTICKED because V2 has not run, and S4 (`886cab0`) has already deleted `getReservedPublishers()`. V2 must now compare the RPC against the pre-`886cab0` implementation recovered from git history, not against live code. Production: RPC absent (PGRST202) and must land before S4's client code. — **2026-09-29, later: V2 RAN (§ 5.2), and v1 was applied on production the same day.**)*
 - [x] **S2 merged to `staging` `--ff-only` and pushed 2026-09-23** (`cd88153`) — `settings.html` + the nav link on all six existing pages + `app.js` + `style.css`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync **in the same commit**, as required
 - [x] `aria-hidden` / `tabindex` removed from the gear — `NavSettingsPlaceholder` → `NavSettingsLink`, admin branch renders a real `<a href="settings.html">`
 - [x] **Gates green on S2.** `node --check` clean on `app.js` + all 7 inline scripts; unit **321/321**; **Playwright 147 passed, 0 failed, exit 0, 20.0m** against deployed staging bytes post-push, with the test count present in the log (the only trustworthy figure — § Smoke Test Suite records a false GREEN at exit 0 with no tests run); nav **and** footer blocks hash identically across all seven pages; served bytes confirmed on the plain URL with `NavSettingsPlaceholder` at ×0
@@ -1044,9 +1076,11 @@ What does scale, and how it is handled here:
 - [x] ⚠️ ~~**V2 and V4 still open**~~ **V2 and V4 RUN 2026-09-29 (§ 5.2).** V4 re-derived on production's October data: 2,038 rows / 46 pages with no config, 1,546 / 35 with the 46 under-bar publishers hidden — measured on the real print, which corrected the plan's ÷46 arithmetic
 - [ ] *(historical — this line read "V2, V3, V4, V4a, V5, V6a, V7, V10 ALL STILL OPEN; the new behaviour is barely verified", which was true when written)* 147 green proves *nothing else broke*; it does not show the filters work, because **no committed spec asserts any of this** (§ Smoke Test Suite: "a green suite says the assertions hold, not that the feature is right"). This is the largest gap in the plan right now
 - [x] *(2026-09-29: done via spec 24, except V6a, which stays evidenced by `s4-visibility-verify.mjs` only.)* V10's spec is the way to close most of them at once: V3 (no config → everything), V4a (rename → reappears), V5 (reserved title stays visible), V6a (pages stay full), V7 (malformed JSON fails open)
-- [ ] **Q8 — Rick decides BEFORE Session C: the customer catalog's default hides 177 still-orderable October titles** (§ 5.2). Accept it, default `focMode` to `'today'` for the customer catalog, or set a per-surface default. Measured on production against 2026-09-29: 177 hidden by the month rule, **0** of them actually past FOC (FOC 2026-10-12 to 10-26). An `app.js` edit if changed
-- [ ] **F164 decision — Rick, before the S1 RPC is first applied on production:** add `AND c.tenant_id = current_tenant_id()` to the `live` CTE in `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (making it parity-exact with the code it replaces), or apply it as written. Production has 0 cross-tenant preorders, so the choice is defence in depth, not a live difference. If edited, the file's STATUS line and a re-run of V2 on staging come with it
-- [ ] **Session C expectation to tell the shop:** the printed catalog goes from about **35 to about 46 pages** on October data (§ 5.2), and past-FOC/in-month titles leave the customer default view (Q8)
+- [x] **Q8 RESOLVED 2026-09-29 (Rick): default `focMode` = `'today'`.** Landed `e64f3d8`, served bytes confirmed (`focMode: 'today',` at `app.js:1242`), spec 24 gained a covering test. The print follows the default: 2,215 rows / 50 pages with no config on October data (§ 5.2)
+- [x] **F164 predicate: DECIDED 2026-09-29 (Rick: "Add it") and WRITTEN** (`7c31e5c`): the `live` CTE now requires `c.tenant_id = current_tenant_id()`. **Rick had already applied v1 on production before this** (the S1 RPC is deployed on production, without the predicate), so v2 is a re-apply on both environments.
+- [ ] **Apply v2 on STAGING, then re-run V2** (`s4-v2-parity-verify.mjs`, expected: the snippet prints a plain `V2 PASS`, since the cross-tenant rows drop out of the RPC's count). Rick runs the SQL; the definition check must print `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present`
+- [ ] **Apply v2 on PRODUCTION** after the staging re-run; then the file's STATUS line flips to `staging=APPLIED … | prod=APPLIED …`, in tokens the `/promote-prod` regex can see
+- [ ] **Session C expectation to tell the shop:** with no exclusions saved, the printed catalog goes from about **35 to about 50 pages** on October data (§ 5.2). The customer catalog now loses only titles whose FOC has passed
 - [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
       S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
       window already carries F146/F147's first live exercise and should not also carry a paper change
