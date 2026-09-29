@@ -905,7 +905,7 @@ F147 fix all 17 would have been marked, the 519-mark shape. *(My first version o
 reservations on 2026-06/07/08 titles and reported 22 "violations"; those are absent from October as a
 normal state and outside the detector's scope. Re-scoped to the detector's actual population.)* **Limits,
 stated:** this is staging, so production's mark path is still unproven against a live candidate; **F146's
-clear half is still unexercised** (0 marks going in; staging now holds 7, so it is testable there); and
+clear half WAS exercised later that day (see the note below: 7 of 7 cleared)**; and
 whether the 7 are *truly* withdrawn, rather than F146's false-positive shape (dropped from the export,
 still live on the distributor's site), is unverified against the distributors' sites.
 
@@ -923,6 +923,8 @@ cross-validates the production V4 numbers. **The customer default, on real Octob
 `s4-visibility-verify.mjs` passes 9/9 (its month was hardcoded to 2026-09 and is now derived), and an
 absent config, a malformed one, and a permissive one all show **2,215** titles, where the month rule would
 have hidden 177. The Q8 change does what it was for.
+
+**F146's clear half, exercised for the first time (2026-09-29, 16:17 UTC).** Rick's older-month backfill re-import on staging (September's Lunar and PRH files, `--skip-autoreserve`; the procedure F146 was originally verified with) logged '7 previously-withdrawn title(s) reappeared - clearing', and a fresh read afterwards confirms it: withdrawn marks tenant-wide 0 (was 7), both mark columns null on all 7, their 7 reservations intact and still open, October's 2,215 rows, preorders (80), `order_deadline` and `catalog_filters` unchanged, September back to its original 2,302 rows. So the clear half works live on staging, by pair reappearance across months, exactly as its own comment says. **Still true:** production's clear half is unexercised (0 marks there), and this does not make F165 go away: the false marks were cheap to clear on staging, but on production customers would have seen them first.
 
 **The clean full suite (151 passed) ran on staging's September data.** The data has changed since, and it
 has not been re-run on this state.
