@@ -1,8 +1,8 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v1** applied there 2026-09-29 by Rick; **v2 with the F164 predicate is written (`7c31e5c`) and owed on BOTH environments**; no PR) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
+**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B); **Q8 RESOLVED the same day: the default past-FOC rule is now "FOC earlier than today" (`e64f3d8`)**; **clean full suite 151/0** · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC **v1** applied there 2026-09-29 by Rick; **v2 with the F164 predicate (`7c31e5c`) is APPLIED and VERIFIED on staging 2026-09-29 (V2 now prints a plain PASS) and still owed on production**; no PR) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
 
-**Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
+**Evidence (2026-09-29):** full Playwright suite **151 passed, 0 failed, 0 flaky (23.2 min): CLEAN**, run directly against deployed staging bytes after the Q8 change (`e64f3d8`) and with spec 24 landed (4 tests). **That run was on staging's SEPTEMBER data; staging was then moved to October (§ 5.2, last subsection), so the suite has not yet been run on the current data.** *(The first run that day was 146 passed / 4 failed, caused by a settings-page save mid-run that the teardown then overwrote; it is recorded in § 5.2, and the rerun above supersedes it.)*
 plus `playwright/s4-visibility-verify.mjs` **9/9** (2026-09-24). Gates run this session, all on staging
 or read-only: **V2** (threshold-7 sets identical; the snippet's stricter gate printed FAIL, explained
 by F164), **V4** (production October: 2,038 rows / 46 pages with no config, 1,546 / 35 with the old
@@ -12,13 +12,14 @@ Record: § 5.2.
 ⚠️ **STILL NOT PRODUCTION-READY, but nothing that blocks it is a staging verification gap any more.**
 What stands between this feature and Session C (the production promotion):
 
-1. **The S1 RPC is on production, but it is v1.** Rick applied it 2026-09-29 (grants verdict `OK -
-   authenticated only`, definition verdict `OK - 1 definition, SECURITY DEFINER, search_path pinned`,
-   smoke `rjbookstop` 22 publishers / 14 at the bar / 4,678 records, equal to my independent measurement;
-   anon probe `42501`). **v2 adds the F164 same-tenant predicate** (`7c31e5c`, approved by Rick), is
-   **PENDING on both environments**, and its definition check prints a *new* verdict string only when
-   the body carries the F164 marker (the v1 verdict passes for either body). Order: apply on staging,
-   re-run V2 (it should now print a plain `V2 PASS`), then apply on production.
+1. **The S1 RPC: v2 is verified on staging; production is still v1.** Staging, 2026-09-29: Rick applied
+   v2 (grants `OK - authenticated only`; definition `OK - 1 definition, SECURITY DEFINER, search_path
+   pinned, F164 predicate present`; smoke `raysandjudys` **112** records where v1 counted 114), and **V2
+   re-run: the plan's own snippet prints `V2 PASS - identical`, exact parity on 61 publishers.** The same
+   snippet on v1, hours earlier, printed FAIL on the two cross-tenant publishers, so this is a real
+   before/after. **Remaining: apply v2 on production** (Rick). Production has no cross-tenant preorders,
+   so v1 and v2 behave identically there; only the definition check's F164 verdict proves which body is
+   deployed, and the SQL file's STATUS flips to `prod=APPLIED` only after it prints.
 2. **Q8 is RESOLVED (Rick, 2026-09-29): the default hides only titles whose FOC is earlier than today.**
    Landed `e64f3d8`; the customer catalog no longer loses the 177 still-orderable October titles.
    **Consequence he accepted:** the printed sheet follows the same default (§ 5.2).
@@ -883,6 +884,47 @@ can be left on a stale render. The spec works around it; it does not fix it. **R
 Rick's call at the stop point. It touches `catalog.html`'s customer reserve path, which this session
 could not edit.
 
+#### Later the same day: v2 on staging, and staging moved to October
+
+Rick applied v2 on staging and then ran the **October import on staging** (`import-staging.js`, 2026-09 →
+2026-10). Everything below was read back from the databases, not taken from the console logs.
+
+**Staging is now the same catalog as production:** 2026-10, **2,215 rows** (Lunar 1,402 / PRH 813). The
+import archived 4 reservations, purged 4,402 stale unreserved rows, deduped 20, recorded 9 monthly order
+confirmations that Rick approved at its prompt (`order_submissions` 887), cleared `order_deadline`
+(as designed), and left `maintenance_mode` false. `catalog_filters` was untouched (167 bytes, same
+`updated_at`). **Production is exactly as measured that morning** (2,215 rows, 3,494 preorders, 0 withdrawn
+marks), so every production figure above stands.
+
+**F147's mark path met live candidates for the FIRST time, on staging, and discriminated.** The detector
+compares only the immediately prior month, so the population is unfulfilled reservations on 2026-09 titles
+absent from 2026-10: **17**. **7 were marked withdrawn, every one with FOC 2026-09-28 (already passed)**;
+**10 were held back, every one with FOC 2026-10-05 to 10-19 (not yet passed)**; **0 violate "marked iff
+FOC passed".** The 10 are exactly the 9 codes the import asked Rick to confirm as orders. Without the
+F147 fix all 17 would have been marked, the 519-mark shape. *(My first version of this check swept in
+reservations on 2026-06/07/08 titles and reported 22 "violations"; those are absent from October as a
+normal state and outside the detector's scope. Re-scoped to the detector's actual population.)* **Limits,
+stated:** this is staging, so production's mark path is still unproven against a live candidate; **F146's
+clear half is still unexercised** (0 marks going in; staging now holds 7, so it is testable there); and
+whether the 7 are *truly* withdrawn, rather than F146's false-positive shape (dropped from the export,
+still live on the distributor's site), is unverified against the distributors' sites.
+
+**The October print, measured directly with no interpolation** (deployed `admin.html`, rendered to PDF):
+
+| Config on staging | Rows | Pages |
+|---|---|---|
+| No config: the new default, "FOC earlier than today" | **2,215** | **50** |
+| Explicit month rule | **2,038** | **46** |
+
+The 2,038 **equals the figure derived independently from production's database** that morning, which
+cross-validates the production V4 numbers. **The customer default, on real October data:** the 9-check
+`s4-visibility-verify.mjs` passes 9/9 (its month was hardcoded to 2026-09 and is now derived), and an
+absent config, a malformed one, and a permissive one all show **2,215** titles, where the month rule would
+have hidden 177. The Q8 change does what it was for.
+
+**The clean full suite (151 passed) ran on staging's September data.** The data has changed since, and it
+has not been re-run on this state.
+
 ---
 
 ## 6. Out of scope — stop and ask
@@ -1078,7 +1120,7 @@ What does scale, and how it is handled here:
 - [x] *(2026-09-29: done via spec 24, except V6a, which stays evidenced by `s4-visibility-verify.mjs` only.)* V10's spec is the way to close most of them at once: V3 (no config → everything), V4a (rename → reappears), V5 (reserved title stays visible), V6a (pages stay full), V7 (malformed JSON fails open)
 - [x] **Q8 RESOLVED 2026-09-29 (Rick): default `focMode` = `'today'`.** Landed `e64f3d8`, served bytes confirmed (`focMode: 'today',` at `app.js:1242`), spec 24 gained a covering test. The print follows the default: 2,215 rows / 50 pages with no config on October data (§ 5.2)
 - [x] **F164 predicate: DECIDED 2026-09-29 (Rick: "Add it") and WRITTEN** (`7c31e5c`): the `live` CTE now requires `c.tenant_id = current_tenant_id()`. **Rick had already applied v1 on production before this** (the S1 RPC is deployed on production, without the predicate), so v2 is a re-apply on both environments.
-- [ ] **Apply v2 on STAGING, then re-run V2** (`s4-v2-parity-verify.mjs`, expected: the snippet prints a plain `V2 PASS`, since the cross-tenant rows drop out of the RPC's count). Rick runs the SQL; the definition check must print `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present`
+- [x] **v2 APPLIED on STAGING and V2 RE-RUN, 2026-09-29.** Definition check printed `OK - 1 definition, SECURITY DEFINER, search_path pinned, F164 predicate present`; `s4-v2-parity-verify.mjs` with `EXPECT_V2=1`: **11/11**, the snippet prints `V2 PASS - identical`, 61 keys at exact parity (the harness's own independent recount also had to be corrected to apply v2's rule: it disagreed with a correct v2 by exactly the two cross-tenant rows, 120 vs 118)
 - [ ] **Apply v2 on PRODUCTION** after the staging re-run; then the file's STATUS line flips to `staging=APPLIED … | prod=APPLIED …`, in tokens the `/promote-prod` regex can see
 - [ ] **Session C expectation to tell the shop:** with no exclusions saved, the printed catalog goes from about **35 to about 50 pages** on October data (§ 5.2). The customer catalog now loses only titles whose FOC has passed
 - [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
