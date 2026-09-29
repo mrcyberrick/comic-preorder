@@ -1,21 +1,40 @@
 # Admin Settings — catalog visibility filters
 
-**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**
+**STATUS:** IN PROGRESS — S0–S4 COMPLETE AND VERIFIED ON STAGING; **GATES V2 / V4 / V10 CLOSED ON STAGING 2026-09-29** (Session B) · staging=2026-09-24 (`cd88153` S2, `886cab0` S4, `71ce076` default-path fix; S1 applied by Rick) · prod=— (S1 RPC absent there, no PR) · PR=— · findings: **F160 (filed + confirmed 2026-09-23, FIXED on staging by S4(a))**, **F164** (filed 2026-09-29, found by V2)
 
-**Evidence:** Playwright **147/0** (regression, spec 24 skipped) plus
-`playwright/s4-visibility-verify.mjs` **9/9** — the behaviour itself, negative-controlled, measured
-against deployed bytes 2026-09-24, with the check count asserted so a skipped check cannot read as a
-pass.
+**Evidence (2026-09-29, Session B):** full Playwright suite **146 passed, 4 failed (27.7 min): NOT a clean pass**, all 4 in spec 20 and caused by a mid-run settings save, not by this work (§ 5.2). Spec 24 is now landed (3 tests, all passed inside that run),
+plus `playwright/s4-visibility-verify.mjs` **9/9** (2026-09-24). Gates run this session, all on staging
+or read-only: **V2** (threshold-7 sets identical; the snippet's stricter gate printed FAIL, explained
+by F164), **V4** (production October: 2,038 rows / 46 pages with no config, 1,546 / 35 with the old
+bar's publishers hidden), **V10** (3 runs, 3/3, `--retries=0`, two negative controls) and **V4a**.
+Record: § 5.2.
 
-⚠️ **NOT READY FOR PRODUCTION, for two specific reasons.**
-**(1) V10 is written but NOT LANDING.** `playwright/tests/24-catalog-visibility.spec.ts` is
-`describe.skip`ped: its results were inconsistent between runs with no code change, and the failures
-sit in the harness's page interaction rather than in any assertion about filtering (§ 9). So the only
-thing defending this behaviour is a `.mjs` harness that has to be run by hand. The 147-test suite
-already proved it cannot catch a miss here, having stayed green while the entire default catalog path
-went unfiltered.
-**(2) S4 is customer-visible** — −109 titles from the past-FOC default — and takes the print
-33 → 45 pages, which should not land in the 2026-09-25 October import window (§ 4 S4).
+⚠️ **STILL NOT PRODUCTION-READY, but nothing that blocks it is a staging verification gap any more.**
+What stands between this feature and Session C (the production promotion):
+
+1. **Production has no S1 RPC** (`get_publisher_reserve_counts`; PGRST202 on 2026-09-29). Rick applies
+   it first (F105), confirmed by the behavioural probe. **Decide the F164 tenant predicate before
+   applying it** (§ 9).
+2. **Q8, Rick's decision:** the default hides **177 October titles from customers that are all still
+   reservable** (FOC 2026-10-12 to 10-26; none past). § 5.2.
+3. **The promotion shape**, full `staging → main` merge vs cherry-pick
+   (`next-work-sequencing-2026-09-29.md` § 3.1).
+4. **The printed catalog goes from about 35 to about 46 pages** on October data. Tell the shop.
+5. **Still owed after promotion, not before:** V11 against the served bytes, and the write-smoke, which
+   cannot be skipped this time (`catalog.html` and `app.js` are on the reserve path).
+
+Residual limits on the evidence, stated: V6a has no spec (only the `.mjs` harness), the parity run has
+never seen a >1,000-row reserve history, and the whole suite lives on one machine (it is gitignored by
+design, no CI).
+
+*(Superseded 2026-09-29, kept visible. This block previously read: "**Evidence:** Playwright **147/0**
+(regression, spec 24 skipped) plus `s4-visibility-verify.mjs` **9/9** … ⚠️ **NOT READY FOR PRODUCTION,
+for two specific reasons.** **(1) V10 is written but NOT LANDING** … so the only thing defending this
+behaviour is a `.mjs` harness that has to be run by hand … **(2) S4 is customer-visible** — −109 titles
+from the past-FOC default — and takes the print 33 → 45 pages, which should not land in the 2026-09-25
+October import window." Reason (1) closed: V10 landed, and its recorded F107 diagnosis was wrong (§ 5.2).
+Reason (2)'s figures were September's, and the window has passed: the October import ran on production
+2026-09-27, clean. The customer-visible cost is now measured on October data as Q8 above, not "−109".)*
 
 *(An earlier version of this block said "no **committed** spec asserts any of this" and "nothing in
 CI defends the feature". Both were confused: the Playwright suite is **gitignored by design** and
@@ -588,17 +607,17 @@ Deploy staging → verify → **production promotion is a separate, explicitly r
 | Gate | Assertion |
 |---|---|
 | V1 | ✅ **DONE 2026-09-23, both environments.** S0 confirmed § 2's cold start and corrected its definition — the trigger is "no publisher clears the bar", not "zero reserve history" (§ 13 F160) |
-| V2 | RPC returns the same publisher set as today's `getReservedPublishers()` at threshold 7 — proven against the old paging implementation, not assumed (§ 5.1). **STILL RUNNABLE AFTER S4, and my twice-stated warning that it had to run first was WRONG.** § 5.1's snippet is a *self-contained* reimplementation using only `db`; it never called the live function, precisely so it could run anywhere. Deleting `getReservedPublishers()` cost nothing. Not yet run |
+| V2 | RPC returns the same publisher set as today's `getReservedPublishers()` at threshold 7 — proven against the old paging implementation, not assumed (§ 5.1). **STILL RUNNABLE AFTER S4, and my twice-stated warning that it had to run first was WRONG.** § 5.1's snippet is a *self-contained* reimplementation using only `db`; it never called the live function, precisely so it could run anywhere. Deleting `getReservedPublishers()` cost nothing. ✅ **RUN 2026-09-29 (Session B), staging: the threshold-7 publisher SETS ARE IDENTICAL (5 = 5, same names).** The snippet's own stricter per-publisher check printed `V2 FAIL` on two counts (`marvel` 25 vs 24, `boom entertainment` 19 vs 18), **fully explained by F164** — two staging preorders that reference another tenant's catalog rows — and reconciled for all 72 keys; negative-controlled; independently recounted by service role. Full record in § 5.2 |
 | V3 | With no `catalog_filters` row, both surfaces show **everything** (§ 3.4) — tested by deleting the key, not by reasoning |
-| V4 | ⚠️ **REWRITTEN TWICE.** It first asserted "print unchanged at 1,534 / 34", which the bar deletion makes false. It then asserted a return to 1,507 / 33 via the "Reserved ≥ 7" preset — **and that preset was removed 2026-09-24 (Q3 reversed)**, so that half is gone too. What remains assertable: with no config row the production print is **2,068 rows / 45 pages**, and hiding by hand the 58 publishers that sat under the old bar returns it to **1,507 / 33**. Neither half run |
-| V4a | **Publisher exclusions survive a rename in the safe direction** (§ 3.2.1): with a publisher excluded, rewrite its `catalog.publisher` value on a scratch row and confirm the row **reappears** rather than staying hidden. Negative-control the assertion by confirming it fails if the config is inverted to an allowlist |
+| V4 | ⚠️ **REWRITTEN TWICE.** It first asserted "print unchanged at 1,534 / 34", which the bar deletion makes false. It then asserted a return to 1,507 / 33 via the "Reserved ≥ 7" preset — **and that preset was removed 2026-09-24 (Q3 reversed)**, so that half is gone too. What remains assertable: with no config row the production print is **2,068 rows / 45 pages**, and hiding by hand the 58 publishers that sat under the old bar returns it to **1,507 / 33**. Neither half run. ✅ **RE-DERIVED 2026-09-29 on PRODUCTION's October data (2026-10), read-only, and the Sept figures above are STALE — do not quote them.** No config: **2,038 rows → 46 pages** (measured on the real print, not ÷46). The 46 formerly-under-bar publishers hidden by hand: **1,546 rows → 35 pages**. **The plan's own page arithmetic was wrong: the real print runs 44.0-44.3 rows per page, not 46**, so "2,068 → 45" was really 47 and "1,507 → 33" was ~34-35. Full breakdown, reconciliation and calibration in § 5.2 |
+| V4a | **Publisher exclusions survive a rename in the safe direction** (§ 3.2.1): with a publisher excluded, rewrite its `catalog.publisher` value on a scratch row and confirm the row **reappears** rather than staying hidden. Negative-control the assertion by confirming it fails if the config is inverted to an allowlist. ✅ **GREEN 2026-09-29 as part of V10** (spec 24 test 2, the rename step), **negative-controlled under allowlist semantics**: with the renamed name hidden too (what an allowlist does to an unlisted name) the row does not reappear (`Showing 0 of 0 items`) and the `of 1 item` assertion goes red; restored byte-identical |
 | V5 | A reserved title stays visible to its customer with its publisher hidden (§ 3.3), asserted in a real browser |
 | V6 | ❌ **VOID — this gate asserted something that turned out to be impossible.** It required publisher filtering to reach the PostgREST query. It cannot: exclusions are stored as `lower(btrim(publisher))` keys while `not.in` compares raw mixed-case values (§ 3.2's correction). Replaced by V6a |
-| V6a | The filter is applied to the FULL result set **before** pagination, so pages stay full — the exact failure `catalog.html`'s own `hideVariants` note records ("filtering after slicing caused short pages and empty grid cells"). Assert a filtered page still renders `PAGE_SIZE` cards where more matches exist. Not yet run |
+| V6a | The filter is applied to the FULL result set **before** pagination, so pages stay full — the exact failure `catalog.html`'s own `hideVariants` note records ("filtering after slicing caused short pages and empty grid cells"). Assert a filtered page still renders `PAGE_SIZE` cards where more matches exist. ✅ **Green 2026-09-24** in `s4-visibility-verify.mjs` (50 cards after hiding a 314-title publisher). **Not in spec 24** — that spec seeds two rows, so it cannot assert a full page; V6a's only standing evidence is the `.mjs` harness |
 | V7 | Malformed JSON in `catalog_filters` shows everything and logs, rather than emptying the catalog |
 | V8 | `node --check` clean on every touched inline `<script>`; nav + footer blocks on `settings.html` hash-identical to the other six |
-| V9 | Full Playwright suite green against deployed staging bytes **post-push**. Current baseline **147 passed** |
-| V10 | New spec asserting V3, V4a, V5 and V7 — the suite has **zero** coverage of any of this today, so a green run otherwise proves only that nothing else broke |
+| V9 | Full Playwright suite green against deployed staging bytes **post-push**. Current baseline **147 passed** *(2026-09-29: spec 24 landed, so the count is now the 147 plus its 3 tests; the result of that run is recorded in the STATUS block)* |
+| V10 | New spec asserting V3, V4a, V5 and V7 — the suite has **zero** coverage of any of this today, so a green run otherwise proves only that nothing else broke. ✅ **LANDED 2026-09-29** (`playwright/tests/24-catalog-visibility.spec.ts`, `describe.skip` removed): **3 consecutive runs, `--retries=0`, 3/3 each**, plus two negative controls observed red and restored byte-identical (V5 inverted; V4a under allowlist semantics). It covers V3, V4a, V5, V7 and the ratio cap; **V6a is not in it** (see that row). The skip's cause was **not** what this doc recorded: see § 9 |
 | V12 | **`getReservedPublishers` and `MIN_RESERVED` return ×0** in the served `admin.html` after S4, and `06-admin-this-week-bagging` / `17-admin-modes` are swept for references before the deletion (CLAUDE.md's rule after the single-catalog-print session turned the suite red by deleting a classed element) |
 | V11 | Post-deploy: served bytes verified with `curl -L` (the documented 302 trap), positive **and** negative assertions |
 
@@ -675,6 +694,162 @@ it still says PASS, the comparison is vacuous and the real result is unknown.
 by design, because the settings page must list a publisher that has titles this month and no
 history. And a publisher with history but no titles this month comes back with its *lowercased* key
 as its display name, since there is no current row to take canonical casing from.
+
+### 5.2 Session B results — V2, V4, V10 closed on STAGING, 2026-09-29
+
+Session B of `docs/next-work-sequencing-2026-09-29.md`. Verification only: no app code, no schema, no
+production write. **Local-only artifacts** (gitignored `playwright/`, never committed):
+`s4-v2-parity-verify.mjs`, `s4-v2-diag.mjs`, `s4-print-pages-calibrate.mjs`, `s4-v4-prod-measure.mjs`,
+`s4-v4-foc-split-prod.mjs`, plus `fixtures/auth.ts` gaining a `pwTest` export and spec 24 landing.
+
+#### V2 — parity, staging. Sets identical; the snippet's stricter gate printed `V2 FAIL`, and F164 explains why
+
+Run in a real signed-in staging **admin** session (throwaway founding-tenant admin, password grant),
+on the deployed `admin.html`, using § 5.1's snippet **extracted verbatim from this file at run time**
+rather than retyped. Its OLD block was also read line for line against the function as it stood before S4
+(`git show 886cab0^:admin.html`): the same algorithm (compared by eye, not by a machine diff).
+
+| | result |
+|---|---|
+| Threshold-7 set, OLD vs RPC | **identical, 5 = 5** (`ablaze`, `abrams`, `boom entertainment`, `dc comics`, `marvel`) |
+| Snippet's per-publisher check | **2 mismatches:** `marvel` RPC 25 vs OLD 24, `boom entertainment` RPC 19 vs OLD 18 → snippet verdict `V2 FAIL` |
+| Cause | **F164**: 2 founding-tenant `preorders` on staging reference `demoshop` catalog rows. Under the admin's RLS their `catalog(publisher)` embed is NULL, so OLD drops them; the RPC (`SECURITY DEFINER`, no tenant test on the join) counts them |
+| Reconciliation | OLD = RPC − cross-tenant refs for **all 72 keys**; independent service-role recount (36 `reservation_history` + 78 `preorders` = 114) = RPC on all **17** publishers with history, and the sums agree (114 = 114) |
+| Negative control | The doc's own (`MIN 7 → 6` on the new-side filter): **1 publisher "only in NEW"**, no PASS |
+| Production | **0 of 3,495 preorders** cross-tenant, so nothing on production is affected |
+
+The harness asserts the snippet's verdict is **exactly what the data predicts** (a `FAIL` whose mismatch
+set equals the cross-tenant publishers, and a plain `PASS` on clean data), so it cannot quietly
+tolerate a new, unexplained difference. **11/11.** Throwaway admin torn down and re-read (0 profile
+rows, auth user 404).
+
+**Stated limits, not glossed:** (1) staging's `reservation_history` (36) and `preorders` (78) are far
+under 1,000 rows, so the old path's `range()` **paging is not exercised** here; the RPC is one
+`GROUP BY` and the service-role recount pages explicitly, but a >1,000-row parity run has not happened
+on either environment. (2) Staging still reads **`catalog_month` 2026-09**; the two implementations read
+the same data, so this does not bear on parity. (3) The plan asks whether the RPC "reproduces the old
+code exactly"; on cross-tenant data it does **not**, by design of `SECURITY DEFINER`. **Rick's decision
+before Session C:** add `AND c.tenant_id = current_tenant_id()` to the RPC's `live` CTE before it is
+first applied on production (F164, fix direction 3). Not done here: V2 exposed it, and this session
+could not fix what V2 exposed.
+
+#### V4 — print volume, PRODUCTION `rjbookstop`, catalog month **2026-10** (read-only)
+
+Service-role GETs, tenant-scoped, paged with `order=id`, every fetch checked against `content-range`.
+Filter semantics read from the deployed code, not from this doc: `CatalogFilters.defaults()` hides a
+row iff `foc_date` is present and its month is `<=` the catalog month.
+
+| | rows | pages |
+|---|---|---|
+| October catalog, all rows | **2,215** (Lunar 1,402 / PRH 813, matching the import-gate record exactly) | n/a |
+| **(a) No config** — FOC-eligible (past-FOC hidden: 177) | **2,038** (Lunar 1,246 / PRH 792) | **46** |
+| **(b) The 46 formerly-under-bar publishers hidden by hand** | **1,546** | **35** |
+| What the *old* ≥7 bar would print for 2026-10 (same as (b): no publisher-less rows) | 1,546 | 35 |
+
+**Reconciliations (each breakdown against its total, F156's lesson):** 2,215 = 2,038 + 177. 2,038 =
+1,546 (14 publishers clearing the old bar) + 492 (46 under it) + 0 (no-publisher rows). An
+**independent server-side predicate** agrees with the JS filter: `foc_date IS NULL` **0** + `foc_date >=
+2026-11-01` **2,038** = 2,038. The paged month total equals `content-range` (2,215). Reserve history:
+1,184 `reservation_history` + 3,494 `preorders` → 22 publishers with any history, 4,678 counted
+records. Of the 46 under-bar publishers, **39 have zero reservations** and 7 have 1-6.
+
+**The page counts are MEASURED on the real print, not derived, and this corrects the plan.** `ceil(rows
+/ 46)` understated: the 2026-08-24 print (1,534 rows) was 35 pages against ÷46's 34. Drove the deployed
+admin's Print Catalog, caught the popup, rendered it to PDF with its own `@page` rules:
+
+| rows printed | pages | rows / page |
+|---|---|---|
+| 2,302 | 52 | 44.27 |
+| 2,068 | 47 | 44.00 |
+| **2,038** | **46** | 44.30 |
+| **1,546** | **35** | 44.17 |
+
+Both October figures were hit **exactly** (the harness hid publisher subsets summing to the target and
+the print's own header confirmed the row count). Rows per page is a property of the print CSS, not of
+the tenant, which is why staging can calibrate production. **Earlier figures corrected:** "2,068 → 45"
+was 47; "1,507 → 33" would be ~34-35. **Caveat:** PDF from headless Chromium, so a physical printer or
+another paper size can differ by a page.
+
+**What Rick should expect on paper at promotion: about 46 pages, up from about 35 under the old bar
+(+11 pages, +492 titles).** The largest titles this un-hides: Seven Seas 88, Oni Press 61, Yen Press
+46, Vault 26, Ignition Press 24, Prana 24, Kodansha 23, Tokyopop 20, BAD IDEA 16, Udon 13, Viz 12,
+Zenescope 12. October has **60** publishers (September: 72), **46** under the old bar (September: 58).
+
+#### ⚠️ Q8 — OPEN, for Rick before Session C: the default hides titles that are still orderable
+
+The default `hidePastFoc: true` + `focMode: 'month'` reproduces the *print's* rule (FOC month `<=`
+catalog month). Q2's recorded rationale for applying it to the *customer* catalog was "a title past FOC
+is already unreservable" — but `isFocPast()` is **date-based** (`foc_date < today`), not month-based.
+Measured on production October data, against today (2026-09-29):
+
+| | titles |
+|---|---|
+| Hidden by the default rule | **177** (8.0% of 2,215) |
+| … of which actually past FOC (`foc_date < today`) | **0** |
+| … of which still reservable | **177** — FOC dates 2026-10-12 (4), 10-19 (9), 10-26 (164); Lunar 156 / PRH 21 |
+
+So on promotion the customer catalog would lose **177 titles that can still be ordered**, and they stay
+hidden for exactly as long as they are orderable (until each FOC date, or the next import). Existing
+reservations are exempt (§ 3.3), so nobody loses a title they hold. `focMode: 'today'` exists in
+`CatalogFilters` and matches `isFocPast()` exactly; it would hide 0 titles today. The print is
+unaffected either way: a paper sheet listing only *next* month's FOCs is what it has always done.
+**This is a product decision, not a defect** (the code does what Q2 and the default's own comment say),
+and the two readings were never distinguished when Q2 was answered on September's "109". Options:
+(1) accept it; (2) default `focMode` to `'today'` for the customer catalog; (3) a per-surface default.
+Any change is an `app.js` edit and is **out of scope for Session B**.
+
+#### The one full-suite run: 146 passed, 4 failed — and why that is not a clean pass
+
+`npx playwright test --reporter=line`, run directly against deployed staging, 27.7 min, 150 tests
+(147 baseline + spec 24's 3). **The four failures are all in `20-restricted-variant-badge.spec.ts`**
+(the F132 badge): every attempt, including retries, timed out looking for its seeded card, with the
+page reading **`Showing 50 of 1776 items · filtered by store settings`**. The suite neutralises
+`catalog_filters` to a permissive config at start, so that note should be impossible.
+
+**Cause, established rather than assumed:** `app_settings.catalog_filters` carries
+`updated_at = 2026-09-29 10:07:51` local, `updated_by` null. The suite's fixtures PATCH only `value`
+and never stamp `updated_at`; the app's own `Settings.set()` does (`app.js:972`). So **that row was
+saved through the real app, on the settings page, at 10:07:51, mid-run** (the suite began 09:50:55). It
+left a non-permissive filter live for spec 20, which ran a few minutes later.
+
+**Cross-checked:** spec 20 rerun alone, `--retries=0`, config confirmed permissive (167 bytes) before
+and after: **6 passed (48.5 s)**. Specs 17 and 18, which also load the catalog, ran before the save and
+passed. Spec 24's tests write their own config explicitly and passed.
+
+**⚠️ Side effect to know about: `globalTeardown` then restored the pre-run value (167 bytes) OVER
+that save at ~10:18.** Whatever was saved at 10:07:51 is gone, and it cannot be recovered from this
+side. Staging now holds the permissive config. This is the suite's ownership model working as
+documented (it "owns" the setting for the run) colliding with a human using the page; nothing in the
+suite detects a concurrent write. A small local improvement, **not made**: have `globalTeardown` skip
+the restore, and say so loudly, if the row's `updated_at` moved since setup.
+
+**So the honest statement is:** no regression is attributable to this session's changes, and there is
+no clean full-suite run. A clean one needs a quiet window on staging's settings page. Whether to spend
+another ~28 minutes on it is Rick's call, since the instruction was one full run.
+
+#### V10 — spec 24 landed; the recorded diagnosis was wrong
+
+`24-catalog-visibility.spec.ts` was skipped on 2026-09-24 with **F107 magic-link pressure** as the
+leading candidate. Switching to a password-grant + `addInitScript` session (a `pwTest` export in
+`fixtures/auth.ts`; the spec changes one import line) did **not** fix it: the next run failed 3 of 3, on
+a page that was plainly signed in, every failure stuck on `Showing 50 of 2303 items`. **Actual cause:
+an overlapping-load race in the spec's own `settle()`.** `selectOption('#filter-variants')` starts
+`loadCatalog()`; `fill('#search')` starts a second one 350ms later (debounce); `catalog.html` has no
+out-of-order guard and the first is the heavier (whole All-Covers month, paged), so the search load
+finishes first and the variants load renders over it. That explains "inconsistent between runs" (a
+coin-flip in the fast path, near-deterministic in the config-active path). Fix, interaction only: wait
+for `.skeleton-card` to clear after the variants change, then type. **Assertions untouched.**
+
+Asked Rick at the stop point (the instruction was to stop if still failing after the auth change): he
+approved **one bounded attempt**. **Result: 3 consecutive runs, `--retries=0`, 3/3 tests each (1.1 min /
+57 s / 58 s, against 4.7 min with failures before).** Two negative controls observed **red** and restored
+byte-identical (`sha256` prefix `4bdf53da…` before and after): the V5 reserved-title assertion inverted
+(`Expected: 0, Received: 1`), and V4a under allowlist semantics (`Showing 0 of 0 items`).
+
+**⚠️ The page race is real and still there.** A customer who changes a filter and types within ~350ms
+can be left on a stale render. The spec works around it; it does not fix it. **Reported, not filed** —
+Rick's call at the stop point. It touches `catalog.html`'s customer reserve path, which this session
+could not edit.
 
 ---
 
@@ -849,7 +1024,7 @@ What does scale, and how it is handled here:
 - [x] **§ 2.1's unification decision made by Rick 2026-09-23: DELETE the ≥7 bar.** Collapsed the three-way fork, deleted S3, turned F160's fix into a deletion, and made the default "store nothing"
 - [x] Q1–Q5 answered by Rick and recorded in § 7 (2026-09-23) — incl. Q4 bar deletion and Q5 exclusion storage; Q6/Q7 renumbered
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
-- [ ] S1 RPC applied to staging, verified by **V2 — which must run BEFORE S4 deletes `getReservedPublishers()`**, or the comparison has no baseline
+- [x] S1 RPC applied to staging, verified by **V2 — which must run BEFORE S4 deletes `getReservedPublishers()`**, or the comparison has no baseline *(**CLOSED 2026-09-29, Session B, with a caveat that must not be dropped:** V2 ran against the pre-`886cab0` algorithm, which the plan's snippet reimplements from `db` alone, so it did not need the deleted function. **Threshold-7 sets identical; the snippet's own per-publisher gate printed `V2 FAIL`**, explained by F164. See § 5.2.)*
       *(2026-09-29: the RPC IS applied on staging — behaviourally probed, HTTP 200 — but this box stays UNTICKED because V2 has not run, and S4 (`886cab0`) has already deleted `getReservedPublishers()`. V2 must now compare the RPC against the pre-`886cab0` implementation recovered from git history, not against live code. Production: RPC absent (PGRST202) and must land before S4's client code.)*
 - [x] **S2 merged to `staging` `--ff-only` and pushed 2026-09-23** (`cd88153`) — `settings.html` + the nav link on all six existing pages + `app.js` + `style.css`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync **in the same commit**, as required
 - [x] `aria-hidden` / `tabindex` removed from the gear — `NavSettingsPlaceholder` → `NavSettingsLink`, admin branch renders a real `<a href="settings.html">`
@@ -864,11 +1039,14 @@ What does scale, and how it is handled here:
 - [x] **Suite ownership verified by independent read**, not the teardown's own log line: `globalSetup` captured 1,439 bytes, `globalTeardown` restored 1,439 bytes, and a fresh service-role read confirms the founding tenant's real config (72 exclusions) is back rather than the suite's permissive one
 - [x] ⚠️ **THE DEFAULT CATALOG PATH WAS NEVER FILTERED — found by Rick 2026-09-24, fixed in `71ce076`.** `loadCatalog()` has FOUR branches and S4 wired three; an ordinary visit lands on the fourth, so the normal catalog was completely unfiltered while S4 was reported as working. The 147-test suite could not catch it because no spec asserts any of this — the gap flagged one commit earlier, demonstrated within the hour. That path is server-paginated, so it needed the two-step (light id pass → filter → fetch the page by id) rather than a fourth `applyVisibility()` call
 - [x] **V3, V5, V6a, V7 and the zero-visibility guard GREEN, measured against deployed staging 2026-09-24** — `playwright/s4-visibility-verify.mjs` (local-only, `f149-maintenance-verify.mjs` convention), **7/7**, with a negative control and the founding tenant's config restored verbatim. Exact figures: whole month 2,302; hiding `marvel` removes precisely its 314 (2,302 → 1,988); a full 50-card page survives the filter; a reserved title survives its publisher being hidden (1,988 → 1,989); malformed config equals absent (both 2,068 — which is `2,302 − 234`, matching Q6's measured past-FOC count exactly); hide-all-72 is ignored rather than obeyed
-- [ ] ⚠️ **V10 ATTEMPTED 2026-09-24 AND NOT LANDED — `playwright/tests/24-catalog-visibility.spec.ts` is written and `test.describe.skip`ped.** The test *design* is sound (seeded rows under a run-unique publisher so real catalog volume is irrelevant; a `settle()` gate so no `toHaveCount(0)` can pass against a mid-render empty grid; tests grouped to limit magic-link sign-ins). What does not work is its page interaction: **results are inconsistent between runs with no code change** — 1 of 3 passing, then 0 of 3, same bytes both sides. Failures land in `settle()`, never in an assertion about filtering. Candidates, neither isolated: F107 magic-link pressure (3 sign-ins plus retries), or a race between the `app_settings` write and the reload that reads it. **Skipped rather than left red**, because a red spec turns the promotion gate red for something that is not a product defect; skipped rather than deleted, because the design is worth finishing. First step for whoever resumes: instrument `settle()` to log what `#results-count` actually reads at timeout — that is exactly what turned the `.mjs` harness from four false failures into 9/9
+- [x] ✅ **V10 LANDED 2026-09-29 — see § 5.2. The F107 diagnosis in the text below was WRONG; the cause was an overlapping-load race in `settle()`.** 3 consecutive runs, `--retries=0`, 3/3 each; two negative controls observed red. *(Superseded text, kept visible:)* ⚠️ **V10 ATTEMPTED 2026-09-24 AND NOT LANDED — `playwright/tests/24-catalog-visibility.spec.ts` is written and `test.describe.skip`ped.** The test *design* is sound (seeded rows under a run-unique publisher so real catalog volume is irrelevant; a `settle()` gate so no `toHaveCount(0)` can pass against a mid-render empty grid; tests grouped to limit magic-link sign-ins). What does not work is its page interaction: **results are inconsistent between runs with no code change** — 1 of 3 passing, then 0 of 3, same bytes both sides. Failures land in `settle()`, never in an assertion about filtering. Candidates, neither isolated: F107 magic-link pressure (3 sign-ins plus retries), or a race between the `app_settings` write and the reload that reads it. **Skipped rather than left red**, because a red spec turns the promotion gate red for something that is not a product defect; skipped rather than deleted, because the design is worth finishing. First step for whoever resumes: instrument `settle()` to log what `#results-count` actually reads at timeout — that is exactly what turned the `.mjs` harness from four false failures into 9/9
 - [ ] ⚠️ **"A COMMITTED SPEC" WAS THE WRONG PHRASE AND THE PLAN WAS WRONG TO USE IT.** The Playwright suite is **gitignored** — confirmed 2026-09-24, `.gitignore:8` in the scripts repo matches `playwright/`. CLAUDE.md records this as deliberate (local-only, allowlist `.gitignore`). So V10 can never produce a tracked artifact, and there is no CI here to defend anything. The best V10 can achieve is a spec **in the local suite that `run-smoke.ps1` executes**, which still defends against regression for whoever runs the gate — but it lives on one machine, and that is a real limit on every claim made about it
-- [ ] ⚠️ **V2 and V4 still open**
+- [x] ⚠️ ~~**V2 and V4 still open**~~ **V2 and V4 RUN 2026-09-29 (§ 5.2).** V4 re-derived on production's October data: 2,038 rows / 46 pages with no config, 1,546 / 35 with the 46 under-bar publishers hidden — measured on the real print, which corrected the plan's ÷46 arithmetic
 - [ ] *(historical — this line read "V2, V3, V4, V4a, V5, V6a, V7, V10 ALL STILL OPEN; the new behaviour is barely verified", which was true when written)* 147 green proves *nothing else broke*; it does not show the filters work, because **no committed spec asserts any of this** (§ Smoke Test Suite: "a green suite says the assertions hold, not that the feature is right"). This is the largest gap in the plan right now
-- [ ] V10's spec is the way to close most of them at once: V3 (no config → everything), V4a (rename → reappears), V5 (reserved title stays visible), V6a (pages stay full), V7 (malformed JSON fails open)
+- [x] *(2026-09-29: done via spec 24, except V6a, which stays evidenced by `s4-visibility-verify.mjs` only.)* V10's spec is the way to close most of them at once: V3 (no config → everything), V4a (rename → reappears), V5 (reserved title stays visible), V6a (pages stay full), V7 (malformed JSON fails open)
+- [ ] **Q8 — Rick decides BEFORE Session C: the customer catalog's default hides 177 still-orderable October titles** (§ 5.2). Accept it, default `focMode` to `'today'` for the customer catalog, or set a per-surface default. Measured on production against 2026-09-29: 177 hidden by the month rule, **0** of them actually past FOC (FOC 2026-10-12 to 10-26). An `app.js` edit if changed
+- [ ] **F164 decision — Rick, before the S1 RPC is first applied on production:** add `AND c.tenant_id = current_tenant_id()` to the `live` CTE in `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (making it parity-exact with the code it replaces), or apply it as written. Production has 0 cross-tenant preorders, so the choice is defence in depth, not a live difference. If edited, the file's STATUS line and a re-run of V2 on staging come with it
+- [ ] **Session C expectation to tell the shop:** the printed catalog goes from about **35 to about 46 pages** on October data (§ 5.2), and past-FOC/in-month titles leave the customer default view (Q8)
 - [ ] Production promotion: **separate, explicitly requested.** S1's RPC lands on production **before**
       S4's client code (F105). **Sequence S4 clear of the 2026-09-25 October import gate** — that
       window already carries F146/F147's first live exercise and should not also carry a paper change
