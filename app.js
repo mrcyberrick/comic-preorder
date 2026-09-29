@@ -81,7 +81,7 @@ const TenantContext = {
         if (profile?.tenant_id) {
           const { data: tenant } = await db
             .from('tenants')
-            .select('id, slug, display_name, branding')
+            .select('id, slug, display_name, branding, plan')
             .eq('id', profile.tenant_id)
             .single();
 
@@ -192,6 +192,25 @@ const Branding = {
       if (b.logo_url) {
         document.querySelectorAll('img[data-tenant-logo]').forEach(img => { img.src = b.logo_url; });
       }
+
+      // Paid-only identity chrome (F72). A free tenant shows its NAME (a trust
+      // signal) but never a phone number, street address, locality or custom
+      // logo — those are the paid tier's identity. Marked up inline so the
+      // founding tenant renders byte-identically and an unresolved tenant
+      // hides rather than leaks.
+      // NB: this also hides on the anon path, where `plan` is never selected —
+      // that is the fail-closed direction (hide identity, never show the wrong shop's).
+      // Sets style.display, not just the `hidden` attribute/property: at least
+      // one target (index.html's tenant-logo wrapper) carries its own inline
+      // `style="display:flex"`, and an inline style always outranks the UA
+      // stylesheet's un-!important `[hidden]{display:none}` — `.hidden = true`
+      // alone would silently fail to hide it.
+      if (!Tier.isPaid(tenant)) {
+        document.querySelectorAll('[data-paid-only]').forEach(el => {
+          el.hidden = true;
+          el.style.display = 'none';
+        });
+      }
     } catch (err) { console.warn('Branding.apply failed; rendering defaults', err); }
   },
   _dim(hex) {                                   // #RRGGBB → rgba(r,g,b,0.15)
@@ -200,6 +219,26 @@ const Branding = {
   },
 };
 window.Branding = Branding;
+
+// ── Plan Tier ────────────────────────────────────────────────
+// Reads tenants.plan. 'pro' ⇒ full identity; anything else ⇒ platform defaults.
+// Fails CLOSED: an unresolved tenant, a missing plan, a mis-cased value, or the
+// anon path (which never selects plan — the resolve_tenant_by_slug projection is
+// deliberately narrow) all evaluate to free. A free render is always safe; a wrong
+// PAID render puts an unprovisioned <slug>.pulllist.app on customer paper, and
+// there is no wildcard DNS behind that name (F145).
+const Tier = {
+  isPaid(tenant) {
+    return !!(tenant && tenant.plan === 'pro');
+  },
+  // The "View Online" target. Paid ⇒ their provisioned subdomain; free ⇒ the apex.
+  publicUrl(tenant) {
+    return this.isPaid(tenant) && tenant.slug
+      ? `${tenant.slug}.${TENANT_APEX}`
+      : TENANT_APEX;
+  },
+};
+window.Tier = Tier;
 
 // ── Post-auth return path (S6c) ──────────────────────────────
 // initNav() redirects a signed-out visitor to index.html and, until 2026-09-08,
@@ -305,8 +344,6 @@ const Auth = {
     const user = await this.getUser();
     if (user) UsageEvents.logout(user.id);
     await db.auth.signOut();
-    // S6c — remember where they were headed before the sign-in wall.
-    PostAuthRedirect.stash();
     window.location.href = 'index.html';
   },
 };
@@ -475,38 +512,65 @@ const NavSearch = {
   },
 };
 
-// ── Mobile Settings Placeholder (added 2026-08-16, Rick's request) ──
-// A non-functional gear icon filling the same header slot the search
-// magnifier occupies on catalog/mylist/subscriptions/arrivals. Pages
-// with no #search (admin.html, analytics.html — every admin-only nav
-// page today) otherwise leave that slot empty, and .nav-logo's
-// margin:0 auto then only centers the logo in the space after the
-// hamburger, not the full header width — those two pages read visibly
-// off-center next to the other four. Self-gates on #search's ABSENCE,
-// the inverse of NavSearch's gate, so it never appears alongside the
-// real search button. Does nothing on click by design — a future
-// settings surface can replace this; aria-hidden + tabindex="-1" keep
-// it out of the accessibility tree and tab order since it has no
-// function yet.
-const NavSettingsPlaceholder = {
-  mount() {
+// ── Mobile Settings gear (added 2026-08-16 as a placeholder; made a
+//    real link 2026-09-23, S2 of docs/admin-settings-catalog-visibility.md)
+// A gear icon filling the same header slot the search magnifier occupies
+// on catalog/mylist/subscriptions/arrivals. Pages with no #search
+// (admin.html, analytics.html, settings.html — every admin-only nav page)
+// otherwise leave that slot empty, and .nav-logo's margin:0 auto then only
+// centers the logo in the space after the hamburger, not the full header
+// width, so those pages read visibly off-center next to the other four.
+// Self-gates on #search's ABSENCE, the inverse of NavSearch's gate, so it
+// never appears alongside the real search button.
+//
+// It shipped deliberately non-functional, with aria-hidden="true" and
+// tabindex="-1" keeping it out of the accessibility tree and tab order
+// because it had no function; its own comment said "a future settings
+// surface can replace this". That surface now exists, so for an ADMIN it
+// renders as a real <a href="settings.html"> with both of those attributes
+// removed — leaving them on would make the only mobile route to Settings
+// invisible to a screen reader and unreachable by keyboard.
+//
+// A non-admin still gets the inert button: every page this mounts on is
+// admin-gated today, so that branch is defensive rather than reachable, but
+// it keeps the logo-centering purpose intact if a non-admin page ever drops
+// its #search.
+//
+// The CSS class stays `.nav-settings-placeholder` so style.css's base-hide
+// and its @media order:3 / display:flex rules are untouched. The name is now
+// historical — it is not a placeholder any more.
+const NavSettingsLink = {
+  // Gear/cog matching the app's stroke-only icon language (viewBox 24x24,
+  // stroke-width 2.4, square caps, miter joins — same as the hamburger,
+  // search and tab-bar icons).
+  _gearSvg:
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M19 12h2.3"></path><path d="M15.5 5.94 16.65 3.95"></path><path d="M8.5 5.94 7.35 3.95"></path><path d="M5 12H2.7"></path><path d="M8.5 18.06 7.35 20.05"></path><path d="M15.5 18.06 16.65 20.05"></path></svg>',
+
+  mount(isAdmin = false) {
     if (document.getElementById('search')) return; // NavSearch owns this slot instead
 
     const navInner = document.querySelector('.nav-inner');
-    if (!navInner || document.getElementById('nav-settings-placeholder')) return; // idempotent
+    if (!navInner || document.getElementById('nav-settings-gear')) return; // idempotent
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'nav-settings-placeholder';
-    btn.className = 'nav-settings-placeholder';
-    btn.setAttribute('aria-hidden', 'true');
-    btn.setAttribute('tabindex', '-1');
-    // Simple gear/cog, matching the app's stroke-only icon language
-    // (viewBox 24x24, stroke-width 2.4, square caps, miter joins — same
-    // as the hamburger/search/tab-bar icons).
-    btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M19 12h2.3"></path><path d="M15.5 5.94 16.65 3.95"></path><path d="M8.5 5.94 7.35 3.95"></path><path d="M5 12H2.7"></path><path d="M8.5 18.06 7.35 20.05"></path><path d="M15.5 18.06 16.65 20.05"></path></svg>';
+    let el;
+    if (isAdmin) {
+      el = document.createElement('a');
+      el.href = 'settings.html';
+      el.setAttribute('aria-label', 'Settings');
+      if ((window.location.pathname.split('/').pop() || '').startsWith('settings')) {
+        el.setAttribute('aria-current', 'page');
+      }
+    } else {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.setAttribute('aria-hidden', 'true');
+      el.setAttribute('tabindex', '-1');
+    }
+    el.id = 'nav-settings-gear';
+    el.className = 'nav-settings-placeholder';
+    el.innerHTML = this._gearSvg;
 
-    navInner.appendChild(btn);
+    navInner.appendChild(el);
   },
 };
 
@@ -521,6 +585,8 @@ async function initNav() {
 
   const user = await Auth.getUser();
   if (!user) {
+    // S6c — remember where they were headed before the sign-in wall.
+    PostAuthRedirect.stash();
     window.location.href = 'index.html';
     return;
   }
@@ -529,10 +595,16 @@ async function initNav() {
   const nameEl  = nav.querySelector('#nav-username');
   if (nameEl) nameEl.textContent = profile?.full_name || user.email;
 
-  // Show admin link if admin
-  const adminLink = nav.querySelector('#nav-admin');
-  if (adminLink && profile?.is_admin) {
-    adminLink.style.display = 'block';
+  // Show admin-only nav links if admin.
+  // #nav-settings joins #nav-admin here (2026-09-23, S2) rather than being
+  // gated per-page: #nav-analytics is still unlocked by a copy of this test in
+  // each of the six pages' own scripts, which is pre-existing duplication this
+  // change deliberately does not touch. New links go in the one place.
+  if (profile?.is_admin) {
+    ['#nav-admin', '#nav-settings'].forEach(sel => {
+      const li = nav.querySelector(sel);
+      if (li) li.style.display = 'block';
+    });
   }
 
   // Mark current page active
@@ -556,7 +628,7 @@ async function initNav() {
   // Mobile tab bar + catalog search proxy (docs/mobile-nav-tab-bar.md)
   TabBar.mount(currentPage);
   NavSearch.mount();
-  NavSettingsPlaceholder.mount(); // fills the same slot when #search is absent
+  NavSettingsLink.mount(!!profile?.is_admin); // fills the same slot when #search is absent
 
   // Logout button
   const logoutBtn = nav.querySelector('#btn-logout');
@@ -723,8 +795,17 @@ const Catalog = {
     return data?.catalog_month || null;
   },
 
-  async fetch({ month, distributor, publisher, search, hideVariants = false, page = 1, pageSize = 48 }) {
+  // `focCutoff` (optional, added 2026-09-24) keeps only rows whose foc_date is
+  // NULL or on/after that date — the past-FOC visibility rule expressed as a
+  // query predicate instead of a client-side pass. It exists so the common
+  // config, which hides past-FOC and nothing else, does NOT have to fall back
+  // to catalog.html's two-step: that cost 2 extra paged requests, 181 KB and
+  // 8.0s to first card against 3.1s, measured 2026-09-24. Callers that omit it
+  // (admin.html's Paper Orders typeahead) are completely unaffected.
+  async fetch({ month, distributor, publisher, search, hideVariants = false, focCutoff = null, page = 1, pageSize = 48 }) {
     let query = db.from('catalog').select('*', { count: 'exact' });
+    // NULL foc_date has no cutoff to be past, so it is always kept.
+    if (focCutoff) query = query.or(`foc_date.is.null,foc_date.gte.${focCutoff}`);
 
     if (month)       query = query.eq('catalog_month', month);
     if (distributor) query = query.eq('distributor', distributor);
@@ -1084,6 +1165,162 @@ async function fetchAllRows(buildQuery, pageSize = 1000) {
   }
   return { data: all, error: null };
 }
+
+// ── Catalog visibility filters (S4, 2026-09-24) ───────────────
+// The ONE reader of app_settings.catalog_filters. Both surfaces it governs —
+// catalog.html's Monthly Catalog and admin.html's Paper Orders print — call
+// this, so the rule cannot drift between them. That single-writer reasoning is
+// F143/F156's, applied to a predicate instead of a write.
+//
+// Plan: docs/admin-settings-catalog-visibility.md. settings.html writes the
+// config; this reads it.
+//
+// ⚠️ FAILS OPEN — and "open" means THE DEFAULTS, not literally everything.
+// Corrected 2026-09-24 after a verification run measured the difference: a
+// missing row, an unreadable row and malformed JSON all fall back to
+// defaults(), which are permissive on every dimension EXCEPT `hidePastFoc`
+// (true, in 'today' mode — titles whose FOC has already passed; see defaults()
+// below. This said "so the print's existing FOC rule survives" until 2026-09-29,
+// when the default mode was reversed from 'month' to 'today').
+// So a corrupt config shows the same catalog an unconfigured tenant sees, not
+// the full unfiltered month. That is the honest contract, and this comment
+// claimed "SHOW EVERYTHING" until a test asserted it and failed.
+//
+// A config that would hide EVERY row is separately ignored — see apply().
+//
+// app_settings.value is untyped text with no CHECK constraint, and an empty
+// catalog is a broken store while an over-long print is only paper. This is the
+// deliberate inverse of Tier, which fails closed because *free* is its safe
+// render.
+//
+// ⚠️ WHY THIS FILTERS CLIENT-SIDE, correcting the plan's § 3.2. That section
+// said the filters would be query predicates, arguing it would make the catalog
+// FASTER than today by fetching fewer rows. That is not achievable as designed:
+// publisher exclusions are stored as `lower(btrim(publisher))` keys (matching
+// getReservedPublishers()' own normalisation and the S1 RPC's), but
+// `catalog.publisher` holds mixed case, and PostgREST's `not.in` compares raw
+// column values with no way to express a lowercased comparison. Sending display
+// values instead would work, but it needs a key->display mapping built from the
+// month's actual publisher list, which is a real optimisation and not this step.
+// Filtering client-side is also structurally free here: every catalog.html
+// path ALREADY fetches all matching rows and then filters in the browser — it
+// is where `hideVariants` has always been applied — so this adds a predicate
+// beside an existing one rather than changing how anything paginates.
+const CatalogFilters = {
+  KEY: 'catalog_filters',
+
+  defaults() {
+    return {
+      v: 1,
+      publishersHidden: [],
+      showStandard: true,
+      showVariants: true,
+      showRestricted: true,
+      ratioMax: null,
+      // ⚠️ TRUE, and this resolves a conflict between two recorded decisions.
+      // Q2 (Rick, 2026-09-23) is "hide past-FOC on BOTH surfaces". § 3.4 is
+      // "no config means show everything". Both cannot hold for the default.
+      // Resolved in Q2's favour for the FOC dimension specifically, because
+      // § 3.4's fail-open rule exists to stop a bad config EMPTYING a surface,
+      // and hiding titles that can no longer be ordered is not an empty surface.
+      hidePastFoc: true,
+      // ⚠️ 'today', NOT 'month' — REVERSED 2026-09-29 (Rick, Q8). This line read
+      // `focMode: 'month'`, chosen because it reproduced the print's old
+      // hardcoded rule exactly (admin.html hid FOC <= the catalog month).
+      // Measured on production's October catalog it was wrong for the CUSTOMER
+      // surface: it hid 177 titles (8.0%), every one with an FOC of 2026-10-12
+      // to 10-26, i.e. none past and all still reservable, since isFocPast()
+      // is date-based (foc_date < today). Q2's rationale was that a title past
+      // FOC is unreservable; only 'today' matches that. Existing saved configs
+      // are unaffected: load() merges over these defaults, and settings.html
+      // saves focMode explicitly.
+      // COST, stated rather than buried: the PRINT follows the same default, so
+      // with no config it now lists every title whose FOC has not passed. On
+      // October data that is all 2,215 rows (50 pages, measured on the real
+      // print) instead of 2,038 (46). The month rule is still one radio away on
+      // settings.html.
+      focMode: 'today',
+      hideZeroPrice: false,
+    };
+  },
+
+  _key(s) { return (s || '').trim().toLowerCase(); },
+
+  async load() {
+    try {
+      const raw = await Settings.get(this.KEY);
+      if (!raw) return this.defaults();
+      const parsed = JSON.parse(raw);
+      const cfg = Object.assign(this.defaults(), parsed);
+      cfg.publishersHidden = Array.isArray(parsed.publishersHidden)
+        ? parsed.publishersHidden.map(s => this._key(s)).filter(Boolean)
+        : [];
+      cfg._hiddenSet = new Set(cfg.publishersHidden);
+      return cfg;
+    } catch (err) {
+      console.warn('catalog_filters unreadable — showing everything', err);
+      return this.defaults();
+    }
+  },
+
+  // True when the row should be HIDDEN. `currentMonth` is needed only for
+  // focMode 'month'; pass the catalog month the rows belong to.
+  hides(row, cfg, currentMonth) {
+    if (!row || !cfg) return false;
+    const hiddenSet = cfg._hiddenSet || new Set(cfg.publishersHidden || []);
+    if (hiddenSet.has(this._key(row.publisher))) return true;
+
+    const cls = coverClassOf(row);
+    if (cls === 'standard' && cfg.showStandard === false) return true;
+    if (cls === 'variant'  && cfg.showVariants === false) return true;
+    if (cls === 'restricted') {
+      if (cfg.showRestricted === false) return true;
+      if (cfg.ratioMax != null) {
+        const d = ratioDenominator(row.order_requirement);
+        // A malformed ratio (d null) is NOT hidden — it must not read as 0 and
+        // slip past a "no harder than N" threshold in either direction.
+        if (d != null && d > cfg.ratioMax) return true;
+      }
+    }
+    if (cfg.hidePastFoc && row.foc_date) {
+      // A row with no foc_date has no cutoff to be past, so it is always kept.
+      const past = cfg.focMode === 'today'
+        ? row.foc_date < DateUtils.todayLocal()
+        : (currentMonth ? row.foc_date.slice(0, 7) <= currentMonth : false);
+      if (past) return true;
+    }
+    if (cfg.hideZeroPrice && Number(row.price_usd) === 0) return true;
+    return false;
+  },
+
+  // Filter a list. Nothing clever: if the config matches no row, the result is
+  // empty, and that is correct.
+  //
+  // ⚠️ A ZERO-VISIBILITY GUARD USED TO LIVE HERE AND IT WAS A REAL BUG.
+  // It read: if `kept` is empty, assume the config is pathological, ignore it
+  // and return every row. The premise is wrong, because apply() is handed
+  // WHATEVER SUBSET its caller is showing — and an empty result after a
+  // narrowed query means "nothing here matches", not "your config would empty
+  // the store". Found by Rick 2026-09-24: with a single publisher hidden, a
+  // customer picking that publisher in catalog.html's own filter got a subset
+  // in which every row was hidden, so the guard fired and served all 67 hidden
+  // titles. The filter was bypassed by using the product normally.
+  //
+  // The guard is now on the WRITE side, in settings.html's save, where it
+  // belongs: "would this config leave the catalog empty" is a property of the
+  // config against the whole month, evaluated once when someone creates it —
+  // not something a read path should infer from a page of results.
+  //
+  // `exempt` forces a row visible regardless. catalog.html passes the
+  // customer's own reserved set: a title someone has already reserved is never
+  // hidden, or a filter could strand it the way F155 stranded DNX #1 — present
+  // in the database, absent from every surface the customer can reach.
+  apply(rows, cfg, currentMonth, exempt) {
+    if (!cfg || !Array.isArray(rows) || !rows.length) return rows || [];
+    return rows.filter(r => (exempt && exempt(r)) || !this.hides(r, cfg, currentMonth));
+  },
+};
+window.CatalogFilters = CatalogFilters;
 
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
@@ -1690,7 +1927,7 @@ const WelcomeModal = {
         <div class="welcome-modal-logo">PULL<span>LIST</span></div>
         <h2>Welcome to PULLLIST</h2>
         <p>
-          Each month, Ray &amp; Judy's Book Stop loads the latest catalog from our distributors.
+          Each month, ${Tier.isPaid(TenantContext.current()) ? "Ray &amp; Judy's Book Stop" : (TenantContext.current().display_name || 'the shop')} loads the latest catalog from our distributors.
           Browse the Catalog, reserve what you want, and we'll order it specifically for you.
           Watch the <strong>order deadline</strong> at the top of the Catalog page — that's your
           cutoff to lock in picks for the month. Use <strong>Subscriptions</strong> to
@@ -1891,6 +2128,46 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ── Cover-type helpers (extracted 2026-09-23, S2) ─────────────
+// The standard-cover test existed as SEVEN inline copies — app.js:778,
+// catalog.html:470 and :1342, admin.html:5408 and :5815,
+// subscriptions.html:472 and :849. settings.html needs the same test, and
+// docs/admin-settings-catalog-visibility.md § 1.4 forbids adding an eighth,
+// so this is the one definition new code calls. The seven existing copies are
+// deliberately NOT migrated here: they sit on customer-facing reserve paths,
+// and rewriting them is a refactor with its own regression surface rather than
+// part of this feature. Migrating them is the follow-on.
+//
+// NULL, 'Standard' (Lunar) and 'Primary Title' (PRH) are standard covers;
+// everything else is a variant.
+function isStandardCoverType(variantType) {
+  return !variantType || variantType === 'Standard' || variantType === 'Primary Title';
+}
+
+// Which of the three disjoint cover classes a catalog row belongs to.
+// Measured 2026-09-23 (S0 Q3) on both environments: `standard_with_ratio` is
+// 0, i.e. no row carries an allocation ratio AND a standard variant_type, so
+// these three are genuinely disjoint and the order of the tests is not load
+// bearing. Restricted is tested first anyway, because an allocation ratio is
+// the stronger statement about a row.
+//
+// `order_requirement` holds the ratio for BOTH distributors: PRH publishes it
+// directly, Lunar keeps it in `variant_type` and the import derives it across
+// (F132/F156). So this never parses a title string — F144's own trap.
+function coverClassOf(row) {
+  if (row && row.order_requirement) return 'restricted';
+  return isStandardCoverType(row && row.variant_type) ? 'standard' : 'variant';
+}
+
+// The denominator of an allocation ratio: '1:25' -> 25. Null for anything not
+// matching N:M — measured 2026-09-23, zero rows fail that pattern on either
+// environment, but a malformed value must not silently read as 0 and slip
+// through a "ratios no harder than N" threshold.
+function ratioDenominator(orderRequirement) {
+  const m = /^(\d+):(\d+)$/.exec(orderRequirement || '');
+  return m ? parseInt(m[2], 10) : null;
 }
 
 function debounce(fn, delay) {
