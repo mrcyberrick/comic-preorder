@@ -501,7 +501,7 @@ No code. Confirms § 2 and replaces this plan's estimates with figures.
 5. `SELECT pg_total_relation_size('public.catalog')` — § 8's storage estimate is derived from row
    counts and **must not be planned on until measured**.
 
-### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23, NOT APPLIED
+### S1 — `get_publisher_reserve_counts()` RPC (DB only) — ✅ WRITTEN 2026-09-23 · APPLIED ON STAGING (by 2026-09-24; probed 2026-09-29, HTTP 200) · NOT APPLIED ON PRODUCTION (probed 2026-09-29, PGRST202)
 
 **File: `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql`**, STATUS line
 `staging=PENDING | prod=PENDING`. Rick runs it; staging first, production before S4 deploys there
@@ -850,6 +850,7 @@ What does scale, and how it is handled here:
 - [x] Q1–Q5 answered by Rick and recorded in § 7 (2026-09-23) — incl. Q4 bar deletion and Q5 exclusion storage; Q6/Q7 renumbered
 - [x] S1 SQL written — `docs/sql/2026-09-23-publisher-reserve-counts-rpc.sql` (2026-09-23)
 - [ ] S1 RPC applied to staging, verified by **V2 — which must run BEFORE S4 deletes `getReservedPublishers()`**, or the comparison has no baseline
+      *(2026-09-29: the RPC IS applied on staging — behaviourally probed, HTTP 200 — but this box stays UNTICKED because V2 has not run, and S4 (`886cab0`) has already deleted `getReservedPublishers()`. V2 must now compare the RPC against the pre-`886cab0` implementation recovered from git history, not against live code. Production: RPC absent (PGRST202) and must land before S4's client code.)*
 - [x] **S2 merged to `staging` `--ff-only` and pushed 2026-09-23** (`cd88153`) — `settings.html` + the nav link on all six existing pages + `app.js` + `style.css`; `settings.html` added to CLAUDE.md § Files That Must Stay in Sync **in the same commit**, as required
 - [x] `aria-hidden` / `tabindex` removed from the gear — `NavSettingsPlaceholder` → `NavSettingsLink`, admin branch renders a real `<a href="settings.html">`
 - [x] **Gates green on S2.** `node --check` clean on `app.js` + all 7 inline scripts; unit **321/321**; **Playwright 147 passed, 0 failed, exit 0, 20.0m** against deployed staging bytes post-push, with the test count present in the log (the only trustworthy figure — § Smoke Test Suite records a false GREEN at exit 0 with no tests run); nav **and** footer blocks hash identically across all seven pages; served bytes confirmed on the plain URL with `NavSettingsPlaceholder` at ×0

@@ -1,4 +1,4 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-09-24 (behavioural probe 2026-09-29: HTTP 200) | prod=PENDING (probe 2026-09-29: PGRST202, function absent — must land BEFORE S4 client code, F105)
 --         Admin Settings catalog-visibility S1. Plan:
 --         docs/admin-settings-catalog-visibility.md § 3.6 / § 4 S1.
 -- (F105) This line is the applied-state record. A gate that lives only in
