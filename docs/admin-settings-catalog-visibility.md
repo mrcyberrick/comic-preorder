@@ -909,6 +909,8 @@ clear half is still unexercised** (0 marks going in; staging now holds 7, so it 
 whether the 7 are *truly* withdrawn, rather than F146's false-positive shape (dropped from the export,
 still live on the distributor's site), is unverified against the distributors' sites.
 
+> ⚠️ **CORRECTED the same evening: "discriminated" verified the IMPLEMENTATION (the code marks exactly the FOC-passed candidates), NOT the premise.** Evidence against the premise: all 6 Lunar marked codes were on Lunar's own *Available Products* export on 09-14 and 09-22 (In-Store 11/4-11/11), and consecutive monthly files share almost no FOC dates (Lunar's September file spans FOC 09-14 to 12-14, its October file starts 10-12), so a title is absent from the next month's file by construction, withdrawn or not. The same predicate on production's data, using today's reservations, marks **0** for an import on 09-27 (the actual run, which matches the record), **4 reservations / 2 titles / 3 customers** on 09-29, **182 / 101 titles / 14 customers / 289 copies** on 10-06 and **368 / 217 / 18 / 591** on 10-13: the outcome depends on WHEN the import runs relative to FOC dates, not on anything a distributor did, and production's 0 was calendar luck. **The 7 staging marks are presumed FALSE POSITIVES until a fresh Available Products export says otherwise** (the export keeps titles after FOC until they ship, 2,024 such rows on 09-22, so still-listed means not withdrawn). Not yet filed as a finding.
+
 **The October print, measured directly with no interpolation** (deployed `admin.html`, rendered to PDF):
 
 | Config on staging | Rows | Pages |
