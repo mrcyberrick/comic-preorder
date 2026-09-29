@@ -1,6 +1,6 @@
 # Next work — sequencing items 4–7 (F158 repoint, Admin Settings close-out + promotion, F161, F157)
 
-**STATUS:** NOT STARTED · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed)
+**STATUS:** IN PROGRESS — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B–E not started · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed)
 
 A sequencing plan, not a sub-deploy. It orders **five sessions** (A–E), one concern each, per
 CLAUDE.md's one-sub-deploy-per-session rule. Session C carries its own plan doc
@@ -225,8 +225,10 @@ built now,** that becomes a separate scripts-repo session against this doc.
 
 ## 6. Done when
 
-- [ ] A: Albert's reservation on the live row; This Week shows both customers; F158 records updated.
-      (Or Rick's fallback choice recorded)
+- [x] A: Albert's reservation on the live row; This Week shows both customers; F158 records updated.
+      (Or Rick's fallback choice recorded) — **DONE 2026-09-29**: Rick's UPDATE returned 1 row; fresh
+      read = 2 on `aa2ecf77…` / 0 on `f9acb743…`; bagging-shaped query for 2026-09-28..10-04 returns
+      Book Stop + Albert Abaunza. § 13 F158 and the CLAUDE.md row updated
 - [ ] B: V2 run and recorded; V4 re-measured on October data; V10 landed 3/3 **or** its
       disposition decided by Rick and recorded; § 9 boxes reflect only what ran
 - [ ] C: Rick's promotion-shape choice recorded; prod RPC applied and probed; PR merged; V11 green;

@@ -6201,6 +6201,28 @@ reasoning — only the disposition changed, not the diagnosis.
     (fulfilled while the date was later revised further out) — distinguishing the two needs the
     same title-by-title care F115 S6 applied. **Explicitly parked, not triaged** — Rick's call,
     2026-09-22, to hold this for a separate session rather than fold it into this fix.
+- **✅ ORPHANED-DUPLICATE DECISION RESOLVED 2026-09-29 — Albert Abaunza's reservation REPOINTED onto
+  the live row.** Made urgent by a fact found that morning, not by the finding itself: the 09-27
+  shipment import (`Shipment-detail-LUNAR.csv`) lists **`0526AZ0504` CVR A, on-sale 9/30/2026**, so
+  the book physically arrives Wednesday 09-30 — while This Week's bagging query selects on
+  `catalog.on_sale_date` within the Mon–Sun week (`admin.html:3946-3947`), and Albert's reservation
+  sat on the orphan row (`f9acb743…`, `catalog_month` 2026-06, `on_sale_date` 2026-07-22). **His copy
+  would have arrived with no bag on the list.** Rick ran one guarded UPDATE in the production SQL
+  Editor (`BEGIN` → pre-check → `UPDATE preorders SET catalog_id = 'aa2ecf77…' WHERE catalog_id =
+  'f9acb743…' RETURNING …` → `COMMIT`): pre-check 2 rows / 2 distinct users (Book Stop on the live row,
+  Albert on the orphan — no collision), UPDATE returned **exactly 1 row**. No trigger applied (the
+  only `preorders` trigger is F109's `BEFORE DELETE`). Same repoint shape as F136 S3's two.
+  **Independently re-verified by a fresh service-role read, not the editor's output:** `aa2ecf77…`
+  holds 2 reservations, `f9acb743…` holds 0, and a query of the same shape as the bagging query for
+  week 2026-09-28..10-04 returns **Book Stop + Albert Abaunza** for CVR A. `fulfilled` left `true` on
+  both — now genuinely backed by shipment evidence; Albert's `fulfilled_at` (2026-06-12) was left as
+  history rather than rewritten. The orphan catalog row stays, with zero reservations — F136's
+  accepted-residual category.
+  **⚠️ Recorded so it is not misread as a recurrence:** the live row's other reservation (the Book
+  Stop account) shows `fulfilled_at` **2026-09-27T23:32** — two days *before* its 09-30 on-sale date.
+  That is the October import's auto-fulfil acting on **real** shipment evidence (the same invoice),
+  i.e. F155 S3(a)'s evidence-present path working as designed — **not** the F158 false-fulfil shape.
+  **The 60-row triage above remains parked.** Plan: `docs/next-work-sequencing-2026-09-29.md` § 1.
 - **Related:** F155 (the harm this fails to catch; its S3 guard is the upstream fix), F159 (found the
   same day, same script, different root cause), F115 (`arrival_outcome`, and the 859-row orphan
   population that bounds any widening), F143 (why a ledger rejection and an arrival judgement are
