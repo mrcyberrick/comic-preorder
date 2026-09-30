@@ -184,7 +184,7 @@ confirming is the person who pulled the files. The admin page already lists conf
 
 ---
 
-## 6. S4 (optional, Rick's call) — "Not withdrawn" control in admin
+## 6. S4 — "Not withdrawn" control in admin — DECLINED for now (§ 9 Q3), kept for reference
 
 Today a wrong mark can be cleared only by re-importing its own month's file (F146's two-day
 procedure) or by SQL. Add a **Not withdrawn** button per row on `#withdrawn-panel`, confirm-gated,
@@ -220,22 +220,22 @@ Never Arrived.
 2. **S2** — next; soak through two weekly `check-dates.js` runs (the two-run rule needs two runs
    before it can raise anything).
 3. **V5** reviewed with Rick → decide S3.
-4. **S3**, then **S4** if wanted.
+4. **S3** (S4 declined, § 9).
 
 **Interim until S1 lands (from § 13 F165, unchanged):** run the November import with `--no-write`
 first and read the candidate list; do not let the mark step run unattended.
 
 ---
 
-## 9. Open questions (Rick)
+## 9. Decisions (Rick, 2026-09-29)
 
-- **Q1.** Retire the automatic mark outright (recommended), rather than keep it with the new
-  signal? The track record in § 1.1 and the noise in § 1.3 are the argument.
-- **Q2.** Confirm in the terminal (recommended for v1) or build the admin control first?
-- **Q3.** S4 now or later? It closes a real gap (no in-app way to clear a wrong mark) independent
-  of the rest.
-- **Q4.** The two-consecutive-runs rule delays a real mark by a week. Acceptable? (Recommended
-  yes: a late mark costs little, § 1.4.)
+- **Q1 — DECIDED: retire the automatic mark outright.** S1 as written; no automatic marking
+  survives in any script.
+- **Q2 — DECIDED: confirm in the terminal.** S3 lives in `check-dates.js`; no admin mark control.
+- **Q3 — DECIDED: not now.** S4 is out of this plan. A wrong mark is still cleared by re-importing
+  its own month's file (F146's procedure) or by SQL. Revisit if that is ever needed in anger.
+- **Q4 — DECIDED: the two-consecutive-runs rule stands**, accepting a one-week delay on a real
+  mark (§ 1.4).
 
 ---
 
@@ -245,7 +245,7 @@ first and read the candidate list; do not let the mark step run unattended.
 - [ ] S2 merged; V3, V4 green; two weekly runs soaked
 - [ ] V5 recorded in § 13 F165 with the true/false split
 - [ ] S3 decided (built and V6 green, or declined with the reason recorded)
-- [ ] S4 decided (built and V7 green, or declined)
+- [x] S4 decided — declined for now, 2026-09-29 (§ 9 Q3); V7 therefore not needed
 - [ ] `monthly-catalog-refresh.md` no longer describes withdrawal marking as an import step;
       `check-dates.js` docblock describes the candidate report
 - [ ] § 13 F165 → RESOLVED; § 13 F147 and F110 status lines point here; CLAUDE.md F165 row updated
