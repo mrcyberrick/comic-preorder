@@ -684,6 +684,9 @@ async function initNav() {
   // Restore admin banner on every page load if context is active
   if (profile?.is_admin) AdminContext.restore();
 
+  // Analytics: one 'visit' per browsing session (see UsageEvents.visit)
+  UsageEvents.visit(user.id);
+
   // Load upcoming items notification bubble
   // Runs async — does not block page load
   NavBubble.load(AdminContext.resolveUserId(user.id));
@@ -1151,6 +1154,28 @@ const UsageEvents = {
 
   logout(userId) {
     this._log(userId, 'logout');
+  },
+
+  // One 'visit' per browsing session, called from initNav() on every signed-in
+  // page load. 'login' above fires only on an email+password sign-in, so it
+  // misses magic-link sign-ins and every return visit on a persisted session
+  // (production 2026-09-29: 53 logins against 1,669 reserves). A visit is the
+  // first page load after VISIT_GAP_MS of inactivity, tracked per user in
+  // localStorage. If storage is unavailable nothing is logged: an under-count
+  // is safer than one visit per page load.
+  VISIT_GAP_MS: 30 * 60 * 1000,
+  visit(userId) {
+    if (!userId || AdminContext.isActive()) return;
+    const key = `pl_last_activity_${userId}`;
+    try {
+      const now  = Date.now();
+      const last = Number(localStorage.getItem(key)) || 0;
+      localStorage.setItem(key, String(now));
+      if (now - last < this.VISIT_GAP_MS) return;
+    } catch {
+      return;
+    }
+    this._log(userId, 'visit');
   },
 };
 
