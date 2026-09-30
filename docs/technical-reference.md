@@ -827,7 +827,12 @@ session) takes a meaningful action.
 **Notes:**
 - Event types currently emitted by `UsageEvents`: `reserve`, `cancel`,
   `subscribe`, `unsubscribe`, `catalog_view`, `page_view`, `login`,
-  `logout`.
+  `logout`, `visit`.
+- `visit` (added 2026-09-30, PR #163): one per browsing session, logged by
+  `initNav()` on the first signed-in page load after 30 min of inactivity
+  (per-user `localStorage` timestamp). `login` fires only on email+password
+  sign-in, so Analytics displays `visit` ("Visits") instead; `login` is still
+  written but no longer shown. No `visit` rows exist before 2026-09-30.
 - RLS allows authenticated users to INSERT their own (with
   `tenant_id = current_tenant_id()`) and admins to SELECT their tenant's;
   no UPDATE or DELETE policy exists — events are append-only from the

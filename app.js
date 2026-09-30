@@ -618,6 +618,57 @@ const NavSettingsLink = {
   },
 };
 
+// ── Admin nav group (S2b of docs/admin-settings-catalog-visibility.md) ──
+// Admin / Analytics / Settings live behind one "Admin ▾" button on desktop.
+// A disclosure, deliberately not an ARIA menu: the button carries
+// aria-expanded and owns a plain list of links, so Tab walks them and no
+// arrow-key handling is owed. Below 640px the button is display:none and the
+// links show flat in the hamburger drawer (style.css), so nothing here runs
+// for a phone user beyond the .active marking.
+//
+// The group's <li> ships display:none and is revealed by initNav()'s admin
+// test, exactly as the three separate links used to be.
+const NavAdminGroup = {
+  mount(nav) {
+    const group = nav.querySelector('.nav-group');
+    const btn   = group && group.querySelector('.nav-group-btn');
+    if (!group || !btn || group.dataset.wired) return; // idempotent
+    group.dataset.wired = '1';
+
+    // The page being viewed is one of the group's links: say so on the button
+    // too, or the row would show no current page at all on admin/analytics/settings.
+    if (group.querySelector('a.active')) btn.classList.add('active');
+
+    const isOpen  = () => group.classList.contains('open');
+    const setOpen = (open) => {
+      group.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', String(open));
+    };
+
+    btn.addEventListener('click', () => setOpen(!isOpen()));
+
+    // Click anywhere else closes it. (Links inside navigate away, so they need no handling.)
+    document.addEventListener('click', (e) => {
+      if (isOpen() && !group.contains(e.target)) setOpen(false);
+    });
+
+    // Escape closes and hands focus back to the button, but only if focus was
+    // inside the group. Listened for on the document, not the group: Safari does
+    // not focus a <button> on click, so the group would never see the keypress.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isOpen()) return;
+      const focusInside = group.contains(document.activeElement);
+      setOpen(false);
+      if (focusInside) btn.focus();
+    });
+
+    // Tabbing past the last link (or Shift-Tabbing back off the button) closes it.
+    group.addEventListener('focusout', (e) => {
+      if (isOpen() && e.relatedTarget && !group.contains(e.relatedTarget)) setOpen(false);
+    });
+  },
+};
+
 // ── Nav Initialization ────────────────────────────────────────
 async function initNav() {
   const nav = document.getElementById('main-nav');
@@ -639,16 +690,17 @@ async function initNav() {
   const nameEl  = nav.querySelector('#nav-username');
   if (nameEl) nameEl.textContent = profile?.full_name || user.email;
 
-  // Show admin-only nav links if admin.
-  // #nav-settings joins #nav-admin here (2026-09-23, S2) rather than being
-  // gated per-page: #nav-analytics is still unlocked by a copy of this test in
-  // each of the six pages' own scripts, which is pre-existing duplication this
-  // change deliberately does not touch. New links go in the one place.
+  // Show the admin nav group if admin.
+  // Since S2b (2026-09-30) #nav-admin is the "Admin ▾" group <li>, and
+  // Analytics / Settings are inside it, so this one reveal covers all three
+  // (S2 had to reveal #nav-admin and #nav-settings separately). Every page's
+  // own script still ends with a copy of this test that sets
+  // #nav-analytics to display:block; that is kept alive, not dead code — the
+  // <li> keeps its id — and is a no-op now that the group already shows it.
+  // Pre-existing duplication, deliberately not touched. New links go here.
   if (profile?.is_admin) {
-    ['#nav-admin', '#nav-settings'].forEach(sel => {
-      const li = nav.querySelector(sel);
-      if (li) li.style.display = 'block';
-    });
+    const adminGroup = nav.querySelector('#nav-admin');
+    if (adminGroup) adminGroup.style.display = 'block';
   }
 
   // Mark current page active
@@ -668,6 +720,7 @@ async function initNav() {
   nav.querySelectorAll('.nav-links a').forEach(a => {
     if (a.getAttribute('href') === currentPage) a.classList.add('active');
   });
+  NavAdminGroup.mount(nav); // after the loop: it reads which link is .active
 
   // Mobile tab bar + catalog search proxy (docs/mobile-nav-tab-bar.md)
   TabBar.mount(currentPage);

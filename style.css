@@ -103,6 +103,92 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--text-primary);
   background: var(--bg-elevated);
 }
+
+/* ── Admin nav group ───────────────────────────────────────────
+   Admin / Analytics / Settings collapse into one "Admin ▾" disclosure so the
+   row stays at four customer links (S2b, docs/admin-settings-catalog-visibility.md
+   § 4). A disclosure, not an ARIA menu: a button with aria-expanded owning a
+   list of plain links, so Tab walks them and no arrow-key handling is owed.
+   The panel is anchored to the group's own <li> (not .nav-inner), which is why
+   its left edge lines up with the button; `top` clears the 60px nav row below
+   the button's own box — see the measurement note on .nav-group-menu.
+   Below 640px none of this applies: the button is hidden and the three links
+   are listed flat in the hamburger drawer (rules in that media query). */
+.nav-group { position: relative; }
+.nav-group-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: inherit;   /* a <button> resets it to `normal`; links inherit the body's 1.6 */
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.nav-group-btn svg { transition: transform 0.18s ease; }
+.nav-group-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* .active = the current page is one of the group's links (set by NavAdminGroup) */
+.nav-group-btn:hover, .nav-group-btn.active, .nav-group.open .nav-group-btn {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+.nav-group-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.nav-group-menu {
+  display: none;
+  position: absolute;
+  /* The group's <li> is as tall as the button and is centred in the 60px row,
+     so the panel starts at the row's bottom edge by dropping the button's own
+     bottom margin (60px row - button height) / 2 below 100%. */
+  top: calc(100% + 13px);
+  left: 0;
+  width: 236px;
+  list-style: none;
+  background: #111;
+  border: 1px solid var(--border-accent);
+  border-radius: 6px;
+  padding: 6px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  z-index: 200;
+}
+.nav-group.open .nav-group-menu { display: block; }
+.nav-links .nav-group-menu a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 0;
+  font-size: 0.86rem;
+  color: #c5bfba;
+}
+.nav-links .nav-group-menu a:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+/* After :hover on purpose: the current page keeps its tint under the pointer.
+   The bar is an inset shadow, not a border, so the row does not shift 3px. */
+.nav-links .nav-group-menu a.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.nav-group-menu svg { flex-shrink: 0; }
+.nav-group-sep { height: 1px; background: var(--border); margin: 5px 0; }
+
+/* Narrow desktop / tablet: a left-anchored 236px panel starting at the Admin
+   button would run off the right edge, so hang it from the button's right edge. */
+@media (min-width: 641px) and (max-width: 900px) {
+  .nav-group-menu { left: auto; right: 0; }
+}
 .nav-user {
   display: flex;
   align-items: center;
@@ -1437,6 +1523,44 @@ button { cursor: pointer; font-family: var(--font-body); }
     font-size: 0.95rem;
     white-space: nowrap;
   }
+
+  /* Admin group, flattened (S2b). The drawer lists Dashboard / Analytics /
+     Settings directly under a small "Admin" label rather than behind a second
+     tap: on a phone the hamburger is the only route to Settings from the four
+     customer pages (the header gear self-gates on #search's absence), so it
+     should not cost an extra step. The button never shows here, so nothing
+     toggles .open. Icons are dropped to match the text-only rows above. */
+  .nav-group-btn { display: none; }
+  .nav-group-menu {
+    display: block;
+    position: static;
+    width: auto;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    margin-top: 6px;
+    padding: 8px 0 0;
+  }
+  .nav-group-menu::before {
+    content: 'Admin';
+    display: block;
+    padding: 0 16px 2px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .nav-links .nav-group-menu a {
+    display: block;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+  }
+  .nav-group-menu svg,
+  .nav-group-sep { display: none; }
 
   .nav-user {
     display: none;
