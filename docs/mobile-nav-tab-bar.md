@@ -1,6 +1,6 @@
 # Mobile Nav — Thumb-Reach Tab Bar (design 2a)
 
-**STATUS:** COMPLETE | staging=2026-08-16 | prod=2026-08-16 (PR #123) | findings=—
+**STATUS:** COMPLETE | staging=2026-08-16 | prod=2026-08-16 (PR #123; § 7.3 auto-hide addendum prod=2026-09-29, PR #161) | findings=—
 
 **Status:** **COMPLETE — live in production 2026-08-16** (PR #123, merge
 `2ed97f8`). S1–S5 plus the two mid-session fixes (§ 8.1) executed and staged
@@ -662,7 +662,7 @@ skip `analytics.html`.
 
 ---
 
-### 7.3 Addendum 2026-09-29 -- the bar now HIDES ON SCROLL DOWN and returns on scroll up (STAGING ONLY, not promoted)
+### 7.3 Addendum 2026-09-29 -- the bar now HIDES ON SCROLL DOWN and returns on scroll up (PROMOTED TO PRODUCTION 2026-09-29, PR #161, merge `af6116a`; it read "STAGING ONLY, not promoted" until then)
 
 This plan built the bar as **always pinned** (`position: fixed; bottom: 0`) and nothing in it hides it. Rick asked for the opposite on 2026-09-29 -- *"mobile menu is not hiding on scroll"*, then, asked what it should do, **"Hide on scroll down, return on scroll up"**. A **feature build, not a defect fix**: the pinned bar was specified behaviour.
 
