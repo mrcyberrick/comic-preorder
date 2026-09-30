@@ -197,6 +197,10 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--text-muted);
 }
 .nav-user strong { color: var(--text-secondary); }
+/* The phone drawer's own copies of Welcome / Sign Out (F168). Desktop keeps
+   .nav-user in the bar, so these stay hidden here; the max-width:640px block
+   further down shows and styles them. */
+.nav-drawer-user, .nav-drawer-signout { display: none; }
 .btn-logout {
   background: transparent;
   border: 1px solid var(--border);
@@ -1490,28 +1494,7 @@ button { cursor: pointer; font-family: var(--font-body); }
 @media (max-width: 640px) {
   .nav-hamburger { display: flex; }
 
-  /* F168: the bar must CONTAIN the wrapped "Welcome / Sign Out" row. It was a
-     fixed `height: 60px` with `flex-wrap: wrap`, so the open .nav-user row
-     wrapped onto a second line that overflowed the bar and hung 57-74px
-     below it, exactly where the drawer below (`top: 100%` of this box)
-     opens -- the drawer covered 83-88% of the Welcome text.
-     `height: auto` lets the open row count toward the bar's height, so the
-     drawer now opens beneath it. The 8px block padding + the 44px header
-     line = 60px, so the CLOSED bar and the header row's position are
-     unchanged, and the header does not jump when the menu opens (a bare
-     `height: auto; min-height: 60px` would centre the lone header line when
-     closed but pin it to the top when open, an 8px jump). `row-gap: 0`
-     because the base rule's `gap: 24px` is also a row gap and would
-     otherwise sit between the header line and the Welcome row. */
-  .nav-inner {
-    flex-wrap: wrap;
-    position: relative;
-    height: auto;
-    min-height: 60px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-    row-gap: 0;
-  }
+  .nav-inner { flex-wrap: wrap; position: relative; }
 
   .nav-links {
     display: none;
@@ -1535,6 +1518,23 @@ button { cursor: pointer; font-family: var(--font-body); }
     padding: 8px 0;
     z-index: 200;
     box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    /* F168: Sign Out is now the drawer's LAST row, so a drawer taller than the
+       screen would put it out of reach, and the bar is sticky so the page
+       cannot be scrolled to bring it into view. Cap the drawer to the space
+       between the bar and the fixed tab bar and let it scroll itself (a short
+       landscape phone is the case; the admin drawer is the tallest).
+       150px = the 60px bar + the 84px the tab bar occupies (the same figure
+       `body` reserves below) + 6px of air. The tab bar has to be subtracted,
+       not just the bar: this drawer sits inside `.nav` (sticky, z-index 100),
+       which is a stacking context, so the drawer's own z-index of 200 cannot
+       rise above the tab bar's 150 and the bar paints over its last rows --
+       measured on a 640x320 screen, where it covered Sign Out. `dvh` follows
+       the mobile browser's collapsing toolbar; the `vh` line above it is the
+       fallback for a browser without it. */
+    max-height: calc(100vh - 150px);
+    max-height: calc(100dvh - 150px - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .nav-links.open { display: flex; }
   .nav-links li { width: 100%; }
@@ -1544,6 +1544,48 @@ button { cursor: pointer; font-family: var(--font-body); }
     font-size: 0.95rem;
     white-space: nowrap;
   }
+
+  /* Account rows (F168): "Welcome, name" is the drawer's first row and Sign Out
+     its last, instead of a second header line that hung outside the 60px bar
+     and sat under the drawer (the drawer covered 83-88% of the name). Markup
+     is in the nav block of the seven synced pages; desktop keeps .nav-user in
+     the bar and hides these (base rule beside .nav-user). Two lines on
+     purpose, small "Welcome," over the name, so a long name wraps inside the
+     200px drawer instead of crowding a button the way the old row did. */
+  .nav-drawer-user {
+    display: block;
+    padding: 4px 16px 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .nav-drawer-name {
+    display: block;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .nav-drawer-signout {
+    display: block;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .nav-drawer-signout-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    border-radius: var(--radius);
+    text-align: left;
+    font-size: 0.95rem;
+    line-height: inherit;   /* a <button> resets it to `normal`; the links inherit the body's 1.6 */
+    color: var(--text-secondary);
+  }
+  .nav-drawer-signout-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+  .nav-drawer-signout-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   /* Admin group, flattened (S2b). The drawer lists Dashboard / Analytics /
      Settings directly under a small "Admin" label rather than behind a second
@@ -1583,26 +1625,13 @@ button { cursor: pointer; font-family: var(--font-body); }
   .nav-group-menu svg,
   .nav-group-sep { display: none; }
 
-  .nav-user {
-    display: none;
-    /* Must sort AFTER the header row (hamburger:1, logo:2, search-btn:3 —
-       style.css:1529+). Flex `order` defaults to 0, which is LOWER than
-       those, so without this the full-width .nav-user.open row (below)
-       sorted ahead of the hamburger in the flex layout on menu-open and
-       wrapped the entire header — hamburger, logo, the hamburger's own
-       X-animation, all of it — onto an invisible second line. Found from
-       a real screenshot: "Welcome, name / Sign Out" rendered at the very
-       top with no header above it at all. */
-    order: 4;
-  }
-  .nav-user.open {
-    display: flex;
-    width: 100%;
-    padding: 8px 0 12px;
-    border-top: 1px solid var(--border);
-    justify-content: space-between;
-    align-items: center;
-  }
+  /* The bar's own Welcome / Sign Out block never shows on a phone: the drawer
+     carries both (.nav-drawer-user / .nav-drawer-signout above). It used to be
+     a full-width `.nav-user.open` row wrapped onto a second line of the 60px
+     bar, which is what F168 was. (Before that it sorted AHEAD of the header
+     row and wrapped the whole header onto an invisible second line -- fixed
+     with `order: 4`. With no row to order, neither problem can recur.) */
+  .nav-user { display: none; }
 }
 
 /* ── FOC Tooltip ───────────────────────────────────────────── */
