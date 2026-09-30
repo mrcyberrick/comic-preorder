@@ -222,6 +222,12 @@ Never Arrived.
 3. **V5** reviewed with Rick → decide S3.
 4. **S3** (S4 declined, § 9).
 
+**Gate scheduled (2026-09-29):** S1 must land before the November new-month import, expected
+~2026-10-26 (the September and October new-month imports ran 2026-08-28 and 2026-09-27; this is an
+estimate, not a known date). Reminder: cloud routine `trig_01Kb5XJp1urERxry29UArQnD` and Google
+Calendar event `9n9766hfoe3d0q3r9vbdqj0e0k`, both **Mon 2026-10-19, 8:00 AM ET**. If the November
+files are expected earlier, move both.
+
 **Interim until S1 lands (from § 13 F165, unchanged):** run the November import with `--no-write`
 first and read the candidate list; do not let the mark step run unattended.
 
