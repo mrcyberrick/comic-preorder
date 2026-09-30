@@ -121,7 +121,7 @@ mrcyberrick/weekly-pull-feed
 
 ### 4.4 Where `build-pull-feed.js` lives, and how it reads data — decisions for Rick
 
-**D1 — single source of truth for the builder (recommended: move it).** Move
+**D1 — single source of truth for the builder. DECIDED 2026-09-30 (Rick): move it.** Move
 `build-pull-feed.js` from the scripts repo into `weekly-pull-feed/scripts/`, and delete it from the
 scripts repo at S4. Two copies of a generator is the drift shape this project keeps paying for.
 `weekly-pull-feed` is **public**, so S0 must confirm the file is credential-free (it should be —
@@ -183,7 +183,8 @@ removed** — S4 before S3 recreates the silent-no-publish window.
    commented/uncommented; ask Rick which imports he ran 09-25 → 09-29 and whether any printed
    `skipping feed publish`. Record case (a) or (b) with evidence.
 3. List every query `build-pull-feed.js` makes (table, columns, filters) → this is the D2 projection.
-4. Confirm the builder is credential-free and safe to make public (D1).
+4. Confirm the builder is credential-free and safe to make public (D1 is decided; this is its
+   precondition — if the file carries anything that must not be public, stop and re-raise D1).
 5. **Recovery, Rick's call (it is now past the Wednesday drop):** either skip this week, or run
    `node build-pull-feed.js --publish` locally, confirm the new commit + stamp, then
    `workflow_dispatch` the send with `dry_run=false`. Do **not** raise `STALE_MAX_DAYS` to push the
@@ -229,7 +230,7 @@ for the elapsed-time waits.)*
 
 | Gate | Assertion | Evidence |
 |---|---|---|
-| **V0** | § 0 classified (a) or (b) with a DB read and the `.env` state; builder's query list recorded; D1/D2 answered by Rick | this doc updated |
+| **V0** | § 0 classified (a) or (b) with a DB read and the `.env` state; builder's query list recorded; builder confirmed public-safe (D1); D2 answered by Rick | this doc updated |
 | **V1** | Anon call to the RPC returns the week's rows with only the projected columns; anon call to `weekly_shipment` directly still denied/filtered | curl output, both environments |
 | **V2** | Each § 4.6 assertion observed **red** under its forced input, then green; one Pages deployer | Actions run links |
 | **V3** | Workflow build == import build for the same week (timestamps aside); scheduled Tuesday run delivered | diff output + Brevo campaign status |
