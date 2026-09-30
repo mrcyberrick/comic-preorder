@@ -185,7 +185,9 @@ removed** — S4 before S3 recreates the silent-no-publish window.
 3. List every query `build-pull-feed.js` makes (table, columns, filters) → this is the D2 projection.
 4. Confirm the builder is credential-free and safe to make public (D1 is decided; this is its
    precondition — if the file carries anything that must not be public, stop and re-raise D1).
-5. **Recovery, Rick's call (it is now past the Wednesday drop):** either skip this week, or run
+5. **Recovery — DECIDED 2026-09-30 (Rick): SKIP this week.** No late build or send for the week of
+   2026-09-30; the next normal weekly import publishes the 10-07 feed as usual. *(Options that were
+   considered, kept for reference:)* either skip this week, or run
    `node build-pull-feed.js --publish` locally, confirm the new commit + stamp, then
    `workflow_dispatch` the send with `dry_run=false`. Do **not** raise `STALE_MAX_DAYS` to push the
    old feed.
