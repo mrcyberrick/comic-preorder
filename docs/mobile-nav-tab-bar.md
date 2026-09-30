@@ -670,6 +670,12 @@ This plan built the bar as **always pinned** (`position: fixed; bottom: 0`) and 
 
 **Not verified, and this is the important part:** everything above was measured in **Chromium's iPhone emulation**, not WebKit and **not iOS standalone (Home Screen) mode**. Rick's report -- the bar drawn about half-way up the screen with no top nav, staying wrong until the app is closed -- happens on his **Home Screen app (production)** and not in Brave on staging, with byte-identical code on both. **That symptom is not reproduced, not diagnosed and not fixed by this change.** See `CLAUDE.md` § Current Migration Phase, "MOBILE TAB BAR AUTO-HIDE".
 
+### 7.4 Addendum 2026-09-30 -- the phone drawer now carries "Welcome, name" and Sign Out (F168; FIXED ON STAGING `51d4b06`, NOT promoted)
+
+§ 2.2 above and this plan's header re-order left the open phone drawer's `.nav-user` row ("Welcome, name / Sign Out") **folded in under a border** on a second line of the fixed 60 px bar, and the `order: 4` fix recorded in the `.nav-user` rule's comment moved it after the header row without giving it room. It overflowed the bar and the drawer (`top: 100%`) opened on top of it, covering 83-88% of the name (**F168**).
+
+**Both are now gone on a phone.** The bar's own `.nav-user` is `display: none` at 640 px and below; the drawer itself carries a two-line greeting as its FIRST row and **Sign Out as its LAST**, so there is no second header line and nothing to order. Desktop keeps `.nav-user` in the bar unchanged. **Sign Out being last has one consequence this plan did not have to consider: the drawer must never be taller than the space above the fixed tab bar**, so it is capped (`max-height`, `overflow-y: auto`) and scrolls itself; without that, on a 640x320 screen the tab bar (z-index 150) painted over Sign Out, because the drawer sits inside `.nav` (a stacking context at 100) and its own z-index of 200 cannot rise above it. Record and measurements: `docs/technical-reference.md` § 13 F168.
+
 ## 8. Deploy log
 
 **Executed 2026-08-15 (Sonnet CLI).** Branch `feat/mobile-tab-bar`, cut from
