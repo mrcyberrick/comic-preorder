@@ -1015,8 +1015,10 @@
     const btnStore = document.getElementById('btn-print-store');
     document.getElementById('btn-print').style.display = 'none';        // no personal print here
     btnStore.style.display = '';
-    document.getElementById('arrivals-toolbar').style.display = 'flex';
-    document.getElementById('store-week-nav').style.display = 'flex';
+    // The toolbar, week nav and reconciliation panel are NOT revealed here.
+    // mountStage() reveals them in the same synchronous block as the first
+    // render, so nothing arrives above #arrivals-container in a frame of its own
+    // (F166, below).
 
     // Monday (local Date) of the week currently shown. Updated by loadStoreWeek.
     let selectedMonday = null;
@@ -1082,26 +1084,59 @@
     const ledgerHasRows = (distributor, code) => !!code && orderLedger
       .some(r => r.distributor === distributor && r.order_code === code);
 
+    // ── F166 — one stable box, filled in one frame ─────────────
+    // Measured 2026-09-29 (browser layout-shift entries): the admin view moved
+    // #arrivals-container three times, each in its own frame — the toolbar and
+    // week nav revealed above it, then the EMPTY reconciliation panel, then the
+    // panel FILLED after an awaited customer-name read. Chrome scores a moving
+    // container by its box whatever is inside it, so batching those into one
+    // frame would only have made one bigger shift. The fix is that the
+    // container never moves at all: the admin chrome lives INSIDE it.
+    //
+    // mountStage() re-parents the existing toolbar / week-nav / panel nodes
+    // (the same nodes, so every listener wired above and below survives) into
+    // #arrivals-container, in front of a grid host. loadStoreWeek() does every
+    // await first and then writes toolbar + week nav + panel + grid in one
+    // synchronous block, so the browser never paints a half-built stage. The
+    // container is a viewport-tall placeholder until then (`.loading-reserve`),
+    // which is also what keeps the footer off screen and unscored.
+    //
+    // The panel's SIZE is data-dependent (one line to a long exception list) —
+    // that is why a fixed-height reservation was rejected: it can only be right
+    // for one size. Measured on staging with 0 / 2 / 12 exception rows: session
+    // CLS rose 0.16 -> 0.21 -> 0.44 on desktop and 0.30 -> 0.40 -> 0.57 on mobile.
+    const toolbarEl  = document.getElementById('arrivals-toolbar');
+    const weekNavEl  = document.getElementById('store-week-nav');
+    const reconPanel = document.getElementById('recon-panel');
+    const gridHost   = document.createElement('div');
+    gridHost.id = 'store-grid';
+    function mountStage() {
+      if (gridHost.isConnected) return;
+      toolbarEl.style.display = 'flex';
+      weekNavEl.style.display = 'flex';
+      container.replaceChildren(toolbarEl, weekNavEl, reconPanel, gridHost);
+    }
+
     function renderStoreGrid() {
       const filtered = currentStoreQuery
         ? currentShipment.filter(r => (r.catalog?.title || r.title || '').toLowerCase().includes(currentStoreQuery))
         : currentShipment;
 
       if (filtered.length) {
-        container.innerHTML =
+        gridHost.innerHTML =
           `<div class="shipment-divider"><span>Store shipment</span>` +
           `<span class="shipment-divider-count">${filtered.length} title${filtered.length !== 1 ? 's' : ''}</span></div>` +
           `<div class="arrivals-grid">${filtered.map(r => makeStoreCard(r)).join('')}</div>`;
-        container.querySelectorAll('img').forEach(img => {
+        gridHost.querySelectorAll('img').forEach(img => {
           if (img.complete) img.classList.add('loaded');
           else img.addEventListener('load', () => img.classList.add('loaded'));
         });
       } else if (currentShipment.length) {
-        container.innerHTML =
+        gridHost.innerHTML =
           `<div class="arrivals-empty"><h2>No matches</h2>` +
           `<p>Try a different title, or clear the search.</p></div>`;
       } else {
-        container.innerHTML =
+        gridHost.innerHTML =
           `<div class="arrivals-empty"><h2>No shipment for this week</h2>` +
           `<p>Nothing has been imported for this week yet. Use the week controls above to check another week.</p></div>`;
       }
@@ -1143,15 +1178,25 @@
       selectedMonday = new Date(wy, wm - 1, wd);
 
       // Week-nav re-render: reserve here too, or switching weeks collapses the
-      // container to one line and then re-expands — two shifts, not zero.
-      container.innerHTML = '<div class="empty-state loading-reserve"><p style="color:var(--text-muted)">Loading…</p></div>';
+      // grid area to one line and then re-expands — two shifts, not zero. Only
+      // once the stage is mounted: on the FIRST load the container still holds
+      // the static placeholder, and replacing it here would be a pointless write.
+      if (gridHost.isConnected) {
+        gridHost.innerHTML = '<div class="empty-state loading-reserve"><p style="color:var(--text-muted)">Loading…</p></div>';
+      }
 
       // Shipment (what physically arrived) and reservations (what was
       // expected) are fetched together so the reconciliation below always
       // describes the same week. The preorders query is store-wide — every
       // customer, across all catalog months — mirroring admin.html's
       // renderThisWeek(); This Week is cross-month by definition.
-      const [shipRes, preRes] = await Promise.all([
+      //
+      // Customer names ride along (F166). They were fetched INSIDE
+      // renderReconciliation(), after the grid had already been painted, which
+      // is what split the reveal into a frame with an empty panel and a later
+      // frame with a filled one. Every await now happens here, before the first
+      // DOM write. Cached after the first call, so a week change costs nothing.
+      const [shipRes, preRes, names] = await Promise.all([
         db.from('weekly_shipment')
           .select(`
             id, distributor, upc, item_code, title, price_usd, quantity, cover_url, on_sale_date,
@@ -1174,6 +1219,7 @@
           `)
           .gte('catalog.on_sale_date', start)
           .lte('catalog.on_sale_date', end),
+        getProfileNames(),
       ]);
 
       const shipment  = shipRes.error ? [] : (shipRes.data || []);
@@ -1189,14 +1235,21 @@
         ? `Store shipment · ${shipment.length} title${shipment.length !== 1 ? 's' : ''} · New Comics ${wedLabel}`
         : 'No shipment imported for this week yet';
 
+      // From here to the end of the function there is NO await: the toolbar,
+      // week nav, reconciliation panel and grid all land in one synchronous
+      // block, so the browser paints them in one frame (F166). Do not add an
+      // await in this block — it would hand the browser a chance to paint a
+      // half-built stage, which is exactly the three-shift sequence this fixes.
+      //
       // currentShipment feeds renderStoreGrid(), which also reapplies
       // whatever search query is currently active (§ above) — replaces the
       // week's grid without disturbing currentStoreQuery.
       currentShipment = shipment;
+      mountStage();
       renderStoreGrid();
 
       renderStoreReport(shipment);
-      await renderReconciliation(shipment, preorders, preRes.error);
+      renderReconciliation(shipment, preorders, preRes.error, names);
       btnStore.disabled = shipment.length === 0;
       btnStore.style.opacity = shipment.length === 0 ? '0.5' : '';
       btnStore.title = shipment.length === 0 ? 'No shipment to print for this week' : '';
@@ -1225,7 +1278,11 @@
     // isCoveredByShipment() in the customer path above. catalog_id alone
     // under-matches (shipment rows can carry a null catalog_id with a valid
     // upc/item_code), which inflates the exception count with false positives.
-    async function renderReconciliation(shipment, preorders, loadError) {
+    //
+    // SYNCHRONOUS on purpose (F166): `names` is passed in, already fetched by
+    // loadStoreWeek(). This used to be `async` and awaited getProfileNames()
+    // itself, after the grid had been painted — see the note above mountStage().
+    function renderReconciliation(shipment, preorders, loadError, names) {
       const panel = document.getElementById('recon-panel');
       panel.style.display = '';
 
@@ -1347,7 +1404,6 @@
         return;
       }
 
-      const names = await getProfileNames();
       const renderRows = (list) => list.map(({ catalog: c, qty, userIds }) => {
         const who = [...userIds].map(id => names.get(id) || 'Unknown').sort().join(', ');
         const code = c.item_code || c.upc || '';
