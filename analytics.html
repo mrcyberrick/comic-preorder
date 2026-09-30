@@ -292,7 +292,7 @@
     </div>
     <div class="head-controls">
       <button class="adm-pill" id="admin-toggle"
-        title="Your own browsing, reserves and logins are filtered out so the numbers reflect customers only">
+        title="Your own browsing, reserves and visits are filtered out so the numbers reflect customers only">
         <span class="adm-track"><span class="adm-knob"></span></span>
         <span id="adm-label">Customers only</span>
       </button>
@@ -302,7 +302,7 @@
 
   <div id="warn-banner" hidden class="warn-banner">
     <span class="ic">⚠</span>
-    <p><strong>Staff activity is included.</strong> Engagement, visits and login counts
+    <p><strong>Staff activity is included.</strong> Engagement and visit counts
        will read high — switch back to customers-only before making decisions.</p>
   </div>
 
@@ -714,7 +714,7 @@
   function distinctUserCount(events) { return new Set(events.map(e => e.user_id)).size; }
   function distinctUsersWith(events, pred) { return new Set(events.filter(pred).map(e => e.user_id)).size; }
   function countByType(events) {
-    const c = { reserve: 0, cancel: 0, subscribe: 0, unsubscribe: 0, login: 0, logout: 0, catalog_view: 0, page_view: 0 };
+    const c = { reserve: 0, cancel: 0, subscribe: 0, unsubscribe: 0, login: 0, logout: 0, visit: 0, catalog_view: 0, page_view: 0 };
     events.forEach(e => { if (c[e.event_type] !== undefined) c[e.event_type]++; });
     return c;
   }
@@ -837,12 +837,12 @@
     const m = new Map();
     events.forEach(e => {
       if (!e.user_id) return;
-      if (!m.has(e.user_id)) m.set(e.user_id, { reserves: 0, cancels: 0, subscribes: 0, logins: 0, catalog_views: 0, page_views: 0, total: 0, last: null });
+      if (!m.has(e.user_id)) m.set(e.user_id, { reserves: 0, cancels: 0, subscribes: 0, visits: 0, catalog_views: 0, page_views: 0, total: 0, last: null });
       const u = m.get(e.user_id); u.total++;
       if (e.event_type === 'reserve') u.reserves++;
       else if (e.event_type === 'cancel') u.cancels++;
       else if (e.event_type === 'subscribe') u.subscribes++;
-      else if (e.event_type === 'login') u.logins++;
+      else if (e.event_type === 'visit') u.visits++;
       else if (e.event_type === 'catalog_view') u.catalog_views++;
       else if (e.event_type === 'page_view') u.page_views++;
       if (!u.last || e.created_at > u.last) u.last = e.created_at;
@@ -1439,7 +1439,7 @@
       kpiTile('Cancels', now.cancel, deltaHtml(now.cancel, priorFor('cancel'), vs, { mode: 'cancel' })),
       kpiTile('New Subscriptions', now.subscribe, deltaHtml(now.subscribe, priorFor('subscribe'), vs)),
       kpiTile('Catalog Views', now.catalog_view, deltaHtml(now.catalog_view, priorFor('catalog_view'), vs)),
-      kpiTile('Logins', now.login, deltaHtml(now.login, priorFor('login'), vs)),
+      kpiTile('Visits', now.visit, deltaHtml(now.visit, priorFor('visit'), vs)),
     ];
     document.getElementById('kpi-ops').innerHTML = tiles.join('');
   }
@@ -1575,7 +1575,7 @@
       .sort((a, b) => (b.lastFull || '').localeCompare(a.lastFull || ''));
     if (!rows.length) { el.innerHTML = '<p class="no-data">No activity yet for this period.</p>'; return; }
     el.innerHTML = `<table class="tbl">
-      <thead><tr><th>Customer</th><th class="r">Reserves</th><th class="r">Cancels</th><th class="r">Subscribes</th><th class="r">Logins</th><th>Last Seen</th></tr></thead>
+      <thead><tr><th>Customer</th><th class="r">Reserves</th><th class="r">Cancels</th><th class="r">Subscribes</th><th class="r" title="Browsing sessions: the first page load after 30 minutes away. Recorded from 2026-09-29.">Visits</th><th>Last Seen</th></tr></thead>
       <tbody>${rows.map(u => {
         const ageDays = u.lastFull ? Math.floor((NOW - new Date(u.lastFull).getTime()) / 86400000) : 999;
         const atRisk = ageDays >= 30;
@@ -1584,7 +1584,7 @@
           <td class="num strong">${u.reserves}</td>
           <td class="num${atRisk && u.cancels > 0 ? ' risk' : ''}">${u.cancels}</td>
           <td class="num">${u.subscribes}</td>
-          <td class="num">${u.logins}</td>
+          <td class="num">${u.visits}</td>
           <td class="dim${atRisk ? ' risk' : ''}">${u.lastFull ? formatDate(DateUtils.fmtLocal(new Date(u.lastFull))) : '—'}</td>
         </tr>`;
       }).join('')}</tbody>
