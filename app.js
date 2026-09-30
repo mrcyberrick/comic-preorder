@@ -687,8 +687,10 @@ async function initNav() {
   }
 
   const profile = await Auth.getProfile(user.id);
-  const nameEl  = nav.querySelector('#nav-username');
-  if (nameEl) nameEl.textContent = profile?.full_name || user.email;
+  // Two copies of the name: the bar's (desktop; its id is also read by the print
+  // headers in mylist/arrivals) and the phone drawer's first row (F168).
+  const displayName = profile?.full_name || user.email;
+  nav.querySelectorAll('#nav-username, .nav-drawer-name').forEach(el => { el.textContent = displayName; });
 
   // Show the admin nav group if admin.
   // Since S2b (2026-09-30) #nav-admin is the "Admin ▾" group <li>, and
@@ -727,12 +729,11 @@ async function initNav() {
   NavSearch.mount();
   NavSettingsLink.mount(!!profile?.is_admin); // fills the same slot when #search is absent
 
-  // Logout button
-  const logoutBtn = nav.querySelector('#btn-logout');
-  if (logoutBtn) logoutBtn.addEventListener('click', () => {
+  // Logout buttons: the bar's (desktop) and the phone drawer's last row (F168)
+  nav.querySelectorAll('#btn-logout, .nav-drawer-signout-btn').forEach(btn => btn.addEventListener('click', () => {
     AdminContext.clear(); // clear impersonation on sign out
     Auth.signOut();
-  });
+  }));
 
   // Restore admin banner on every page load if context is active
   if (profile?.is_admin) AdminContext.restore();
@@ -747,19 +748,18 @@ async function initNav() {
   // ── Hamburger toggle ──────────────────────────────────
   const hamburger = nav.querySelector('#nav-hamburger');
   const navLinks  = nav.querySelector('.nav-links');
-  const navUser   = nav.querySelector('.nav-user');
+  // (.nav-user no longer toggles .open: on a phone it is hidden and the drawer
+  // carries Welcome / Sign Out itself, F168; on desktop it is always shown.)
   if (hamburger) {
     hamburger.addEventListener('click', () => {
       hamburger.classList.toggle('open');
       navLinks.classList.toggle('open');
-      navUser.classList.toggle('open');
     });
     // Close menu when a link is clicked
     navLinks.querySelectorAll('a').forEach(a => {
       a.addEventListener('click', () => {
         hamburger.classList.remove('open');
         navLinks.classList.remove('open');
-        navUser.classList.remove('open');
       });
     });
   }
