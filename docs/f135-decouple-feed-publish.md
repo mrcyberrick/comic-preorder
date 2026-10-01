@@ -1,6 +1,6 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** IN PROGRESS 2026-10-01 — S0 COMPLETE (V0 green); CUTOVER BY 2026-10-06 UNDER WAY (§ 11): S1 SQL written, awaiting Rick to apply; S2 built and tested locally, not pushed; S4/S5 after the Oct 6 cycle | staging=PENDING | prod=PENDING | findings=F135,F134
+**STATUS:** IN PROGRESS 2026-10-01 — S0, S1 (RPC applied on both environments) and S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) COMPLETE and verified (§ 11.4); S3 = the first unattended cron run, Tue 2026-10-06 21:00Z; S4/S5 after it | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
 **Owner finding:** F135 (`docs/technical-reference.md` § 13). **Target:** two repos — the private
 scripts repo (`catalogs/scripts`, `mrcyberrick/comic-preorder-scripts`) and
 `mrcyberrick/weekly-pull-feed` (public). **No `comic-preorder` app change.** One optional DB object
@@ -330,7 +330,7 @@ for the elapsed-time waits.)*
 
 ## 7. Risks to check, not assume
 
-- **R1 — Does a `GITHUB_TOKEN` push trigger the legacy Pages build?** GitHub suppresses most
+- **R1 — Does a `GITHUB_TOKEN` push trigger the legacy Pages build?** ***ANSWERED 2026-10-01: YES (§ 11.4, run `36882659720`).*** GitHub suppresses most
   workflow triggers from `GITHUB_TOKEN` pushes; Pages' dynamic builder has behaved differently over
   time. **Measure in S2** (push a test commit from the workflow, watch for a `pages build and
   deployment` run). If it does not trigger: request a Pages build via the REST API
@@ -490,6 +490,8 @@ Rick was offered three options (keep the skip / publish only / publish and send)
 | Images actually served | all **37** distinct cover URLs in the committed email return **HTTP 200**, and a 5-thumbnail sample of the 88 retained from the prior issue also returned 200 (the email shows one cover per series, so 37 of the 71 staged thumbnails are referenced) |
 | No send | no `Send Weekly Newsletter` run exists after the 09-30 failure; the Brevo workflow was not dispatched |
 
+***SUPERSEDED the same day by the cutover (§ 11): the Tuesday run now builds its own feed from the database and `check-stamp.js` refuses to send an email not stamped TODAY, so a stale issue can no longer pass. The paragraph below is kept as the record of the risk while it stood.***
+
 **⚠️ The risk this publish created, accepted by Rick when he chose it.** The send guard passes a feed
 less than 6 days old, measured from the stamp date. This feed is stamped **2026-10-01**, so at the
 Tuesday **2026-10-06 21:00 UTC** cron its age is ~5.9 days and **it passes**. If the import for the
@@ -539,12 +541,12 @@ be observed before the old one is removed (§ 5's order rule is unchanged).
 
 | Step | State |
 |---|---|
-| **S1** RPC `get_pull_feed_week` — `docs/sql/2026-10-01-f135-pull-feed-week-rpc.sql` | **STAGING APPLIED 2026-10-01 (Rick); PRODUCTION NOT YET** — and production is the one the builder reads. Staging verdict: `OK - F135 week RPC present, SECURITY DEFINER, anon-callable, projection exact, parity holds`, `raysandjudys`, week 2026-09-28, 71 = 71. **V1 on staging, as a real anonymous caller:** HTTP 200, 71 rows, exactly the four keys, 64 with a series name; unknown slug → `[]`; empty week → `[]`; identical output across two calls (deterministic); direct anon read of the table → 401 `42501` (closed). The `sb_publishable_` key works as `apikey` alone. **Production, anon, same day:** still **404 `PGRST202`**, table `[]` |
-| **S2** build in the workflow | **Built and tested in a local clone, not pushed.** Branch `f135-s2-build-in-workflow` @ `ca8a7ed9` (scratch dir; will be pushed to `weekly-pull-feed` as a rehearsal branch first, never straight to `main`) |
+| **S1** RPC `get_pull_feed_week` — `docs/sql/2026-10-01-f135-pull-feed-week-rpc.sql` | **APPLIED on BOTH environments 2026-10-01 (Rick), V1 green on both.** Verdicts: `OK - F135 week RPC present, SECURITY DEFINER, anon-callable, projection exact, parity holds` — staging `raysandjudys` week 2026-09-28 71 = 71; **production `rjbookstop` week 2026-09-28 71 = 71**. **V1 as a real anonymous caller, production:** HTTP 200, 71 rows, exactly the four keys (67 with a series name); unknown slug → `[]`; the other tenant (`comicstore`) same week → `[]`; empty week → `[]`; identical output across two calls; direct anon read of `weekly_shipment` → `200 []` (closed by RLS). Staging, same checks: 200 / 71 / four keys / `[]` / `[]` / deterministic / **401** `42501`. The `200 []` vs `401` difference is the production-vs-staging anon-grant divergence F150 already records for `app_settings`, now also seen on `weekly_shipment`; both are closed. The `sb_publishable_` key works as `apikey` alone |
+| **S2** build in the workflow | **LIVE on `weekly-pull-feed` `main` since about 15:12Z on 2026-10-01 (its Pages build ran 15:13Z) — feature commit `ca8a7ed9`**, pushed as a fast-forward of **only that commit** (the rehearsal branch had two extra publish commits touching 79 files, mostly junk thumbnails; the branch was deleted afterwards). Verified end to end — see § 11.4 |
 | Repo variables | `SUPABASE_URL` and `SUPABASE_ANON_KEY` set on `weekly-pull-feed` 2026-10-01 14:50Z from the public `config.js` the live site serves (non-secret by design). The anon key's shape and length (`sb_publishable_`, 46) were read back; the value never was |
 | Scripts repo | **Untouched.** Its copy of `build-pull-feed.js` and import-time publish stay until S4, so **two copies of the builder exist for now: edit only the `weekly-pull-feed` one** |
 
-**Evidence so far (all local, none of it needs the RPC):**
+**Evidence, local (before anything was pushed):**
 - **35 unit tests pass with an empty environment** (12 ported retention tests + 23 new). **Every guard
   was mutation-tested**: broken in a throwaway copy, and the matching test went red each time —
   empty-week check removed (2 red), 1000-row cap removed (1), already-on-sale removed (1) and inverted
@@ -554,30 +556,67 @@ be observed before the old one is removed (§ 5's order rule is unchanged).
   the rows the OLD service-role query returns for the week of 09-30 to the NEW builder; against the
   artifacts at `weekly-pull-feed` `d7263702`, `newsletter-email.html` and `newsletter.html` are
   **byte-identical** and `rss.xml` is identical apart from its build-time `pubDate`/`lastBuildDate`.
-  It also proves the CRLF→LF conversion and one scrubbed comment changed nothing rendered. **This must
-  be repeated against the REAL RPC once S1 is applied** (it exercises everything except the SQL).
+  It also proves the CRLF→LF conversion and one scrubbed comment changed nothing rendered.
+  **Repeated against the REAL production RPC after S1: the same result** — `newsletter-email.html`
+  (55,258 chars) and `newsletter.html` (62,684) byte-identical, `rss.xml` identical apart from
+  build-time stamps.
 - **A comment was scrubbed before the file could go public:** the S0 soft item naming the subscriber
   list's Gmail share (`build-pull-feed.js:99`) now reads "Gmail is a large share of recipients". The
   other internal-measurement comments (a Brevo campaign's byte size, catalog row counts) were left —
   Rick has not ruled on them and they identify no one.
 
-**Still to do, in order:** (1) Rick applies S1 (staging, then production); (2) V1 — anon call to the RPC
-returns the week's rows with exactly four keys, unknown slug returns `[]`, the table stays closed;
-(3) V3 against the real RPC; (4) push the branch to `weekly-pull-feed` as a rehearsal and dispatch it:
-no-rows week red, already-on-sale week red, un-served images red, then a green run — the GitHub parser
-validates the workflow YAML here, nothing has parsed it yet; (5) merge to `main`; (6) one `build-only`
-dispatch on `main` for the **current** week, **before** the Oct 2 import (so the live feed is never
-replaced by a stale week), to measure R1 (does a `GITHUB_TOKEN` push start the Pages build) and prove
-the commit/Pages/wait path on the real branch; (7) the Oct 6 cron is the unattended observation.
+**Remaining:** the Oct 6 cron is the unattended observation (gate V3's "observe a Tuesday"); S4 and S5
+follow it (§ 5). Everything before that is done and recorded in § 11.4.
 
 ### 11.3 Fallback, and what to watch on Oct 6
 
 If the Oct 6 build step fails, the send job is skipped and the run goes red (GitHub emails Rick). Then:
 fix forward, or dispatch `mode=send-only` — which sends the feed already on `main`. That fallback is
 valid **only while `import.js` still publishes at import time** (until S4), which is exactly why S4
-waits for a green Oct 6 cycle. The Oct 5 reminder (routine `trig_015GUseYiM3LGbNvruo9t2TD`) still
-describes the pre-cutover hazard; **revise it when the cutover lands**, and it stays correct if the
-cutover slips.
+waits for a green Oct 6 cycle. **The Oct 5 reminder was revised when the cutover landed** (routine
+`trig_015GUseYiM3LGbNvruo9t2TD` and the calendar event, both 2026-10-01): it no longer says "confirm the
+import published or disable the workflow" — that hazard is closed (§ 10.6) — and now says to confirm the
+week's shipment rows are loaded (the one input the workflow cannot create), watch the first run and check
+the Brevo campaign status, and renew the PAT only if S4 has not landed.
+
+### 11.4 Rehearsal and live verification, 2026-10-01
+
+The branch was pushed to `weekly-pull-feed` as `f135-s2-build-in-workflow` first (a push there starts
+nothing: the workflow triggers only on schedule and dispatch, and legacy Pages builds only `main`), then
+dispatched one run at a time (the workflow's concurrency group would cancel a queued run). Guard
+messages quoted from the run logs.
+
+| Run | Input | Result | What it proves |
+|---|---|---|---|
+| `36881315177` | `build-only`, `week=2030-01-07` | **RED** at "Build and publish": `No shipment rows for the week 2030-01-07 -> 2030-01-13. The weekly shipment import has not run for this week ... Refusing to publish a different week instead.` Send job skipped | Case (b) fails loudly. Also the first proof that the YAML parses, Node 22 sets up, the 35 tests pass on the runner, and the env reaches the real RPC |
+| `36881394480` | `build-only`, no week (run date 10-01) | **RED**: `Every row for 2026-09-28 -> 2026-10-04 is already on sale (latest 2026-09-30, today 2026-10-01). Refusing to preview a past week` | A run can never preview an already-shipped week. This is the live situation today |
+| `36881472703` | `build-only`, `week=2026-09-16`, `thumb_wait_minutes=1` | Build step **success**, then **RED** at the wait: `42 of 43 image(s) are NOT being served after 1 min` | The F98 failure (images in the commit, not on the site) is caught before the send job can run. Pre-checked: 0 of 77 of that week's thumbnails were served |
+| `36882230466` | `build-and-send`, `week=2026-09-30`, `dry_run=true` | **GREEN**, both jobs. 71 titles → one commit `7774ad5e` on the rehearsal branch; `round 1: 38/38 served`; `newsletter-email.html is stamped 2026-10-01 - built by this run`; the send step created **Brevo draft campaign 34** ("weekly-pull-feed 2026-10-01", list of 12) and sent nothing | The whole chain, including the send job's checkout of the branch tip and the stamp check. **Draft 34 is a rehearsal artifact for Rick to delete** |
+| `36882659720` | `build-only`, `week=2026-09-30`, on **`main`** | **GREEN**: commit **`da7ba7c6`** on `main` (one commit, content-identical to the live issue; only `rss.xml`'s build-time stamps changed), `Pages build of da7ba7c6 was started by the push itself (R1: yes)`, 38/38 images served, send skipped | The real commit + Pages + wait path, which a scratch branch cannot exercise |
+
+- **R1 is answered: YES.** A `GITHUB_TOKEN` push starts the legacy Pages build by itself. The
+  request-a-build step stays as a harmless safety net (it did not fire).
+- **F100's one-deployer property holds on `main`:** the Pages build of `da7ba7c6` reached `built`,
+  exactly **one** deployment exists for that sha, one `pages build and deployment` run, and the only
+  workflow defined is `send-newsletter.yml`.
+- **Order mattered and was respected:** the `main` run targeted the week production **already showed**
+  (09-30), done **before** the Oct 2 import. Production's newest loaded week was still 09-30 (week
+  10-05 → 0 rows), so nothing newer could be replaced.
+- **A trap avoided:** the rehearsal runs committed to the rehearsal branch itself, so fast-forwarding
+  `main` to that branch's tip would have shipped ~79 junk files. Only `ca8a7ed9` was pushed to `main`.
+- **A guard hook did its job:** the first push attempt was blocked by `guard-git.ps1` ("could not resolve
+  `$SCR/wpf` as a git repository for the pre-push secret scan. Failing closed (F104)") because it reads the
+  literal command text before the shell expands a variable. Re-run with a literal path; the secret scan
+  ran. A secret scan of everything the branch adds, run beforehand, found nothing.
+
+**What is still unproven, stated plainly:** (1) **no scheduled (cron) run of the new workflow has ever
+happened** — Oct 6 is the first, and `schedule` runs on `main` with `inputs` absent, a code path the
+dispatch rehearsals exercised only by `mode`/`week` inputs; the expressions are written for it
+(`github.event_name == 'schedule' || …`) and nothing has run them yet; (2) **the send itself was only
+ever run with `dry_run=true`**, so a real Brevo send from the new workflow is first seen on Oct 6 (the
+send script is byte-unchanged; its last real send was run #29 on 2026-09-22, which succeeded); (3) a first week with
+**new** thumbnails on `main` (this republish had 0 new) exercises the Pages-build → wait ordering for
+real only on Oct 6.
 
 ---
 
