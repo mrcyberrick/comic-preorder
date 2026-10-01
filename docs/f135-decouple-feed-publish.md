@@ -1,6 +1,6 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** IN PROGRESS 2026-10-01 — S0 COMPLETE (V0 green; § 0.1, § 4.4, § 10), S1–S5 NOT STARTED | staging=— | prod=— | findings=F135,F134
+**STATUS:** IN PROGRESS 2026-10-01 — S0 COMPLETE (V0 green); CUTOVER BY 2026-10-06 UNDER WAY (§ 11): S1 SQL written, awaiting Rick to apply; S2 built and tested locally, not pushed; S4/S5 after the Oct 6 cycle | staging=PENDING | prod=PENDING | findings=F135,F134
 **Owner finding:** F135 (`docs/technical-reference.md` § 13). **Target:** two repos — the private
 scripts repo (`catalogs/scripts`, `mrcyberrick/comic-preorder-scripts`) and
 `mrcyberrick/weekly-pull-feed` (public). **No `comic-preorder` app change.** One optional DB object
@@ -509,6 +509,75 @@ no credential values) and a Google Calendar event on Rick's primary calendar (po
 8:00–8:15 AM ET). Delete the routine at https://claude.ai/code/routines if the plan changes. Combined
 deliberately: both deadlines fall after the same morning, and a second reminder for a single check
 would be noise.
+
+---
+
+## 11. Cutover by 2026-10-06 — execution record (started 2026-10-01)
+
+**Rick, 2026-10-01: "It should be fully decoupled from the import script"; chose to cut over by
+Tue 2026-10-06** (asked which of: cut over by Oct 6 / keep the plan's pace / also give shipment loading
+its own entry point — he selected the first only). That pulls S1 and S2 forward and folds S3's
+equivalence evidence into them; S4 and S5 stay **after** the Oct 6 cycle, because the new trigger must
+be observed before the old one is removed (§ 5's order rule is unchanged).
+
+### 11.1 Deviations from § 4–§ 5, each deliberate
+
+1. **The week rule is the Mon–Sun week containing the run date** — not "the week containing the next
+   Wednesday" (§ 4.6(1)). That resolves § 10.4 item 6 (no Wednesday anchoring). No rows for that week
+   fails loudly; rows that have **all** already gone on sale fail too unless a week is named.
+2. **The Monday preflight (§ 4.5) is NOT in the cutover.** Rick has not ruled on § 10.4 item 7. The
+   Tuesday build gives the same signal (no rows → red run → GitHub's email), about 15 hours later.
+3. **Two gates added that the plan did not have**, because with build and send adjacent the send
+   script's 6-day stale guard is near-vacuous: `scripts/check-stamp.js` (the email must be stamped
+   today, checked in the send job against a fresh checkout of the branch tip) and
+   `scripts/wait-for-thumbs.js` (every image the email references must be **served**, HTTP 200, before
+   the send job may run — the F98 / F100 gap).
+4. **The send job checks out the branch tip, not the triggering commit.** A default checkout would read
+   the pre-build `newsletter-email.html`; the build job's commit is not in it.
+
+### 11.2 Status
+
+| Step | State |
+|---|---|
+| **S1** RPC `get_pull_feed_week` — `docs/sql/2026-10-01-f135-pull-feed-week-rpc.sql` | **Written; NOT applied.** Rick runs it on staging, then production. Anon check **before** apply, 2026-10-01: the RPC returns **404 `PGRST202`** and a direct anon read of `weekly_shipment` returns `[]` (table closed) |
+| **S2** build in the workflow | **Built and tested in a local clone, not pushed.** Branch `f135-s2-build-in-workflow` @ `ca8a7ed9` (scratch dir; will be pushed to `weekly-pull-feed` as a rehearsal branch first, never straight to `main`) |
+| Repo variables | `SUPABASE_URL` and `SUPABASE_ANON_KEY` set on `weekly-pull-feed` 2026-10-01 14:50Z from the public `config.js` the live site serves (non-secret by design). The anon key's shape and length (`sb_publishable_`, 46) were read back; the value never was |
+| Scripts repo | **Untouched.** Its copy of `build-pull-feed.js` and import-time publish stay until S4, so **two copies of the builder exist for now: edit only the `weekly-pull-feed` one** |
+
+**Evidence so far (all local, none of it needs the RPC):**
+- **35 unit tests pass with an empty environment** (12 ported retention tests + 23 new). **Every guard
+  was mutation-tested**: broken in a throwaway copy, and the matching test went red each time —
+  empty-week check removed (2 red), 1000-row cap removed (1), already-on-sale removed (1) and inverted
+  (1), stamp check made to always pass (2), earliest-wins restored (5), thumbnail wait made to never
+  fail (2) — and the unmutated control stayed 35/35.
+- **V3 (early, data stubbed): rendered output equals what production published.** A local stub served
+  the rows the OLD service-role query returns for the week of 09-30 to the NEW builder; against the
+  artifacts at `weekly-pull-feed` `d7263702`, `newsletter-email.html` and `newsletter.html` are
+  **byte-identical** and `rss.xml` is identical apart from its build-time `pubDate`/`lastBuildDate`.
+  It also proves the CRLF→LF conversion and one scrubbed comment changed nothing rendered. **This must
+  be repeated against the REAL RPC once S1 is applied** (it exercises everything except the SQL).
+- **A comment was scrubbed before the file could go public:** the S0 soft item naming the subscriber
+  list's Gmail share (`build-pull-feed.js:99`) now reads "Gmail is a large share of recipients". The
+  other internal-measurement comments (a Brevo campaign's byte size, catalog row counts) were left —
+  Rick has not ruled on them and they identify no one.
+
+**Still to do, in order:** (1) Rick applies S1 (staging, then production); (2) V1 — anon call to the RPC
+returns the week's rows with exactly four keys, unknown slug returns `[]`, the table stays closed;
+(3) V3 against the real RPC; (4) push the branch to `weekly-pull-feed` as a rehearsal and dispatch it:
+no-rows week red, already-on-sale week red, un-served images red, then a green run — the GitHub parser
+validates the workflow YAML here, nothing has parsed it yet; (5) merge to `main`; (6) one `build-only`
+dispatch on `main` for the **current** week, **before** the Oct 2 import (so the live feed is never
+replaced by a stale week), to measure R1 (does a `GITHUB_TOKEN` push start the Pages build) and prove
+the commit/Pages/wait path on the real branch; (7) the Oct 6 cron is the unattended observation.
+
+### 11.3 Fallback, and what to watch on Oct 6
+
+If the Oct 6 build step fails, the send job is skipped and the run goes red (GitHub emails Rick). Then:
+fix forward, or dispatch `mode=send-only` — which sends the feed already on `main`. That fallback is
+valid **only while `import.js` still publishes at import time** (until S4), which is exactly why S4
+waits for a green Oct 6 cycle. The Oct 5 reminder (routine `trig_015GUseYiM3LGbNvruo9t2TD`) still
+describes the pre-cutover hazard; **revise it when the cutover lands**, and it stays correct if the
+cutover slips.
 
 ---
 
