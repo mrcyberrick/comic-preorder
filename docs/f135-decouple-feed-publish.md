@@ -260,7 +260,9 @@ removed** — S4 before S3 recreates the silent-no-publish window.
 
 **S0 — Discovery + this week's recovery (one session, read-mostly). Gate V0.** ***DONE 2026-10-01 —
 V0 green. Step 1 → § 10.1, step 2 → § 0.1, step 3 → § 10.2 and § 4.4, step 4 → § 4.4, step 5 →
-nothing run (week skipped; its on-sale date has also now passed), step 6 → no finding filed (§ 10.5).***
+**publish only, no send, run later the same day on Rick's explicit call (§ 10.6)**, step 6 → no
+finding filed (§ 10.5).*** *(This line first read "nothing run (week skipped; its on-sale date has
+also now passed)", true until Rick overrode the 09-30 skip decision that afternoon.)*
 1. Re-read `import.js` publish block, `resolveFeedWeek()`, `publishPullFeed()` and all of
    `build-pull-feed.js` from disk; record current line numbers here.
 2. **Classify § 0**: service-role read of production `weekly_shipment` for the week of 2026-09-30
@@ -459,15 +461,45 @@ anyway (F162's lesson).
 - **Rick, 2026-10-01:** D2 = **A** (anon `SECURITY DEFINER` RPC). Asked what happened to the token
   line on 09-21 / 09-27: **does not remember** — the cause stays an inference (§ 0.1).
 - **Earlier, standing:** D1 = move the builder (2026-09-30); skip the week-of-09-30 newsletter
-  (2026-09-30) — no late build or send was run, and nothing was published or sent in S0.
+  (2026-09-30). ***Superseded in part the same day (§ 10.6): Rick chose "publish only, no send" after
+  S0's classification.** This bullet first read "no late build or send was run, and nothing was
+  published or sent in S0" — true until that publish.* **No Brevo send was run, and none is
+  planned for this week.**
 - **No finding filed.** The case-(a) cause matches the failure § 3 already named, and the token
   expiry (§ 3, item 2) is a second trigger of the mechanism F135 owns, not a new mechanism. Rick can
   ask for it to be filed. **Next free finding ID: F169** — F168 was filed 2026-09-30 on `staging`
   (the phone drawer). This branch is cut from `main` and its `CLAUDE.md` still reads F168, so file
   from `staging`'s copy, not this one.
-- **Nothing written outside this repo.** S0 made production reads only (GET), one local
-  `build-pull-feed.js --local` run (gitignored `pull-feed-out/`; no upload, no GitHub write), and
-  read-only GitHub API calls. No code, SQL or workflow was changed in either repo.
+- **Writes outside this repo: exactly one, the § 10.6 publish.** Everything else in S0 was production
+  reads (GET), one local `build-pull-feed.js --local` run (gitignored `pull-feed-out/`; no upload)
+  and read-only GitHub API calls. No code, SQL or workflow was changed in either repo.
+  *(First read "Nothing written outside this repo" — true until the publish.)*
+
+### 10.6 Recovery — publish only, 2026-10-01 (Rick's explicit call)
+
+Rick was offered three options (keep the skip / publish only / publish and send) and chose
+**publish only, no send.** Run from the scripts folder: `node build-pull-feed.js --publish`, no
+`--week`, so the week resolved from the database to on-sale 2026-09-30 (Mon 09-28 → Sun 10-04).
+
+| Check | Result |
+|---|---|
+| The script's own report | 71 titles; +71 thumbnails staged (0 cached, 0 `wsrv.nl` failures, 0 over the 100 KB limit); 143 expired purged, 88 retained; its own tree check "163 referenced file(s) present, 143 orphan(s) gone"; exit 0 |
+| The commit on `weekly-pull-feed` `main` | **`d7263702`**, 2026-10-01 14:24:56Z, one parent; `newsletter-email.html`, `newsletter.html`, `rss.xml` and `thumb-retention.json` modified plus thumbnails; 218 files in all |
+| The committed stamp | `<!-- pull-feed-generated: 2026-10-01 -->` (read from the commit, not the local build) |
+| Pages | `pages-build` for `d7263702` reached `built`; **exactly one deployment** for that sha; the one workflow run since is `pages build and deployment`, `success` — F100's one-deployer property held |
+| Images actually served | all **37** distinct cover URLs in the committed email return **HTTP 200**, and a 5-thumbnail sample of the 88 retained from the prior issue also returned 200 (the email shows one cover per series, so 37 of the 71 staged thumbnails are referenced) |
+| No send | no `Send Weekly Newsletter` run exists after the 09-30 failure; the Brevo workflow was not dispatched |
+
+**⚠️ The risk this publish created, accepted by Rick when he chose it.** The send guard passes a feed
+less than 6 days old, measured from the stamp date. This feed is stamped **2026-10-01**, so at the
+Tuesday **2026-10-06 21:00 UTC** cron its age is ~5.9 days and **it passes**. If the import for the
+10-07 week has not published a newer feed by then, **that Tuesday's send mails the week-of-09-30
+issue — books that went on sale a week earlier — which is the 2026-08-11 incident from the other
+side.** Before 10-06 21:00Z: confirm `weekly-pull-feed` `main` has a publish commit **after**
+`d7263702` for the 10-07 week (recent weeks run 67-88 titles; stamp on or after the import date), and
+that the import was run with the token line uncommented and the PAT still valid (§ 3 item 2). If the
+10-07 import slips past that Tuesday, **disable the scheduled workflow** (Actions → Disable
+workflow) until it has published; a `dry_run` dispatch does not stop the cron.
 
 ---
 
