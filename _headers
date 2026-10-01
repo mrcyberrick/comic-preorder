@@ -44,6 +44,8 @@
   Cache-Control: public, max-age=31536000, immutable
 /assets/hero-mobile-v2.webp
   Cache-Control: public, max-age=31536000, immutable
+/assets/banner-v1.webp
+  Cache-Control: public, max-age=31536000, immutable
 /icon-192-v2.png
   Cache-Control: public, max-age=31536000, immutable
 /apple-touch-icon-v2.png

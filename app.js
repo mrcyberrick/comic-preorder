@@ -1444,6 +1444,130 @@ const CatalogFilters = {
 };
 window.CatalogFilters = CatalogFilters;
 
+// ── Catalog header banner (docs/catalog-header-banner.md) ─────
+// The art in the empty space right of the "Monthly Catalog" title. ONE module
+// owns the whole contract — the stored shape, the URL rule, the tier rule and
+// the render — so catalog.html (reader) and settings.html (writer + preview)
+// cannot disagree about it. That is CatalogFilters' lesson (the writer once
+// carried its own copy of the defaults) applied up front.
+//
+// Stored in app_settings.catalog_banner as JSON text: { v:1, mode, imageUrl }.
+// No schema change — app_settings is (tenant_id, key, value text) with no key
+// allowlist, and the existing admin write policies already cover it.
+//
+//   mode 'default'  the platform artwork (assets/banner-v1.webp, cut from the
+//                   apex hero). This is also what an ABSENT row means.
+//   mode 'custom'   the tenant's own image at `imageUrl` — PAID TIER ONLY.
+//   mode 'off'      no banner.
+//
+// Tier rule (docs/f72-multi-tenant-branding.md § 0.1): custom visual branding
+// is the paid tier's; free renders platform defaults. A stored 'custom' on a
+// free tenant therefore resolves to the PLATFORM art, never to the custom
+// image — the free render is always the safe one (same direction as Tier).
+//
+// Failure directions, chosen on purpose:
+//   - unreadable / malformed config  -> the default art (decoration, so a
+//     broken row must not take it away or throw)
+//   - a custom image that will not load -> NOTHING. Showing platform art on a
+//     store that chose its own would be the wrong shop's identity on its page.
+//
+// imageUrl is assigned to an <img>'s src and never to CSS or innerHTML, and
+// must be https:, so a stored value cannot inject markup or a javascript: URL.
+const CatalogBanner = {
+  KEY: 'catalog_banner',
+  // -v1 is load-bearing: _headers serves this path `immutable` for a year, so
+  // re-exporting the art REQUIRES bumping to -v2 and updating this constant.
+  DEFAULT_SRC: 'assets/banner-v1.webp',
+  MODES: ['default', 'custom', 'off'],
+
+  defaults() { return { v: 1, mode: 'default', imageUrl: '' }; },
+
+  // Normalised https URL, or null. https only; 2,048 chars is the practical
+  // browser/CDN ceiling and bounds what a settings row can carry.
+  cleanUrl(raw) {
+    const s = (raw == null ? '' : String(raw)).trim();
+    if (!s || s.length > 2048) return null;
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    return u.protocol === 'https:' ? u.href : null;
+  },
+
+  // maybeSingle(), not Settings.get(): get() uses .single(), which answers 406
+  // for the no-row case, and a tenant that never saved a banner is the NORMAL
+  // case — it would log a failed request in every customer's console on every
+  // catalog load.
+  async load() {
+    try {
+      const { data, error } = await db.from('app_settings')
+        .select('value').eq('key', this.KEY).maybeSingle();
+      if (error || !data || !data.value) return this.defaults();
+      return this.parse(data.value);
+    } catch (err) {
+      console.warn('catalog_banner unreadable — using the default art', err);
+      return this.defaults();
+    }
+  },
+
+  parse(raw) {
+    try {
+      const p = JSON.parse(raw);
+      return {
+        v: 1,
+        mode: this.MODES.includes(p && p.mode) ? p.mode : 'default',
+        imageUrl: this.cleanUrl(p && p.imageUrl) || '',
+      };
+    } catch { return this.defaults(); }
+  },
+
+  // The one decision: what, if anything, to show. Returns { src, custom } or null.
+  resolve(cfg, tenant) {
+    const c = cfg || this.defaults();
+    if (c.mode === 'off') return null;
+    if (c.mode === 'custom' && c.imageUrl && Tier.isPaid(tenant)) {
+      return { src: c.imageUrl, custom: true };
+    }
+    return { src: this.DEFAULT_SRC, custom: false };
+  },
+
+  // Fills `host` (an empty .brand-banner element). Safe to call repeatedly —
+  // settings.html re-mounts its live preview with it. Decorative, so alt is
+  // empty and the host is aria-hidden in the markup.
+  mount(host, cfg, tenant) {
+    if (!host) return;
+    host.textContent = '';
+    host.classList.remove('is-ready');
+    const pick = this.resolve(cfg, tenant);
+    if (!pick) { host.hidden = true; return; }
+    host.hidden = false;
+    const img = new Image();
+    img.alt = '';
+    img.decoding = 'async';
+    img.setAttribute('fetchpriority', 'low');  // decoration must not compete with the covers
+    if (pick.custom) img.referrerPolicy = 'no-referrer';
+    // Handlers BEFORE src: a cached image can fire load synchronously.
+    img.onload = () => host.classList.add('is-ready');
+    img.onerror = () => { host.hidden = true; };
+    img.src = pick.src;
+    host.appendChild(img);
+  },
+
+  // Resolves true if `url` loads as an image. Used by settings.html so a dead
+  // address is refused at save time instead of discovered by customers.
+  test(url, timeoutMs = 8000) {
+    return new Promise(resolve => {
+      const u = this.cleanUrl(url);
+      if (!u) return resolve(false);
+      const img = new Image();
+      const t = setTimeout(() => { img.src = ''; resolve(false); }, timeoutMs);
+      img.onload = () => { clearTimeout(t); resolve(img.naturalWidth > 0); };
+      img.onerror = () => { clearTimeout(t); resolve(false); };
+      img.referrerPolicy = 'no-referrer';
+      img.src = u;
+    });
+  },
+};
+window.CatalogBanner = CatalogBanner;
+
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
   async getMyIds(userId) {
