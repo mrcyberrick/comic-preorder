@@ -501,6 +501,15 @@ that the import was run with the token line uncommented and the PAT still valid 
 10-07 import slips past that Tuesday, **disable the scheduled workflow** (Actions → Disable
 workflow) until it has published; a `dry_run` dispatch does not stop the cron.
 
+**Gate scheduled (2026-10-01):** the two checks above — the pre-send publish confirmation (due before
+Tue 2026-10-06 21:00Z) and the PAT renewal (due before Wed 2026-10-07 15:43:24Z) — share **one
+reminder, Mon 2026-10-05 8:00 AM ET** (33 h before the send, ~52 h before expiry). Two channels:
+one-time routine `trig_015GUseYiM3LGbNvruo9t2TD` (`run_once_at` 2026-10-05T12:00:00Z, reminds only,
+no credential values) and a Google Calendar event on Rick's primary calendar (popup + email,
+8:00–8:15 AM ET). Delete the routine at https://claude.ai/code/routines if the plan changes. Combined
+deliberately: both deadlines fall after the same morning, and a second reminder for a single check
+would be noise.
+
 ---
 
 ## References
