@@ -158,7 +158,7 @@
       min-height: 40px; outline: none;
     }
 
-    /* Branding ▸ Catalog banner. The preview frame reuses the REAL header
+    /* Branding ▸ Page banner. The preview frame reuses the REAL header
        classes (.page-header--banner + .brand-banner from style.css), so what is
        shown here is the same markup and CSS a customer gets, not a drawing of it. */
     .set-banner-stage { padding: 14px 18px 4px; }
@@ -482,7 +482,7 @@
       </section>
 
       <!-- ── Branding ───────────────────────────────────────────
-           Its own Save: this is a different setting (app_settings.catalog_banner)
+           Its own Save: this is a different setting (app_settings.page_banner)
            from the catalog filters above, and saving one must never write the other. -->
       <div id="branding" style="margin:34px 0 14px;scroll-margin-top:76px">
         <h2 style="margin:0;font-family:var(--font-display);font-size:1.7rem;letter-spacing:0.03em;line-height:1.1">Branding</h2>
@@ -493,12 +493,12 @@
 
       <section class="set-panel" id="banner-panel">
         <div class="set-panel-head">
-          <h3>Catalog banner</h3>
-          <p>The artwork in the empty space beside <strong>Monthly Catalog</strong> on the customer catalog page.</p>
+          <h3>Page banner</h3>
+          <p>The artwork in the empty space beside the page title on the customer pages: <strong>Catalog</strong>, <strong>My List</strong>, <strong>Subscriptions</strong> and <strong>This Week</strong>. It is not printed.</p>
         </div>
 
         <div class="set-banner-stage">
-          <div class="page-header page-header--banner set-banner-frame" aria-label="Preview of the catalog page header">
+          <div class="page-header page-header--banner set-banner-frame" aria-label="Preview of a customer page header (shown here as the Catalog)">
             <div class="brand-banner" id="bn-preview" aria-hidden="true"></div>
             <h1>Monthly Catalog</h1>
             <p>Catalog for <span id="bn-month">—</span> — browse and reserve items</p>
@@ -992,10 +992,10 @@
     toast('Catalog visibility saved');
   });
 
-  // ══ Branding ▸ Catalog banner ═════════════════════════════════
-  // A separate setting from the catalog filters above (app_settings.catalog_banner),
+  // ══ Branding ▸ Page banner ═════════════════════════════════
+  // A separate setting from the catalog filters above (app_settings.page_banner),
   // with its own Save, so neither can write the other. The shape, the URL rule,
-  // the tier rule and the render all come from CatalogBanner in app.js — this
+  // the tier rule and the render all come from PageBanner in app.js — this
   // page holds NO second copy of any of them, because the reader (catalog.html)
   // and this writer disagreeing about "default" is exactly the CatalogFilters bug.
   const bnTenant = TenantContext.current();
@@ -1006,11 +1006,11 @@
   let bnSavedAt = null;
   {
     const { data, error } = await db.from('app_settings')
-      .select('value, updated_at').eq('key', CatalogBanner.KEY).maybeSingle();
-    if (error) console.warn('catalog_banner read failed', error);
-    if (data && data.value) { bnSaved = CatalogBanner.parse(data.value); bnSavedAt = data.updated_at || null; }
+      .select('value, updated_at').eq('key', PageBanner.KEY).maybeSingle();
+    if (error) console.warn('page_banner read failed', error);
+    if (data && data.value) { bnSaved = PageBanner.parse(data.value); bnSavedAt = data.updated_at || null; }
   }
-  const bnBaseline = () => bnSaved || CatalogBanner.defaults();
+  const bnBaseline = () => bnSaved || PageBanner.defaults();
   let bnDraft = JSON.parse(JSON.stringify(bnBaseline()));
 
   if (!bnPaid) {
@@ -1021,7 +1021,7 @@
     el('bn-tier-note').style.display = 'flex';
   }
 
-  const bnUrlOf = () => CatalogBanner.cleanUrl(el('bn-url').value);
+  const bnUrlOf = () => PageBanner.cleanUrl(el('bn-url').value);
   const bnCurrent = () => ({
     v: 1,
     mode: bnDraft.mode,
@@ -1050,7 +1050,7 @@
         const seq = ++bnTestSeq;
         hint.className = 'set-url-hint';
         hint.textContent = 'Checking image…';
-        CatalogBanner.test(cur.imageUrl).then(ok => {
+        PageBanner.test(cur.imageUrl).then(ok => {
           if (seq !== bnTestSeq) return;               // a newer edit superseded this check
           hint.className = 'set-url-hint ' + (ok ? 'is-ok' : 'is-bad');
           hint.textContent = ok ? 'Image loads.' : 'That address did not load as an image.';
@@ -1061,7 +1061,7 @@
       hint.className = 'set-url-hint';
       hint.textContent = '';
     }
-    CatalogBanner.mount(el('bn-preview'), previewCfg, bnTenant);
+    PageBanner.mount(el('bn-preview'), previewCfg, bnTenant);
   }
 
   function bnRender() {
@@ -1111,7 +1111,7 @@
       // Refuse a dead address at the WRITE side: a customer-side failure shows
       // them nothing, and nobody would see the problem until they thought to look.
       btn.textContent = 'Checking image…';
-      const ok = await CatalogBanner.test(cfg.imageUrl);
+      const ok = await PageBanner.test(cfg.imageUrl);
       if (!ok) {
         toast('That address did not load as an image — check it and try again.', 'error');
         btn.disabled = false;
@@ -1120,10 +1120,10 @@
       }
     }
     btn.textContent = 'Saving…';
-    const { error } = await Settings.set(CatalogBanner.KEY, JSON.stringify(cfg));
+    const { error } = await Settings.set(PageBanner.KEY, JSON.stringify(cfg));
     btn.textContent = orig;
     if (error) {
-      console.error('catalog_banner save failed', error);
+      console.error('page_banner save failed', error);
       toast('Could not save — ' + (error.message || 'unknown error'), 'error');
       btn.disabled = false;
       return;
@@ -1132,7 +1132,7 @@
     bnSavedAt = new Date().toISOString();
     bnDraft = JSON.parse(JSON.stringify(cfg));
     bnRender();
-    toast('Catalog banner saved');
+    toast('Page banner saved');
   });
 
   el('bn-url').value = bnDraft.imageUrl || '';

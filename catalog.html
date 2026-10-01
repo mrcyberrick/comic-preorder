@@ -130,9 +130,9 @@
 <!-- Page Header -->
 <div class="container">
   <div class="page-header page-header--banner">
-    <!-- Header art — empty here, filled by CatalogBanner.mount() below. Behind
+    <!-- Header art — empty here, filled by PageBanner.mount() below. Behind
          the text and out of flow (see .brand-banner in style.css). -->
-    <div class="brand-banner" id="catalog-banner" aria-hidden="true"></div>
+    <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1>Monthly Catalog</h1>
     <p id="catalog-subtitle">Browse and reserve items from the current order cycle</p>
   </div>
@@ -303,10 +303,10 @@
   // ── Header banner ─────────────────────────────────────────────
   // Fire-and-forget: decoration, so nothing awaits it and a failure only means
   // no art. Overlaps everything below rather than adding a serialized step to
-  // an init that is already several round trips deep. Contract: CatalogBanner
+  // an init that is already several round trips deep. Contract: PageBanner
   // in app.js; the admin controls it from Settings ▸ Branding.
-  CatalogBanner.load().then(cfg =>
-    CatalogBanner.mount(document.getElementById('catalog-banner'), cfg, TenantContext.current()));
+  PageBanner.load().then(cfg =>
+    PageBanner.mount(document.getElementById('page-banner'), cfg, TenantContext.current()));
 
   // ── Blocked account detection ────────────────────────────────
   // Two statuses block reserving and subscribing, with the SAME effect and

@@ -436,7 +436,10 @@
     </div>
   </div>
 
-  <div class="page-header">
+  <div class="page-header page-header--banner">
+    <!-- Header art — filled by PageBanner.mount() (app.js). Out of flow, behind
+         the text; the print-store / this-week print paths already hide the header. -->
+    <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1 id="page-title">This Week's Arrivals</h1>
     <p id="page-subtitle">Your reserved titles arriving at the store this week</p>
   </div>
@@ -599,6 +602,11 @@
 
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
+
+  // Header banner — fire-and-forget decoration (PageBanner, app.js); one
+  // setting for all four customer pages, controlled from Settings ▸ Branding.
+  PageBanner.load().then(cfg =>
+    PageBanner.mount(document.getElementById('page-banner'), cfg, TenantContext.current()));
 
   // ── Calculate this week's Mon-Sun range ───────────────────
   // Uses the canonical DateUtils.weekRange() helper from app.js so the

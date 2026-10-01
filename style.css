@@ -230,28 +230,31 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .page-header p { color: var(--text-secondary); font-size: 0.9rem; }
 
-/* ── Header banner art (catalog.html + the settings.html preview) ──
+/* ── Header banner art (catalog, mylist, subscriptions, arrivals + the settings preview) ──
    Fills the empty space right of a page title. Contract is in app.js
-   (CatalogBanner); this is only the look.
+   (PageBanner); this is only the look.
 
    It takes NO space in the layout: the host is absolutely positioned inside a
    `.page-header--banner`, sits behind the text (z-index -1 in the header's own
-   stacking context), and is non-interactive. That matters because catalog.html
-   carries the F141 CLS work — nothing here may move the grid, and the art
-   arrives late (after the settings read and the image fetch), so it fades in
-   from opacity 0 instead of appearing.
+   stacking context), and is non-interactive. That matters because these pages
+   carry the F141/F161/F166 CLS work — nothing here may move the content, and
+   the art arrives late (after the settings read and the image fetch), so it
+   fades in from opacity 0 instead of appearing.
 
    The left edge is cut on a slant and carries a slash in the tenant's accent
    (--accent follows branding.primary_color), the same comic-panel cut as the
    apex page; the image itself fades into the page background so it has no hard
-   edge behind the title. */
-.page-header--banner { position: relative; isolation: isolate; }
+   edge behind the title.
+
+   --banner-w is the art's width, shared by the art itself and by the subtitle
+   cap below so the two cannot drift apart. */
+.page-header--banner { position: relative; isolation: isolate; --banner-w: min(52%, 640px); }
 .brand-banner {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(52%, 640px);
+  width: var(--banner-w);
   z-index: -1;
   pointer-events: none;
   overflow: hidden;
@@ -282,6 +285,19 @@ button { cursor: pointer; font-family: var(--font-body); }
   background: var(--accent);
   clip-path: polygon(48px 0, 52px 0, 4px 100%, 0 100%);
 }
+@media (min-width: 641px) and (max-width: 900px) {
+  /* Narrower art on tablets, so a longer subtitle (This Week's changes with the
+     data) has room before it meets the slash. object-fit: cover keeps the
+     figure, which sits at the right of the image. */
+  .page-header--banner { --banner-w: 40%; }
+}
+@media (min-width: 641px) {
+  /* A long, STATIC subtitle wraps clear of the art instead of running under it
+     (Subscriptions, ~115 characters). Opt-in per page, not global: My List and
+     This Week rewrite their subtitles after load, and a width cap on text that
+     changes length would re-wrap and shift the page when it did. */
+  .page-header--wrap-sub p { max-width: calc(100% - var(--banner-w) - 16px); }
+}
 @media (max-width: 640px) {
   /* Little spare room on a phone, so the art sits BEHIND the title block and is
      dimmed to keep the text legible rather than being dropped. The slash is
@@ -289,13 +305,20 @@ button { cursor: pointer; font-family: var(--font-body); }
      subtitle (seen in a real 393px screenshot), and a decorative line must not
      compete with the words it sits behind. A soft halo on the subtitle keeps it
      readable where the bright part of the art passes behind it. */
-  .brand-banner { width: 72%; }
+  .page-header--banner { --banner-w: 72%; }
   .brand-banner.is-ready { opacity: 0.5; }
   .brand-banner::after { display: none; }
   .brand-banner::before {
     background: linear-gradient(90deg, var(--bg) 0%, rgba(15,15,15,0.78) 42%, rgba(15,15,15,0) 88%);
   }
   .page-header--banner p { text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg); }
+}
+@media print {
+  /* Decoration never prints. My List's print rules hide only the subtitle, not
+     the header, so without this a printed pull list would carry a dark fading
+     image on white paper. Global on purpose: it also covers any page that gains
+     the banner later. */
+  .brand-banner { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .brand-banner { transition: none; }

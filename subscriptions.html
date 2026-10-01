@@ -284,7 +284,10 @@
 
 <div class="container">
 
-  <div class="page-header">
+  <div class="page-header page-header--banner page-header--wrap-sub">
+    <!-- Header art — filled by PageBanner.mount() (app.js). --wrap-sub: this
+         subtitle is a long static sentence, so it wraps clear of the art. -->
+    <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1 id="page-title">My Subscriptions</h1>
     <p id="page-subtitle">When a new catalog loads each month, subscribed series are automatically added to your pull list — no action needed.</p>
   </div>
@@ -391,6 +394,11 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
+
+  // Header banner — fire-and-forget decoration (PageBanner, app.js); one
+  // setting for all four customer pages, controlled from Settings ▸ Branding.
+  PageBanner.load().then(cfg =>
+    PageBanner.mount(document.getElementById('page-banner'), cfg, TenantContext.current()));
 
   // ── Blocked account detection ────────────────────────────────
   // Ported from catalog.html's gate (2026-08-10) — same predicate, same

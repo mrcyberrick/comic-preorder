@@ -563,7 +563,10 @@
     </div>
   </div>
 
-  <div class="page-header">
+  <div class="page-header page-header--banner">
+    <!-- Header art — filled by PageBanner.mount() (app.js). Out of flow, behind
+         the text, and hidden in print (style.css). -->
+    <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1>My Pull List</h1>
     <p id="mylist-subtitle">Your reservations for the current order cycle</p>
   </div>
@@ -783,6 +786,11 @@ function confirmDialog(message, okLabel = 'Remove') {
   // Check maintenance mode — admins bypass
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
+
+  // Header banner — fire-and-forget decoration (PageBanner, app.js); one
+  // setting for all four customer pages, controlled from Settings ▸ Branding.
+  PageBanner.load().then(cfg =>
+    PageBanner.mount(document.getElementById('page-banner'), cfg, TenantContext.current()));
 
   // ── Blocked account detection ────────────────────────────────
   // Ported from catalog.html's gate (2026-08-10) — same predicate, same

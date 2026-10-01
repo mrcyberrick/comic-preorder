@@ -1444,14 +1444,21 @@ const CatalogFilters = {
 };
 window.CatalogFilters = CatalogFilters;
 
-// ── Catalog header banner (docs/catalog-header-banner.md) ─────
-// The art in the empty space right of the "Monthly Catalog" title. ONE module
-// owns the whole contract — the stored shape, the URL rule, the tier rule and
-// the render — so catalog.html (reader) and settings.html (writer + preview)
-// cannot disagree about it. That is CatalogFilters' lesson (the writer once
-// carried its own copy of the defaults) applied up front.
+// ── Page header banner (docs/page-header-banner.md) ─────
+// The art in the empty space right of the page title on the four CUSTOMER pages
+// (catalog, mylist, subscriptions, arrivals) — one setting for all of them, so
+// the storefront reads as one brand. Staff pages (admin, analytics, settings)
+// do not carry it. ONE module owns the whole contract — the stored shape, the
+// URL rule, the tier rule and the render — so those pages (readers) and
+// settings.html (writer + preview) cannot disagree about it. That is
+// CatalogFilters' lesson (the writer once carried its own copy of the
+// defaults) applied up front.
 //
-// Stored in app_settings.catalog_banner as JSON text: { v:1, mode, imageUrl }.
+// Named page_banner / PageBanner, not catalog_*: it began as the catalog's
+// banner and was widened to all four pages BEFORE anything was saved or
+// promoted, which is the only time the key could be renamed for free.
+//
+// Stored in app_settings.page_banner as JSON text: { v:1, mode, imageUrl }.
 // No schema change — app_settings is (tenant_id, key, value text) with no key
 // allowlist, and the existing admin write policies already cover it.
 //
@@ -1473,8 +1480,8 @@ window.CatalogFilters = CatalogFilters;
 //
 // imageUrl is assigned to an <img>'s src and never to CSS or innerHTML, and
 // must be https:, so a stored value cannot inject markup or a javascript: URL.
-const CatalogBanner = {
-  KEY: 'catalog_banner',
+const PageBanner = {
+  KEY: 'page_banner',
   // -v1 is load-bearing: _headers serves this path `immutable` for a year, so
   // re-exporting the art REQUIRES bumping to -v2 and updating this constant.
   DEFAULT_SRC: 'assets/banner-v1.webp',
@@ -1503,7 +1510,7 @@ const CatalogBanner = {
       if (error || !data || !data.value) return this.defaults();
       return this.parse(data.value);
     } catch (err) {
-      console.warn('catalog_banner unreadable — using the default art', err);
+      console.warn('page_banner unreadable — using the default art', err);
       return this.defaults();
     }
   },
@@ -1566,7 +1573,7 @@ const CatalogBanner = {
     });
   },
 };
-window.CatalogBanner = CatalogBanner;
+window.PageBanner = PageBanner;
 
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
