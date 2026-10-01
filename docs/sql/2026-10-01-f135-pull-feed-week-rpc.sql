@@ -1,4 +1,4 @@
--- STATUS: PENDING | staging=PENDING | prod=PENDING | findings=F135
+-- STATUS: IN PROGRESS | staging=APPLIED 2026-10-01 | prod=PENDING | findings=F135
 
 -- F135 S1: give the weekly pull-feed BUILD a way to read one week's shipment
 -- without holding a Supabase service-role key.
