@@ -1,6 +1,6 @@
 # Page header banner — brandable art beside the title on the four customer pages
 
-**STATUS:** IN PROGRESS | staging=BUILT 2026-10-01 (catalog first, widened to all four customer pages the same day), awaiting Rick's review | prod=NOT PROMOTED | findings=— (feature build, not a defect; **F169 is the next free finding ID**)
+**STATUS:** IN PROGRESS | staging=BUILT 2026-10-01 (catalog first, widened to all four customer pages and tuned for LCP the same day), awaiting Rick's review | prod=NOT PROMOTED | findings=— (feature build, not a defect; **F169 is the next free finding ID**)
 
 **Last verified against live: 2026-10-01** (staging; production untouched).
 
@@ -46,8 +46,8 @@ fills it with a banner image, and lets the store change it.
 | `assets/banner-v1.webp` | New. 1100 × 256, 11 KB, cut from the hero. **`-v1` is load-bearing** (immutable for a year): re-exporting REQUIRES `-v2` and updating `PageBanner.DEFAULT_SRC`. |
 | `_headers` | `/assets/banner-v1.webp` added to the immutable group. |
 | `style.css` | `.page-header--banner`, `.brand-banner`, `--banner-w`, `.page-header--wrap-sub`, plus tablet / phone / reduced-motion / **print** rules. Shared, because the Settings preview reuses the real classes. |
-| `app.js` | `PageBanner` (`KEY`, `defaults`, `cleanUrl`, `load`, `parse`, `resolve`, `mount`, `test`). **`app.js` carries `merge=ours`**, see § 5. |
-| `catalog.html`, `mylist.html`, `arrivals.html`, `subscriptions.html` | Header gets the class and an empty `#page-banner` host; one fire-and-forget `PageBanner.load().then(mount)` after the maintenance check. Subscriptions also gets `page-header--wrap-sub`. |
+| `app.js` | `PageBanner` (`KEY`, `defaults`, `cleanUrl`, `load`, `parse`, `resolve`, `mount`, **`show`**, `test`). **`app.js` carries `merge=ours`**, see § 5. |
+| `catalog.html`, `mylist.html`, `arrivals.html`, `subscriptions.html` | Header gets the class and an empty `#page-banner` host; `<link rel="preload" as="image">` for the default art in the head; **one `PageBanner.show(host)` call as the first line of the page's init** (see § 5). Subscriptions also gets `page-header--wrap-sub`. |
 | `settings.html` | Branding ▸ Page banner panel, live preview, own Save/Discard; rail item "Branding" is a link (was "Soon"). |
 
 The nav and footer blocks are untouched, so the seven-page sync set is unaffected.
@@ -79,11 +79,43 @@ with the sources named measured **0.0069 with the banner vs 0.0069 without**, an
 occurred in both configurations. The sources are the page's own content (`list-container`, `btn-print`,
 `btn-email-list`, nav). The harness therefore compares each side's best run, not the mean.
 
-## 5. Honest limits / when promoting
+## 5. Performance: the art became the LCP element, and how that was reduced
+
+**Found by measurement, not assumed.** `lighthouse-auth.mjs` on staging, same throwaway account, banner on
+vs off (`page_banner` row set to `off`). On pages with **no cover grid** the 11 KB art is the largest
+paint, so its arrival time *is* the page's LCP, and it was arriving at the end of the whole init chain
+(auth, tenant, maintenance check, settings read, image fetch). Catalog and This Week were unaffected
+because their covers are the LCP anyway.
+
+| Page, banner **on** (off in brackets) | First build | + preload + parallel read | + paint on config (`show`) |
+|---|---|---|---|
+| My List, mobile | **94**, LCP 2.9 s | 97, LCP 2.4 s | **98**, LCP 2.2 s  *(100, 1.5 s)* |
+| My List, desktop | **98**, LCP 1.1 s | 99, LCP 0.8 s | **100**, LCP 0.7 s  *(100, 0.4 s)* |
+| Subscriptions, mobile | **96**, LCP 2.5 s | 97, LCP 2.4 s | **98**, LCP 2.1 s  *(99, 1.4 s)* |
+
+What changed, in order:
+1. `<link rel="preload" as="image">` for the default art, so the fetch starts at HTML parse.
+2. The settings read starts at the top of each page's init, in parallel with auth and tenant resolution.
+3. `PageBanner.show()` paints `default` and `off` the moment the read returns: they need **no tenant**
+   (`resolve()` consults `Tier` only for `custom`). `custom` is the paid tier's and still waits for the
+   tenant, and if the tenant never resolves (~12 s) it shows **nothing**, because a null tenant would read
+   as free and paint the platform art on a store that chose its own.
+
+**Residual, stated plainly:** about **+0.7 s mobile LCP** (1-2 score points) on My List and Subscriptions
+remains. It is the floor of "read a setting, then fetch and paint an image". Going further would mean
+caching the last-known decision in `localStorage` for first paint, which adds a stale-config and
+cross-user hazard for a decorative element; not done. These are cold-cache lab numbers; a returning
+visitor has the art in the immutable cache.
+
+**Not caused by this work:** Subscriptions desktop scores **78-79 with the banner on AND off** (CLS 0.512,
+identical both ways). It is the F141 Pattern B family, measured here on a brand-new empty account
+(F141's own caveat: an empty account is not representative). Not investigated, not filed.
+
+## 6. Honest limits / when promoting
 
 - **Chromium only.** Not WebKit, not a real iPhone. The slant uses `clip-path`, the fade uses
   gradients; both are broadly supported, but unverified on Safari.
-- **CLS is unthrottled**, so it is a floor, not a Lighthouse figure.
+- **The harness's CLS is unthrottled**, so it is a floor; the Lighthouse figures in § 5 are the throttled ones.
 - **No committed spec asserts the banner** (the Playwright suite is gitignored anyway). The evidence
   is the local harness; a green suite says only that nothing else broke.
 - **Admin impersonation on Subscriptions:** the page replaces its long subtitle with a short one, so
