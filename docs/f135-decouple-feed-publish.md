@@ -1,14 +1,17 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** PLANNED 2026-09-30 (re-activated after the 2026-09-29 missed send) — NOT STARTED | staging=— | prod=— | findings=F135,F134
+**STATUS:** IN PROGRESS 2026-10-01 — S0 COMPLETE (V0 green; § 0.1, § 4.4, § 10), S1–S5 NOT STARTED | staging=— | prod=— | findings=F135,F134
 **Owner finding:** F135 (`docs/technical-reference.md` § 13). **Target:** two repos — the private
 scripts repo (`catalogs/scripts`, `mrcyberrick/comic-preorder-scripts`) and
 `mrcyberrick/weekly-pull-feed` (public). **No `comic-preorder` app change.** One optional DB object
 (§ 4.4, decision D2).
-**Last verified against live:** 2026-09-30 — `weekly-pull-feed` read at `4a20821`; send workflow run
-`36648375252` log read; `send-brevo-campaign.js` stale guard read at lines 60–95. The scripts repo
-was **not** readable from the planning session — every claim about `import.js` /
-`build-pull-feed.js` below carries its 2026-08-21 line numbers and **must be re-read in S0**.
+**Last verified against live:** 2026-10-01 (S0) — scripts repo read from disk at `8f964a5` (`main`,
+in sync with `origin/main`): `import.js`, `import-staging.js`, `build-pull-feed.js` and the tests
+that import them; production `weekly_shipment` read with the service role (GET only); `weekly-pull-feed`
+`main` re-read through the GitHub API (tip still `4a20821`); the PAT's health probed read-only.
+**Line numbers in § 10.1 are measured at that commit; the 2026-08-21 numbers this doc used before
+(`import.js` ~1931 and ~1510) were off by +388 and +267 lines.** Earlier read, 2026-09-30:
+send workflow run `36648375252` log; `send-brevo-campaign.js` stale guard at lines 60–95.
 
 *(History: written 2026-08-21, direction settled with Rick the same day — **decouple**, do not add an
 ad-hoc mode. **Deferred 2026-08-29** in favour of the `.env` mitigation (§ 3), because the gated
@@ -48,6 +51,37 @@ happened**, and the only thing that publishes is `import.js`'s shipment step.
 operator running a data import on a laptop with the right `.env` line uncommented. That has now
 failed in both directions: wrong week mailed (2026-08-11) and nothing mailed (2026-09-29).
 
+### 0.1 S0 result — classified (a), measured 2026-10-01
+
+**The weekly shipment import ran. The publish did not. Case (a); case (b) is ruled out.**
+
+| Evidence | Reading | Source |
+|---|---|---|
+| Production `weekly_shipment`, week Mon 09-28 → Sun 10-04 | **71 rows** (PRH 43, Lunar 28), `on_sale_date` 2026-09-30, every row has a title and a cover | service-role read, 2026-10-01 |
+| Those rows' `created_at` | **2026-09-27 23:43:22Z** (Sun 7:43 PM ET), one batch (all within 0.12 s). The October catalog import cleared `order_deadline` at 23:32Z, 11 min earlier — consistent with one run | same read; CLAUDE.md October gate record |
+| `weekly-pull-feed` commits after 09-18 | **None.** Tip `4a20821`, 2026-09-18 16:58:45Z; `main` is the only branch | GitHub API, 2026-10-01 |
+| Normal import → publish gap | 2 min 21 s (09-11: rows 22:59:14Z → commit 23:01:35Z) to 6 min 6 s (09-18: 16:52:39Z → 16:58:45Z) — so a 09-27 publish would have landed by ~23:50Z | same sources |
+| The builder on the 09-30 data | `node build-pull-feed.js --local` renders **71 titles**, exit 0 — the data and render half cannot have thrown | local run (writes only the gitignored `pull-feed-out/`; nothing uploaded) |
+| `GITHUB_TOKEN_PULL_FEED` today | present and **uncommented** (`.env` line 13); a 93-character fine-grained PAT; GitHub accepts it: repo `GET` 200, `permissions.push = true`, `git/ref/heads/main` (the publish's own first call) 200 | `.env` read with values redacted; read-only API calls |
+| `.env` last modified | **2026-09-27 23:46:17Z (7:46 PM ET) — 176 s after the shipment rows landed** | file mtime |
+| The 09-21 ad-hoc import | 2 PRH rows, on-sale 09-22, created 2026-09-22 00:20–00:24Z (Mon 8:20 PM ET). **No publish commit followed it either**; any successful publish commits, because `rss.xml` stamps the build time (`build-pull-feed.js:53-57`) | same read |
+
+**What this leaves.** Two production imports since 09-18 and neither published. With the token valid
+today, the one cause that fits both is **the token line being absent from `.env` during those runs**:
+commented out for the 09-21 ad-hoc import (the § 3 mitigation) and not restored before 09-27 — the
+forgotten-*restore* direction § 3 named on 09-30. The `.env` edit 176 s after the 09-27 shipment fits
+"put back right after the run". **That is an inference, not a confirmed cause.** Rick was asked on
+2026-10-01 and does not remember, and the console line that would settle it (`⚠️  GITHUB_TOKEN_PULL_FEED
+missing from .env — skipping feed publish.`, `import.js:2328`) was not kept. A publish that failed
+inside the `try/catch` (`import.js:2347-2350`) is not strictly excluded, but the narrow remainder is
+unlikely: the token works today, the build renders, and the first publish call succeeds against the
+live ref. **Either way the incident reduces to one console line, and that is the finding:** `import.js`
+treats "nothing was published" as a warning, and nothing downstream looks for it.
+
+**Decoupling closes this class; § 4.5 does not.** The 71 rows were in the database from Sunday night,
+so Monday's preflight (§ 4.5) would have passed. Only moving the build into the cron (§ 4.2) closes
+(a). § 4.5 exists for (b), which has **never been observed** (§ 10.4 item 7).
+
 ---
 
 ## 1. The defect (unchanged from 2026-08-21)
@@ -81,6 +115,27 @@ Comment out `GITHUB_TOKEN_PULL_FEED` in the scripts `.env` for an **ad-hoc** shi
 **restore it** before the next weekly import. **New as of 2026-09-30:** forgetting the *restore*
 silently produces the § 0 failure. Until S4 lands, check the line is uncommented before every weekly
 import.
+
+**S0 additions, measured 2026-10-01.**
+
+1. **State today:** the line is **uncommented** (`.env` line 13) and the PAT is valid (§ 0.1). The
+   import for the 10-07 week is safe to run as-is. Check with
+   `grep -n GITHUB_TOKEN_PULL_FEED .env` — a leading `#` means the publish will be skipped.
+2. **⏰ The PAT expires 2026-10-07 15:43:24 UTC (11:43 AM ET)** (GitHub's own
+   `github-authentication-token-expiration` header). It is a fine-grained token; 90 days before that
+   is 2026-07-09, the date of the decision to publish from `import.js`, so it was probably created
+   then *(inferred, not read from GitHub)*. After expiry, `publishPullFeed()`'s first
+   GitHub call fails with 401, `import.js:2347-2350` prints a warning and the import carries on:
+   **the same silent no-publish as § 0, with a different trigger.** The weekly import for the 10-07
+   week (expected around 10-02) falls inside the window; the import for the 10-14 week (expected
+   around 10-09) does not. **Renew the token before 10-07.** Decoupling cannot land first: S3 alone
+   needs one observed Tuesday. *(Recorded under F135 rather than filed separately: it is a second
+   trigger of the mechanism F135 already owns, and D3 retires the token.)*
+3. **There is no shipment-only entry point.** The shipment import is Step 6 of the full
+   `node import.js <lunar> <prh> [<ship1> <ship2>]` run (`import.js:1969`, `:2250`), reached only after
+   a catalog import. The toggle therefore applies to a whole catalog-plus-shipment run.
+4. `.env.example` has **never** listed this variable (§ 10.4 item 2), so a rebuilt `.env` gets no hint
+   that it is needed.
 
 ---
 
@@ -128,7 +183,35 @@ scripts repo at S4. Two copies of a generator is the drift shape this project ke
 the scripts repo has been `.env`-driven since 2026-07-08) and contains nothing Rick minds being
 public (S6a's `?series=` link logic is fine; it ships in every email anyway).
 
-**D2 — how the Actions job reads production data (recommended: a narrow read-only RPC).**
+**D1 precondition — CHECKED 2026-10-01: met.** Lines 1–740 (everything except the email/RSS templates)
+were read in full; the whole 1,875-line file was then pattern-scanned for key shapes, UUIDs, emails,
+phones, project refs and local paths — **the ~1,100 template lines were scanned by pattern, not read.**
+Result: **no literal secret and no UUID.** The four credentials arrive
+only through `.env` (`SUPABASE_URL_PROD`, `IMPORT_SERVICE_KEY_PROD`, `IMPORT_TENANT_ID_PROD`,
+`GITHUB_TOKEN_PULL_FEED`, `:66-69`). What is hardcoded is already public: the production project ref
+(`:72`, a wrong-environment guard — it is also in the public `config.js`), the shop's phone and
+address (`:1238-1239`, `:1301-1302`, `:1351-1353` — printed in every email), `rjbookstop.pulllist.app`, and the
+GitHub owner and repo. **Two soft items for Rick's eye, neither a blocker:** comments at `:84-88` and
+`:130-135` quote internal measurements (a Brevo campaign's byte size, a list "roughly 70% Gmail",
+catalog-month row counts). **Moving it is not a plain copy:** `loadDotEnv()` exits 1 when no `.env`
+sits next to the script (`:222-232`) and the four `requireEnv()` calls run at module load, so the
+file cannot even be `require`d in Actions as written. Both change in S2, in the same edit that
+switches the data path (§ 10.4 item 4).
+
+**D2 — DECIDED 2026-10-01 (Rick): A, the anon-callable `SECURITY DEFINER` RPC.**
+S0 step 3 found the builder's whole data footprint: **one table, `weekly_shipment`**, read by two
+queries (§ 10.2) — `title`, `cover_url` and the joined `catalog.series_name` for one Mon–Sun week,
+plus the latest `on_sale_date`. **No per-customer or reservation data**, and every column already
+ships in the public newsletter, so the stop condition in the paragraph below did not fire. S1 settles
+the signature; two points carried in from S0: (1) it must return **every** row for the week,
+including ones with no title or cover, because the builder derives its "skipped / collapsed"
+warning and the customer-facing title count from the raw row count (`:346-352`); (2) the embedded
+`catalog:catalog_id(series_name)` is a **left** join (null when no catalog row), so the RPC must be
+one too. Taking the tenant **slug** (`rjbookstop`) instead of the UUID would keep the tenant UUID out
+of a public repo — an S1 design choice, `/sql-check` first.
+
+*Original framing, kept for the record:* **D2 — how the Actions job reads production data
+(recommended: a narrow read-only RPC).**
 
 | Option | Secret in GitHub | Blast radius if leaked | Work |
 |---|---|---|---|
@@ -175,7 +258,9 @@ Each must be **negative-control tested** in S2: force the failing input, observe
 Session boundaries are marked. **Order matters: the new trigger is proven before the old one is
 removed** — S4 before S3 recreates the silent-no-publish window.
 
-**S0 — Discovery + this week's recovery (one session, read-mostly). Gate V0.**
+**S0 — Discovery + this week's recovery (one session, read-mostly). Gate V0.** ***DONE 2026-10-01 —
+V0 green. Step 1 → § 10.1, step 2 → § 0.1, step 3 → § 10.2 and § 4.4, step 4 → § 4.4, step 5 →
+nothing run (week skipped; its on-sale date has also now passed), step 6 → no finding filed (§ 10.5).***
 1. Re-read `import.js` publish block, `resolveFeedWeek()`, `publishPullFeed()` and all of
    `build-pull-feed.js` from disk; record current line numbers here.
 2. **Classify § 0**: service-role read of production `weekly_shipment` for the week of 2026-09-30
@@ -232,7 +317,7 @@ for the elapsed-time waits.)*
 
 | Gate | Assertion | Evidence |
 |---|---|---|
-| **V0** | § 0 classified (a) or (b) with a DB read and the `.env` state; builder's query list recorded; builder confirmed public-safe (D1); D2 answered by Rick | this doc updated |
+| **V0** | § 0 classified (a) or (b) with a DB read and the `.env` state; builder's query list recorded; builder confirmed public-safe (D1); D2 answered by Rick | this doc updated — **GREEN 2026-10-01:** (a) per § 0.1 (cause inferred, not confirmed); queries § 10.2; D1 met § 4.4; **D2 = A** |
 | **V1** | Anon call to the RPC returns the week's rows with only the projected columns; anon call to `weekly_shipment` directly still denied/filtered | curl output, both environments |
 | **V2** | Each § 4.6 assertion observed **red** under its forced input, then green; one Pages deployer | Actions run links |
 | **V3** | Workflow build == import build for the same week (timestamps aside); scheduled Tuesday run delivered | diff output + Brevo campaign status |
@@ -276,11 +361,113 @@ left in place or dropped.
       pushed** (`git log origin/main`)
 - [ ] `weekly-pull-feed`: build-then-send on schedule, Monday preflight, dispatch recovery modes,
       one Pages deployer, repo-native credentials
-- [ ] `GITHUB_TOKEN_PULL_FEED` removed from `.env` / `.env.example`; no doc still instructs
-      commenting it out
+- [ ] `GITHUB_TOKEN_PULL_FEED` removed from `.env`; `README.md:13` no longer names it (it was never
+      in `.env.example`, § 10.4 item 2); no doc still instructs commenting it out
 - [ ] RPC `STATUS:` line reads APPLIED on both environments (if D2 = A)
 - [ ] § 13 F135 → RESOLVED; CLAUDE.md F135 row removed; this STATUS token flipped
 - [ ] `/wrap-up`
+
+---
+
+## 10. S0 record — code map, query inventory and corrections (2026-10-01)
+
+Everything below was read from disk or from the live systems on 2026-10-01. Where § 5 and this
+section disagree, **this section is current.**
+
+### 10.1 Where the code is — scripts repo `main` @ `8f964a5` (in sync with `origin/main`)
+
+| File | What | Lines |
+|---|---|---|
+| `import.js` | `NO_WRITE` flag | `:72` |
+| | positional args: `[lunarCatalogPath, prhCatalogPath, argShipPath1, argShipPath2]` | `:1969` |
+| | `resolveFeedWeek()` (comment `:1755-1776`) | `:1777-1789` |
+| | Step 6 shipment import | `:2250-2352` |
+| | `upsertShipment(...)` — the shipment write, runs **before** the publish | `:2315` |
+| | **publish block**: `NO_WRITE` skip `:2325-2326`; missing-token warning `:2327-2328`; `resolveFeedWeek(allShip)` `:2331`; spread print `:2335-2344`; `require('./build-pull-feed.js')` + `publishPullFeed({ refDate: feedDate })` `:2345-2346`; `catch` → warning only `:2347-2350` | `:2319-2351` |
+| | `module.exports` (includes `resolveFeedWeek`) | `:2450-2466` (`:2455`) |
+| `import-staging.js` | `resolveFeedWeek()` — **no call site** (comment `:1752-1768`) | `:1769-1781` |
+| | `module.exports` includes it | `:2413` |
+| `build-pull-feed.js` | header, usage, data contract | `:1-58` |
+| | credentials: `loadDotEnv()` call `:65`, four `requireEnv()` `:66-69`, prod-URL guard `:72-75` | `:64-75` |
+| | `loadDotEnv()` / `requireEnv()` | `:222-241` |
+| | `resolveLatestShipmentWeek()` | `:286-301` |
+| | `fetchWeekRows()` (raw/skipped/collapsed accounting `:346-352`; returns `shipmentCount` `:356`) | `:303-357` |
+| | `gh()` GitHub Git Data API wrapper | `:392-405` |
+| | `readPublishState()` · `resolveThumb()` · `planPurge()` · `verifyPublishedTree()` | `:411` · `:461` · `:530` · `:564` |
+| | **`publishPullFeed()`** — the single-commit publish | `:600-678` |
+| | `buildLocal()` · `module.exports` · CLI | `:680` · `:695-703` · `:706-720` |
+| | email/RSS templates (`buildNewsletterHtml` first) | `:729-1875` |
+| | `pull-feed-generated` stamp: `new Date().toISOString().slice(0, 10)` | `:1371`, `:1439` |
+
+### 10.2 Every query the builder makes — the D2 projection
+
+| # | Where | Request | Columns used |
+|---|---|---|---|
+| Q1 | `resolveLatestShipmentWeek()` `:286-301`, called from `fetchWeekRows()` `:304` only when no `--week` is given | `GET weekly_shipment?select=on_sale_date&tenant_id=eq.{T}&on_sale_date=not.is.null&order=on_sale_date.desc&limit=1` | `on_sale_date` |
+| Q2 | `fetchWeekRows()` `:311-322` | `GET weekly_shipment?select=title,cover_url,catalog:catalog_id(series_name)&tenant_id=eq.{T}&on_sale_date=gte.{Mon}&on_sale_date=lte.{Sun}&limit=1000&offset=N`, paged until a short page | `title`, `cover_url`, `catalog.series_name` (left join through `catalog_id`) |
+
+**Not in D2** (not database reads): the GitHub API calls on `mrcyberrick/weekly-pull-feed`
+(`gh()`: `git/ref`, `git/commits`, `git/trees`, `git/blobs`, `PATCH git/refs`) and `wsrv.nl`, the
+image resizer (`:475`). **No other table, no database write, no RPC.** Downstream the raw row count
+matters as much as the columns: it becomes `shipmentCount`, the customer-facing "titles arriving"
+number (`:356`). Weekly sizes, measured: 67 / 73 / 68 / 77 / 88 (+2 ad-hoc) / 71 rows for the weeks
+08-26 → 09-30 — nowhere near PostgREST's 1,000-row cap, but give the RPC an explicit `ORDER BY`
+anyway (F162's lesson).
+
+### 10.3 Test coverage S4 will touch
+
+- `test/feed-week.test.mjs` — imports `resolveFeedWeek` from `../import.js` (`:37`); goes with the
+  function.
+- `test/builders.test.mjs:35-41` — asserts `import.js` and `import-staging.js` export **the same key
+  set**. Deleting `resolveFeedWeek` from one file only turns this red.
+- `test/thumb-retention.test.mjs` — `require`s `../build-pull-feed.js` (`:33`) after injecting dummy
+  env, which only works because the module reads its env at load. It moves with the builder, and
+  `weekly-pull-feed` has **no `package.json` and no test runner today** (root: `.github/`, `images/`,
+  `index.html`, the three artifacts, `scripts/send-brevo-campaign.js`, `thumb-retention.json`,
+  `thumbs/`), so S2 must decide where those tests live or they are dropped by accident.
+
+### 10.4 Corrections to the 2026-09-30 runbook
+
+1. **S4 must also remove `resolveFeedWeek()` from `import-staging.js`** (`:1769`, export `:2413`). It
+   has no call site, but the parity test above requires both files to export the same set. S4's text
+   named only `import.js`.
+2. **`.env.example` has never listed `GITHUB_TOKEN_PULL_FEED`** — it holds only the six
+   Supabase/tenant variables. S4's "remove it from `.env.example`" is a no-op; the doc that names the
+   variable is `README.md:13`. The same fact means nothing reminds an operator rebuilding `.env` that
+   the publish needs it (F131's single-operator shape).
+3. **S2 starting state, confirmed:** one workflow (`send-newsletter.yml`, `cron: "0 21 * * 2"`,
+   `permissions: contents: read`), Pages `build_type: legacy` on `main` / `/`, `deploy-pages.yml`
+   absent — so there is exactly one deployer now, and the build job's `contents: write` is the only
+   permission change. Secrets the workflow references today: `BREVO_API_KEY`, `SENDER_EMAIL`.
+4. **The builder is not a drop-in copy for Actions** (§ 4.4 D1): `loadDotEnv()` exits 1 with no `.env`,
+   and four `requireEnv()` calls run at module load. Both must change in S2, along with the data path.
+5. **The stamp is a UTC date** (`:1371`) while the same file's retention code uses local date parts
+   (`todayLocalDate()` `:505`). Harmless at a 21:00 UTC run; choose one clock for the stamp **and** for
+   § 4.6(3)'s "stamp equals today" assertion, or that assertion can disagree with the thing it checks.
+6. **§ 4.6(1) is Wednesday-anchored** ("the week containing the next Wednesday"). The builder's own
+   comment (`:284-285`) and CLAUDE.md § Key Business Logic both prohibit Wednesday-anchored logic.
+   Measured `on_sale_date`s are Wednesdays except one ad-hoc Tuesday (09-22), so it would work today.
+   The intent — fail when the database's newest week is not this run's week — can be stated from the
+   Mon–Sun week of the run date. Re-derive it in S2.
+7. **§ 4.5's Monday preflight addresses case (b), which has never been observed.** The observed failure
+   (a) passes it, because the rows were present from Sunday night (§ 0.1). **Rick's call** whether it
+   stays in scope for this finding or is deferred. It is cheap once S1's RPC exists, but it is a
+   second workflow and a second alert to maintain for a failure with no instance on record.
+
+### 10.5 Decisions and disposition
+
+- **Rick, 2026-10-01:** D2 = **A** (anon `SECURITY DEFINER` RPC). Asked what happened to the token
+  line on 09-21 / 09-27: **does not remember** — the cause stays an inference (§ 0.1).
+- **Earlier, standing:** D1 = move the builder (2026-09-30); skip the week-of-09-30 newsletter
+  (2026-09-30) — no late build or send was run, and nothing was published or sent in S0.
+- **No finding filed.** The case-(a) cause matches the failure § 3 already named, and the token
+  expiry (§ 3, item 2) is a second trigger of the mechanism F135 owns, not a new mechanism. Rick can
+  ask for it to be filed. **Next free finding ID: F169** — F168 was filed 2026-09-30 on `staging`
+  (the phone drawer). This branch is cut from `main` and its `CLAUDE.md` still reads F168, so file
+  from `staging`'s copy, not this one.
+- **Nothing written outside this repo.** S0 made production reads only (GET), one local
+  `build-pull-feed.js --local` run (gitignored `pull-feed-out/`; no upload, no GitHub write), and
+  read-only GitHub API calls. No code, SQL or workflow was changed in either repo.
 
 ---
 
