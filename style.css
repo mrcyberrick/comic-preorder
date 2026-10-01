@@ -1128,6 +1128,40 @@ button { cursor: pointer; font-family: var(--font-body); }
 .list-table .col-title { font-weight: 500; }
 .list-table .col-sub { font-size: 0.75rem; color: var(--text-muted); }
 
+/* ── Table card (desktop) ─────────────────────────────────────
+   Gives a main data table a surface of its own. Bare, it sat directly on the
+   page background (#0f0f0f) with half-transparent row rules, so it read as
+   less defined than the bordered cards beside it (Upcoming Arrivals, My
+   Subscriptions). The recipe is the weekly newsletter's own table
+   (weekly-pull-feed/newsletter.html), which already uses this app's tokens:
+   a --bg-card surface on the --bg page, a 1px --border edge, --radius-lg
+   corners, the --shadow lift, a --bg-elevated header band and full-strength
+   --border row rules.
+
+   Screen + desktop ONLY, deliberately:
+   - <=640px the table is display:none and the page shows .mobile-card items,
+     which are already bordered cards; an empty bordered wrapper would show.
+   - print keeps the plain black-on-white table (mylist.html's print rules).
+   overflow-x:auto, not hidden: the card clips to its rounded corners either
+   way, but a table wider than the card must scroll, not be cut off. */
+@media screen and (min-width: 641px) {
+  .table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .table-card .list-table th {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);        /* --text-muted is too faint on the #222 band */
+    border-bottom: 1px solid var(--border);
+  }
+  .table-card .list-table td { border-bottom: 1px solid var(--border); }
+  .table-card .list-table tr:last-child td { border-bottom: none; }
+}
+
 /* ── Admin ─────────────────────────────────────────────────── */
 /* ── Mode switch (F121 session 4) ───────────────────────────────────────
    Sits ABOVE the tab strip and outranks it: a mode is the job you are doing
