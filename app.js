@@ -1549,13 +1549,42 @@ const PageBanner = {
     const img = new Image();
     img.alt = '';
     img.decoding = 'async';
-    img.setAttribute('fetchpriority', 'low');  // decoration must not compete with the covers
-    if (pick.custom) img.referrerPolicy = 'no-referrer';
+    // A tenant's own image comes from a host we do not control, so it must not
+    // compete with the covers. The default art is 11 KB, preloaded in each page
+    // head, and is the LCP element on pages with no cover grid: leave it at
+    // normal priority.
+    if (pick.custom) { img.setAttribute('fetchpriority', 'low'); img.referrerPolicy = 'no-referrer'; }
     // Handlers BEFORE src: a cached image can fire load synchronously.
     img.onload = () => host.classList.add('is-ready');
     img.onerror = () => { host.hidden = true; };
     img.src = pick.src;
     host.appendChild(img);
+  },
+
+  // The one call a customer page makes, FIRST THING in its init. Starts the
+  // settings read immediately, in parallel with auth and tenant resolution, and
+  // paints as soon as it can:
+  //   - 'default' and 'off' need NO tenant (resolve() consults Tier only for
+  //     'custom'), so they paint the moment the read returns. This matters: the
+  //     art is the largest paint on pages with no cover grid, and waiting for
+  //     initNav + the maintenance check put it at the end of the whole init
+  //     chain (Lighthouse: My List mobile LCP 2.9 s against 1.4 s without it).
+  //   - 'custom' is the PAID tier's, so it must wait for the tenant. If the
+  //     tenant never resolves, show NOTHING: a null tenant would read as free
+  //     and paint the platform art on a store that chose its own.
+  // Never throws or rejects: this is decoration, and a page's init must not be
+  // able to fail on it.
+  async show(host) {
+    try {
+      const cfg = await this.load();
+      if (cfg.mode !== 'custom') { this.mount(host, cfg, null); return; }
+      let tenant = null;
+      for (let i = 0; i < 300 && !tenant; i++) {  // up to ~12 s, then give up quietly
+        try { tenant = TenantContext.current(); }  // throws until resolve() has finished
+        catch (_) { await new Promise(r => setTimeout(r, 40)); }
+      }
+      if (tenant) this.mount(host, cfg, tenant);
+    } catch (err) { console.warn('PageBanner.show failed — no banner', err); }
   },
 
   // Resolves true if `url` loads as an image. Used by settings.html so a dead

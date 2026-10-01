@@ -595,11 +595,10 @@
 <script src="app.js"></script>
 <script>
 (async () => {
-  // Header banner config: start the read NOW, in parallel with auth and tenant resolution, rather
-  // than after the maintenance check. The art is the largest paint on pages with no cover grid, so a
-  // serialized read put its arrival at the end of the whole init chain (measured: LCP +1.4 s mobile on
-  // My List). load() never rejects, so an early return below cannot leave an unhandled rejection.
-  const bannerCfg = PageBanner.load();
+  // Header banner (PageBanner, app.js; set in Settings > Branding). FIRST THING, before any await:
+  // it reads its config in parallel with auth and tenant resolution and paints as soon as it can,
+  // because the art is the largest paint on pages with no cover grid. Never throws or rejects.
+  PageBanner.show(document.getElementById('page-banner'));
   const navData = await initNav();
   if (!navData) return;
   const { user, profile } = navData;
@@ -611,11 +610,6 @@
 
   try { await checkMaintenanceMode(profile?.is_admin); }
   catch(e) { if (e.message === 'maintenance') return; }
-
-  // Header banner — fire-and-forget decoration (PageBanner, app.js); one
-  // setting for all four customer pages, controlled from Settings ▸ Branding.
-  bannerCfg.then(cfg =>
-    PageBanner.mount(document.getElementById('page-banner'), cfg, TenantContext.current()));
 
   // ── Calculate this week's Mon-Sun range ───────────────────
   // Uses the canonical DateUtils.weekRange() helper from app.js so the
