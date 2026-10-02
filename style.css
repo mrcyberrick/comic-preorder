@@ -248,7 +248,24 @@ button { cursor: pointer; font-family: var(--font-body); }
 
    --banner-w is the art's width, shared by the art itself and by the subtitle
    cap below so the two cannot drift apart. */
-.page-header--banner { position: relative; isolation: isolate; --banner-w: min(52%, 640px); }
+.page-header--banner {
+  position: relative;
+  isolation: isolate;
+  --banner-w: min(52%, 640px);
+  /* The header as a defined card. Bare, it sat on the same #0f0f0f as the page
+     with only a hairline under it, so nothing separated it from the background.
+     The recipe is the weekly newsletter's header band (weekly-pull-feed/
+     newsletter.html): a --bg-elevated (#222) band, a 1px --border (#2e2e2e)
+     edge, --radius-lg corners and the --shadow lift, against the --bg page.
+     overflow:hidden clips the art to the rounded corners. */
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  padding: 32px 28px 28px;
+  margin-top: 20px;
+}
 .brand-banner {
   position: absolute;
   top: 0;
@@ -275,7 +292,7 @@ button { cursor: pointer; font-family: var(--font-body); }
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(90deg, var(--bg) 0%, rgba(15,15,15,0.6) 36%, rgba(15,15,15,0) 80%);
+  background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
 }
 .brand-banner::after {             /* the accent slash on the slanted edge */
   content: '';
@@ -305,13 +322,13 @@ button { cursor: pointer; font-family: var(--font-body); }
      subtitle (seen in a real 393px screenshot), and a decorative line must not
      compete with the words it sits behind. A soft halo on the subtitle keeps it
      readable where the bright part of the art passes behind it. */
-  .page-header--banner { --banner-w: 72%; }
+  .page-header--banner { --banner-w: 72%; padding: 26px 20px 22px; margin-top: 16px; }
   .brand-banner.is-ready { opacity: 0.5; }
   .brand-banner::after { display: none; }
   .brand-banner::before {
-    background: linear-gradient(90deg, var(--bg) 0%, rgba(15,15,15,0.78) 42%, rgba(15,15,15,0) 88%);
+    background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.78) 42%, rgba(34,34,34,0) 88%);
   }
-  .page-header--banner p { text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg); }
+  .page-header--banner p { text-shadow: 0 0 8px var(--bg-elevated), 0 0 3px var(--bg-elevated); }
 }
 @media print {
   /* Decoration never prints. My List's print rules hide only the subtitle, not
@@ -319,6 +336,17 @@ button { cursor: pointer; font-family: var(--font-body); }
      image on white paper. Global on purpose: it also covers any page that gains
      the banner later. */
   .brand-banner { display: none !important; }
+  /* The card is a screen treatment. Left on, a dark #222 box would print behind
+     black text (My List prints its title) wherever backgrounds are enabled. */
+  .page-header--banner {
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    padding: 0;
+    margin-top: 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .brand-banner { transition: none; }
