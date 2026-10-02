@@ -158,6 +158,24 @@
       min-height: 40px; outline: none;
     }
 
+    /* Branding ▸ Page banner. The preview frame reuses the REAL header
+       classes (.page-header--banner + .brand-banner from style.css), so what is
+       shown here is the same markup and CSS a customer gets, not a drawing of it. */
+    .set-banner-stage { padding: 14px 18px 4px; }
+    .set-banner-frame { margin: 0; }   /* look comes from .page-header--banner itself: same card as the real pages */
+    .set-banner-frame h1 { font-size: 2rem; }
+    .set-banner-actions {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 12px 18px; border-top: 1px solid var(--border);
+    }
+    .set-banner-actions .set-banner-status { margin-right: auto; font-size: 0.78rem; color: var(--text-secondary); }
+    .set-row input[type="radio"] { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
+    .set-row.is-locked { cursor: not-allowed; }
+    .set-row.is-locked .set-row-title, .set-row.is-locked .set-row-note { opacity: 0.55; }
+    .set-url-hint { font-size: 0.74rem; margin-top: 6px; color: var(--text-secondary); min-height: 1.1em; }
+    .set-url-hint.is-bad { color: var(--warning); }
+    .set-url-hint.is-ok { color: var(--success); }
+
     /* Mobile: rail becomes a plain list above the content, panels stay full width */
     @media (max-width: 860px) {
       .set-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -242,10 +260,10 @@
       </div>
       <div>
         <div class="set-rail-group-label">Store identity</div>
-        <div class="set-rail-item">
+        <a class="set-rail-item" href="#branding">
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
-          Branding <span class="set-soon">Soon</span>
-        </div>
+          Branding
+        </a>
         <div class="set-rail-item">
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14"/><path d="m3 6 9 7 9-7"/></svg>
           Email Templates <span class="set-soon">Soon</span>
@@ -456,6 +474,76 @@
           <strong>Data-quality note:</strong> <span id="noprice-count">0</span> titles this month have
           <code>price_usd</code> set to NULL rather than a number. That is missing import data, not a
           giveaway, so it is reported here rather than given a filter of its own.
+        </div>
+      </section>
+
+      <!-- ── Branding ───────────────────────────────────────────
+           Its own Save: this is a different setting (app_settings.page_banner)
+           from the catalog filters above, and saving one must never write the other. -->
+      <div id="branding" style="margin:34px 0 14px;scroll-margin-top:76px">
+        <h2 style="margin:0;font-family:var(--font-display);font-size:1.7rem;letter-spacing:0.03em;line-height:1.1">Branding</h2>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:var(--text-secondary);max-width:760px">
+          How the store looks to customers. Applies to everyone in this tenant.
+        </p>
+      </div>
+
+      <section class="set-panel" id="banner-panel">
+        <div class="set-panel-head">
+          <h3>Page banner</h3>
+          <p>The artwork in the empty space beside the page title on the customer pages: <strong>Catalog</strong>, <strong>My List</strong>, <strong>Subscriptions</strong> and <strong>This Week</strong>. It is not printed.</p>
+        </div>
+
+        <div class="set-banner-stage">
+          <div class="page-header page-header--banner set-banner-frame" aria-label="Preview of a customer page header (shown here as the Catalog)">
+            <div class="brand-banner" id="bn-preview" aria-hidden="true"></div>
+            <h1>Monthly Catalog</h1>
+            <p>Catalog for <span id="bn-month">—</span> — browse and reserve items</p>
+          </div>
+        </div>
+
+        <label class="set-row">
+          <input type="radio" name="bnmode" value="default" id="bn-default">
+          <span class="set-row-text">
+            <span class="set-row-title">Default artwork</span>
+            <span class="set-row-note">The skyline artwork from pulllist.app, in your store's accent colour.</span>
+          </span>
+        </label>
+        <label class="set-row" id="bn-custom-row">
+          <input type="radio" name="bnmode" value="custom" id="bn-custom">
+          <span class="set-row-text">
+            <span class="set-row-title">Custom image</span>
+            <span class="set-row-note">Your own banner, shown instead of the default.</span>
+          </span>
+        </label>
+        <div class="set-subpanel" id="bn-custom-panel" style="display:none;border-left-color:var(--border-accent)">
+          <label for="bn-url" style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:6px">Image address</label>
+          <input type="url" id="bn-url" class="set-input" style="width:100%;box-sizing:border-box"
+                 placeholder="https://example.com/my-banner.webp" autocomplete="off" spellcheck="false" maxlength="2048">
+          <div class="set-url-hint" id="bn-url-hint"></div>
+          <p style="margin:8px 0 0;font-size:0.74rem;color:var(--text-secondary);line-height:1.5">
+            A wide image about <strong>1100 &times; 256 px</strong> (roughly 4:1) works best. The left side
+            fades into the page, so keep the subject on the right. It must be hosted at an
+            <code>https://</code> address you control; the image is checked before it is saved.
+          </p>
+        </div>
+        <label class="set-row">
+          <input type="radio" name="bnmode" value="off" id="bn-off">
+          <span class="set-row-text">
+            <span class="set-row-title">No banner</span>
+            <span class="set-row-note">Leave the space empty.</span>
+          </span>
+        </label>
+        <div class="set-notice set-notice-lock" id="bn-tier-note" style="display:none;margin:0 18px 14px">
+          <svg width="15" height="15" fill="none" stroke="var(--text-secondary)" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <span><strong style="color:var(--text-primary)">Custom images are part of the Branded plan.</strong>
+          This store is on the free plan, so customers see the default artwork, or nothing if you choose
+          <em>No banner</em>.</span>
+        </div>
+
+        <div class="set-banner-actions">
+          <span class="set-banner-status" id="bn-status">Never saved</span>
+          <button class="btn btn-secondary btn-sm" id="bn-discard" type="button">Discard</button>
+          <button class="btn btn-primary btn-sm" id="bn-save" type="button">Save banner</button>
         </div>
       </section>
 
@@ -899,6 +987,152 @@
     renderAll();
     toast('Catalog visibility saved');
   });
+
+  // ══ Branding ▸ Page banner ═════════════════════════════════
+  // A separate setting from the catalog filters above (app_settings.page_banner),
+  // with its own Save, so neither can write the other. The shape, the URL rule,
+  // the tier rule and the render all come from PageBanner in app.js — this
+  // page holds NO second copy of any of them, because the reader (catalog.html)
+  // and this writer disagreeing about "default" is exactly the CatalogFilters bug.
+  const bnTenant = TenantContext.current();
+  const bnPaid   = Tier.isPaid(bnTenant);
+  el('bn-month').textContent = currentMonth || 'this month';
+
+  let bnSaved = null;          // last-saved config; null = never saved
+  let bnSavedAt = null;
+  {
+    const { data, error } = await db.from('app_settings')
+      .select('value, updated_at').eq('key', PageBanner.KEY).maybeSingle();
+    if (error) console.warn('page_banner read failed', error);
+    if (data && data.value) { bnSaved = PageBanner.parse(data.value); bnSavedAt = data.updated_at || null; }
+  }
+  const bnBaseline = () => bnSaved || PageBanner.defaults();
+  let bnDraft = JSON.parse(JSON.stringify(bnBaseline()));
+
+  if (!bnPaid) {
+    // Custom is the paid tier's. Disabled, not hidden, so the option and the
+    // reason it is unavailable are both visible.
+    el('bn-custom').disabled = true;
+    el('bn-custom-row').classList.add('is-locked');
+    el('bn-tier-note').style.display = 'flex';
+  }
+
+  const bnUrlOf = () => PageBanner.cleanUrl(el('bn-url').value);
+  const bnCurrent = () => ({
+    v: 1,
+    mode: bnDraft.mode,
+    imageUrl: bnUrlOf() || '',
+  });
+  const bnKey = c => JSON.stringify({ mode: c.mode, imageUrl: c.imageUrl || '' });
+  const bnDirty = () => bnKey(bnCurrent()) !== bnKey(bnBaseline());
+
+  let bnTestSeq = 0;
+  function bnRenderPreview() {
+    const cur = bnCurrent();
+    const hint = el('bn-url-hint');
+    let previewCfg = cur;
+    if (cur.mode === 'custom') {
+      if (!cur.imageUrl) {
+        // Do not preview PLATFORM art under a "custom" label: with no usable
+        // address the customer-side render would be the default, which is not
+        // what choosing Custom means. Show the empty state instead.
+        previewCfg = { v: 1, mode: 'off', imageUrl: '' };
+        hint.className = 'set-url-hint';
+        hint.textContent = el('bn-url').value.trim()
+          ? 'That is not a valid https:// address.'
+          : 'Enter an https:// address to preview it.';
+        if (el('bn-url').value.trim()) hint.classList.add('is-bad');
+      } else {
+        const seq = ++bnTestSeq;
+        hint.className = 'set-url-hint';
+        hint.textContent = 'Checking image…';
+        PageBanner.test(cur.imageUrl).then(ok => {
+          if (seq !== bnTestSeq) return;               // a newer edit superseded this check
+          hint.className = 'set-url-hint ' + (ok ? 'is-ok' : 'is-bad');
+          hint.textContent = ok ? 'Image loads.' : 'That address did not load as an image.';
+        });
+      }
+    } else {
+      bnTestSeq++;
+      hint.className = 'set-url-hint';
+      hint.textContent = '';
+    }
+    PageBanner.mount(el('bn-preview'), previewCfg, bnTenant);
+  }
+
+  function bnRender() {
+    el('bn-default').checked = bnDraft.mode === 'default';
+    el('bn-custom').checked  = bnDraft.mode === 'custom';
+    el('bn-off').checked     = bnDraft.mode === 'off';
+    el('bn-custom-panel').style.display = bnDraft.mode === 'custom' ? 'block' : 'none';
+    const dirty = bnDirty();
+    el('bn-save').disabled = !dirty;
+    el('bn-discard').disabled = !dirty;
+    el('bn-status').textContent = dirty
+      ? 'Unsaved changes'
+      : (bnSavedAt
+          ? 'Saved ' + new Date(bnSavedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'Never saved — customers see the default artwork');
+    bnRenderPreview();
+  }
+
+  document.querySelectorAll('input[name="bnmode"]').forEach(r => r.addEventListener('change', () => {
+    if (r.checked) { bnDraft.mode = r.value; bnRender(); }
+  }));
+  el('bn-url').addEventListener('input', debounce(bnRender, 350));
+
+  el('bn-discard').addEventListener('click', () => {
+    bnDraft = JSON.parse(JSON.stringify(bnBaseline()));
+    el('bn-url').value = bnDraft.imageUrl || '';
+    bnRender();
+    toast('Changes discarded');
+  });
+
+  el('bn-save').addEventListener('click', async () => {
+    const btn = el('bn-save');
+    const orig = btn.textContent;
+    const cfg = bnCurrent();
+
+    if (cfg.mode === 'custom' && !bnPaid) {
+      toast('Custom banner images are part of the Branded plan.', 'error');
+      return;
+    }
+    btn.disabled = true;
+    if (cfg.mode === 'custom') {
+      if (!cfg.imageUrl) {
+        toast('Enter a full https:// image address for the custom banner.', 'error');
+        btn.disabled = false;
+        return;
+      }
+      // Refuse a dead address at the WRITE side: a customer-side failure shows
+      // them nothing, and nobody would see the problem until they thought to look.
+      btn.textContent = 'Checking image…';
+      const ok = await PageBanner.test(cfg.imageUrl);
+      if (!ok) {
+        toast('That address did not load as an image — check it and try again.', 'error');
+        btn.disabled = false;
+        btn.textContent = orig;
+        return;
+      }
+    }
+    btn.textContent = 'Saving…';
+    const { error } = await Settings.set(PageBanner.KEY, JSON.stringify(cfg));
+    btn.textContent = orig;
+    if (error) {
+      console.error('page_banner save failed', error);
+      toast('Could not save — ' + (error.message || 'unknown error'), 'error');
+      btn.disabled = false;
+      return;
+    }
+    bnSaved = JSON.parse(JSON.stringify(cfg));
+    bnSavedAt = new Date().toISOString();
+    bnDraft = JSON.parse(JSON.stringify(cfg));
+    bnRender();
+    toast('Page banner saved');
+  });
+
+  el('bn-url').value = bnDraft.imageUrl || '';
+  bnRender();
 
   // ── Reveal ───────────────────────────────────────────────────
   el('load-state').style.display = 'none';

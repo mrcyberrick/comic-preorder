@@ -230,6 +230,132 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .page-header p { color: var(--text-secondary); font-size: 0.9rem; }
 
+/* ── Header banner art (catalog, mylist, subscriptions, arrivals + the settings preview) ──
+   Fills the empty space right of a page title. Contract is in app.js
+   (PageBanner); this is only the look.
+
+   It takes NO space in the layout: the host is absolutely positioned inside a
+   `.page-header--banner`, sits behind the text (z-index -1 in the header's own
+   stacking context), and is non-interactive. That matters because these pages
+   carry the F141/F161/F166 CLS work — nothing here may move the content, and
+   the art arrives late (after the settings read and the image fetch), so it
+   fades in from opacity 0 instead of appearing.
+
+   A lightning bolt in the tenant's accent (--accent follows
+   branding.primary_color) marks where the art begins, and the image fades into
+   the header band so it has no hard edge behind the title. The bolt was a plain
+   slanted slash until Rick asked for a bolt (2026-10-01); it is one clip-path
+   polygon on ::after, so it costs no image and no request.
+
+   --banner-w is the art's width, shared by the art itself and by the subtitle
+   cap below so the two cannot drift apart. */
+.page-header--banner {
+  position: relative;
+  isolation: isolate;
+  --banner-w: min(52%, 640px);
+  /* The header as a defined card. Bare, it sat on the same #0f0f0f as the page
+     with only a hairline under it, so nothing separated it from the background.
+     The recipe is the weekly newsletter's header band (weekly-pull-feed/
+     newsletter.html): a --bg-elevated (#222) band, a 1px --border (#2e2e2e)
+     edge, --radius-lg corners and the --shadow lift, against the --bg page.
+     overflow:hidden clips the art to the rounded corners. */
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  padding: 32px 28px 28px;
+  margin-top: 20px;
+}
+.brand-banner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--banner-w);
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.brand-banner.is-ready { opacity: 1; }
+.brand-banner img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+}
+.brand-banner::before {            /* fade into the page background */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
+}
+.brand-banner::after {             /* the accent lightning bolt where the art begins */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--accent);
+  /* Seven points: flat top, down-left to a notch, a jog right, then down to the
+     tip. x is in px and y in %, so it stretches with the header's height (one
+     line of subtitle or two) without distorting its width. */
+  clip-path: polygon(34px 0, 60px 0, 45px 42%, 64px 42%, 20px 100%, 35px 57%, 14px 57%);
+}
+@media (min-width: 641px) and (max-width: 900px) {
+  /* Narrower art on tablets, so a longer subtitle (This Week's changes with the
+     data) has room before it meets the bolt. object-fit: cover keeps the
+     figure, which sits at the right of the image. */
+  .page-header--banner { --banner-w: 40%; }
+}
+@media (min-width: 641px) {
+  /* A long, STATIC subtitle wraps clear of the art instead of running under it
+     (Subscriptions, ~115 characters). Opt-in per page, not global: My List and
+     This Week rewrite their subtitles after load, and a width cap on text that
+     changes length would re-wrap and shift the page when it did. */
+  .page-header--wrap-sub p { max-width: calc(100% - var(--banner-w) - 16px); }
+}
+@media (max-width: 640px) {
+  /* Little spare room on a phone, so the art sits BEHIND the title block and is
+     dimmed to keep the text legible rather than being dropped. The bolt is
+     dropped here: at this width the art starts left of the end of the title, so a
+     bright shape there would sit on the words (the old slash cut straight through
+     the title in a real 393px screenshot), and decoration must not compete with
+     the text it sits behind. A soft halo on the subtitle keeps it
+     readable where the bright part of the art passes behind it. */
+  .page-header--banner { --banner-w: 72%; padding: 26px 20px 22px; margin-top: 16px; }
+  .brand-banner.is-ready { opacity: 0.5; }
+  .brand-banner::after { display: none; }
+  .brand-banner::before {
+    background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.78) 42%, rgba(34,34,34,0) 88%);
+  }
+  .page-header--banner p { text-shadow: 0 0 8px var(--bg-elevated), 0 0 3px var(--bg-elevated); }
+}
+@media print {
+  /* Decoration never prints. My List's print rules hide only the subtitle, not
+     the header, so without this a printed pull list would carry a dark fading
+     image on white paper. Global on purpose: it also covers any page that gains
+     the banner later. */
+  .brand-banner { display: none !important; }
+  /* The card is a screen treatment. Left on, a dark #222 box would print behind
+     black text (My List prints its title) wherever backgrounds are enabled. */
+  .page-header--banner {
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    padding: 0;
+    margin-top: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-banner { transition: none; }
+}
+
 /* ── Order Deadline Banner ─────────────────────────────────── */
 .deadline-banner {
   display: flex;
@@ -1033,6 +1159,40 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .list-table .col-title { font-weight: 500; }
 .list-table .col-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+/* ── Table card (desktop) ─────────────────────────────────────
+   Gives a main data table a surface of its own. Bare, it sat directly on the
+   page background (#0f0f0f) with half-transparent row rules, so it read as
+   less defined than the bordered cards beside it (Upcoming Arrivals, My
+   Subscriptions). The recipe is the weekly newsletter's own table
+   (weekly-pull-feed/newsletter.html), which already uses this app's tokens:
+   a --bg-card surface on the --bg page, a 1px --border edge, --radius-lg
+   corners, the --shadow lift, a --bg-elevated header band and full-strength
+   --border row rules.
+
+   Screen + desktop ONLY, deliberately:
+   - <=640px the table is display:none and the page shows .mobile-card items,
+     which are already bordered cards; an empty bordered wrapper would show.
+   - print keeps the plain black-on-white table (mylist.html's print rules).
+   overflow-x:auto, not hidden: the card clips to its rounded corners either
+   way, but a table wider than the card must scroll, not be cut off. */
+@media screen and (min-width: 641px) {
+  .table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .table-card .list-table th {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);        /* --text-muted is too faint on the #222 band */
+    border-bottom: 1px solid var(--border);
+  }
+  .table-card .list-table td { border-bottom: 1px solid var(--border); }
+  .table-card .list-table tr:last-child td { border-bottom: none; }
+}
 
 /* ── Admin ─────────────────────────────────────────────────── */
 /* ── Mode switch (F121 session 4) ───────────────────────────────────────
