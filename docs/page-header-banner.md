@@ -1,6 +1,6 @@
 # Page header banner — brandable art beside the title on the four customer pages
 
-**STATUS:** IN PROGRESS | staging=2026-10-02 (the follow-ups in sections 9 and 10 are on staging only) | prod=2026-10-02 (PR #166, merge dc94e29: the first banner build, with the v1 art, the bolt on the art's edge and the old catalog subtitle) | findings=— (feature build, not a defect; **F169 is the next free finding ID**). Section 9-10 follow-ups NOT promoted; live write-smoke on production still owed by Rick; see CLAUDE.md.
+**STATUS:** IN PROGRESS | staging=2026-10-02 (the follow-ups in sections 9, 10 and 11 are on staging only) | prod=2026-10-02 (PR #166, merge dc94e29: the first banner build, with the v1 art, the bolt on the art's edge and the old catalog subtitle) | findings=— (feature build, not a defect; **F169 is the next free finding ID**). Section 9-11 follow-ups NOT promoted; live write-smoke on production still owed by Rick; see CLAUDE.md.
 
 **Last verified against live: 2026-10-02** (production serving PR #166's bytes, verified byte-identical to `origin/main` on both hostnames).
 
@@ -43,9 +43,9 @@ fills it with a banner image, and lets the store change it.
 
 | File | Change |
 |---|---|
-| `assets/banner-v2.webp` | **The default art** (§ 9): 1280 × 278, 19 KB, the redesigned scene fitted to the art slot. **`-v2` is load-bearing** (immutable for a year): re-exporting REQUIRES `-v3` and updating `PageBanner.DEFAULT_SRC`. |
+| `assets/banner-v3.webp` | **The default art** (§ 9, re-encoded in § 11): 1280 × 278, 14 KB, the redesigned scene fitted to the art slot. **`-v3` is load-bearing** (immutable for a year): re-exporting REQUIRES `-v4` and updating `PageBanner.DEFAULT_SRC`, the four preload links and the `_headers` line together. `banner-v2.webp` (19 KB) existed on staging only and was deleted. |
 | `assets/banner-v1.webp` | The first cut (1100 × 256, 11 KB, a tight waist-up crop). **No longer referenced**; kept in the repo and `_headers` only because browsers may hold it for a year. Safe to delete later. |
-| `_headers` | `/assets/banner-v1.webp` and `/assets/banner-v2.webp` in the immutable group. |
+| `_headers` | `/assets/banner-v1.webp` and `/assets/banner-v3.webp` in the immutable group. |
 | `style.css` | `.page-header--banner`, `.brand-banner`, `--banner-w`, `.page-header--wrap-sub`, plus tablet / phone / reduced-motion / **print** rules. Shared, because the Settings preview reuses the real classes. |
 | `app.js` | `PageBanner` (`KEY`, `defaults`, `cleanUrl`, `load`, `parse`, `resolve`, `mount`, **`show`**, `test`). **`app.js` carries `merge=ours`**, see § 5. |
 | `catalog.html`, `mylist.html`, `arrivals.html`, `subscriptions.html` | Header gets the class and an empty `#page-banner` host; `<link rel="preload" as="image">` for the default art in the head; **one `PageBanner.show(host)` call as the first line of the page's init** (see § 5). Subscriptions also gets `page-header--wrap-sub`. |
@@ -123,7 +123,7 @@ identical both ways). It is the F141 Pattern B family, measured here on a brand-
   its header shrinks a line after load. Staff-only, and it is the price of the two-line wrap.
 - **Promotion touches `app.js`**, which has `merge=ours`. `/promote-prod` step 2 must assert the merge
   RESULT for `app.js` (the driver has dropped it three times). A full merge also needs
-  `assets/banner-v2.webp` and the `_headers` lines to travel with it.
+  `assets/banner-v3.webp` and the `_headers` lines to travel with it.
 - No production `app_settings` row is needed: absent means default art.
 
 ## 7. The header as a card (added after Rick's review, 2026-10-01)
@@ -217,7 +217,7 @@ match our header (about 8.8:1 on desktop), so `object-fit: cover` would crop the
    last line) while a long title, such as an impersonated customer's name, still wraps at the card's width; the bolt is
    absolutely positioned so it adds no height. Visible on a phone (it is part of the title now, not of the art); hidden in
    print. The old rule on the art (`.brand-banner::after`) and the art's slanted cut are gone.
-2. **`assets/banner-v2.webp`**: the mockup's scene only (right of x≈900, no text, no bolt), scaled to the art slot's
+2. **`assets/banner-v2.webp`** (re-encoded smaller as `banner-v3.webp` in § 11; v2 is deleted): the mockup's scene only (right of x≈900, no text, no bolt), scaled to the art slot's
    height so the whole figure, the skyline and the sun show, with the empty left side blended row-by-row into the band
    colour (`#222`), so there is no seam. 1280 × 278, 19 KB. Where the slot is narrower (tablet, phone) `object-fit: cover`
    anchored right keeps the figure.
@@ -248,7 +248,7 @@ three times**, so it is not a one-off. The art grew by 7.5 KB (11 KB to 19 KB), 
 simulated connection, so the size alone does not explain 0.4 s; lab conditions on a busy machine (its TBT also read
 100-120 ms in the repeats against 0-40 ms before) may account for part of it. **It was not isolated**: that needs the old
 and new art measured in the same window, and the old art was not redeployed for it. If the 2 points matter, the cheapest
-lever is re-encoding `banner-v2.webp` at a lower quality (about 13 KB at q60) as `banner-v3.webp`.
+lever is re-encoding `banner-v2.webp` at a lower quality (about 13 KB at q60) as `banner-v3.webp`. **Done in § 11, which measured how much of the gap it recovers.**
 
 ## 10. The title accent: from a bolt to a hard red offset shadow (2026-10-02)
 
@@ -285,3 +285,48 @@ inside the card on a phone. Full Playwright suite **151 passed** (22.9 min) on t
 **A process note worth keeping:** the first attempt at the glow patch searched for its end marker from the start of the file,
 matched an earlier identical `@media` line, and duplicated about 130 lines of CSS. It was caught because the diff said
 `+143` for a change that should have been about `+20`, and the file was restored from git before it was committed.
+
+## 11. The default art re-encoded smaller: `banner-v3.webp` (2026-10-02)
+
+Rick's request, after § 9's note that Subscriptions on a phone had lost about 2 points and 0.4 s of LCP: "deploy smaller banner".
+
+**What was done.** `banner-v3.webp` is **14.2 KB, down from 19.2 KB (-26%)**, same 1280 × 278 geometry. It was re-fitted **from the
+lossless scene source** (the same crop, resize and row-by-row blend into `#222` as § 9) at WebP quality 50, **not** by
+re-compressing `banner-v2.webp`, which would have stacked a second lossy pass on a first. Quality was chosen from a measured
+ladder on the same source: 60 = 16.1 KB, 55 = 15.1 KB, 50 = 14.2 KB, 45 = 13.5 KB, 40 = 12.3 KB. **The plan's "about 13 KB at q60"
+was wrong for this source** (q60 is 16 KB); that figure came from re-compressing v2 and does not hold for the lossless route.
+Judged by eye on a side-by-side of the figure at 1:1 pixels (the art is shown at 640 CSS px from a 1280 px file, so 1:1 is
+a 2x screen), v2, q55, q50 and q45 are hard to tell apart; **PSNR against the lossless fit is 36.2 dB for v2 and 34.7 dB for
+the chosen q50**, i.e. a small measured loss, stated rather than hidden. q50 was picked as the last step before the
+ladder's returns shrink (q45 saves 0.7 KB more).
+
+**What moved together** (the `-vN` rule): `PageBanner.DEFAULT_SRC` in `app.js` (and the comment above it), the
+`rel="preload"` link in all four customer pages, and the `_headers` immutable entry. `banner-v2.webp` was **deleted** (it was
+never promoted, so production never held it); `banner-v1.webp` stays because production still references it. After the deploy,
+`banner-v2` appears nowhere in `app.js`, the four pages or `_headers` (0 hits), but **Cloudflare's edge still served the orphaned
+v2 file (19,212 bytes) for a while**, the same behaviour the 2026-08-24 performance sweep recorded for a deleted favicon: harmless,
+since nothing links it.
+
+**Measured, Lighthouse on staging, authenticated, cold cache, Subscriptions mobile, three runs on the new art:**
+
+| Build | Performance | LCP |
+|---|---|---|
+| banner v1 (11 KB), before § 9 | 98 | 2.1 s |
+| banner v2 (19 KB), § 9 | 96 (three runs) | 2.50 s |
+| **banner v3 (14 KB), this section** | **97, 97, 97** | **2.39, 2.41, 2.41 s** |
+
+**Stated plainly:** it recovered **about 1 point and 0.1 s, not the whole gap.** That is consistent with the size
+arithmetic in § 9 (a few KB is tens of milliseconds on Lighthouse's simulated connection), and it means **the rest of the
++0.3 s against v1 is not explained by file size** and was not isolated. TBT read 0 / 0 / 59 ms across the three runs against 42
+for the v2 reference, i.e. the lab noise is as large as some of the differences, so read the LCP column and treat the last
+decimal as noise. **My List and Subscriptions desktop were NOT re-measured for this change**; only the one metric that
+had regressed was re-run. Going further would mean a smaller image still (a narrower file loses sharpness on a 2x screen) or
+caching the banner decision in `localStorage` (rejected in § 5 for its stale-config and cross-user hazard); neither was done.
+
+**Verified:** `node --check` clean on `app.js` and the inline script of all four pages; `page-banner-verify.mjs` **145/145
+against the deployed staging bytes** (it now asserts `assets/banner-v3.webp`, `1280px wide, opacity 1`); the served image is
+14,240 bytes with `Cache-Control: public, max-age=31536000, immutable`; full Playwright suite **151 passed, 0 failed
+(22.4 min)**, exit 0, from the log's own summary line (a background launcher's "completed, exit 0" notice arrived within
+seconds of the start and was the launcher shell, not the run); teardown restored `catalog_filters` (167 bytes), deleted its
+synthetic tenant (re-read: gone), and left Rick's `page_banner` row on the founding tenant in place with its value unchanged
+(`updated_at` moves each time the harness restores it).
