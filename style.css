@@ -241,10 +241,11 @@ button { cursor: pointer; font-family: var(--font-body); }
    the art arrives late (after the settings read and the image fetch), so it
    fades in from opacity 0 instead of appearing.
 
-   The left edge is cut on a slant and carries a slash in the tenant's accent
-   (--accent follows branding.primary_color), the same comic-panel cut as the
-   apex page; the image itself fades into the page background so it has no hard
-   edge behind the title.
+   A lightning bolt in the tenant's accent (--accent follows
+   branding.primary_color) marks where the art begins, and the image fades into
+   the header band so it has no hard edge behind the title. The bolt was a plain
+   slanted slash until Rick asked for a bolt (2026-10-01); it is one clip-path
+   polygon on ::after, so it costs no image and no request.
 
    --banner-w is the art's width, shared by the art itself and by the subtitle
    cap below so the two cannot drift apart. */
@@ -277,7 +278,6 @@ button { cursor: pointer; font-family: var(--font-body); }
   overflow: hidden;
   opacity: 0;
   transition: opacity 0.4s ease;
-  clip-path: polygon(48px 0, 100% 0, 100% 100%, 0 100%);
 }
 .brand-banner.is-ready { opacity: 1; }
 .brand-banner img {
@@ -294,17 +294,20 @@ button { cursor: pointer; font-family: var(--font-body); }
   z-index: 1;
   background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
 }
-.brand-banner::after {             /* the accent slash on the slanted edge */
+.brand-banner::after {             /* the accent lightning bolt where the art begins */
   content: '';
   position: absolute;
   inset: 0;
   z-index: 2;
   background: var(--accent);
-  clip-path: polygon(48px 0, 52px 0, 4px 100%, 0 100%);
+  /* Seven points: flat top, down-left to a notch, a jog right, then down to the
+     tip. x is in px and y in %, so it stretches with the header's height (one
+     line of subtitle or two) without distorting its width. */
+  clip-path: polygon(34px 0, 60px 0, 45px 42%, 64px 42%, 20px 100%, 35px 57%, 14px 57%);
 }
 @media (min-width: 641px) and (max-width: 900px) {
   /* Narrower art on tablets, so a longer subtitle (This Week's changes with the
-     data) has room before it meets the slash. object-fit: cover keeps the
+     data) has room before it meets the bolt. object-fit: cover keeps the
      figure, which sits at the right of the image. */
   .page-header--banner { --banner-w: 40%; }
 }
@@ -317,10 +320,11 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 @media (max-width: 640px) {
   /* Little spare room on a phone, so the art sits BEHIND the title block and is
-     dimmed to keep the text legible rather than being dropped. The slash is
-     dropped here: at this width it would cut straight through the title and the
-     subtitle (seen in a real 393px screenshot), and a decorative line must not
-     compete with the words it sits behind. A soft halo on the subtitle keeps it
+     dimmed to keep the text legible rather than being dropped. The bolt is
+     dropped here: at this width the art starts left of the end of the title, so a
+     bright shape there would sit on the words (the old slash cut straight through
+     the title in a real 393px screenshot), and decoration must not compete with
+     the text it sits behind. A soft halo on the subtitle keeps it
      readable where the bright part of the art passes behind it. */
   .page-header--banner { --banner-w: 72%; padding: 26px 20px 22px; margin-top: 16px; }
   .brand-banner.is-ready { opacity: 0.5; }
