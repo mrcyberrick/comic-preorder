@@ -1462,8 +1462,9 @@ window.CatalogFilters = CatalogFilters;
 // No schema change — app_settings is (tenant_id, key, value text) with no key
 // allowlist, and the existing admin write policies already cover it.
 //
-//   mode 'default'  the platform artwork (assets/banner-v1.webp, cut from the
-//                   apex hero). This is also what an ABSENT row means.
+//   mode 'default'  the platform artwork (assets/banner-v2.webp: the apex hero's
+//                   scene, reframed to show the whole figure). This is also what
+//                   an ABSENT row means.
 //   mode 'custom'   the tenant's own image at `imageUrl` — PAID TIER ONLY.
 //   mode 'off'      no banner.
 //
@@ -1482,9 +1483,10 @@ window.CatalogFilters = CatalogFilters;
 // must be https:, so a stored value cannot inject markup or a javascript: URL.
 const PageBanner = {
   KEY: 'page_banner',
-  // -v1 is load-bearing: _headers serves this path `immutable` for a year, so
-  // re-exporting the art REQUIRES bumping to -v2 and updating this constant.
-  DEFAULT_SRC: 'assets/banner-v1.webp',
+  // -v2 is load-bearing (v1 was the first cut, a tight crop; 2026-10-02): _headers
+  // serves this path `immutable` for a year, so re-exporting the art REQUIRES
+  // bumping to -v3 and updating this constant.
+  DEFAULT_SRC: 'assets/banner-v2.webp',
   MODES: ['default', 'custom', 'off'],
 
   defaults() { return { v: 1, mode: 'default', imageUrl: '' }; },

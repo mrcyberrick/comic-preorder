@@ -241,11 +241,13 @@ button { cursor: pointer; font-family: var(--font-body); }
    the art arrives late (after the settings read and the image fetch), so it
    fades in from opacity 0 instead of appearing.
 
-   A lightning bolt in the tenant's accent (--accent follows
-   branding.primary_color) marks where the art begins, and the image fades into
-   the header band so it has no hard edge behind the title. The bolt was a plain
-   slanted slash until Rick asked for a bolt (2026-10-01); it is one clip-path
-   polygon on ::after, so it costs no image and no request.
+   The image fades into the header band so it has no hard edge behind the title.
+   The accent lightning bolt is a brand mark on the TITLE (h1::after), not on the
+   art: small, in the tenant's accent (--accent follows branding.primary_color),
+   sitting right after the title text so it supports the name instead of
+   competing with it. It began as a plain slash on the art's edge, then a
+   full-height bolt there (Rick, 2026-10-01); both read as a separate element.
+   One clip-path polygon, so it costs no image and no request.
 
    --banner-w is the art's width, shared by the art itself and by the subtitle
    cap below so the two cannot drift apart. */
@@ -294,20 +296,33 @@ button { cursor: pointer; font-family: var(--font-body); }
   z-index: 1;
   background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
 }
-.brand-banner::after {             /* the accent lightning bolt where the art begins */
+/* The title carries the bolt. display:table shrink-wraps the h1 to its text, so the
+   bolt can sit right after the last line while a long title (an impersonated
+   customer's name) still wraps at the card's width; a plain block would put the
+   bolt at the far right edge. The bolt is absolutely positioned, so it adds no
+   height and the header does not change size. All em, so it scales with the
+   title on every page and at every width. Seven points: flat top, down-left to a
+   notch, a jog right, then down to the tip. */
+.page-header--banner h1 {
+  display: table;
+  position: relative;
+  max-width: 100%;
+  padding-right: 0.86em;          /* the bolt (.44em) plus the gap before it (.42em) */
+}
+.page-header--banner h1::after {
   content: '';
   position: absolute;
-  inset: 0;
-  z-index: 2;
+  right: 0;
+  top: 50%;
+  width: 0.44em;
+  height: 1.28em;
+  transform: translateY(-50%);
   background: var(--accent);
-  /* Seven points: flat top, down-left to a notch, a jog right, then down to the
-     tip. x is in px and y in %, so it stretches with the header's height (one
-     line of subtitle or two) without distorting its width. */
-  clip-path: polygon(34px 0, 60px 0, 45px 42%, 64px 42%, 20px 100%, 35px 57%, 14px 57%);
+  clip-path: polygon(35% 0, 70% 0, 52% 40%, 78% 40%, 25% 100%, 40% 52%, 15% 52%);
 }
 @media (min-width: 641px) and (max-width: 900px) {
   /* Narrower art on tablets, so a longer subtitle (This Week's changes with the
-     data) has room before it meets the bolt. object-fit: cover keeps the
+     data) has room before it meets the art. object-fit: cover keeps the
      figure, which sits at the right of the image. */
   .page-header--banner { --banner-w: 40%; }
 }
@@ -320,15 +335,13 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 @media (max-width: 640px) {
   /* Little spare room on a phone, so the art sits BEHIND the title block and is
-     dimmed to keep the text legible rather than being dropped. The bolt is
-     dropped here: at this width the art starts left of the end of the title, so a
-     bright shape there would sit on the words (the old slash cut straight through
-     the title in a real 393px screenshot), and decoration must not compete with
-     the text it sits behind. A soft halo on the subtitle keeps it
-     readable where the bright part of the art passes behind it. */
+     dimmed to keep the text legible rather than being dropped. A soft halo on the
+     subtitle keeps it readable where the bright part of the art passes behind it.
+     (The title's bolt stays: it is part of the title, not of the art. The
+     original slash lived on the art's edge and cut straight through the title in
+     a real 393px screenshot, which is why it was dropped on a phone.) */
   .page-header--banner { --banner-w: 72%; padding: 26px 20px 22px; margin-top: 16px; }
   .brand-banner.is-ready { opacity: 0.5; }
-  .brand-banner::after { display: none; }
   .brand-banner::before {
     background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.78) 42%, rgba(34,34,34,0) 88%);
   }
@@ -340,6 +353,8 @@ button { cursor: pointer; font-family: var(--font-body); }
      image on white paper. Global on purpose: it also covers any page that gains
      the banner later. */
   .brand-banner { display: none !important; }
+  .page-header--banner h1 { display: block; padding-right: 0; }
+  .page-header--banner h1::after { display: none; }
   /* The card is a screen treatment. Left on, a dark #222 box would print behind
      black text (My List prints its title) wherever backgrounds are enabled. */
   .page-header--banner {
