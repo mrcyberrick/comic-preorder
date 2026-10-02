@@ -43,8 +43,9 @@ fills it with a banner image, and lets the store change it.
 
 | File | Change |
 |---|---|
-| `assets/banner-v1.webp` | New. 1100 × 256, 11 KB, cut from the hero. **`-v1` is load-bearing** (immutable for a year): re-exporting REQUIRES `-v2` and updating `PageBanner.DEFAULT_SRC`. |
-| `_headers` | `/assets/banner-v1.webp` added to the immutable group. |
+| `assets/banner-v2.webp` | **The default art** (§ 9): 1280 × 278, 19 KB, the redesigned scene fitted to the art slot. **`-v2` is load-bearing** (immutable for a year): re-exporting REQUIRES `-v3` and updating `PageBanner.DEFAULT_SRC`. |
+| `assets/banner-v1.webp` | The first cut (1100 × 256, 11 KB, a tight waist-up crop). **No longer referenced**; kept in the repo and `_headers` only because browsers may hold it for a year. Safe to delete later. |
+| `_headers` | `/assets/banner-v1.webp` and `/assets/banner-v2.webp` in the immutable group. |
 | `style.css` | `.page-header--banner`, `.brand-banner`, `--banner-w`, `.page-header--wrap-sub`, plus tablet / phone / reduced-motion / **print** rules. Shared, because the Settings preview reuses the real classes. |
 | `app.js` | `PageBanner` (`KEY`, `defaults`, `cleanUrl`, `load`, `parse`, `resolve`, `mount`, **`show`**, `test`). **`app.js` carries `merge=ours`**, see § 5. |
 | `catalog.html`, `mylist.html`, `arrivals.html`, `subscriptions.html` | Header gets the class and an empty `#page-banner` host; `<link rel="preload" as="image">` for the default art in the head; **one `PageBanner.show(host)` call as the first line of the page's init** (see § 5). Subscriptions also gets `page-header--wrap-sub`. |
@@ -122,7 +123,7 @@ identical both ways). It is the F141 Pattern B family, measured here on a brand-
   its header shrinks a line after load. Staff-only, and it is the price of the two-line wrap.
 - **Promotion touches `app.js`**, which has `merge=ours`. `/promote-prod` step 2 must assert the merge
   RESULT for `app.js` (the driver has dropped it three times). A full merge also needs
-  `assets/banner-v1.webp` and the `_headers` line to travel with it.
+  `assets/banner-v2.webp` and the `_headers` lines to travel with it.
 - No production `app_settings` row is needed: absent means default art.
 
 ## 7. The header as a card (added after Rick's review, 2026-10-01)
@@ -163,6 +164,9 @@ inspected at 1350, 700 and 393 px.
 
 ## 8. The bolt (added after Rick's review, 2026-10-01)
 
+> **Superseded in placement by § 9 (2026-10-02):** the bolt described here lived on the art's left edge; it is now a small mark
+> on the title. The polygon and the accent-colour behaviour carry over. Kept as the record of what shipped in PR #166.
+
 **The ask:** *"Change the red line into a lightning bolt on the header image."*
 
 The red line was one `clip-path` polygon on `.brand-banner::after`. It is now a seven-point bolt polygon in the
@@ -191,3 +195,54 @@ art itself is unclipped. Layout shift with and without the banner is unchanged (
 6-run alternating A/B on the deployed card build measured **0.0067 with the banner vs 0.0067 without**, and the
 higher outcome occurred once in each. The check therefore asks that the best banner-on run not exceed the *worst*
 banner-off run (3 runs each), rather than the best-versus-best form that could fail on a coin flip.
+
+## 9. Reframed art, a bolt on the title, a warmer subtitle (2026-10-02)
+
+**The ask.** Rick reviewed a redesigned default banner (a mockup with the title, bolt and subtitle baked into one
+image) and agreed three changes, keeping the concept: (1) a smaller bolt that supports the branding instead of
+competing with the title, (2) the superhero reframed with a little more space, (3) a more inviting subtitle.
+
+**Why the mockup was adapted, not dropped in.** Used as-is it would put its baked "Monthly Catalog" on My List,
+Subscriptions and This Week and collide with each page's real title; its navy left side (`#0e1820`) clashes with the
+app's neutral `#222` band; its bolt was a fixed darker red rather than the store's accent; and at 5.4:1 it does not
+match our header (about 8.8:1 on desktop), so `object-fit: cover` would crop the figure's head or feet.
+
+**What was built (header height unchanged: 141 / 141 / 164 / 141 px, asserted):**
+1. **The bolt is a brand mark on the title** (`h1::after`), not a shape on the art. It sits right after the title text,
+   sized in `em` (`.44em × 1.28em`) so it scales with the title on every page and width, in `var(--accent)` so it still
+   follows `branding.primary_color`. The `h1` is `display: table` so it shrink-wraps to its text (the bolt can follow the
+   last line) while a long title, such as an impersonated customer's name, still wraps at the card's width; the bolt is
+   absolutely positioned so it adds no height. Visible on a phone (it is part of the title now, not of the art); hidden in
+   print. The old rule on the art (`.brand-banner::after`) and the art's slanted cut are gone.
+2. **`assets/banner-v2.webp`**: the mockup's scene only (right of x≈900, no text, no bolt), scaled to the art slot's
+   height so the whole figure, the skyline and the sun show, with the empty left side blended row-by-row into the band
+   colour (`#222`), so there is no seam. 1280 × 278, 19 KB. Where the slot is narrower (tablet, phone) `object-fit: cover`
+   anchored right keeps the figure.
+3. **The catalog subtitle reads "October 2026 · Browse and reserve your comics"**, replacing "Catalog for 2026-10 — browse
+   and reserve items". **It is written in three places in `catalog.html`** (the initial load and both branches of
+   `updateReservedStat()`), so all three go through one `monthLabelOf()`; changing only the first would have let the first
+   reserve click revert the header. The admin impersonation line gets the same month format ("October 2026 · Managing
+   <name>"). The Settings preview reads the same way. **My List, Subscriptions and This Week keep their own subtitles.**
+
+**Verified:** `page-banner-verify.mjs` **141 checks** on the working tree (new: the bolt is a 7-point polygon on the title,
+absolutely positioned, in the accent colour; the art carries no accent shape; the room after the last letter is `.86em`;
+header height equals the previous build's on all four pages; the catalog subtitle matches `Month YYYY · Browse and reserve
+your comics`; the title and its bolt stay inside the card on a phone; the bolt is hidden in print). Screenshots inspected.
+
+**Staging evidence for § 9:** full Playwright suite **151 passed** (24.0 min) on the deployed build; `page-banner-verify.mjs` **141/141** against the deployed bytes.
+
+**Performance, measured on staging (Lighthouse, authenticated, cold cache), against the build before this change:**
+
+| Page | Before (banner v1) | After (banner v2) |
+|---|---|---|
+| My List, mobile | 98, LCP 2.2 s | 98 / 97 / 98, LCP 2.3-2.4 s |
+| My List, desktop | 100, LCP 0.7 s | 100, LCP 0.7 s |
+| Subscriptions, mobile | 98, LCP 2.1 s | **96, LCP 2.5 s, three runs in a row** |
+| Subscriptions, desktop | 79 (CLS 0.512, pre-existing) | 79 (CLS 0.513, unchanged) |
+
+**Stated plainly:** My List is unchanged. **Subscriptions mobile is about 2 points and 0.4 s of LCP worse, and it reproduced
+three times**, so it is not a one-off. The art grew by 7.5 KB (11 KB to 19 KB), which is only about 40 ms on Lighthouse's
+simulated connection, so the size alone does not explain 0.4 s; lab conditions on a busy machine (its TBT also read
+100-120 ms in the repeats against 0-40 ms before) may account for part of it. **It was not isolated**: that needs the old
+and new art measured in the same window, and the old art was not redeployed for it. If the 2 points matter, the cheapest
+lever is re-encoding `banner-v2.webp` at a lower quality (about 13 KB at q60) as `banner-v3.webp`.
