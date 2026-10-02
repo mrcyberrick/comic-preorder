@@ -1,8 +1,8 @@
 # Page header banner — brandable art beside the title on the four customer pages
 
-**STATUS:** IN PROGRESS | staging=BUILT 2026-10-01 (catalog first, widened to all four customer pages and tuned for LCP the same day), awaiting Rick's review | prod=NOT PROMOTED | findings=— (feature build, not a defect; **F169 is the next free finding ID**)
+**STATUS:** COMPLETE | staging=2026-10-01 (catalog first, widened to all four customer pages, tuned for LCP, then given the header card and the bolt the same day) | prod=2026-10-02 (PR #166, merge dc94e29) | findings=— (feature build, not a defect; **F169 is the next free finding ID**). Live write-smoke on production still owed by Rick; see CLAUDE.md.
 
-**Last verified against live: 2026-10-01** (staging; production untouched).
+**Last verified against live: 2026-10-02** (production serving PR #166's bytes, verified byte-identical to `origin/main` on both hostnames).
 
 ## 1. What this is
 
