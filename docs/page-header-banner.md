@@ -1,6 +1,6 @@
 # Page header banner — brandable art beside the title on the four customer pages
 
-**STATUS:** COMPLETE | staging=2026-10-01 (catalog first, widened to all four customer pages, tuned for LCP, then given the header card and the bolt the same day) | prod=2026-10-02 (PR #166, merge dc94e29) | findings=— (feature build, not a defect; **F169 is the next free finding ID**). Live write-smoke on production still owed by Rick; see CLAUDE.md.
+**STATUS:** IN PROGRESS | staging=2026-10-02 (the follow-ups in sections 9 and 10 are on staging only) | prod=2026-10-02 (PR #166, merge dc94e29: the first banner build, with the v1 art, the bolt on the art's edge and the old catalog subtitle) | findings=— (feature build, not a defect; **F169 is the next free finding ID**). Section 9-10 follow-ups NOT promoted; live write-smoke on production still owed by Rick; see CLAUDE.md.
 
 **Last verified against live: 2026-10-02** (production serving PR #166's bytes, verified byte-identical to `origin/main` on both hostnames).
 
@@ -198,6 +198,9 @@ banner-off run (3 runs each), rather than the best-versus-best form that could f
 
 ## 9. Reframed art, a bolt on the title, a warmer subtitle (2026-10-02)
 
+> **Item 1 below (the bolt on the title) was superseded the same day by § 10**: the bolt is gone and the accent is now a hard
+> offset shadow on the title. Items 2 (the `banner-v2.webp` art) and 3 (the subtitle) stand.
+
 **The ask.** Rick reviewed a redesigned default banner (a mockup with the title, bolt and subtitle baked into one
 image) and agreed three changes, keeping the concept: (1) a smaller bolt that supports the branding instead of
 competing with the title, (2) the superhero reframed with a little more space, (3) a more inviting subtitle.
@@ -246,3 +249,39 @@ simulated connection, so the size alone does not explain 0.4 s; lab conditions o
 100-120 ms in the repeats against 0-40 ms before) may account for part of it. **It was not isolated**: that needs the old
 and new art measured in the same window, and the old art was not redeployed for it. If the 2 points matter, the cheapest
 lever is re-encoding `banner-v2.webp` at a lower quality (about 13 KB at q60) as `banner-v3.webp`.
+
+## 10. The title accent: from a bolt to a hard red offset shadow (2026-10-02)
+
+**The path, in order** (each step was seen on staging or in an isolated mock before the next was chosen):
+1. A red slash on the art's edge, then a full-height bolt there (shipped to production in PR #166).
+2. A small bolt on the title (§ 9, staging).
+3. Rick pasted a recommendation to remove the bolt and put a subtle red shadow on the title instead (fewer competing
+   elements, the red of the cape echoed in the type). Three treatments were rendered in an isolated mock against the real
+   header CSS: a soft glow, a hard offset, and a glow with a thin red edge.
+4. **Rick chose the soft glow**; it was built and deployed to staging (suite 151 passed).
+5. **After seeing it live he chose the hard offset instead.** This is the final state.
+
+**What is there now:** the title (`.page-header--banner h1`) carries `text-shadow: 2px 2px 0` at 55% of the accent: a crisp,
+zero-blur offset, the look of a comic title printed with a misregistered spot-colour plate. It applies to all four customer
+pages and the Settings preview.
+- **It follows the store's brand colour.** A `color-mix(in srgb, var(--accent) 55%, transparent)` version sits inside
+  `@supports`, with the plain platform red as the default. **They are separate rules on purpose:** a declaration containing
+  `var()` is accepted at parse time even where `color-mix()` is unsupported, and then computes to `none` instead of falling back.
+- **A fixed 2px at every size** (desktop and phone), the look chosen from the mock. Whole pixels keep the edge sharp; why an
+  em-based offset would soften on the smaller phone title is reasoned, not measured.
+- **Print: `text-shadow: none`**, so a red offset does not sit behind printed black text.
+- **No layout:** a shadow takes no space, so header heights are unchanged (141 / 141 / 164 / 141 px, asserted).
+- **The bolt is gone entirely:** the `h1` is an ordinary block again (no `display: table`, no `padding-right`, no `::after`).
+
+**One thing to know for a store with its own accent:** the shadow takes that colour. A very dark accent will barely show on the
+`#222` band, and a very light one will be bright; the title text itself stays cream either way.
+
+**Verified:** `page-banner-verify.mjs` **145 checks** on the working tree and on the deployed staging bytes, including: 2px
+right, 2px down, **zero blur**, about 55% strength; the shadow **follows a changed `--accent`** (set to `#1d4ed8`, read back as
+that blue); no bolt scaffolding remains on the title; the art carries no accent shape; print has no shadow; the title stays
+inside the card on a phone. Full Playwright suite **151 passed** (22.9 min) on the deployed build. Screenshots inspected at
+1350, 700 and 393 px.
+
+**A process note worth keeping:** the first attempt at the glow patch searched for its end marker from the start of the file,
+matched an earlier identical `@media` line, and duplicated about 130 lines of CSS. It was caught because the diff said
+`+143` for a change that should have been about `+20`, and the file was restored from git before it was committed.
