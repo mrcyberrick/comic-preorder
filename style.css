@@ -241,11 +241,15 @@ button { cursor: pointer; font-family: var(--font-body); }
    the art arrives late (after the settings read and the image fetch), so it
    fades in from opacity 0 instead of appearing.
 
-   A lightning bolt in the tenant's accent (--accent follows
-   branding.primary_color) marks where the art begins, and the image fades into
-   the header band so it has no hard edge behind the title. The bolt was a plain
-   slanted slash until Rick asked for a bolt (2026-10-01); it is one clip-path
-   polygon on ::after, so it costs no image and no request.
+   The image fades into the header band so it has no hard edge behind the title.
+   The brand accent is a hard, comic-print offset shadow on the TITLE's own letters
+   (text-shadow: 2px 2px 0 on the h1), in the tenant's accent (--accent follows
+   branding.primary_color), which ties the type to the red of the cape without
+   adding a second graphic to compete with it. History (Rick, 2026-10-01/02): a
+   plain slash on the art's edge, then a full-height bolt there, then a small bolt
+   after the title (each read as a separate element), then a soft glow in the type
+   (seen live on staging, then swapped by Rick for the hard offset, his preference
+   once he saw it on the page). No image, no extra element, no request.
 
    --banner-w is the art's width, shared by the art itself and by the subtitle
    cap below so the two cannot drift apart. */
@@ -294,20 +298,25 @@ button { cursor: pointer; font-family: var(--font-body); }
   z-index: 1;
   background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
 }
-.brand-banner::after {             /* the accent lightning bolt where the art begins */
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: var(--accent);
-  /* Seven points: flat top, down-left to a notch, a jog right, then down to the
-     tip. x is in px and y in %, so it stretches with the header's height (one
-     line of subtitle or two) without distorting its width. */
-  clip-path: polygon(34px 0, 60px 0, 45px 42%, 64px 42%, 20px 100%, 35px 57%, 14px 57%);
+/* The title's accent: a hard offset shadow in the brand colour behind the letters,
+   the way a comic title is printed with a misregistered spot-colour plate. Zero
+   blur, so the edges stay crisp at every size. The offset is a fixed 2px at both
+   desktop and phone sizes: that is the look Rick chose from the mock, and a whole
+   pixel keeps the edge sharp, where an em-based offset would land on a fraction of
+   a pixel on the smaller phone title (reasoned, not measured).
+   Two rules on purpose. A declaration containing var() is accepted at parse time
+   even where color-mix() is unsupported, and then computes to NONE rather than
+   falling back, so the color-mix version lives in @supports and the plain red
+   (the platform accent) is the default. Only a store with its own accent colour
+   sees a difference between the two. No extra element and no layout: a shadow
+   takes no space. */
+.page-header--banner h1 { text-shadow: 2px 2px 0 rgba(232, 50, 28, 0.55); }
+@supports (color: color-mix(in srgb, red 55%, transparent)) {
+  .page-header--banner h1 { text-shadow: 2px 2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
 }
 @media (min-width: 641px) and (max-width: 900px) {
   /* Narrower art on tablets, so a longer subtitle (This Week's changes with the
-     data) has room before it meets the bolt. object-fit: cover keeps the
+     data) has room before it meets the art. object-fit: cover keeps the
      figure, which sits at the right of the image. */
   .page-header--banner { --banner-w: 40%; }
 }
@@ -320,15 +329,13 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 @media (max-width: 640px) {
   /* Little spare room on a phone, so the art sits BEHIND the title block and is
-     dimmed to keep the text legible rather than being dropped. The bolt is
-     dropped here: at this width the art starts left of the end of the title, so a
-     bright shape there would sit on the words (the old slash cut straight through
-     the title in a real 393px screenshot), and decoration must not compete with
-     the text it sits behind. A soft halo on the subtitle keeps it
-     readable where the bright part of the art passes behind it. */
+     dimmed to keep the text legible rather than being dropped. A soft halo on the
+     subtitle keeps it readable where the bright part of the art passes behind it.
+     (An accent shape on the art's edge used to cut straight through the title in a
+     real 393px screenshot, which is why the accent now lives in the title's own
+     offset shadow instead.) */
   .page-header--banner { --banner-w: 72%; padding: 26px 20px 22px; margin-top: 16px; }
   .brand-banner.is-ready { opacity: 0.5; }
-  .brand-banner::after { display: none; }
   .brand-banner::before {
     background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.78) 42%, rgba(34,34,34,0) 88%);
   }
@@ -340,6 +347,7 @@ button { cursor: pointer; font-family: var(--font-body); }
      image on white paper. Global on purpose: it also covers any page that gains
      the banner later. */
   .brand-banner { display: none !important; }
+  .page-header--banner h1 { text-shadow: none; }   /* a red offset behind printed black text just reads as a misprint */
   /* The card is a screen treatment. Left on, a dark #222 box would print behind
      black text (My List prints its title) wherever backgrounds are enabled. */
   .page-header--banner {

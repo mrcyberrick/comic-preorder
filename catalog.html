@@ -23,7 +23,7 @@
   <!-- The default banner art, fetched at HTML parse instead of after the auth/tenant/settings chain
        (docs/page-header-banner.md section 6). Without this the art was the LCP element on pages with no
        larger image and its arrival waited on that whole chain. 11 KB, immutable-cached. -->
-  <link rel="preload" as="image" href="assets/banner-v1.webp">
+  <link rel="preload" as="image" href="assets/banner-v3.webp">
   <style>
     /* Search + filter toggle row — always visible */
     .toolbar-header {
@@ -138,7 +138,7 @@
          the text and out of flow (see .brand-banner in style.css). -->
     <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1>Monthly Catalog</h1>
-    <p id="catalog-subtitle">Browse and reserve items from the current order cycle</p>
+    <p id="catalog-subtitle">Browse and reserve your comics</p>
   </div>
 
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
@@ -300,6 +300,15 @@
   const navData = await initNav();
   if (!navData) return;
   const { user, profile } = navData;
+
+  // "2026-10" -> "October 2026" for the header subtitle. Built from local parts, never
+  // toISOString() (F28). The subtitle is written in THREE places (the initial load
+  // below and both branches of updateReservedStat()); they all use this so a reserve
+  // click cannot revert the header to a different wording.
+  function monthLabelOf(ym) {
+    const [y, m] = (ym || '').split('-').map(Number);
+    return (y && m) ? new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '';
+  }
 
   // Check maintenance mode — admins bypass
   try { await checkMaintenanceMode(profile?.is_admin); } catch(e) { return; }
@@ -661,7 +670,7 @@
 
   if (currentMonth) {
     document.getElementById('catalog-subtitle').textContent =
-      `Catalog for ${currentMonth} — browse and reserve items`;
+      `${monthLabelOf(currentMonth)} · Browse and reserve your comics`;
   }
 
   // ── Order deadline banner ─────────────────────────────────────
@@ -1443,9 +1452,9 @@
     // Update subtitle to reflect whose list we're managing
     const subtitle = document.getElementById('catalog-subtitle');
     if (AdminContext.isActive()) {
-      subtitle.innerHTML = `Catalog for ${currentMonth} &mdash; managing <strong style="color:var(--accent)">${escapeHtml(AdminContext.activeUserName)}</strong>`;
+      subtitle.innerHTML = `${escapeHtml(monthLabelOf(currentMonth))} &middot; Managing <strong style="color:var(--accent)">${escapeHtml(AdminContext.activeUserName)}</strong>`;
     } else {
-      subtitle.textContent = `Catalog for ${currentMonth} — browse and reserve items`;
+      subtitle.textContent = `${monthLabelOf(currentMonth)} · Browse and reserve your comics`;
     }
   }
 
