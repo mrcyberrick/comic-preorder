@@ -670,7 +670,7 @@ This plan built the bar as **always pinned** (`position: fixed; bottom: 0`) and 
 
 **Not verified, and this is the important part:** everything above was measured in **Chromium's iPhone emulation**, not WebKit and **not iOS standalone (Home Screen) mode**. Rick's report -- the bar drawn about half-way up the screen with no top nav, staying wrong until the app is closed -- happens on his **Home Screen app (production)** and not in Brave on staging, with byte-identical code on both. **That symptom is not reproduced, not diagnosed and not fixed by this change.** See `CLAUDE.md` § Current Migration Phase, "MOBILE TAB BAR AUTO-HIDE".
 
-### 7.4 Addendum 2026-09-30 -- the phone drawer now carries "Welcome, name" and Sign Out (F168; FIXED ON STAGING `51d4b06`, NOT promoted)
+### 7.4 Addendum 2026-09-30 -- the phone drawer now carries "Welcome, name" and Sign Out (F168; PROMOTED TO PRODUCTION 2026-09-30, PR #165, merge `a640a8b`; it read "FIXED ON STAGING `51d4b06`, NOT promoted" until then)
 
 § 2.2 above and this plan's header re-order left the open phone drawer's `.nav-user` row ("Welcome, name / Sign Out") **folded in under a border** on a second line of the fixed 60 px bar, and the `order: 4` fix recorded in the `.nav-user` rule's comment moved it after the header row without giving it room. It overflowed the bar and the drawer (`top: 100%`) opened on top of it, covering 83-88% of the name (**F168**).
 

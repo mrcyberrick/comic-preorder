@@ -20,6 +20,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
   <link rel="stylesheet" href="style.css">
+  <!-- The default banner art, fetched at HTML parse instead of after the auth/tenant/settings chain
+       (docs/page-header-banner.md section 6). Without this the art was the LCP element on pages with no
+       larger image and its arrival waited on that whole chain. 11 KB, immutable-cached. -->
+  <link rel="preload" as="image" href="assets/banner-v1.webp">
   <style>
     /* Search + filter toggle row — always visible */
     .toolbar-header {
@@ -129,7 +133,10 @@
 
 <!-- Page Header -->
 <div class="container">
-  <div class="page-header">
+  <div class="page-header page-header--banner">
+    <!-- Header art — empty here, filled by PageBanner.mount() below. Behind
+         the text and out of flow (see .brand-banner in style.css). -->
+    <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1>Monthly Catalog</h1>
     <p id="catalog-subtitle">Browse and reserve items from the current order cycle</p>
   </div>
@@ -285,6 +292,10 @@
 <script src="app.js"></script>
 <script>
 (async () => {
+  // Header banner (PageBanner, app.js; set in Settings > Branding). FIRST THING, before any await:
+  // it reads its config in parallel with auth and tenant resolution and paints as soon as it can,
+  // because the art is the largest paint on pages with no cover grid. Never throws or rejects.
+  PageBanner.show(document.getElementById('page-banner'));
   await TenantContext.resolve();
   const navData = await initNav();
   if (!navData) return;
