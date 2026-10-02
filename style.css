@@ -242,13 +242,14 @@ button { cursor: pointer; font-family: var(--font-body); }
    fades in from opacity 0 instead of appearing.
 
    The image fades into the header band so it has no hard edge behind the title.
-   The brand accent is a soft glow on the TITLE's own letters (text-shadow on the
-   h1), in the tenant's accent (--accent follows branding.primary_color), which
-   ties the type to the red of the cape without adding a second graphic to
-   compete with it. History: a plain slash on the art's edge, then a full-height
-   bolt there, then a small bolt after the title (Rick, 2026-10-01/02); each read
-   as a separate element, so the accent moved into the type itself. No image, no
-   extra element, no request.
+   The brand accent is a hard, comic-print offset shadow on the TITLE's own letters
+   (text-shadow: 2px 2px 0 on the h1), in the tenant's accent (--accent follows
+   branding.primary_color), which ties the type to the red of the cape without
+   adding a second graphic to compete with it. History (Rick, 2026-10-01/02): a
+   plain slash on the art's edge, then a full-height bolt there, then a small bolt
+   after the title (each read as a separate element), then a soft glow in the type
+   (seen live on staging, then swapped by Rick for the hard offset, his preference
+   once he saw it on the page). No image, no extra element, no request.
 
    --banner-w is the art's width, shared by the art itself and by the subtitle
    cap below so the two cannot drift apart. */
@@ -297,15 +298,21 @@ button { cursor: pointer; font-family: var(--font-body); }
   z-index: 1;
   background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
 }
-/* The title's accent: a soft glow in the brand colour on the letters themselves.
-   Two declarations on purpose. A declaration containing var() is accepted at parse
-   time even where color-mix() is unsupported, and then computes to NONE rather than
+/* The title's accent: a hard offset shadow in the brand colour behind the letters,
+   the way a comic title is printed with a misregistered spot-colour plate. Zero
+   blur, so the edges stay crisp at every size. The offset is a fixed 2px at both
+   desktop and phone sizes: that is the look Rick chose from the mock, and a whole
+   pixel keeps the edge sharp, where an em-based offset would land on a fraction of
+   a pixel on the smaller phone title (reasoned, not measured).
+   Two rules on purpose. A declaration containing var() is accepted at parse time
+   even where color-mix() is unsupported, and then computes to NONE rather than
    falling back, so the color-mix version lives in @supports and the plain red
-   (the platform accent) is the default. Only a store with its own accent colour sees
-   a difference between the two. No extra element and no layout: a shadow takes no space. */
-.page-header--banner h1 { text-shadow: 0 0 18px rgba(232, 50, 28, 0.5); }
-@supports (color: color-mix(in srgb, red 50%, transparent)) {
-  .page-header--banner h1 { text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 50%, transparent); }
+   (the platform accent) is the default. Only a store with its own accent colour
+   sees a difference between the two. No extra element and no layout: a shadow
+   takes no space. */
+.page-header--banner h1 { text-shadow: 2px 2px 0 rgba(232, 50, 28, 0.55); }
+@supports (color: color-mix(in srgb, red 55%, transparent)) {
+  .page-header--banner h1 { text-shadow: 2px 2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
 }
 @media (min-width: 641px) and (max-width: 900px) {
   /* Narrower art on tablets, so a longer subtitle (This Week's changes with the
@@ -326,7 +333,7 @@ button { cursor: pointer; font-family: var(--font-body); }
      subtitle keeps it readable where the bright part of the art passes behind it.
      (An accent shape on the art's edge used to cut straight through the title in a
      real 393px screenshot, which is why the accent now lives in the title's own
-     glow instead.) */
+     offset shadow instead.) */
   .page-header--banner { --banner-w: 72%; padding: 26px 20px 22px; margin-top: 16px; }
   .brand-banner.is-ready { opacity: 0.5; }
   .brand-banner::before {
@@ -340,7 +347,7 @@ button { cursor: pointer; font-family: var(--font-body); }
      image on white paper. Global on purpose: it also covers any page that gains
      the banner later. */
   .brand-banner { display: none !important; }
-  .page-header--banner h1 { text-shadow: none; }   /* a red glow around printed black text just smudges */
+  .page-header--banner h1 { text-shadow: none; }   /* a red offset behind printed black text just reads as a misprint */
   /* The card is a screen treatment. Left on, a dark #222 box would print behind
      black text (My List prints its title) wherever backgrounds are enabled. */
   .page-header--banner {
