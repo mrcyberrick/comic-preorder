@@ -29,11 +29,11 @@ fills it with a banner image, and lets the store change it.
 | Custom image tier | Paid only; a stored `custom` on a free tenant resolves to the **platform** art | Same direction as `Tier`: the free render is always the safe one. Free tenants may still pick *No banner*. |
 | Custom image source | An `https://` address the admin hosts | **Rick, 2026-10-01: "Address only is fine".** No image storage exists in this project. The address is checked to actually load **before** it is saved. |
 | A custom image that will not load | Shows **nothing**, never the platform art | Platform art on a store that chose its own would be the wrong shop's identity on its page. |
-| Accent colour | The slash on the cut edge uses `var(--accent)` | `Branding.apply()` already overrides `--accent` from `branding.primary_color`, so the banner follows it with no new mechanism. |
+| Accent colour | The lightning bolt where the art begins uses `var(--accent)` | `Branding.apply()` already overrides `--accent` from `branding.primary_color`, so the banner follows it with no new mechanism. |
 | Layout | Absolutely positioned, behind the text, `pointer-events: none` | Takes **no** flow space. These pages carry the F141/F161/F166 CLS work; nothing here may move content. The art arrives late (settings read + image fetch), so it fades in from opacity 0. |
 | Subscriptions subtitle | **Wraps to two lines** (three at tablet width) clear of the art, via the opt-in `.page-header--wrap-sub` | **Rick, 2026-10-01.** Its ~115-character subtitle would otherwise run under the art and across the slash. **Opt-in, not global:** My List and This Week rewrite their subtitles after load, and a width cap on text that changes length would re-wrap and shift the page. |
 | Tablet (641-900px) | Art narrows to 40% (`--banner-w`) | Leaves room for This Week's data-driven subtitle without capping it. |
-| Phone (≤640px) | Behind the title block, 72% wide, dimmed to 0.5, **no slash**, soft halo on the subtitle | A real 393px screenshot showed the slash cutting through the title. |
+| Phone (≤640px) | Behind the title block, 72% wide, dimmed to 0.5, **no bolt**, soft halo on the subtitle | A real 393px screenshot showed the original slash cutting through the title; the same reasoning keeps the bolt off a phone. |
 | Print | **Hidden in all print output** (`@media print { .brand-banner { display: none !important } }` in the shared CSS) | **Rick, 2026-10-01.** My List's print rules hide only the subtitle, not the header, so the banner would have printed as a dark fading image on white paper. Global, so any later page is covered too. |
 | One module owns the contract | `PageBanner` in `app.js` (shape, URL rule, tier rule, render) | The pages (readers) and `settings.html` (writer + preview) must not disagree about "default": that is exactly the `CatalogFilters` bug. Settings holds no second copy. |
 | Read | `.maybeSingle()`, not `Settings.get()` | `get()` uses `.single()`, which answers HTTP 406 for no row. A tenant that never saved a banner is the normal case, so it would log a failed request on every page load. |
@@ -113,7 +113,7 @@ identical both ways). It is the F141 Pattern B family, measured here on a brand-
 
 ## 6. Honest limits / when promoting
 
-- **Chromium only.** Not WebKit, not a real iPhone. The slant uses `clip-path`, the fade uses
+- **Chromium only.** Not WebKit, not a real iPhone. The bolt uses `clip-path`, the fade uses
   gradients; both are broadly supported, but unverified on Safari.
 - **The harness's CLS is unthrottled**, so it is a floor; the Lighthouse figures in § 5 are the throttled ones.
 - **No committed spec asserts the banner** (the Playwright suite is gitignored anyway). The evidence
@@ -124,3 +124,70 @@ identical both ways). It is the F141 Pattern B family, measured here on a brand-
   RESULT for `app.js` (the driver has dropped it three times). A full merge also needs
   `assets/banner-v1.webp` and the `_headers` line to travel with it.
 - No production `app_settings` row is needed: absent means default art.
+
+## 7. The header as a card (added after Rick's review, 2026-10-01)
+
+**The ask:** *"The header that has the Monthly Catalog title is not defined from the background. Please use
+the newsletter to incorporate contrasting colors."* The header sat on the same `#0f0f0f` as the page with
+only a hairline under it, so nothing separated it.
+
+**The recipe**, read from the weekly newsletter's header band (`mrcyberrick.us/weekly-pull-feed/newsletter.html`),
+which already uses this app's tokens:
+
+| Newsletter | Token | On `.page-header--banner` |
+|---|---|---|
+| page `#0f0f0f` | `--bg` | unchanged |
+| header band `#222222` | `--bg-elevated` | the header's background |
+| `1px solid #2e2e2e` | `--border` | the header's edge (was a bottom hairline only) |
+| `border-radius: 8px` | `--radius-lg` | corners; `overflow: hidden` clips the art to them |
+| `box-shadow: 0 4px 24px rgba(0,0,0,.5)` | `--shadow` | the lift |
+
+**What follows from it:**
+- **The art fades into the band colour** (`rgba(34,34,34,...)`), not the page colour, or it would show a dark
+  seam against the new background. The phone subtitle halo uses the band colour for the same reason.
+- **Scope: all four customer pages**, because the header is one shared component (`.page-header--banner`);
+  a card on the catalog alone would make the other three look unfinished. Admin, analytics and settings
+  headers are untouched (they do not carry the class). Scoping it back to the catalog is one selector.
+- **Print flattens it** (no background, border, shadow or padding). My List prints its title in black, and a
+  dark `#222` box behind it would be unreadable wherever "background graphics" is on.
+- **Settings preview** drops its own frame styling and inherits the real card, so it matches what customers see.
+- Spacing: `padding: 32px 28px 28px` and `margin-top: 20px` on desktop, `26px 20px 22px` and `16px` on a phone.
+  The header is about 13 px taller than before; it is static CSS in the HTML, so it cannot shift after paint.
+
+**Verified:** `page-banner-verify.mjs` now **120 checks** (16 new): on each of the four pages the header
+computes `rgb(34,34,34)` on the `rgb(15,15,15)` page, a `1px rgb(46,46,46)` edge, 8px corners, the
+`0 4px 24px` shadow and `overflow: hidden`; title and subtitle colours are unchanged; and in print emulation
+the card is flattened on every page. The existing no-layout, subtitle-clearance, tablet and phone checks still
+pass with the 1px border (two geometry tolerances were loosened from 0/1 to 1/2 px for it). Screenshots
+inspected at 1350, 700 and 393 px.
+
+## 8. The bolt (added after Rick's review, 2026-10-01)
+
+**The ask:** *"Change the red line into a lightning bolt on the header image."*
+
+The red line was one `clip-path` polygon on `.brand-banner::after`. It is now a seven-point bolt polygon in the
+same `var(--accent)` (so it still follows `branding.primary_color`), at the same spot where the art begins:
+
+```
+polygon(34px 0, 60px 0, 45px 42%, 64px 42%, 20px 100%, 35px 57%, 14px 57%)
+```
+
+- **Still CSS only:** no image, no request, nothing for the store to upload.
+- **x in px, y in %**, so it stretches with the header's height (one subtitle line or two) without distorting
+  its width.
+- **The art loses its slanted cut.** Its left edge is hidden by the fade into the header band, so the slash had
+  been the only thing showing it; the bolt marks the start of the art instead.
+- **Hidden on a phone**, as the slash was: there the art sits behind the title, and a bright shape would land on
+  the words.
+- Chosen from three candidates rendered in an isolated mock (a thin classic bolt, a larger and steeper one, and the
+  steeper one with a glow). The steeper one reads best; the glow was not visible enough to justify extra markup.
+
+**Verified:** `page-banner-verify.mjs` **124 checks**: on all four pages the accent mark is a 7-point polygon and the
+art itself is unclipped. Layout shift with and without the banner is unchanged (catalog 0.0182 vs 0.0183, My List
+0.0058 vs 0.0058, Subscriptions 0.0363 vs 0.0363, This Week 0.0022 vs 0.0022).
+
+**One harness comparison was loosened, with the evidence.** My List's own shifts land either in one burst (about
+0.0115) or in three (about 0.0057), and which one happens flips from run to run **in both banner states**. A
+6-run alternating A/B on the deployed card build measured **0.0067 with the banner vs 0.0067 without**, and the
+higher outcome occurred once in each. The check therefore asks that the best banner-on run not exceed the *worst*
+banner-off run (3 runs each), rather than the best-versus-best form that could fail on a coin flip.
