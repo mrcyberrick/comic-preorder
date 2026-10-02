@@ -1483,9 +1483,11 @@ window.CatalogFilters = CatalogFilters;
 // must be https:, so a stored value cannot inject markup or a javascript: URL.
 const PageBanner = {
   KEY: 'page_banner',
-  // -v2 is load-bearing (v1 was the first cut, a tight crop; 2026-10-02): _headers
-  // serves this path `immutable` for a year, so re-exporting the art REQUIRES
-  // bumping to -v3 and updating this constant.
+  // -v3 is load-bearing (v1 was the first cut, a tight crop; v2 the reframed scene
+  // at 19 KB, never promoted; v3 the same scene re-encoded at 14 KB; 2026-10-02):
+  // _headers serves this path `immutable` for a year, so re-exporting the art
+  // REQUIRES bumping to -v4 and updating this constant, the four preload links and
+  // the _headers entry together.
   DEFAULT_SRC: 'assets/banner-v3.webp',
   MODES: ['default', 'custom', 'off'],
 
