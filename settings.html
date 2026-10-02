@@ -497,7 +497,7 @@
           <div class="page-header page-header--banner set-banner-frame" aria-label="Preview of a customer page header (shown here as the Catalog)">
             <div class="brand-banner" id="bn-preview" aria-hidden="true"></div>
             <h1>Monthly Catalog</h1>
-            <p>Catalog for <span id="bn-month">—</span> — browse and reserve items</p>
+            <p><span id="bn-month">This month</span> &middot; Browse and reserve your comics</p>
           </div>
         </div>
 
@@ -996,7 +996,9 @@
   // and this writer disagreeing about "default" is exactly the CatalogFilters bug.
   const bnTenant = TenantContext.current();
   const bnPaid   = Tier.isPaid(bnTenant);
-  el('bn-month').textContent = currentMonth || 'this month';
+  { // "2026-10" -> "October 2026": the wording the catalog header itself uses
+    const [y, m] = (currentMonth || '').split('-').map(Number);
+    el('bn-month').textContent = (y && m) ? new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'This month'; }
 
   let bnSaved = null;          // last-saved config; null = never saved
   let bnSavedAt = null;

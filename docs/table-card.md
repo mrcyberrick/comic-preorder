@@ -1,8 +1,8 @@
 # Table card — a surface for My List's main table
 
-**STATUS:** IN PROGRESS | staging=BUILT 2026-10-01, awaiting Rick's review | prod=NOT PROMOTED | findings=— (a formatting change Rick asked for, not a defect; **F169 is the next free finding ID**)
+**STATUS:** COMPLETE | staging=2026-10-01 | prod=2026-10-02 (PR #166, merge dc94e29) | findings=— (a formatting change Rick asked for, not a defect; **F169 is the next free finding ID**)
 
-**Last verified against live: 2026-10-01** (staging; production untouched).
+**Last verified against live: 2026-10-02** (production serving PR #166's bytes, verified byte-identical to `origin/main` on both hostnames).
 
 ## 1. The ask and the cause
 
