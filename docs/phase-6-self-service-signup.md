@@ -1,6 +1,6 @@
 # Phase 6 — Open Self-Service Tenant Signup (STUB)
 
-**STATUS:** STUB — NOT READY (readiness assessed 2026-10-04, see § Readiness) | staging=— | prod=N/A | findings=F145,F72,F165,F157,F151,F150
+**STATUS:** STUB — NOT READY (readiness assessed 2026-10-04, see § Readiness) | staging=— | prod=N/A | findings=F145,F72,F165,F157,F169,F151,F150
 
 **Status:** **Stub — not started.** Successor to Phase 5. This is a *thin coordinator stub* capturing the goal, the gating prerequisite, and the design decisions taken at 5.4 planning (2026-06-15). **Detailed sub-deploy runbooks are written when Phase 6 actually opens — after Phase 5 (5.5) closes** — per the Phase 3/4/5 pattern (plan-when-its-turn-comes; do not plan execution detail against future schema/infra state).
 **Predecessor:** Phase 5 — Second-Tenant Onboarding (`docs/phase-5-second-tenant-onboarding.md`). **Phase 6 does not begin until Phase 5 is Complete.**
@@ -30,14 +30,15 @@ Rick to reverse Q3 explicitly; the gates below are what that reversal would then
 | G1 | **S0 serving-model spike** (wildcard `*.pulllist.app` + TLS on Pages) | **Never run.** F145 measured there is **no** wildcard record: arbitrary subdomains are NXDOMAIN; `rjbookstop`/`comicstore` are individually provisioned custom hostnames | everything in 6.x |
 | G2 | **F165** — automatic withdrawal mark fires on import timing | OPEN, High — **exposure removed 2026-10-04**: S1 landed (scripts `5919130`), no import can mark a title withdrawn. S2 (weekly candidate report) landed the same day (scripts `3ef4b89`, report-only, soaking through two real weekly runs); S3 (confirm-to-mark) not built; first real-import proof is the November import | a self-serve tenant's first import would inherit it |
 | G3 | **F72 email half** — 5 mail functions founding-branded; S2a `register-customer` and F153's `register-tenant` are SOURCE-only on production (not deployed) | OPEN | any tenant taking real customers; a self-serve signup would receive no invite on production |
-| G4 | **F157 distributor-scoping** — a one-distributor tenant's single catalog is treated as a partial import | OPEN, design not started (sequencing doc Session E) | the eligibility gate's own "either PRH **or** Lunar" promise |
+| G4 | **F157 distributor-scoping** — a one-distributor tenant's single catalog is treated as a partial import | OPEN — **scoping DESIGNED 2026-10-04** (`docs/f157-distributor-scoping.md`, STATUS NOT STARTED, migration text written and not run, build deferred). **⚠️ Re-scoped by that work:** the RPC (`delete_dropped_catalog_items`) matches zero rows in its real wiring (F66, F110), so scoping it does **not** unblock a one-distributor tenant. What does is the import scripts' two mandatory positional catalog files, the month inferred from the Lunar filename, and F157's own zero-row guard aborting on a missing file, filed as **F169** (no owner, no plan, no workaround) | the eligibility gate's own "either PRH **or** Lunar" promise. **G4 is really F169**; the scoped delete rides along with it |
 | G5 | **F131** — every tenant's catalog comes from one operator's portal access; no self-service import | OPEN, structural | "no operator in the loop" (this phase's Goal) is false until solved |
 | G6 | **`tenants.plan` has no CHECK constraint** (`'Pro'` would persist and read free) | raised 2026-09-02, not applied | 6.3 writing plan/tier values |
 | G7 | **F151** (dead secret readable in `tenants.settings`), **F150** (prod `app_settings` anon grants) | OPEN, Low | must be clean before strangers get admin accounts |
 | G8 | **F164** creation path untraced (cross-tenant `preorders` on staging) | OPEN | a cross-tenant write path would be Medium the day tenant N+1 is public |
 
 **Recommended order if Q3 is reversed:** G2 (deadline half done 2026-10-04; S2 landed and soaking; S3 still to decide) → G1 spike (cheap, ~1
-session, read-only plus one DNS record on a throwaway label) → G3 + G6 + G7 together → G4 design →
+session, read-only plus one DNS record on a throwaway label) → G3 + G6 + G7 together → G4 *(the
+scoping design is written; the part still owed is F169's single-distributor import mode)* →
 then write the 6.x runbooks. G5 is a product decision, not a session.
 
 ### Corrections to this stub's June text (2026-10-04; old text left in place below)

@@ -5993,6 +5993,20 @@ reasoning — only the disposition changed, not the diagnosis.
   **Not found from a live incident** — found while designing a browser-based import for
   non-technical tenants, by asking what the two-mandatory-catalog-arguments rule actually
   guarantees. It guarantees less than it looks like it does.
+- **2026-10-04 -- the remaining half is DESIGNED, not built, and Effect 1 below is CORRECTED.**
+  Session E of `docs/next-work-sequencing-2026-09-29.md` wrote `docs/f157-distributor-scoping.md`
+  (STATUS NOT STARTED): an optional `p_distributor text DEFAULT NULL` on `delete_dropped_catalog_items`
+  (a `DROP` + `CREATE` in one transaction with the grants rewritten, since `CREATE OR REPLACE` with a
+  new parameter list leaves a second function behind and a new function is executable by `anon` and
+  `authenticated` until revoked, F124), passed by the import scripts only on an explicitly declared
+  `--only=Lunar|PRH` run; the default two-distributor call is unchanged. The migration text is
+  written and NOT run. The live definition was measured on both projects first (Step 0):
+  **identical, one signature, `search_path=public`, ACL service-role only, body = F66's guard.**
+  **The withdrawal half (Effect 2) is closed by F165 S1 (`5919130`) and S2 (`3ef4b89`).** Build
+  trigger: the first single-distributor tenant, or Phase 6 S0, whichever comes first.
+  **Correction (see Effect 1): the RPC matches zero rows in its real wiring, so the scoping is
+  defence in depth and a precondition for ever calling it elsewhere, and it is NOT what blocks a
+  one-distributor tenant -- that is F169.**
 - **The fix.** A new pure `classifyEmptyCatalogSources()`, exported from both scripts and wired
   into `main()` after normalisation — **before** `normalized_catalog.json` is written and before any
   RPC — aborting with exit 1. It also prints the **normalised** count per distributor beside the raw
@@ -6034,6 +6048,23 @@ reasoning — only the disposition changed, not the diagnosis.
   `docs/phase-1-schema-migration.md:671-689` — a Phase 1 snapshot; **read the live definition before
   relying on this**, per § Document Integrity). So a Lunar-only record set deletes every PRH row in
   that month.
+  ***Corrected 2026-10-04 -- Effect 1 is NOT reachable.*** *(The paragraph above is kept as filed.)*
+  At the moment of the DELETE, every row at `(tenant, catalog_month)` is a row the same run has
+  just upserted: the call is made only when `isNewMonth` is true (`confirmedMonth` is greater than
+  the tenant's newest month, so no row existed there before), and only after `refreshCatalog()` has
+  upserted `records`, from which the array is built. `item_code != ALL(array)` is false for every
+  one of them, so the statement matches **zero rows**. A distributor whose file normalised to zero
+  records has no just-imported rows to lose, and a new month has no earlier ones. **F66 (2026-06) and
+  F110 (2026-08-03) had already recorded exactly this** ("matches zero rows on every run", "the
+  no-op `delete_dropped_catalog_items` call"); this finding's Effect 1 did not carry it forward, and
+  its own next bullet states the premise ("the month's rows were inserted moments earlier").
+  Re-derived against the live definition measured on both projects 2026-10-04. Derived from the
+  body and the call site, **not observed**: the tripwire is that a new-month import printing
+  `Removed N dropped item(s)` instead of `No dropped items to remove` would falsify it.
+  The function becomes dangerous only if it is called from a path where the month already holds
+  rows (a same-month refresh, F66's "activation risk"), which is the real reason to scope it.
+  **Consequence: the sentence below, "It also blocks single-distributor tenants outright", is true,
+  but the RPC is not why. The cause is the scripts' argument and month handling, now F169.**
 - **Effect 2 — and this is the one that actually reaches customers.**
   `computeWithdrawalCandidates()` (`import.js:1015`) builds `currentPairs` as
   `distributor||item_code` across the whole import and flags every prior-month row not in it. With
@@ -6705,7 +6736,7 @@ reasoning — only the disposition changed, not the diagnosis.
   | `normalized_catalog.json` is written beside the Lunar file | `:2034` | needs a path that exists without a Lunar file |
 
   **Not verified this session:** F157's filing says the shipment path "likewise requires both invoices". Scripts commit `f5fb6f0` has since made shipment files any-number, so that statement may already be stale. Re-verify before relying on it either way.
-- **The misattribution this finding corrects.** F157 (2026-09-07), "Relevant to Phase 6", says distributor-scoping `delete_dropped_catalog_items` "is what makes such a tenant possible at all"; `docs/phase-6-self-service-signup.md` gate G4 and `docs/next-work-sequencing-2026-09-29.md` § 5 say the same. **The RPC matches zero rows in its real wiring** (F66, 2026-06, and F110, 2026-08-03, both recorded that; re-derived 2026-10-04 against the live **staging** definition, with the production read still outstanding when this was filed): it runs only on a new-month import, after that run has upserted every row of the month, with an array built from those same records. So an unscoped call cannot harm a one-distributor tenant, and a scoped one does not unblock them. F157's Effect 1 was therefore not reachable; this is recorded in F157's own entry, not as a separate finding.
+- **The misattribution this finding corrects.** F157 (2026-09-07), "Relevant to Phase 6", says distributor-scoping `delete_dropped_catalog_items` "is what makes such a tenant possible at all"; `docs/phase-6-self-service-signup.md` gate G4 and `docs/next-work-sequencing-2026-09-29.md` § 5 say the same. **The RPC matches zero rows in its real wiring** (F66, 2026-06, and F110, 2026-08-03, both recorded that; re-derived 2026-10-04 against the live definition: staging's, with the production read still outstanding when this was filed, and ***production's arrived later the same day and is identical, so this now rests on both***): it runs only on a new-month import, after that run has upserted every row of the month, with an array built from those same records. So an unscoped call cannot harm a one-distributor tenant, and a scoped one does not unblock them. F157's Effect 1 was therefore not reachable; this is recorded in F157's own entry, not as a separate finding.
 - **Scope.** Both import scripts (staging and production, which must change together — the 2026-05-08 drift incident). No schema, no RLS, no Edge Function, no web code.
 - **Fix direction (design in its own session; nothing here is a decision).** A per-run declaration of the distributors supplied (`docs/f157-distributor-scoping.md` § 4.2.1 proposes `--only=Lunar|PRH`, default unchanged), the month inferred from whichever file is declared, F157's guard applied to **declared** sources only, the Lunar-specific checks skipped when Lunar is not declared, and an output path that does not assume a Lunar file. The F157 scoped delete rides along because that work already touches the same call and the same guard. **Longer term** the declaration belongs on the tenant (`tenants.settings`), not on a command line, because Phase 6 and F131 assume no operator at the keyboard.
 - **Trigger.** The same as the F157 design: the first single-distributor tenant, or Phase 6 S0, whichever comes first. Phase 6 is currently **NOT READY** (`docs/phase-6-self-service-signup.md` § Readiness), and Rick's 2026-08-29 Shape D decision still stands, so nothing is scheduled.

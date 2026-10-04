@@ -1,6 +1,6 @@
 # Next work — sequencing items 4–7 (F158 repoint, Admin Settings close-out + promotion, F161, F157)
 
-**STATUS:** IN PROGRESS — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B DONE 2026-09-29 (staging; V2/V4/V10 closed, no app code) · C DONE 2026-09-29 (PR #159, merge `5b661ff`) · D DONE 2026-09-29 (F161: cause found, NOT data volume) · E not started · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed), F164 (filed by Session B)
+**STATUS:** COMPLETE (all five sessions A-E done; E is design only, build deferred) — A DONE 2026-09-29 (prod data, 1 row, Rick-run) · B DONE 2026-09-29 (staging; V2/V4/V10 closed, no app code) · C DONE 2026-09-29 (PR #159, merge `5b661ff`) · D DONE 2026-09-29 (F161: cause found, NOT data volume) · E DONE 2026-10-04 (design only: `docs/f157-distributor-scoping.md`, STATUS NOT STARTED; found F157's Effect 1 unreachable, F169 filed) · planned 2026-09-29 · staging=— · prod=— · PR=— · findings: F158, F161, F157 (advances; none consumed), F164 (filed by Session B), F169 (filed by Session E)
 
 A sequencing plan, not a sub-deploy. It orders **five sessions** (A–E), one concern each, per
 CLAUDE.md's one-sub-deploy-per-session rule. Session C carries its own plan doc
@@ -223,6 +223,20 @@ design, defer the build.** Three reasons, each checkable:
 > month just imported). Reasons 1 and 3 still hold, so the design-now/build-later recommendation
 > stands. Read the deliverable below with `computeWithdrawalCandidates()` struck out.
 
+> **DONE 2026-10-04 -- and the parenthesis above, "deletes the absent distributor's rows for the
+> month just imported", was WRONG. Reason 1 was stronger than it said.** Writing the design
+> (`docs/f157-distributor-scoping.md`, Step 0 measured identical on both projects) showed that
+> `delete_dropped_catalog_items` matches zero rows in its real wiring: it runs only when
+> `isNewMonth` is true and only after the run has upserted every row of the month, from the same
+> records it builds its array from. F66 and F110 had recorded that already; F157's Effect 1 and this
+> section did not carry it forward. So scoping it is defence in depth and a precondition for ever
+> calling it from another path, **not** what blocks a one-distributor tenant. What does block one
+> (two mandatory positional catalog files, the month inferred from the Lunar filename, F157's own
+> zero-row guard aborting on a missing file) had no owner and is now **F169**. The deliverable
+> below was produced as specified, with the trigger unchanged (first single-distributor tenant or
+> Phase 6 S0). The design also lists a cheaper alternative, retiring the call, for Rick to weigh at
+> build time.
+
 **Session E deliverable:** `docs/f157-distributor-scoping.md`, with STATUS NOT STARTED, containing
 the RPC signature change (plus a backward-compatible default, so a stale script cannot break), the
 `computeWithdrawalCandidates()` change, the unit-test cases (including a single-distributor tenant
@@ -267,5 +281,7 @@ built now,** that becomes a separate scripts-repo session against this doc.
       discarded by `merge=ours` a third time and restored in its own commit. V11 green on both hostnames; write-smoke run
       (`usage_events` reserve/cancel, tenant `rjbookstop`); Print Catalog 50 pages / 100%. No Edge Function deployed.
 - [x] D: per-metric numbers for three accounts/conditions recorded in F161, cause classified — **DONE 2026-09-29.** Cause: **CLS on desktop, triggered by 1-3 current-month rows, NOT data volume** (hypothesis refuted; 2x3 grid + 0-5 row curve, 51 interleaved Lighthouse runs in three batches (18 + 18 + 15), verified teardowns). 6 of 24 production reserving accounts are in the trigger range. **Owed by Rick:** his own DevTools per-metric readings on production (requested). Not fixed; fix directions recorded in F161
-- [ ] E: `docs/f157-distributor-scoping.md` committed (or Rick's override recorded)
-- [ ] This doc's STATUS token → COMPLETE
+- [x] E: `docs/f157-distributor-scoping.md` committed (or Rick's override recorded) — **DONE 2026-10-04.** Design
+      only; migration text written and NOT run; Step 0 identical on staging and production; trigger stated; the
+      withdrawal half recorded as closed (F165 S1 `5919130`, S2 `3ef4b89`). Found Effect 1 unreachable; F169 filed
+- [x] This doc's STATUS token → COMPLETE — **2026-10-04**
