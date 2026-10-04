@@ -1,6 +1,6 @@
 # F165 — Withdrawal detection redesign
 
-**STATUS:** IN PROGRESS · staging=S1 2026-10-04 · prod=S1 2026-10-04 (scripts repo `main` `5919130`; no deploy step, it takes effect at the next import run) · S2, S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
+**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAKING (needs two real weekly runs), S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
 
 Owner doc for F165. The finding itself lives in `docs/technical-reference.md` § 13 F165; this doc
 is the execution plan. Planned 2026-09-29, the day the finding was filed.
@@ -162,6 +162,67 @@ month → candidate; (c) absent once only → not yet; (d) own source not suppli
 (e) frozen PRH month → skipped and reported; (f) shipped → not a candidate. Negative-control (b)
 and (a).
 
+### S2 LANDED 2026-10-04 (scripts repo `main` `3ef4b89`, pushed and confirmed on origin)
+
+**Built as specified:** rules 1-5; the pure exported `classifyWithdrawalCandidates()` with the five-argument
+signature above; `main()` guarded with `require.main === module`; the per-candidate report line (allocation
+flag included); `check-dates.js` docblock. Reads widened by two columns (`preorders.user_id` for the customer
+count, `catalog.order_requirement` for the flag). No database write of any kind.
+
+**Decisions the spec left open, recorded so a later session does not re-derive them differently:**
+
+1. **State shape.** `check-dates-state.json` gains `absent: { "<distributor>||<catalog_month>||<item_code>": { since, lastRun } }`.
+   Keyed per catalog ROW (an F136-style duplicate in another month is judged against its own source), not per
+   bare code.
+2. **"Also absent on the previous run" means on an EARLIER DATE.** A candidate needs `since < today`. Without that,
+   this project's habit of a `--no-write` dry run followed by the real run on the same files would count as two
+   runs and raise a candidate off one export, defeating rule 3. A different-day dry run still counts as a run;
+   this was not given a day-gap threshold, which would be an invented number.
+3. **Only codes absent from a SUPPLIED source are carried forward.** A code that is present, or whose source was
+   not supplied that run, drops out of the map, so "two runs" always means two consecutive observations and a run
+   that did not look cannot bridge two that did. The cost is that a missed week restarts the clock, which is the
+   safe direction (§ 1.4, Q4).
+4. **Observations are saved under `--no-write` and before the apply step.** The local state file is not the
+   database, rule 3 needs it, and the V4 replay depended on it. The two existing end-of-run state writes replaced
+   the whole file and would have dropped `absent`, so all three now go through a `saveState()` that spreads the
+   loaded state.
+5. **Frozen = the PRH catalog month is MORE than 3 months before today**, by month arithmetic: on 2026-10-04 the
+   2026-07 catalog is live and 2026-06 is frozen, and 2026-06 was still live on 2026-09-18, matching what F159
+   recorded. The existing hash-based freeze warning is untouched and is not used here (F159: a hash cannot tell
+   frozen from re-supplied).
+6. **Rule 4 does not gate the streak.** An absent title is tracked even when it already shipped or its in-store
+   date has passed; rule 4 only decides whether it is *listed*. The report says how many were absent twice but not
+   listed, so a quiet week is distinguishable from a blind one.
+
+**V3 green.** 19 new tests (`test/withdrawal-candidates.test.mjs`): (a)-(f) plus same-day re-run, presence resets
+the streak, untrusted future-dated state, already-marked, report ordering, the report line and its allocation
+flag, and a check that requiring the module makes no network call, prints nothing and leaves the real state file
+untouched. Unit suite **345/345** (was 326). **Negative controls, each observed red then reverted byte-identical
+(sha256):** own-source test broken (compare against the newest supplied month, i.e. F165's premise) turned (a) and
+(d) red; the two-run rule removed turned (b), four (c) tests and (e) red; the `main()` guard removed turned the
+import-safety test red (`main()` ran on `require` and hit the stubbed `fetch`).
+
+**V4 green, with a positive control so the pass is not vacuous.** `check-dates.js --staging --no-write` twice, in
+order, with the 09-22 then the 09-29 Lunar Available Products export and PRH 2026-09 master data (the 09-22 pull
+for week 1; for week 2 the 10-02 pull, the nearest that exists), the clock set to 2026-09-22 and 2026-09-29. Run
+from a byte-identical COPY of the script in a scratch folder (its state and log files land in scratch; the real
+`import.js` supplies credentials through a one-line stub) so **nothing in the real folders could change, and
+nothing did: the real `check-dates-state.json` (sha256 `3940CBB2...9019`), all four real `check-dates-log-*`
+files and every file under `catalogs/recheck/` hashed identically before and after (18 files).** Result: **0
+candidates in both weeks.** All 7 F165 codes (6 Lunar + PRH `84428401135820011`) were confirmed by a read-only
+query to hold an open, unmarked reservation with a future in-store date (11/4 or 11/11), so they were in the
+evaluated set and the only thing excluding them is presence in their own source. **Positive control:** removing
+`0926AB0520` from copies of both exports raised it in week 2 (week 1: "absent for the first time", no candidate)
+with `absent since 2026-09-22` and a full report line.
+
+**Not proven, stated plainly.** (1) **Never run against production**, not even `--no-write`; the first real run
+is Rick's next weekly `check-dates.js`. (2) Staging holds only **39** open-reservation catalog rows, **31** of them
+checkable in the replay, so the replay says nothing about the candidate **volume** production will produce; that
+is V5. (3) The glue in `main()` (files to per-source code sets, the report) is covered only by these replays, not
+by a unit test. (4) The ledger-net column uses the same simple `item_code` + `distributor` join F158's section
+already uses, not `admin.html`'s PRH ISBN chain, so a PRH title can read "no order recorded" when it was ordered
+(the F158 section records the same simplification). (5) The week-2 PRH file is dated after the 09-29 clock.
+
 ---
 
 ## 5. S3 — confirm-to-mark in `check-dates.js`
@@ -233,8 +294,14 @@ notes are now moot. (1) The interim rule, ~~"Interim until S1 lands: run the Nov
 `--no-write` first and read the candidate list; do not let the mark step run unattended"~~: the import
 prints no candidate list and writes no mark, so the rule is retired. (2) The gate reminder above
 (routine `trig_01Kb5XJp1urERxry29UArQnD`, calendar event `9n9766hfoe3d0q3r9vbdqj0e0k`, Mon 2026-10-19)
-existed only to get S1 in before November and is obsolete; deleting both is Rick's call. **Next is
-S2.**
+existed only to get S1 in before November and is obsolete; deleting both is Rick's call. ~~**Next is
+S2.**~~
+
+**S2 LANDED 2026-10-04 (scripts repo `3ef4b89`; V3 and V4 green, record in § 4).** **Next is the soak, then
+V5.** The first real (production) run is Rick's next weekly `check-dates.js`: it records first sightings and can
+raise nothing. The second weekly run is the first that can list a candidate. V5 (each candidate checked by hand
+on the distributor's site, the true/false split written into § 13 F165) is reviewed with Rick, and only then is
+S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real run is safe (one observation).
 
 ---
 
@@ -257,6 +324,9 @@ S2.**
       last clause is only checkable after Rick's November import, which should print the "marking is
       retired" line and no `Checking for withdrawn titles` header. Tick it then.)*
 - [ ] S2 merged; V3, V4 green; two weekly runs soaked
+      *(Not ticked: S2 is merged and V3/V4 are green as of 2026-10-04, scripts repo `3ef4b89`, but the soak
+      clause is only checkable after two REAL weekly runs; the first records first sightings and can raise
+      nothing, the second can. Tick it after the second.)*
 - [ ] V5 recorded in § 13 F165 with the true/false split
 - [ ] S3 decided (built and V6 green, or declined with the reason recorded)
 - [x] S4 decided — declined for now, 2026-09-29 (§ 9 Q3); V7 therefore not needed

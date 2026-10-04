@@ -28,7 +28,7 @@ Rick to reverse Q3 explicitly; the gates below are what that reversal would then
 | # | Gate | State 2026-10-04 | Blocks |
 |---|---|---|---|
 | G1 | **S0 serving-model spike** (wildcard `*.pulllist.app` + TLS on Pages) | **Never run.** F145 measured there is **no** wildcard record: arbitrary subdomains are NXDOMAIN; `rjbookstop`/`comicstore` are individually provisioned custom hostnames | everything in 6.x |
-| G2 | **F165** — automatic withdrawal mark fires on import timing | OPEN, High — **exposure removed 2026-10-04**: S1 landed (scripts `5919130`), no import can mark a title withdrawn. S2 (weekly candidate report) and S3 (confirm-to-mark) not built; first real-import proof is the November import | a self-serve tenant's first import would inherit it |
+| G2 | **F165** — automatic withdrawal mark fires on import timing | OPEN, High — **exposure removed 2026-10-04**: S1 landed (scripts `5919130`), no import can mark a title withdrawn. S2 (weekly candidate report) landed the same day (scripts `3ef4b89`, report-only, soaking through two real weekly runs); S3 (confirm-to-mark) not built; first real-import proof is the November import | a self-serve tenant's first import would inherit it |
 | G3 | **F72 email half** — 5 mail functions founding-branded; S2a `register-customer` and F153's `register-tenant` are SOURCE-only on production (not deployed) | OPEN | any tenant taking real customers; a self-serve signup would receive no invite on production |
 | G4 | **F157 distributor-scoping** — a one-distributor tenant's single catalog is treated as a partial import | OPEN, design not started (sequencing doc Session E) | the eligibility gate's own "either PRH **or** Lunar" promise |
 | G5 | **F131** — every tenant's catalog comes from one operator's portal access; no self-service import | OPEN, structural | "no operator in the loop" (this phase's Goal) is false until solved |
@@ -36,7 +36,7 @@ Rick to reverse Q3 explicitly; the gates below are what that reversal would then
 | G7 | **F151** (dead secret readable in `tenants.settings`), **F150** (prod `app_settings` anon grants) | OPEN, Low | must be clean before strangers get admin accounts |
 | G8 | **F164** creation path untraced (cross-tenant `preorders` on staging) | OPEN | a cross-tenant write path would be Medium the day tenant N+1 is public |
 
-**Recommended order if Q3 is reversed:** G2 (deadline half done 2026-10-04; finish S2/S3) → G1 spike (cheap, ~1
+**Recommended order if Q3 is reversed:** G2 (deadline half done 2026-10-04; S2 landed and soaking; S3 still to decide) → G1 spike (cheap, ~1
 session, read-only plus one DNS record on a throwaway label) → G3 + G6 + G7 together → G4 design →
 then write the 6.x runbooks. G5 is a product decision, not a session.
 
