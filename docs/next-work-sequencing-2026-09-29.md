@@ -214,6 +214,15 @@ design, defer the build.** Three reasons, each checkable:
    `delete_dropped_catalog_items` means a `docs/sql/` migration on both projects, in lock-step with
    both import scripts. It is worth doing once, deliberately, not squeezed in.
 
+> **CORRECTED 2026-10-04 — the withdrawal half of this session is gone.** F165 S1 (scripts
+> `5919130`) deleted `computeWithdrawalCandidates()` and the automatic mark outright, and F165 S2
+> (`3ef4b89`) compares each title only with **its own distributor's** source, so a one-distributor
+> import cannot raise a candidate for the other. Reason 2 above no longer applies. **F157's remaining
+> scope is `delete_dropped_catalog_items` only** (`import.js:898` / `import-staging.js:897`, still
+> unscoped: a single-distributor new-month import deletes the absent distributor's rows for the
+> month just imported). Reasons 1 and 3 still hold, so the design-now/build-later recommendation
+> stands. Read the deliverable below with `computeWithdrawalCandidates()` struck out.
+
 **Session E deliverable:** `docs/f157-distributor-scoping.md`, with STATUS NOT STARTED, containing
 the RPC signature change (plus a backward-compatible default, so a stale script cannot break), the
 `computeWithdrawalCandidates()` change, the unit-test cases (including a single-distributor tenant
