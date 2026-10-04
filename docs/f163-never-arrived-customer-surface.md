@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** NOT STARTED — design written 2026-10-04, Rick's decisions recorded (§ 2); build not scheduled · staging=— · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13)
+**STATUS:** NOT STARTED — design written 2026-10-04, Rick's decisions recorded (§ 2, § 13); build next (execution handoff prepared 2026-10-04), promotion pending Rick's validation on staging · staging=— · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13)
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -289,8 +289,11 @@ itself one way here and another there.
   `N passed` line, never the launcher's exit notice); teardown re-read.
 - **B6.** Update § 13 F163, the CLAUDE.md row, this doc's STATUS; `/wrap-up`.
 - **Rollback:** revert the one commit. No schema, no data, nothing written to production.
-- **Stop and ask Rick:** the empty-list fallback (§ 7), the copy (§ 4), any request to touch
-  `Preorders.cancel`, and § 11 item 1.
+- **Stop and ask Rick:** the empty-list fallback (§ 7), the copy (§ 4), and any request to touch
+  `Preorders.cancel`. (§ 13 item 1, the resolve control's confirm/undo, is **answered: do not add it**.)
+- **Promotion is gated on Rick validating the build on staging** (his instruction, 2026-10-04). The
+  build session ends at B6 with the work on staging and the harness/suite results recorded; it does
+  not open a production PR.
 
 ## 10. Tests and negative controls
 
@@ -346,17 +349,20 @@ rule (V6 red); put the markup back above the list (V4 and V5 red).
 14.** **4 paper accounts** (10 rows) change only through impersonation. **24 customer-visible rows
 total** (from 5). Nothing is written. Printed lists lose a block that has been printing.
 
-## 13. Residuals and items raised for Rick (nothing here is decided)
+## 13. Residuals and items raised for Rick (items 1 and 2 ANSWERED 2026-10-04; the rest are notes, not decisions)
 
 1. **The resolve control has no confirm and no undo** (recorded as a residual of PR #154 on
    2026-09-21 and never filed). Until now a mis-click on "Didn't arrive" for a stranded row changed
    nothing a customer could see. **After this build it tells the customer "Did not arrive" for up to 180
    days with no way to take it back.** Raised: does the build wait for an F143-style confirm on that
    control? Not scoped here and **no ID consumed** (F170 stays next free); it is the same gap, with a
-   larger consequence.
+   larger consequence. **ANSWERED (Rick, 2026-10-04): no. The build does NOT wait for a confirm or
+   undo and does not add one.** Rick accepts the exposure above knowingly; it stays unfiled and
+   unscoped. A build session must not add a confirm to the resolve control "while it is there".
 2. **No customer is told proactively.** The section is read on the next visit. The 3 real customers
    with did-not-arrive rows (11 rows, 81-151 days old) learn nothing until the build ships, and then
    only if they open My List. Telling them in person is available today and costs nothing.
+   **ANSWERED (Rick, 2026-10-04): no. No in-person notice now;** the section is how they find out.
 3. **The 180-day window is a tunable, not a finding:** one constant. The expiry is silent, like the
    14-day one it replaces, just much later.
 4. **`damaged` sits under a heading ("No longer coming") that fits it badly** (it arrived). Pre-existing
@@ -375,8 +381,9 @@ total** (from 5). Nothing is written. Printed lists lose a block that has been p
 - [ ] every § 10 negative control observed red, then reverted byte-identically
 - [ ] harness green on the working tree AND on the deployed staging bytes; V5 numbers recorded
 - [ ] full suite: 151 passed, 0 failed (from the log's own line); teardown re-read
-- [ ] Rick approved the copy (§ 4) and answered § 13 item 1
-- [ ] `/promote-prod` only on Rick's explicit request; V12 recorded
+- [x] § 13 item 1 answered (Rick 2026-10-04: no confirm/undo, do not wait) and item 2 answered (no in-person notice)
+- [ ] Rick validated the build on staging, including approving the copy (§ 4) (**promotion is pending this**)
+- [ ] `/promote-prod` only on Rick's explicit request after that validation; V12 recorded
 - [ ] § 13 F163, the CLAUDE.md row and this STATUS token advanced
 
 ## References
