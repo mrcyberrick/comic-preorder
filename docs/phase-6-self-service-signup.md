@@ -1,6 +1,6 @@
 # Phase 6 — Open Self-Service Tenant Signup (STUB)
 
-**STATUS:** STUB | staging=— | prod=N/A | findings=—
+**STATUS:** STUB — NOT READY (readiness assessed 2026-10-04, see § Readiness) | staging=— | prod=N/A | findings=F145,F72,F165,F157,F151,F150
 
 **Status:** **Stub — not started.** Successor to Phase 5. This is a *thin coordinator stub* capturing the goal, the gating prerequisite, and the design decisions taken at 5.4 planning (2026-06-15). **Detailed sub-deploy runbooks are written when Phase 6 actually opens — after Phase 5 (5.5) closes** — per the Phase 3/4/5 pattern (plan-when-its-turn-comes; do not plan execution detail against future schema/infra state).
 **Predecessor:** Phase 5 — Second-Tenant Onboarding (`docs/phase-5-second-tenant-onboarding.md`). **Phase 6 does not begin until Phase 5 is Complete.**
@@ -12,6 +12,52 @@
 - The **4.1 FK-ordered canary teardown** (proven in 5.4 S4) — Phase 6's abandoned-tenant sweep and takedown tooling build on it.
 
 > **Why a separate phase, not a 5.6:** Phase 5's goal and completion criteria end at "two tenants side by side + two-tenant production soak." Open public self-serve (public signup page, wildcard DNS/TLS, bot/abuse controls, tenant lifecycle/suspend, onboarding wizard) is a distinct product expansion with its own risk surface. Phase 5's completion criteria already anticipate "Phase 6 stub created if a successor phase exists" — this is that stub.
+
+---
+
+## Readiness — assessed 2026-10-04 (verdict: NOT READY; do not open Phase 6 yet)
+
+Measured against the repo, both branches and the served production bytes on 2026-10-04, not
+against this stub's June text.
+
+**Strategic gate (Rick's, not technical).** `pre-phase-6-consolidation-wave-2.md` § 0 Q3
+(2026-08-29) chose **Shape D, continuous small features for one store**, and deferred both W8 (this
+phase's S0 spike) and W10 (F72+F99 scoping). Nothing since has reversed that. Opening Phase 6 needs
+Rick to reverse Q3 explicitly; the gates below are what that reversal would then have to clear.
+
+| # | Gate | State 2026-10-04 | Blocks |
+|---|---|---|---|
+| G1 | **S0 serving-model spike** (wildcard `*.pulllist.app` + TLS on Pages) | **Never run.** F145 measured there is **no** wildcard record: arbitrary subdomains are NXDOMAIN; `rjbookstop`/`comicstore` are individually provisioned custom hostnames | everything in 6.x |
+| G2 | **F165** — automatic withdrawal mark fires on import timing | OPEN, High. S1 must land before the November import regardless of Phase 6 | a self-serve tenant's first import would inherit it |
+| G3 | **F72 email half** — 5 mail functions founding-branded; S2a `register-customer` and F153's `register-tenant` are SOURCE-only on production (not deployed) | OPEN | any tenant taking real customers; a self-serve signup would receive no invite on production |
+| G4 | **F157 distributor-scoping** — a one-distributor tenant's single catalog is treated as a partial import | OPEN, design not started (sequencing doc Session E) | the eligibility gate's own "either PRH **or** Lunar" promise |
+| G5 | **F131** — every tenant's catalog comes from one operator's portal access; no self-service import | OPEN, structural | "no operator in the loop" (this phase's Goal) is false until solved |
+| G6 | **`tenants.plan` has no CHECK constraint** (`'Pro'` would persist and read free) | raised 2026-09-02, not applied | 6.3 writing plan/tier values |
+| G7 | **F151** (dead secret readable in `tenants.settings`), **F150** (prod `app_settings` anon grants) | OPEN, Low | must be clean before strangers get admin accounts |
+| G8 | **F164** creation path untraced (cross-tenant `preorders` on staging) | OPEN | a cross-tenant write path would be Medium the day tenant N+1 is public |
+
+**Recommended order if Q3 is reversed:** G2 (has its own deadline anyway) → G1 spike (cheap, ~1
+session, read-only plus one DNS record on a throwaway label) → G3 + G6 + G7 together → G4 design →
+then write the 6.x runbooks. G5 is a product decision, not a session.
+
+### Corrections to this stub's June text (2026-10-04; old text left in place below)
+
+1. **"after Phase 5 (5.5) closes"** — Phase 5 closed 2026-07-15; that precondition is met. The live
+   gate is § 0 Q3 above.
+2. **6.0's row says "via Cloudflare for SaaS / Worker"**, contradicting this stub's own lead
+   recommendation (a) wildcard subdomain. The spike must price **both**, leading with (a).
+3. **"Billing / plan tiers — no requirement yet"** is stale: `tenants.plan` (`free`/`pro`) and the
+   `Tier` helper are LIVE on production (F72 S0/S1a/S3, PR #159), and the apex page sells tiers.
+   Self-serve tenants are created **free**; a paid upgrade path is in scope for discussion, billing
+   still is not.
+4. **"per-tenant MailerSend identities" / "not MailerLite"** — mail moved to **Resend** (F99, both
+   environments 2026-09-02) on a flat `noreply@pulllist.app`; per-tenant sender subdomains cost a
+   paid Resend domain slot (F99 D7). The MailerLite path was removed platform-wide 2026-08-30.
+5. **Engine reuse:** `register-tenant` now takes an allowlisted `plan` and sends an invite (F153),
+   but **production runs the 2026-09-02 build without the invite**. Deploy it (read live
+   `verify_jwt` first, F93) before any 6.x work assumes it.
+6. **6.3's "logo upload"**: there is no storage bucket or upload path today; the page-banner custom
+   image (`page_banner`, paid tier) takes an `https:` URL only. Sizing 6.3 must include storage.
 
 ---
 
@@ -114,4 +160,4 @@ Not committed; recorded so the work is sized and findable.
 
 ---
 
-**Last updated:** 2026-06-16 (added cost-model distinction — wildcard subdomain vs CF-for-SaaS custom hostnames — and the PRH/Lunar retailer-account eligibility gate as the primary value+cost control; detail still deferred until Phase 5 closes)
+**Last updated:** 2026-10-04 (Readiness section + corrections added; verdict NOT READY). Previously 2026-06-16 (added cost-model distinction — wildcard subdomain vs CF-for-SaaS custom hostnames — and the PRH/Lunar retailer-account eligibility gate as the primary value+cost control; detail still deferred until Phase 5 closes)

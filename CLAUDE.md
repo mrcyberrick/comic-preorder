@@ -10,9 +10,17 @@ comic pre-order system. **Read this file in full at the start of every session.*
 **Active phase:** none. Phase 5 closed 2026-07-15 (all sub-deploys 5.0–5.5 complete; see
 `docs/phase-5-second-tenant-onboarding.md`). Phase 6 — open self-service tenant signup — is a
 **stub only** (`docs/phase-6-self-service-signup.md`), not started, gated on a wildcard-DNS/TLS
-spike.
+spike. **Readiness assessed 2026-10-04: Phase 6 is NOT ready to open** (S0 never run, F145
+confirms no wildcard record exists; F72's email half and F165 still open; Rick's 2026-08-29 "Shape D,
+small features" decision still stands). Gate list in `docs/phase-6-self-service-signup.md` § Readiness.
 **Active sub-deploy:** none.
-**Next scheduled work:** none pending. **Sequencing reminder — window CLOSED 2026-08-28:**
+**Next scheduled work (corrected 2026-10-04 — this line read "none pending", which was false):
+F165 S1, retire the automatic withdrawal mark in `import.js`/`import-staging.js`, MUST land before
+the November new-month import (expected late October).** Plan: `docs/f165-withdrawal-detection-redesign.md` § 3.
+**⚠️ The scripts repo has UNCOMMITTED work in exactly those two files** (seen 2026-10-04: a
+multi-shipment-file run, `import.js`/`import-staging.js` +144/-38 each, `test/README.md`, new
+`test/shipment-files.test.mjs`, last modified 2026-10-02, recorded nowhere). Resolve it (commit or
+park, Rick's call) before S1 edits those files. **Superseded wording: "Next scheduled work:** none pending." **Sequencing reminder — window CLOSED 2026-08-28:**
 production ran its real September import this session (`catalog_month` 2026-08 → 2026-09) — the
 transition this reminder existed to protect has already happened, both environments. The
 constraint is dormant until October's import opens the next one; no admin-ordering-surface work is
@@ -88,6 +96,8 @@ about the *next* hand-typed UPDATE. **Fix, raised for Rick's call, NOT applied:*
 **Three local-only harnesses** (gitignored playwright folder, `f149-maintenance-verify.mjs`
 convention): `f72-s0-tier-verify.mjs` (anon), `f72-s0-authed-verify.mjs` (authenticated read),
 `f72-s0-plan-allowlist.mjs` (the server allowlist + teardown).
+
+**✅ PROMOTED TO PRODUCTION 2026-10-02 (PR #167, merge `5fc1b6c`, 12:47 -04:00) — recorded 2026-10-04, two days late, the F132/F138/F139/F145 stale-claim pattern again. Everything in the paragraph below that says "production untouched", "Production still has" or "not promoted" is SUPERSEDED.** Verified 2026-10-04 against the bytes production serves (`curl -L`), both `pulllist.app` and `rjbookstop.pulllist.app`: served `app.js` == `origin/main` (`081487d2a351`), `banner-v3` x2 in `app.js`, `assets/banner-v3.webp` `200 image/webp`, `monthLabelOf` x4 in `catalog.html`, `config.js` prod ref x1. **Not known:** whether the PR #166 write-smoke (which gated this) was ever run, and any post-merge human check; nothing in the repo records either. **Finding-ID disposition: none consumed. F169 remains the next free ID.**
 
 **Last completed work: STAGING ONLY, NOT PROMOTED — the banner follow-ups: reframed art, a warmer catalog subtitle and a hard red offset shadow on the title, 2026-10-02 (code commits `fb854bb`, `9e404ba`, `36b5627`, `0e9a3fd`; production untouched and STILL serving PR #166's first build).** Rick's live design review of the banner after PR #166. **Production still has:** the v1 art (a tight waist-up crop), the full-height bolt on the art's left edge, and the old subtitle "Catalog for 2026-10 — browse and reserve items". **Staging has:** (1) `assets/banner-v3.webp`, the redesigned image's scene (no baked text) fitted to the art slot so the whole figure shows (**14 KB**, re-fitted from the lossless source at WebP q50 after a first 19 KB `banner-v2.webp`, which is deleted; v1 is kept in the repo and `_headers` because production still references it; `0e9a3fd`); (2) the catalog subtitle **"October 2026 · Browse and reserve your comics"**, written in THREE places in `catalog.html` (the initial load and both branches of `updateReservedStat()`) through one `monthLabelOf()`, so a reserve click cannot revert it; (3) the title accent: **`text-shadow: 2px 2px 0` at 55% of `--accent`** (a `color-mix()` rule inside `@supports` so a store's own colour tints it, plain red otherwise), replacing the bolt entirely. **The sequence matters and is recorded in `docs/page-header-banner.md` § 9-10:** a bolt on the title and then a soft glow were each built and seen on staging before Rick chose the hard offset. **`style.css` carries a `var()` trap worth knowing:** a declaration containing `var()` is accepted at parse time and then computes to `none` where `color-mix()` is unsupported, instead of falling back, hence the separate `@supports` rule.
 
