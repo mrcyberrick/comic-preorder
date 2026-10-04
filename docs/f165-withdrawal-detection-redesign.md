@@ -1,6 +1,6 @@
 # F165 — Withdrawal detection redesign
 
-**STATUS:** NOT STARTED · staging=— · prod=— · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
+**STATUS:** IN PROGRESS · staging=S1 2026-10-04 · prod=S1 2026-10-04 (scripts repo `main` `5919130`; no deploy step, it takes effect at the next import run) · S2, S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
 
 Owner doc for F165. The finding itself lives in `docs/technical-reference.md` § 13 F165; this doc
 is the execution plan. Planned 2026-09-29, the day the finding was filed.
@@ -228,8 +228,13 @@ estimate, not a known date). Reminder: cloud routine `trig_01Kb5XJp1urERxry29UAr
 Calendar event `9n9766hfoe3d0q3r9vbdqj0e0k`, both **Mon 2026-10-19, 8:00 AM ET**. If the November
 files are expected earlier, move both.
 
-**Interim until S1 lands (from § 13 F165, unchanged):** run the November import with `--no-write`
-first and read the candidate list; do not let the mark step run unattended.
+**S1 LANDED 2026-10-04 (scripts repo `5919130`; V1 and V2 green, record in § 13 F165).** Two earlier
+notes are now moot. (1) The interim rule, ~~"Interim until S1 lands: run the November import with
+`--no-write` first and read the candidate list; do not let the mark step run unattended"~~: the import
+prints no candidate list and writes no mark, so the rule is retired. (2) The gate reminder above
+(routine `trig_01Kb5XJp1urERxry29UArQnD`, calendar event `9n9766hfoe3d0q3r9vbdqj0e0k`, Mon 2026-10-19)
+existed only to get S1 in before November and is obsolete; deleting both is Rick's call. **Next is
+S2.**
 
 ---
 
@@ -248,6 +253,9 @@ first and read the candidate list; do not let the mark step run unattended.
 ## 10. Completion criteria
 
 - [ ] S1 merged in the scripts repo; V1, V2 green; November import ran with no mark step
+      *(Not ticked: S1 is merged and V1/V2 are green as of 2026-10-04, scripts repo `5919130`, but the
+      last clause is only checkable after Rick's November import, which should print the "marking is
+      retired" line and no `Checking for withdrawn titles` header. Tick it then.)*
 - [ ] S2 merged; V3, V4 green; two weekly runs soaked
 - [ ] V5 recorded in § 13 F165 with the true/false split
 - [ ] S3 decided (built and V6 green, or declined with the reason recorded)
