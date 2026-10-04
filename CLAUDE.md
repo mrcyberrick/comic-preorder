@@ -17,10 +17,17 @@ small features" decision still stands). Gate list in `docs/phase-6-self-service-
 **Next scheduled work (corrected 2026-10-04 — this line read "none pending", which was false):
 F165 S1, retire the automatic withdrawal mark in `import.js`/`import-staging.js`, MUST land before
 the November new-month import (expected late October).** Plan: `docs/f165-withdrawal-detection-redesign.md` § 3.
-**⚠️ The scripts repo has UNCOMMITTED work in exactly those two files** (seen 2026-10-04: a
-multi-shipment-file run, `import.js`/`import-staging.js` +144/-38 each, `test/README.md`, new
-`test/shipment-files.test.mjs`, last modified 2026-10-02, recorded nowhere). Resolve it (commit or
-park, Rick's call) before S1 edits those files. **Superseded wording: "Next scheduled work:** none pending." **Sequencing reminder — window CLOSED 2026-08-28:**
+**✅ RESOLVED 2026-10-04: the uncommitted work in those two files is COMMITTED** (scripts repo `main`
+`f5fb6f0`, local only, NOT pushed: `main` is 1 ahead of `origin/main`). It is multi-shipment-file
+import: every argument after the two catalogs is a shipment file, any number, any order; a missing file
+skips the whole shipment import, a file named twice (by path or delivery number) is refused rather than
+doubling its quantities. `import.js`/`import-staging.js` +144/-38 each, `test/README.md`, new
+`test/shipment-files.test.mjs`; unit suite 346/346 (was 321). **It was already in real use:** Rick's
+2026-10-02 production import loaded Lunar + three PRH deliveries through it. **Not unit-tested:** the
+`main()` path-collecting glue (CLI and prompt), only exercised by `--no-write` dry runs. S1 can now edit
+those files from a clean tree. *(This paragraph previously read: "The scripts repo has UNCOMMITTED work
+in exactly those two files (seen 2026-10-04 ... recorded nowhere). Resolve it (commit or park, Rick's
+call) before S1 edits those files.")* **Superseded wording: "Next scheduled work:** none pending." **Sequencing reminder — window CLOSED 2026-08-28:**
 production ran its real September import this session (`catalog_month` 2026-08 → 2026-09) — the
 transition this reminder existed to protect has already happened, both environments. The
 constraint is dormant until October's import opens the next one; no admin-ordering-surface work is
