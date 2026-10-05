@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** IN PROGRESS — BUILT AND VERIFIED ON STAGING 2026-10-05 (`9fbb71b`, `mylist.html` only; harness 65/65 on the deployed bytes, full suite 156 passed, § 15); NOT promoted, pending Rick's validation on staging including approval of the copy; PLUS the admin "Clear" follow-up (`6583a6c`, § 16: harness 80/80 on the deployed bytes, full suite 158 passed), whose SQL is APPLIED on BOTH environments (production 2026-10-05, so step 0 no longer blocks on it) · staging=2026-10-05 · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13). *(This token read "NOT STARTED — design written 2026-10-04 ... build next" until the build session.)*
+**STATUS:** COMPLETE except one human check — PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; build `9fbb71b`, admin Clear `6583a6c`, `mylist.html` only; its SQL `prod=APPLIED` the same day). Open: Rick's own production My List count (the read-only replay says 14) · staging=2026-10-05 · prod=2026-10-05 · PR=#168 · findings: F163 (closes, pending that check; owner record in `docs/technical-reference.md` § 13). *(This token read "IN PROGRESS — BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)*
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -406,7 +406,7 @@ total** (from 5). Nothing is written. Printed lists lose a block that has been p
 - [x] full suite: 156 passed, 0 failed (from the log's own line; 151 baseline + 5 new local-spec tests, which reconcile exactly); teardown re-read (§ 15: nothing of this session left; August F130 leftovers untouched)
 - [x] § 13 item 1 answered (Rick 2026-10-04: no confirm/undo, do not wait) and item 2 answered (no in-person notice)
 - [x] Rick validated the build on staging, including approving the copy (§ 4). **2026-10-05: Rick looked at the staging demo account (including the admin Clear) and said "Demo looks good - can clear"; when asked to approve the copy explicitly (the section note and the chip hover text, quoted to him) he answered "yes".** The demo account was torn down at his word and re-read as 0 rows. **Not covered by his words: a real phone, and the empty-main-list case (he had already accepted that placement).** The "No longer coming" copy as approved: note "The store has confirmed these will not be coming to you. Where there is a Remove button it only clears your list; otherwise contact the store with any questions."; chip title "Confirmed by the store — contact them with questions".
-- [ ] `/promote-prod` only on Rick's explicit request after that validation; V12 recorded
+- [x] `/promote-prod` only on Rick's explicit request after that validation; V12 recorded (§ 17). **Open inside V12: Rick's own My List count against the replay's 14.**
 - [x] § 13 F163, the CLAUDE.md row and this STATUS token advanced (2026-10-05, build session)
 
 ## 15. Build record (2026-10-05, staging only; the evidence behind § 14)
@@ -559,6 +559,15 @@ title is not yet fulfilled, an admin can only close it by impersonating each cus
 withdrawn, and production last read 0 marks (2026-09-27), so the panel is empty there. **Rick: leave it as is.** A title-level
 "remove these reservations" action, if ever wanted, belongs with F165 S3's confirm-to-mark design, because a false mark
 (F165's 7) plus a bulk delete cannot be undone.
+
+
+## 17. Production (2026-10-05): V12 recorded
+
+Rick asked for the promotion ("2) promote Prod") after approving the copy. **PR #168, merge `fcba6ba`** (parents `5fc1b6c` main and `0f0b321`; the staging tip it carried was `cc88ced`). Gates, the served-bytes verification on both hostnames, the markers and the read-only replay are recorded in CLAUDE.md § Current Migration Phase ("PROMOTED TO PRODUCTION 2026-10-05 -- F163"). In this doc's terms:
+- **V12, served bytes:** `mylist.html` byte-identical to `origin/main` on `pulllist.app` and `rjbookstop.pulllist.app` (also `app.js`, `config.js`, `arrivals.html`, `admin.html`, `catalog.html`, `style.css`). Positive markers present; the old guard as a STATEMENT x0 (the string itself reads x1 because a comment quotes it, as § 15 predicted).
+- **V12, replay:** a GET-only service-role replay of § 4's predicate against production's database: **48 eligible rows, 10 accounts**, Rick's own account **14**, real customers 9 / 8 / 4 / 2 / 1. Identical to § 1.3 and § 1.5, so nothing has drifted.
+- **V12, human check, NOT YET REPORTED:** Rick opens his own production My List; the "No longer coming" badge should read **14**. Until he says so, the finding is fixed and promoted but not confirmed by eye.
+- **Day one, as predicted in § 12:** 0 customers newly see the section, 4 of the 5 who already had it get more cards (+19 rows, worst 9), Rick's own account goes 0 -> 14, and the printed list loses a block that had been printing. Nothing was written to production data by this promotion; the one schema change (the nullable column) was applied by Rick beforehand and holds 0 cleared rows.
 
 ## References
 
