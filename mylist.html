@@ -881,6 +881,13 @@ function confirmDialog(message, okLabel = 'Remove') {
   // those customers have never been shown. A tunable, not a finding: if the data later grows past what a customer
   // should see on one list, this is the lever. The expiry is silent, like the 14-day one it replaces, just later.
   const UNAVAILABLE_WINDOW_DAYS = 180;
+  // F163 follow-up (Rick, 2026-10-05): an ADMIN can clear a card from this section without deleting the reservation,
+  // by stamping preorders.unavailable_dismissed_at. The cards that need it are the ones nobody else can clear: a
+  // fulfilled row (Preorders.cancel refuses it) or a code the store ordered (F109 refuses it). Hidden from everyone
+  // once cleared. Purely presentational: it changes no fulfilled / arrival_outcome / ledger / Order Follow-Up state.
+  // Customers never get the button; that is a UI gate, not a database boundary (users manage own preorders is ALL, F127).
+  let dismissedPreorderIds = new Set();
+  const isAdminViewer = !!profile?.is_admin;       // impersonating a customer OR on the admin's own list
   let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
 
   // Codes the store has already submitted to a distributor (F101/F102
@@ -969,6 +976,22 @@ function confirmDialog(message, okLabel = 'Remove') {
   const distEl     = document.getElementById('filter-distributor');
   const container  = document.getElementById('list-container');
 
+  // The ids an admin has cleared from "No longer coming". Its OWN small query, deliberately NOT a column on
+  // Preorders.getMy (app.js): selecting a column production does not have yet would 400 the WHOLE page (the F115
+  // lesson), and app.js carries the merge=ours promotion trap. FAILS OPEN: any error, including the column not existing
+  // yet, returns an empty set, so every card shows. A cleared card reappearing is the safe direction; hiding a live one is
+  // not. Paginated (F139/F140: an unbounded select caps at PostgREST's 1000) with an id order for stable pages (F162).
+  async function loadDismissedIds(userId) {
+    const { data, error } = await fetchAllRows(() => db
+      .from('preorders')
+      .select('id')
+      .eq('user_id', userId)
+      .not('unavailable_dismissed_at', 'is', null)
+      .order('id'));
+    if (error) return new Set();
+    return new Set((data || []).map(r => r.id));
+  }
+
   async function loadList() {
     const targetUserId = AdminContext.resolveUserId(user.id);
     if (AdminContext.isActive()) {
@@ -977,14 +1000,16 @@ function confirmDialog(message, okLabel = 'Remove') {
       const noticeEl = document.getElementById('pickup-notice');
       if (noticeEl) noticeEl.style.display = 'none';
     }
-    const [{ items, error }, ordered] = await Promise.all([
+    const [{ items, error }, ordered, dismissed] = await Promise.all([
       Preorders.getMy(targetUserId),
       getOrderedCodes(),
+      loadDismissedIds(targetUserId),
     ]);
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
       return;
     }
+    dismissedPreorderIds = dismissed;
     // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now
     // returns a signed order_state per code. A code with only a zero/negative
     // net quantity (rejected, or corrected away) is 'unavailable', not
@@ -1043,6 +1068,7 @@ function confirmDialog(message, okLabel = 'Remove') {
     allUnavailable = items.filter(i => {
       const c = i.catalog;
       if (!c) return false;
+      if (dismissedPreorderIds.has(i.id)) return false;     // an admin cleared this notice (F163 follow-up)
       const inMainTable = c.catalog_month === currentMonth;
       const inUpcoming  = !!(c.on_sale_date && c.on_sale_date >= today);
       if (inMainTable || inUpcoming) return false;          // already visible
@@ -1633,7 +1659,13 @@ function confirmDialog(message, okLabel = 'Remove') {
               // supplier-rejected or never-arrived one, which is now most of what this chip sits on. Same wording
               // as the main table's own did-not-arrive chip, so the two surfaces cannot say different things.
               : `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions"
-                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>`}
+                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>${isAdminViewer
+                  // ADMIN ONLY, and only where there is no Remove (Remove already clears a card, by deleting the
+                  // reservation). Hides the card for everyone; the reservation is kept. See the grid handler below.
+                  ? `<button class="btn btn-secondary btn-sm clear-btn-unavailable" data-preorder-id="${item.id}"
+                             title="Admin: hide this notice from the list. The reservation is kept."
+                             style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Clear</button>`
+                  : ''}`}
           </div>
         </div>`;
     }).join('');
@@ -1678,6 +1710,36 @@ function confirmDialog(message, okLabel = 'Remove') {
             ? { withdrawn: true, cancelled_after_order_submitted: isCodeOrdered(cCancelled) }
             : {});
         }
+      });
+    });
+
+    // Admin "Clear" (F163 follow-up). Stamps the row; does NOT delete it, so the only record of what the customer was
+    // promised survives. Confirm-gated because a mis-click hides a notice from a customer, and there is no in-app undo
+    // (Rick, 2026-10-05; restoring is one UPDATE ... SET unavailable_dismissed_at = NULL).
+    grid.querySelectorAll('.clear-btn-unavailable').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const msg = AdminContext.isActive()
+          ? `Clear this notice from ${AdminContext.activeUserName}'s list? They will no longer see it. The reservation itself is kept.`
+          : 'Clear this notice from your list? The reservation itself is kept.';
+        if (!(await confirmDialog(msg, 'Clear'))) return;
+        btn.disabled = true;
+        const id = btn.dataset.preorderId;
+        // An INSTANT (a timestamptz), not a calendar date, so F28's toISOString() rule does not apply here.
+        const { data, error } = await db.from('preorders')
+          .update({ unavailable_dismissed_at: new Date().toISOString() })
+          .eq('id', id)
+          .select('id');
+        // The ROW COUNT is the success check, not `error`: an RLS-filtered update returns no error and zero rows
+        // (the F127 / Decline lesson), and "Notice cleared" over a write that did not happen is a silent lie.
+        if (error || !data || data.length !== 1) {
+          toast('Failed to clear notice', 'error');
+          btn.disabled = false;
+          return;
+        }
+        dismissedPreorderIds.add(id);
+        allUnavailable = allUnavailable.filter(i => i.id !== id);
+        toast('Notice cleared');
+        renderUnavailable();
       });
     });
   }
