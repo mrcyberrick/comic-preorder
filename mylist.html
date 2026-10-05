@@ -76,6 +76,10 @@
     }
     .month-arrivals.open .month-arrivals-body { display: block; }
 
+    /* "No longer coming" sits BELOW the main list (F163, Rick Q3 2026-10-04), so it needs the gap that its old
+       position above the list got from the section before it. */
+    #unavailable-section { margin-top: 24px; }
+
     /* FOC-locked rows */
     .foc-locked-row { opacity: 0.8; }
     .foc-locked-notice {
@@ -271,8 +275,10 @@
 
     /* ── Print Styles ─────────────────────────────────────── */
     @media print {
-      /* Hide everything except the list */
-      .nav, .toolbar, .btn, .qty-btn, .cancel-btn, .my-subs,
+      /* Hide everything except the list.
+         #unavailable-section (F163, Rick Q5a 2026-10-04): the printout is the pickup-and-pay list, and a title that
+         is not coming has nothing to collect or pay for. Nothing here used to hide .month-arrivals, so it printed. */
+      .nav, .toolbar, .btn, .qty-btn, .cancel-btn, .my-subs, #unavailable-section,
       #toast-container, .page-header p,
       #admin-impersonation-banner, #first-issues-section,
       th:last-child, td:last-child,          /* Remove column */
@@ -638,29 +644,6 @@
     </div>
   </div>
 
-  <!-- No longer coming — reservations the store has CONFIRMED will not arrive,
-       which the past-item auto-hide would otherwise make invisible. Rendered
-       OPEN by default when non-empty: a closed disclosure would hide exactly
-       the thing the customer needs to be told, the same reasoning PR #142
-       applied to the bagging list's "Not arriving this week" note. -->
-  <div class="month-arrivals" id="unavailable-section" style="display:none">
-    <div class="month-arrivals-header" id="unavailable-toggle">
-      <div class="month-arrivals-title">
-        <span>No longer coming</span>
-        <span class="month-arrivals-count" id="unavailable-count">0</span>
-      </div>
-      <span class="month-arrivals-chevron">▼</span>
-    </div>
-    <div class="month-arrivals-body">
-      <p id="unavailable-note" style="margin:0 0 10px;font-size:0.78rem;color:var(--text-secondary)">
-        The store confirmed these will not arrive. Removing one only clears it from your list —
-        there is nothing to collect.
-      </p>
-      <div class="month-arrivals-grid" id="unavailable-grid"></div>
-    </div>
-  </div>
-
-
   <!-- Subscriptions (collapsible) -->
   <div class="my-subs" id="my-subs-section" style="display:none">
     <div class="my-subs-header" id="my-subs-toggle">
@@ -687,6 +670,33 @@
          with the placeholder when real content is written. -->
     <div class="empty-state loading-reserve">
       <p style="color:var(--text-muted)">Loading your list…</p>
+    </div>
+  </div>
+
+  <!-- No longer coming — reservations the store has CONFIRMED will not be coming,
+       which the past-item auto-hide would otherwise make invisible. Rendered
+       OPEN by default when non-empty: a closed disclosure would hide exactly
+       the thing the customer needs to be told, the same reasoning PR #142
+       applied to the bagging list's "Not arriving this week" note.
+
+       F163 (Rick, 2026-10-04): this block sits BELOW #list-container, not above it. Above, it was a display:none
+       section revealed ahead of the list while the list's 100vh .loading-reserve placeholder collapsed, which is
+       F161's shift mechanism. Below, the list never moves for it. It stays display:none until it has content and
+       gets NO min-height reservation: F141 measured that reserving more space scored worse. -->
+  <div class="month-arrivals" id="unavailable-section" style="display:none">
+    <div class="month-arrivals-header" id="unavailable-toggle">
+      <div class="month-arrivals-title">
+        <span>No longer coming</span>
+        <span class="month-arrivals-count" id="unavailable-count">0</span>
+      </div>
+      <span class="month-arrivals-chevron">▼</span>
+    </div>
+    <div class="month-arrivals-body">
+      <p id="unavailable-note" style="margin:0 0 10px;font-size:0.78rem;color:var(--text-secondary)">
+        The store has confirmed these will not be coming to you. Where there is a Remove button it only
+        clears your list; otherwise contact the store with any questions.
+      </p>
+      <div class="month-arrivals-grid" id="unavailable-grid"></div>
     </div>
   </div>
 
@@ -866,6 +876,18 @@ function confirmDialog(message, okLabel = 'Remove') {
   // this third bucket they are invisible to the customer entirely — see
   // renderUnavailable().
   let allUnavailable = [];
+  // How long after its ON-SALE date a confirmed-terminal row stays in "No longer coming" (F163, Rick 2026-10-04).
+  // 180 shows every eligible row on production today (48); 90 would hide the 12 oldest did-not-arrive rows, which
+  // those customers have never been shown. A tunable, not a finding: if the data later grows past what a customer
+  // should see on one list, this is the lever. The expiry is silent, like the 14-day one it replaces, just later.
+  const UNAVAILABLE_WINDOW_DAYS = 180;
+  // F163 follow-up (Rick, 2026-10-05): an ADMIN can clear a card from this section without deleting the reservation,
+  // by stamping preorders.unavailable_dismissed_at. The cards that need it are the ones nobody else can clear: a
+  // fulfilled row (Preorders.cancel refuses it) or a code the store ordered (F109 refuses it). Hidden from everyone
+  // once cleared. Purely presentational: it changes no fulfilled / arrival_outcome / ledger / Order Follow-Up state.
+  // Customers never get the button; that is a UI gate, not a database boundary (users manage own preorders is ALL, F127).
+  let dismissedPreorderIds = new Set();
+  const isAdminViewer = !!profile?.is_admin;       // impersonating a customer OR on the admin's own list
   let cachedFirstIssues = null; // #1 issues for the current catalog month — fetched once
 
   // Codes the store has already submitted to a distributor (F101/F102
@@ -954,6 +976,22 @@ function confirmDialog(message, okLabel = 'Remove') {
   const distEl     = document.getElementById('filter-distributor');
   const container  = document.getElementById('list-container');
 
+  // The ids an admin has cleared from "No longer coming". Its OWN small query, deliberately NOT a column on
+  // Preorders.getMy (app.js): selecting a column production does not have yet would 400 the WHOLE page (the F115
+  // lesson), and app.js carries the merge=ours promotion trap. FAILS OPEN: any error, including the column not existing
+  // yet, returns an empty set, so every card shows. A cleared card reappearing is the safe direction; hiding a live one is
+  // not. Paginated (F139/F140: an unbounded select caps at PostgREST's 1000) with an id order for stable pages (F162).
+  async function loadDismissedIds(userId) {
+    const { data, error } = await fetchAllRows(() => db
+      .from('preorders')
+      .select('id')
+      .eq('user_id', userId)
+      .not('unavailable_dismissed_at', 'is', null)
+      .order('id'));
+    if (error) return new Set();
+    return new Set((data || []).map(r => r.id));
+  }
+
   async function loadList() {
     const targetUserId = AdminContext.resolveUserId(user.id);
     if (AdminContext.isActive()) {
@@ -962,14 +1000,16 @@ function confirmDialog(message, okLabel = 'Remove') {
       const noticeEl = document.getElementById('pickup-notice');
       if (noticeEl) noticeEl.style.display = 'none';
     }
-    const [{ items, error }, ordered] = await Promise.all([
+    const [{ items, error }, ordered, dismissed] = await Promise.all([
       Preorders.getMy(targetUserId),
       getOrderedCodes(),
+      loadDismissedIds(targetUserId),
     ]);
     if (error) {
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
       return;
     }
+    dismissedPreorderIds = dismissed;
     // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now
     // returns a signed order_state per code. A code with only a zero/negative
     // net quantity (rejected, or corrected away) is 'unavailable', not
@@ -984,6 +1024,10 @@ function confirmDialog(message, okLabel = 'Remove') {
     // Upcoming Arrivals section uses allUpcoming which includes all future months.
     // DateUtils.todayLocal() avoids the F28 toISOString() footgun.
     const today = DateUtils.todayLocal();
+    // Local calendar date, N days back, as a 'YYYY-MM-DD' string compared as a string (F28: never toISOString()).
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - UNAVAILABLE_WINDOW_DAYS);
+    const unavailableSince = DateUtils.fmtLocal(windowStart);
     allItems = items.filter(i => i.catalog?.catalog_month === currentMonth);
     allUpcoming = items.filter(i => {
       const d = i.catalog?.on_sale_date;
@@ -1006,28 +1050,40 @@ function confirmDialog(message, okLabel = 'Remove') {
     // Only HUMAN-CONFIRMED states qualify, matching F134 § 4.3's settled rule
     // that auto-judged 'unknown' stays staff-only (Order Follow-Up, admin
     // only). 'arrived' is not terminal — it means the book is on the shelf.
+    //
+    // F163 (Rick, 2026-10-04) REVERSED the open-only rule that used to sit here. It read:
+    //   "OPEN reservations only. `fulfilled` is the system's 'this one is closed' flag — the row has already been
+    //    through its cycle and the customer was told so. Re-opening closed rows months later is not what this
+    //    section is for, and some of them the customer genuinely collected. Omitting this check shipped in the
+    //    first cut and was wrong: measured on production 2026-09-21 it selected 54 rows rather than 23, of which
+    //    31 were fulfilled, and put 24 cards on one customer's list. It matches the filter both admin-side panels
+    //    already use — computeWithdrawnTitles() and computeBackorderRisk() both lead with !p.fulfilled."
+    //    (`if (i.fulfilled) return false;`)
+    // That rule made the section a ~14-day transient: auto_fulfill_past_on_sale() closes a row about two weeks after
+    // on-sale, `fulfilled` flips true, and the row vanished with no notice, the same shape as the badge it was
+    // built to stop being transient. Measured 2026-10-05: 45 confirmed rows hidden that way, the oldest 151 days,
+    // 15 of them never-arrived rows nobody had ever been shown. The reason for the old rule was real (a first cut
+    // with NO test selected 54 rows), and what answers it now is NOT `fulfilled` but the three tests below: only
+    // HUMAN-CONFIRMED signals count, an 'arrived' row never does, and the window bounds the list.
     allUnavailable = items.filter(i => {
       const c = i.catalog;
       if (!c) return false;
-      // OPEN reservations only. `fulfilled` is the system's "this one is
-      // closed" flag — the row has already been through its cycle and the
-      // customer was told so. Re-opening closed rows months later is not what
-      // this section is for, and some of them the customer genuinely
-      // collected. Omitting this check shipped in the first cut and was wrong:
-      // measured on production 2026-09-21 it selected 54 rows rather than 23,
-      // of which 31 were fulfilled, and put 24 cards on one customer's list.
-      // It matches the filter both admin-side panels already use —
-      // computeWithdrawnTitles() and computeBackorderRisk() both lead with
-      // !p.fulfilled.
-      if (i.fulfilled) return false;
+      if (dismissedPreorderIds.has(i.id)) return false;     // an admin cleared this notice (F163 follow-up)
       const inMainTable = c.catalog_month === currentMonth;
       const inUpcoming  = !!(c.on_sale_date && c.on_sale_date >= today);
       if (inMainTable || inUpcoming) return false;          // already visible
+      // Window: a confirmed row stays UNAVAILABLE_WINDOW_DAYS after its on-sale date. An UNDATED row cannot be aged,
+      // so it is kept: failing visible beats failing silent (0 such rows on production today).
+      if (c.on_sale_date && c.on_sale_date < unavailableSince) return false;
       return !!c.withdrawn_at
-          || isCodeRejected(c)
+          // Ledger-rejected, UNLESS shipment evidence says the book arrived. Two production rows (one title, two
+          // accounts) read both; telling a customer "Rejected by the supplier" about a book on the shelf is false.
+          || (isCodeRejected(c) && i.arrival_outcome !== 'arrived')
           || i.arrival_outcome === 'not_arrived'
           || i.arrival_outcome === 'damaged';
     });
+    // These two stay adjacent and SYNCHRONOUS. An `await` between them would let the browser paint the list before
+    // the section exists, and the section would then appear as its own layout shift (F161 / F163 § 7).
     renderList();
     renderUnavailable();
   }
@@ -1529,6 +1585,12 @@ function confirmDialog(message, okLabel = 'Remove') {
   // copy, which is the honest answer: the store has it on order and must
   // settle the ledger (or withdraw the title) first.
   //
+  // F163 (Rick, 2026-10-04) added a THIRD condition, because the section now also lists FULFILLED rows.
+  // Preorders.cancel() refuses any fulfilled row that is not withdrawn ("the order for this item has already been
+  // placed"), independent of the ledger, so a button on a fulfilled rejected row would render and then fail with a
+  // misleading message. `canRemove = isWithdrawn || (isRejected && !item.fulfilled)`. A WITHDRAWN row is exempt from
+  // both guards (F110 § 2.2), so it keeps Remove whether or not it is fulfilled. Informational only otherwise.
+  //
   // Rick's call, 2026-09-21: Remove appears here and ONLY here. The
   // current-month table's rejected rows stay badge-only exactly as the
   // 2026-08-06 decision set them, because that reasoning — a live cycle
@@ -1571,7 +1633,9 @@ function confirmDialog(message, okLabel = 'Remove') {
           : isNotArrived
             ? '⚠ Did not arrive'
             : '⚠ Arrived damaged';
-      const canRemove = isWithdrawn || isRejected;   // == what F109 permits
+      // == what the SERVER and Preorders.cancel() permit: F109 allows withdrawn or ledger net <= 0, and cancel()
+      // refuses a fulfilled row unless it is withdrawn. Superseded form: `isWithdrawn || isRejected` (open rows only).
+      const canRemove = isWithdrawn || (isRejected && !item.fulfilled);
       const cover = c.cover_url
         // onerror MUST also add .loaded — see the fade-in loop below for why.
         // COVER_PLACEHOLDER is a .webp file, not a data: URI, so the
@@ -1591,8 +1655,17 @@ function confirmDialog(message, okLabel = 'Remove') {
             ${canRemove
               ? `<button class="btn btn-danger btn-sm cancel-btn-unavailable" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
                          style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>`
-              : `<span class="foc-locked-chip" title="The store has this on order — contact them"
-                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>`}
+              // Title was "The store has this on order — contact them": TRUE for a net > 0 row, FALSE for a
+              // supplier-rejected or never-arrived one, which is now most of what this chip sits on. Same wording
+              // as the main table's own did-not-arrive chip, so the two surfaces cannot say different things.
+              : `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions"
+                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>${isAdminViewer
+                  // ADMIN ONLY, and only where there is no Remove (Remove already clears a card, by deleting the
+                  // reservation). Hides the card for everyone; the reservation is kept. See the grid handler below.
+                  ? `<button class="btn btn-secondary btn-sm clear-btn-unavailable" data-preorder-id="${item.id}"
+                             title="Admin: hide this notice from the list. The reservation is kept."
+                             style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Clear</button>`
+                  : ''}`}
           </div>
         </div>`;
     }).join('');
@@ -1637,6 +1710,36 @@ function confirmDialog(message, okLabel = 'Remove') {
             ? { withdrawn: true, cancelled_after_order_submitted: isCodeOrdered(cCancelled) }
             : {});
         }
+      });
+    });
+
+    // Admin "Clear" (F163 follow-up). Stamps the row; does NOT delete it, so the only record of what the customer was
+    // promised survives. Confirm-gated because a mis-click hides a notice from a customer, and there is no in-app undo
+    // (Rick, 2026-10-05; restoring is one UPDATE ... SET unavailable_dismissed_at = NULL).
+    grid.querySelectorAll('.clear-btn-unavailable').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const msg = AdminContext.isActive()
+          ? `Clear this notice from ${AdminContext.activeUserName}'s list? They will no longer see it. The reservation itself is kept.`
+          : 'Clear this notice from your list? The reservation itself is kept.';
+        if (!(await confirmDialog(msg, 'Clear'))) return;
+        btn.disabled = true;
+        const id = btn.dataset.preorderId;
+        // An INSTANT (a timestamptz), not a calendar date, so F28's toISOString() rule does not apply here.
+        const { data, error } = await db.from('preorders')
+          .update({ unavailable_dismissed_at: new Date().toISOString() })
+          .eq('id', id)
+          .select('id');
+        // The ROW COUNT is the success check, not `error`: an RLS-filtered update returns no error and zero rows
+        // (the F127 / Decline lesson), and "Notice cleared" over a write that did not happen is a silent lie.
+        if (error || !data || data.length !== 1) {
+          toast('Failed to clear notice', 'error');
+          btn.disabled = false;
+          return;
+        }
+        dismissedPreorderIds.add(id);
+        allUnavailable = allUnavailable.filter(i => i.id !== id);
+        toast('Notice cleared');
+        renderUnavailable();
       });
     });
   }
