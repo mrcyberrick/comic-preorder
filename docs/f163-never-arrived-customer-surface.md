@@ -128,6 +128,18 @@ did-not-arrive rows: 9 on real customers, 2 on your account, 1 on a paper accoun
 paper account: **those customers have never been shown anything about a title that never came, since
 May.**
 
+### 1.5 G0 re-measure at build (2026-10-05, read-only, production, GET only; § 9 B1)
+
+Both local scripts re-run unchanged (`f163-stranded-measure.mjs`, `f163-stranded-accounts.mjs`; every fetch equals its
+exact count: 3,573 `preorders`, 2,019 `order_submissions`; 0 preorders without a catalog row). **Halt conditions
+checked and none tripped:** parts sum **1,740 = 1,740 (OK)**; eligible rows **48** (exactly the § 1.3 figure, so no
+drift to explain); **withdrawn rows in the stranded set: 0** (so K, Remove-on-fulfilled-withdrawn, is still proven by
+the harness only); `unknown` rows with no confirmed signal **0**. Shown today **5**, hidden-confirmed **45** (26 + 2 + 2
+supplier-rejected, 15 `not_arrived`), 10 accounts (5 real customers), per-account section rows 14 / 9 / 8 / 5 / 4 / 3 / 2 /
+1 / 1 / 1 (account kinds as § 1.3: admin 14, paper x4, real customers 9 / 8 / 4 / 2 / 1). Age of the 45 hidden rows:
+15-30 d 14, 31-60 d 16, 61-90 d 3, **> 90 d 12**. Real customers: **1 with an empty main list**, 0 with 1-3 main rows, 4
+with 4+. **Every figure the design rests on is unchanged from 2026-10-04**; it is the same population one day on.
+
 ## 2. Rick's decisions (2026-10-04, via AskUserQuestion; recommendation taken on every one)
 
 | # | Question | Answer | Measured basis |
@@ -375,7 +387,7 @@ total** (from 5). Nothing is written. Printed lists lose a block that has been p
 
 ## 14. Completion criteria (for the BUILD; all unchecked)
 
-- [ ] G0 re-measure recorded in this doc
+- [x] G0 re-measure recorded in this doc (§ 1.5, 2026-10-05: parts sum, 48 eligible, 0 withdrawn)
 - [ ] harness extended; the new assertions observed **RED** on the pre-change bytes
 - [ ] implemented in `mylist.html` only; `git diff --stat` shows one code file
 - [ ] every § 10 negative control observed red, then reverted byte-identically
