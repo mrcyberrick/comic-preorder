@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** NOT STARTED — design written 2026-10-04, Rick's decisions recorded (§ 2, § 13); build next (execution handoff prepared 2026-10-04), promotion pending Rick's validation on staging · staging=— · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13)
+**STATUS:** IN PROGRESS — BUILT AND VERIFIED ON STAGING 2026-10-05 (`9fbb71b`, `mylist.html` only; harness 65/65 on the deployed bytes, full suite 156 passed, § 15); NOT promoted, pending Rick's validation on staging including approval of the copy · staging=2026-10-05 · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13). *(This token read "NOT STARTED — design written 2026-10-04 ... build next" until the build session.)*
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -264,6 +264,17 @@ itself one way here and another there.
   fallback is to emit the section inside the same synchronous write, **before** the empty-state hold,
   for the empty branch only. That edits the empty-state hold, which has regressed before: **stop and ask
   Rick** rather than choosing at build.
+  **MEASURED AT BUILD 2026-10-05 (harness PV9), and the trigger FIRED:** for a non-impersonated customer
+  with an empty main list and 3 section rows, the section's top is **2,246 px = 2.39 viewport heights on
+  desktop (1350x940) and 3,476 px = 4.22 on a phone (412x823)**. It sits behind the full-viewport hold
+  **and** the 24-cover "New #1 issues" discovery grid that `renderList()` loads into the same container
+  for an empty, non-impersonated list. **Stopped and asked Rick; ANSWERED: accept, the section stays below
+  the list for everyone** (alternatives offered and not built: above the list for the empty branch only;
+  inside the empty-state block, above the discovery grid). **Not measured:** the impersonated empty-list
+  case (the 2 paper accounts with an empty main list, readable only by impersonation), which skips the
+  discovery grid and so should land nearer 1.5 viewports; that is an inference from the code, not a reading.
+  Cost accepted: the one real customer with an empty main list (4 rows) reads their "No longer coming"
+  notice about two screens down instead of at the top.
 - The count badge, open-by-default and chevron toggle are unchanged.
 
 ## 8. Mobile, print, impersonation
@@ -385,18 +396,69 @@ total** (from 5). Nothing is written. Printed lists lose a block that has been p
    rationale (54 vs 23 rows, 24 cards on one list). Rick reversed it knowing today's numbers (worst real
    customer 9, § 1.3). If the data later grows past that, the 180-day constant is the lever.
 
-## 14. Completion criteria (for the BUILD; all unchecked)
+## 14. Completion criteria (for the BUILD; ticked 2026-10-05 except Rick's validation and the promotion)
 
 - [x] G0 re-measure recorded in this doc (§ 1.5, 2026-10-05: parts sum, 48 eligible, 0 withdrawn)
-- [ ] harness extended; the new assertions observed **RED** on the pre-change bytes
-- [ ] implemented in `mylist.html` only; `git diff --stat` shows one code file
-- [ ] every § 10 negative control observed red, then reverted byte-identically
-- [ ] harness green on the working tree AND on the deployed staging bytes; V5 numbers recorded
-- [ ] full suite: 151 passed, 0 failed (from the log's own line); teardown re-read
+- [x] harness extended; the new assertions observed **RED** on the pre-change bytes (§ 15: 20 named failures, 0 crashes)
+- [x] implemented in `mylist.html` only; `git diff --stat` shows one code file (`9fbb71b`, +80/-39)
+- [x] every § 10 negative control observed red, then reverted byte-identically (§ 15: 6/6; repo file sha256 unchanged)
+- [x] harness green on the working tree AND on the deployed staging bytes; V5 numbers recorded (§ 15)
+- [x] full suite: 156 passed, 0 failed (from the log's own line; 151 baseline + 5 new local-spec tests, which reconcile exactly); teardown re-read (§ 15: nothing of this session left; August F130 leftovers untouched)
 - [x] § 13 item 1 answered (Rick 2026-10-04: no confirm/undo, do not wait) and item 2 answered (no in-person notice)
 - [ ] Rick validated the build on staging, including approving the copy (§ 4) (**promotion is pending this**)
 - [ ] `/promote-prod` only on Rick's explicit request after that validation; V12 recorded
-- [ ] § 13 F163, the CLAUDE.md row and this STATUS token advanced
+- [x] § 13 F163, the CLAUDE.md row and this STATUS token advanced (2026-10-05, build session)
+
+## 15. Build record (2026-10-05, staging only; the evidence behind § 14)
+
+**Code:** `9fbb71b`, `mylist.html` only (+80/-39; pushed, served bytes byte-identical to the commit, sha256 prefix
+`9923c2cb7f81a856`, confirmed on the plain URL). `docs/` and the local harness/spec are separate. No `app.js`, query,
+schema, RLS or SQL; nothing written to production (B1's measurement was GET-only).
+
+**Harness** (`mylist-no-longer-coming-verify.mjs`, local-only; the original is kept in the build session's scratch):
+- **B2, pre-change bytes:** 20 named assertion failures and no crash; the plan's required RED set (F, G, K, L, the
+  DOM-order check) all red, and the pre-existing V1-V14 baseline still green. The layout-shift gate's vacuous-pass guard
+  (the section must render 5 cards) went red too: **on the old bytes "with" equals "without" trivially**, so without that
+  guard PV5 would have passed on code that does nothing.
+- **B3/B5, working tree and deployed bytes:** green on both; the deployed run is **65 PASS / 0 FAIL** (its own final line).
+- **Fixtures G-N** behave per § 4's truth table, and **Remove on a fulfilled WITHDRAWN row genuinely deletes it** (K,
+  read back from the database), while the server still refuses the net > 0 row (V8c).
+- **PV5 layout shift** (Lighthouse-like throttling, 3 runs each, 5 main-table rows so the account stays out of F161's
+  1-3-row range): with the section **0.006 desktop / 0.005 mobile**, identical to without. **Control, 5 OPEN confirmed rows
+  (what the old bytes can show): pre-move bytes 0.131 desktop / 0.202 mobile, the same rows below the list 0.006 / 0.005.**
+  So the section's old position cost about 0.125 / 0.197 of CLS, which is F161's mechanism measured directly.
+- **PV9** is recorded in § 7.
+
+**Negative controls** (each a single edit to a scratch copy served via `--serve=file:`, the edit asserted to match once,
+the harness required to exit 1 with no crash; the repo file's sha256 `76c36dfea9a3faa8` identical before and after):
+1 restore the `fulfilled` guard -> F, G, K, L, N red; 2 drop the window -> M red; 3 drop the `arrived` exclusion -> H red;
+4 drop `!item.fulfilled` from `canRemove` -> the G no-Remove check red; 5 remove the print rule -> PV6 red; 6 put the
+markup back above the list -> PV4, PV4b and both PV5 checks red (**CLS 0.133 / 0.210 against 0.006 / 0.005**).
+
+**Full suite:** `npx playwright test --reporter=line` run directly, **156 passed (23.5 min)**, 0 failed, from the log's own
+line. **Local spec** `25-mylist-no-longer-coming.spec.ts` (5 tests) is the part of this that the suite covers from now on;
+it does not cover PV5, PV7 or PV9, which stay in the harness. Neither is committed (the suite is gitignored), so
+**nothing in git asserts any of this**, same as F141 and F166.
+
+**Spec sweep before pushing:** no spec referenced the section; every fulfilled seed in specs 03, 15, 21 and 22 is either a
+current-month row (main table, excluded by the `inMainTable` test) or an `unknown`/`arrived` row with no confirmed signal,
+so none could newly surface.
+
+**Teardown re-read from the database (not the suite's own claim):** 0 `PWNLC_` catalog, ledger, preorder, profile or auth
+rows; 0 auth users or profiles created since the suite started (excluding the intended `pw-pending` survivors, F64);
+`catalog_filters` restored to its original 167 bytes. **Not zero, and not this session's:** one `TEST_PW_` catalog row and
+its preorder (`PW-ISO-B-1786504586132`, created 2026-08-12 by the tenant-isolation fixtures) and the **four August
+`pw-*` synthetic tenants** that CLAUDE.md already records as F130 territory. Left alone, per F130's own "classify first".
+
+**Stated plainly.** (1) **Chromium only**, not WebKit, not a real phone. (2) The layout-shift numbers are a synthetic
+profile on staging data, not Lighthouse and not production. (3) The copy (§ 4) is **proposed, not approved**: Rick approves
+it as part of his staging validation. (4) § 4's truth table writes "Did not arrive" for fulfilled + `not_arrived` with ledger
+"any"; the code's precedence (withdrawn -> rejected -> not_arrived -> damaged, identical to the main table) gives "Rejected
+by the supplier" when the ledger also nets <= 0. No fixture and no production row exercises that overlap; the precedence
+rule, not the table cell, is what governs. (5) **For V12 after promotion:** the plan's negative marker "the old
+`if (i.fulfilled) return false` x0" cannot be used literally, because the explanatory comment now quotes it (it reads x1 in
+the served bytes, as does the old chip title `The store has this on order`). Check the **statement** form instead: a line
+matching `^\s+if \(i\.fulfilled\) return false;` must read x0 (it does on staging today). (6) Rick has **not** validated.
 
 ## References
 
