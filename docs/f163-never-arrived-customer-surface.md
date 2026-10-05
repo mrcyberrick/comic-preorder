@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** IN PROGRESS — BUILT AND VERIFIED ON STAGING 2026-10-05 (`9fbb71b`, `mylist.html` only; harness 65/65 on the deployed bytes, full suite 156 passed, § 15); NOT promoted, pending Rick's validation on staging including approval of the copy · staging=2026-10-05 · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13). *(This token read "NOT STARTED — design written 2026-10-04 ... build next" until the build session.)*
+**STATUS:** IN PROGRESS — BUILT AND VERIFIED ON STAGING 2026-10-05 (`9fbb71b`, `mylist.html` only; harness 65/65 on the deployed bytes, full suite 156 passed, § 15); NOT promoted, pending Rick's validation on staging including approval of the copy; PLUS the admin "Clear" follow-up (`6583a6c`, § 16: harness 80/80 on the deployed bytes, full suite 158 passed), whose SQL is `prod=PENDING`, so `/promote-prod` is blocked until it is applied on production · staging=2026-10-05 · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13). *(This token read "NOT STARTED — design written 2026-10-04 ... build next" until the build session.)*
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -460,7 +460,7 @@ rule, not the table cell, is what governs. (5) **For V12 after promotion:** the 
 the served bytes, as does the old chip title `The store has this on order`). Check the **statement** form instead: a line
 matching `^\s+if \(i\.fulfilled\) return false;` must read x0 (it does on staging today). (6) Rick has **not** validated.
 
-## 16. Addendum: an admin can CLEAR a card (Rick, 2026-10-05). DESIGNED, SQL WRITTEN, CLIENT NOT BUILT
+## 16. Addendum: an admin can CLEAR a card (Rick, 2026-10-05). BUILT AND VERIFIED ON STAGING 2026-10-05; NOT promoted
 
 **The ask.** Rick, looking at the staging demo: "can the admin clear it from the list if they contact the store?" Measured
 answer: **not from the app today**, except Remove on withdrawn and open-rejected cards. The section's Remove calls
@@ -471,72 +471,22 @@ admins; `admins manage tenant preorders` is ALL), but that deletes the only reco
 **Rick chose a hide flag: "option 2 please".**
 
 **Schema:** one additive nullable column, `preorders.unavailable_dismissed_at timestamptz`; no default, no backfill, no RLS
-change, no `app.js` change. The SQL is below. Its pre-flight also checks for any function or view that copies `preorders`
-rows wholesale, because the import's archive function (source not in the repo) builds `reservation_history` from a join,
-and a `SELECT *` there would be affected by a new column. **Not run anywhere.** Rick runs it (SQL Editor), staging first.
+change, no `app.js` change. **The SQL is `docs/sql/2026-10-05-preorders-unavailable-dismissed.sql`** (moved out of this doc
+into `docs/sql/` once the client that depends on it reached staging; the block that used to sit here was extracted from this
+doc byte-for-byte, so what Rick ran is what that file holds). **STATUS: `staging=APPLIED 2026-10-05 | prod=PENDING`**, so
+`/promote-prod` step 0 now blocks until it is applied on production, which is the intended gate: without it the Clear
+button does nothing there. It was NOT committed under `docs/sql/` while the client was unbuilt, because a `prod=PENDING`
+file blocks every promotion (the F157 session's reasoning).
 
-**Deliberately NOT committed under `docs/sql/` yet.** A `STATUS: ... prod=PENDING` file there blocks every `/promote-prod`
-at step 0 (the F157 session embedded its SQL in its plan for exactly this reason), which would stop F163 itself being
-promoted until this migration was also applied on production. When the client is built and Rick wants both promoted
-together, save the block below as `docs/sql/2026-10-05-preorders-unavailable-dismissed.sql` with a
-`-- STATUS: staging=APPLIED <date> | prod=PENDING` first line, and apply it on production BEFORE the merge.
+**Applied on staging by Rick, 2026-10-05.** Pre-flight: `already_present` 0, 10 existing `preorders` columns; policies
+present: `admins manage tenant preorders` (ALL), `users manage own preorders` (ALL), plus F127's two RESTRICTIVE gates
+(`blocked accounts cannot create/change preorders`, which test the ACTING user's status, so an active admin passes). Check
+(3) listed two objects: `get_publisher_reserve_counts` (a read-only count RPC) and the `admin_preorders` view (explicit
+column list, no caller). **Neither copies `preorders` rows wholesale, and `archive_stale_reservations` was NOT flagged**, so
+the archive is unaffected on staging. Post-check: `unavailable_dismissed_at | timestamp with time zone | YES | null`,
+97 `preorders`, 0 cleared. **Production is a different database: re-run the pre-flight there before applying.**
 
-```sql
--- preorders: one additive nullable column, unavailable_dismissed_at   (F163 follow-up, prepared 2026-10-05)
--- Run on STAGING first, in the Supabase SQL Editor (postgres superuser). Production is a separate, later run.
---   NULL          = not cleared (every existing row; the card shows if it otherwise qualifies)
---   a timestamptz = an admin cleared the notice at that moment; the card is hidden
--- Additive, nullable, NO default, NO backfill: a metadata-only change in Postgres (no rewrite), every row reads NULL.
--- PURELY PRESENTATIONAL: nothing but mylist.html will read it. No RLS change (`admins manage tenant preorders` is the
--- admin write path; `users manage own preorders` is also ALL, so a hand-crafted customer request could set or clear it
--- on their own rows: the F127 "UI gate" class, accepted).
-
--- ===== PRE-FLIGHT (read-only). Run as one paste; each result set is shown. =====
--- (1) The column must NOT already exist.
-SELECT count(*) FILTER (WHERE column_name = 'unavailable_dismissed_at') AS already_present,
-       count(*)                                                        AS preorders_columns
-FROM   information_schema.columns
-WHERE  table_schema = 'public' AND table_name = 'preorders';
--- EXPECTED: already_present = 0. If 1, STOP: it was already run; go to the POST-CHECK.
-
--- (2) The two write paths must exist.
-SELECT policyname, cmd FROM pg_policies
-WHERE  schemaname = 'public' AND tablename = 'preorders' ORDER BY policyname;
--- EXPECTED: includes 'admins manage tenant preorders' (ALL) and 'users manage own preorders' (ALL).
-
--- (3) Anything that copies preorders rows WHOLESALE would pick up (or choke on) a new column.
-SELECT 'function' AS kind, p.proname AS name
-FROM   pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE  n.nspname = 'public' AND p.prokind = 'f'
-  AND  pg_get_functiondef(p.oid) ~* '\mpreorders\M'
-  AND  pg_get_functiondef(p.oid) ~* '(\mp\.\*|\mpreorders\.\*|select\s+\*|row_to_json|to_jsonb)'
-UNION ALL
-SELECT 'view', c.relname
-FROM   pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE  n.nspname = 'public' AND c.relkind IN ('v', 'm') AND pg_get_viewdef(c.oid) ~* '\mpreorders\M'
-ORDER  BY 1, 2;
--- EXPECTED: review each row. STOP AND REPORT if any copies a preorders row into another table without an explicit
--- column list (archive_stale_reservations is the one to look at). Empty, or only functions that merely READ, is clean.
-
--- ===== MIGRATION =====
-BEGIN;
-ALTER TABLE public.preorders ADD COLUMN unavailable_dismissed_at timestamptz;
-COMMENT ON COLUMN public.preorders.unavailable_dismissed_at IS
-  'F163: set when an admin clears this reservation''s notice from the customer''s My List "No longer coming" section. Presentational only: hides the card, changes nothing else. NULL = not cleared.';
-COMMIT;
-
--- ===== POST-CHECK (read-only) =====
--- (1) Exists, nullable, no default.
-SELECT column_name, data_type, is_nullable, column_default
-FROM   information_schema.columns
-WHERE  table_schema = 'public' AND table_name = 'preorders' AND column_name = 'unavailable_dismissed_at';
--- EXPECTED: unavailable_dismissed_at | timestamp with time zone | YES | (null).  ZERO rows = the ALTER did not land.
--- (2) Nothing backfilled, no rows lost.
-SELECT count(*) AS total_preorders, count(unavailable_dismissed_at) AS cleared FROM public.preorders;
--- EXPECTED: cleared = 0, and total_preorders equals what it was before (production read 3,573 on 2026-10-04).
-```
-
-**Defaults chosen, stated so Rick can veto any BEFORE the client is built:**
+**The defaults (Rick confirmed all five on 2026-10-05, and said "build on F163"):**
 1. **Admin-only**: the button shows when `profile.is_admin`, whether impersonating a customer or on the admin's own list
    (Rick's own account holds 14 of the 48 eligible rows). Customers never see it.
 2. **Only on cards with no Remove button.** Remove already clears a card, by deleting the reservation, which is the
@@ -559,15 +509,50 @@ SELECT count(*) AS total_preorders, count(unavailable_dismissed_at) AS cleared F
 or clear the flag on their own rows. The admin-only gate is a UI gate, the F127 class. The worst case is a customer hiding
 or re-showing a notice about their own reservation.
 
-**Coupling to note.** This lands in the same `mylist.html` as the F163 build above, which is staging-only and not yet
-validated. A later full `staging` -> `main` promotion would carry both, and the migration then has to be applied on
-production first. If Rick wants F163 itself out before this is finished, that needs a deliberate split.
+**Coupling, now real.** This sits in the same `mylist.html` as the F163 build above, which is staging-only and not yet
+validated. A later full `staging` -> `main` promotion carries both, and the SQL file's `prod=PENDING` now makes step 0 block
+until the migration is applied on production first. Rick chose to build on F163 rather than keep them separable.
 
-**Sequence:** Rick runs the SQL on staging and pastes the post-check -> Rick confirms or vetoes the defaults -> build in
-`mylist.html` only, harness extended (admin sees Clear only on the right cards, customer never; Clear writes the timestamp
-and keeps the reservation; the card stays gone on reload and in the customer's own session; fail-open with the column
-missing) with negative controls -> deploy, full suite, teardown re-read -> Rick validates. Feature build: **no finding ID
+**Build record (2026-10-05, staging only).** Code `6583a6c`, `mylist.html` only (+64/-2; served bytes byte-identical to the
+commit, sha256 prefix `c616c0b86deec8e3`, plain URL). The client reads the cleared ids in its own paginated query (not
+`Preorders.getMy`, so no `app.js` change), **fails open**, and judges the write by the returned ROW COUNT, not `error`.
+- **Harness** (`mylist-no-longer-coming-verify.mjs`, local-only): **80 PASS / 0 FAIL on the deployed bytes** (its own final
+  line), 76/76 on the working tree with the column present. New checks: PD1 a customer never sees Clear; PD2 an admin
+  impersonating sees it on exactly the cards with no Remove (C F G L N) and on none of A B K; PD3 an admin on their OWN list
+  gets it; PDF1/PDF2 **fail-open** (a copy whose cleared-ids query names a missing column still shows all 8 cards, no page
+  error); PD4-PD13 the end-to-end flow: the confirm names the customer and says the reservation is kept, **Cancel writes
+  nothing**, Clear stamps the row, **the reservation is kept with fulfilled and arrival_outcome unchanged**, the card
+  leaves and the badge drops by one, **still gone after a reload**, and the CUSTOMER's own session no longer sees it but
+  still sees the others and still has no Clear button.
+- **Negative controls** (a single edit to a scratch copy, the repo file's sha256 unchanged each time): open the admin gate
+  to customers -> PD1 red; close it to everyone -> PD2 and PD3 red; break fail-open (a failed read throws) -> PDF1 red, and
+  that control shows what fail-open buys: **0 cards, the whole section gone, plus a page error**; drop the persisted filter ->
+  PD10 and PD11 red; write nothing -> PD7 red; also clear `fulfilled` -> PD8 red. **One prediction was wrong and is recorded
+  as such:** I expected PD9 to go red when the persisted filter was dropped. It stayed green, correctly, because PD9 only checks
+  that the card leaves the page right after the click, which the click handler does on its own; PD10 (reload) and PD11
+  (the customer's view) are the checks that catch it, and both went red.
+- **NOT TESTED:** that a silently RLS-filtered zero-row update is reported as a failure. The harness cannot create a blocked
+  admin, so the row-count check has no control; it is reasoned (F127's lesson), not observed. F127's UPDATE gate is a
+  WITH CHECK, which raises rather than filters, so a true silent zero-row is less likely than it sounds.
+- **Layout shift** unchanged by the extra query: **0.006 desktop / 0.005 mobile** with the section, identical to without.
+- **Full suite: 158 passed (23.4 min)**, 0 failed, from the log's own line (156 + the two new local-spec tests, V6 and V7).
+  Teardown re-read from the database: nothing this session created is left; the demo account was kept on purpose; the same
+  four August `pw-*` tenants and one `TEST_PW_` catalog row remain (F130 family), untouched.
+- **Spec 25** now has 7 tests; V7 needs the new column and fails loudly at the database read if it is missing.
+
+**Stated plainly.** Chromium only; staging only; nothing in git asserts any of it (the suite and harness are gitignored); no
+in-app undo (restore is one `UPDATE preorders SET unavailable_dismissed_at = NULL WHERE id = ...`); the customer-side gate is a
+UI gate (F127 class). **Not done: production.** Rick has not validated the Clear button either. Feature build, **no finding ID
 consumed** (F170 stays next free).
+
+**An adjacent question Rick asked while validating, answered and left alone (2026-10-05).** The admin dashboard's "Withdrawn by
+Distributor" panel has no action to close a row. That is the F110 § 4.5 design: it is read-only and lists unfulfilled
+reservations on withdrawn titles. A row leaves it when the last customer removes their reservation (F110 re-enabled Remove),
+when auto-fulfil closes the reservation, or when the mark clears on reappearance (F146). If customers do not remove and the
+title is not yet fulfilled, an admin can only close it by impersonating each customer. Since F165 S1 nothing marks titles
+withdrawn, and production last read 0 marks (2026-09-27), so the panel is empty there. **Rick: leave it as is.** A title-level
+"remove these reservations" action, if ever wanted, belongs with F165 S3's confirm-to-mark design, because a false mark
+(F165's 7) plus a bulk delete cannot be undone.
 
 ## References
 
