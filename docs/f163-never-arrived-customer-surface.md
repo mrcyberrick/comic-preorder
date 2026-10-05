@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** IN PROGRESS — BUILT AND VERIFIED ON STAGING 2026-10-05 (`9fbb71b`, `mylist.html` only; harness 65/65 on the deployed bytes, full suite 156 passed, § 15); NOT promoted, pending Rick's validation on staging including approval of the copy; PLUS the admin "Clear" follow-up (`6583a6c`, § 16: harness 80/80 on the deployed bytes, full suite 158 passed), whose SQL is `prod=PENDING`, so `/promote-prod` is blocked until it is applied on production · staging=2026-10-05 · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13). *(This token read "NOT STARTED — design written 2026-10-04 ... build next" until the build session.)*
+**STATUS:** IN PROGRESS — BUILT AND VERIFIED ON STAGING 2026-10-05 (`9fbb71b`, `mylist.html` only; harness 65/65 on the deployed bytes, full suite 156 passed, § 15); NOT promoted, pending Rick's validation on staging including approval of the copy; PLUS the admin "Clear" follow-up (`6583a6c`, § 16: harness 80/80 on the deployed bytes, full suite 158 passed), whose SQL is APPLIED on BOTH environments (production 2026-10-05, so step 0 no longer blocks on it) · staging=2026-10-05 · prod=— · PR=— · findings: F163 (advances; owner record in `docs/technical-reference.md` § 13). *(This token read "NOT STARTED — design written 2026-10-04 ... build next" until the build session.)*
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -473,9 +473,8 @@ admins; `admins manage tenant preorders` is ALL), but that deletes the only reco
 **Schema:** one additive nullable column, `preorders.unavailable_dismissed_at timestamptz`; no default, no backfill, no RLS
 change, no `app.js` change. **The SQL is `docs/sql/2026-10-05-preorders-unavailable-dismissed.sql`** (moved out of this doc
 into `docs/sql/` once the client that depends on it reached staging; the block that used to sit here was extracted from this
-doc byte-for-byte, so what Rick ran is what that file holds). **STATUS: `staging=APPLIED 2026-10-05 | prod=PENDING`**, so
-`/promote-prod` step 0 now blocks until it is applied on production, which is the intended gate: without it the Clear
-button does nothing there. It was NOT committed under `docs/sql/` while the client was unbuilt, because a `prod=PENDING`
+doc byte-for-byte, so what Rick ran is what that file holds). **STATUS: `staging=APPLIED 2026-10-05 | prod=APPLIED 2026-10-05`**. While it read `prod=PENDING`,
+`/promote-prod` step 0 blocked, which was the intended gate: without the column the Clear button does nothing on production. It was NOT committed under `docs/sql/` while the client was unbuilt, because a `prod=PENDING`
 file blocks every promotion (the F157 session's reasoning).
 
 **Applied on staging by Rick, 2026-10-05.** Pre-flight: `already_present` 0, 10 existing `preorders` columns; policies
@@ -485,6 +484,13 @@ present: `admins manage tenant preorders` (ALL), `users manage own preorders` (A
 column list, no caller). **Neither copies `preorders` rows wholesale, and `archive_stale_reservations` was NOT flagged**, so
 the archive is unaffected on staging. Post-check: `unavailable_dismissed_at | timestamp with time zone | YES | null`,
 97 `preorders`, 0 cleared. **Production is a different database: re-run the pre-flight there before applying.**
+
+**Applied on PRODUCTION by Rick, 2026-10-05.** Pre-flight: `already_present` 0, 10 existing `preorders` columns, the same four policies, and
+the same two objects from check (3) (`get_publisher_reserve_counts`, `admin_preorders`); `archive_stale_reservations` was not flagged.
+Post-check: `unavailable_dismissed_at | timestamp with time zone | YES | null`, **3,574 `preorders`, 0 cleared** (3,573 were read on
+2026-10-04). **Independently re-read afterwards, not taken from the paste:** a GET-only call through the production REST API reads the
+column, 3,574 rows, 0 non-null. (Production's first run of an earlier migration, RPC v2 on 2026-09-29, once did not land, which is why
+this was checked.) Rick asked whether the plan held a second script to run: it does not, only this file.
 
 **The defaults (Rick confirmed all five on 2026-10-05, and said "build on F163"):**
 1. **Admin-only**: the button shows when `profile.is_admin`, whether impersonating a customer or on the admin's own list
@@ -510,8 +516,8 @@ or clear the flag on their own rows. The admin-only gate is a UI gate, the F127 
 or re-showing a notice about their own reservation.
 
 **Coupling, now real.** This sits in the same `mylist.html` as the F163 build above, which is staging-only and not yet
-validated. A later full `staging` -> `main` promotion carries both, and the SQL file's `prod=PENDING` now makes step 0 block
-until the migration is applied on production first. Rick chose to build on F163 rather than keep them separable.
+validated. A later full `staging` -> `main` promotion carries both, and the migration is now applied on production too
+(2026-10-05), so step 0 no longer blocks on it. Rick chose to build on F163 rather than keep them separable.
 
 **Build record (2026-10-05, staging only).** Code `6583a6c`, `mylist.html` only (+64/-2; served bytes byte-identical to the
 commit, sha256 prefix `c616c0b86deec8e3`, plain URL). The client reads the cleared ids in its own paginated query (not

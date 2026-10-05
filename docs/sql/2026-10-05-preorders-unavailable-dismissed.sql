@@ -1,10 +1,11 @@
--- STATUS: staging=APPLIED 2026-10-05 (Rick; pre-flight already_present 0, preorders_columns 10; post-check unavailable_dismissed_at | timestamp with time zone | YES | null, total_preorders 97, cleared 0) | prod=PENDING
+-- STATUS: staging=APPLIED 2026-10-05 (Rick; pre-flight already_present 0, preorders_columns 10; post-check unavailable_dismissed_at | timestamp with time zone | YES | null, total_preorders 97, cleared 0) | prod=APPLIED 2026-10-05 (Rick; pre-flight already_present 0, preorders_columns 10, the same two objects listed as on staging; post-check column timestamptz | YES | null, total_preorders 3574, cleared 0; independently re-read through the production REST API, column readable, 3574 / 0)
 --         F163 follow-up: an admin can CLEAR a card from My List's "No longer coming" section without
 --         deleting the reservation. mylist.html (on staging) reads and writes this column and FAILS OPEN
 --         if it is absent, so deploy order cannot break the page, but /promote-prod step 0 blocks until
 --         prod=APPLIED, which is the intended gate: without it the Clear button does nothing on production.
 -- (F105) This line is the applied-state record. Update it the moment you run this on production, with the
 --         post-check numbers (production read 3,573 preorders on 2026-10-04; cleared must be 0).
+-- Production, 2026-10-05: applied by Rick, pre-flight (3) listed get_publisher_reserve_counts and admin_preorders (same as staging; archive_stale_reservations not flagged).
 -- Design and the decisions behind it: docs/f163-never-arrived-customer-surface.md § 16.
 -- Pre-flight (3) on staging listed get_publisher_reserve_counts (a read-only count RPC) and the admin_preorders view
 -- (explicit column list, no caller); neither copies preorders rows wholesale, and archive_stale_reservations was NOT
