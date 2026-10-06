@@ -61,8 +61,13 @@ production import first) read `subscriptions` and `catalog` grouped by tenant an
 (both queries are in § 2e). **Not verified:** production was never written; no admin JWT test; the cross-tenant
 FK-blocking effect on another tenant's catalog deletes is inferred, not tested; four argument-taking RPCs were not
 read. Record: `docs/pre-phase-6-gate-closure.md` § 2e, `docs/technical-reference.md` § 13 F164.
-**Next in that plan: nothing remaining needs no Phase 6 decision except G-I's scripts half, which waits for the
-November import; G-E (F165 soak) is time-gated.** *(This line read "Next in that plan: G-D (F164 trace) needs no Phase 6
+**Next in that plan: G-C, the S0 serving-model spike** (runbook `docs/pre-phase-6-gate-closure.md` § 2f, written in a
+third readiness pass 2026-10-06; verdict unchanged, nothing re-measured had moved). It needs no Phase 6 decision and is
+the cost input D1 lacks. G-I's scripts half waits for the November import; G-E (F165 soak) is time-gated; **G-J** (F150
+platform-wide, new) needs Rick's go; the client signup gate is now part of G-F. **Latent, unfiled (Rick's call): an
+unknown `<slug>.pulllist.app` falls back to the FOUNDING tenant (`app.js:142-145`), reachable once a wildcard exists.**
+*(Before the third pass this line read "Next in that plan: nothing remaining needs no Phase 6 decision except G-I's
+scripts half, which waits for the November import; G-E (F165 soak) is time-gated.", which missed G-C.)* *(This line read "Next in that plan: G-D (F164 trace) needs no Phase 6
 decision." until G-D ran, and before that "G-B (engine to production) and G-D (F164 trace) need no Phase 6 decision.")*
 **Active sub-deploy:** none.
 **Next scheduled work: soak F165 S2 through Rick's next two real weekly `check-dates.js` runs (no hard

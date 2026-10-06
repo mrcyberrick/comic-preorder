@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; G-C, G-E..G-H NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; third readiness pass 2026-10-06: verdict unchanged, G-C runbook written (§ 2f, NEXT), G-J (F150 platform-wide) added, signup gate folded into G-F; G-C, G-E..G-H, G-J NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -45,13 +45,14 @@ Phase-6-motivated and wait on D1.
 |---|---|---|---|---|
 | **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | **DONE 2026-10-06 — see § 2a for the result.** Closed G6 and the F151 rows; **did NOT close G7b** (the sweep widened F150 and Rick deferred it) | 1 session, Rick runs SQL |
 | G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A (**done**); `/promote-prod` needs Rick's explicit request. **Runbook: § 2b. DONE 2026-10-06 — see § 2c for the result.** Closed G7a and the engine half of G3; the client signup gate and the other five mail functions are still open (§ 2c) | 1 session |
-| G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change** | 1 session, Rick in Cloudflare dashboard |
+| G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change**. **Runbook: § 2f (written 2026-10-06, third readiness pass). NEXT SESSION.** | 1 session, Rick in Cloudflare dashboard |
 | G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything. **Runbook: § 2d. DONE 2026-10-06 — see § 2e for the result.** Did **NOT** close G8: the path is reachable (Medium), so G8 waits for G-I | ½ session |
 | **G-I** | **F164 guard** (new 2026-10-06): fix the import's two unfiltered reads, then the `preorders` trigger | G8 | **after G-D (done)**; the scripts-repo half belongs with G-G (same file, same "after the November import" reasoning, though production has no live exposure today); the trigger only AFTER the import fix is proven on staging; D1 not required for the design, but the trigger is only urgent at tenant N+1. **Plan: § 2e** | 1-2 sessions (scripts repo + one migration) |
 | G-E | **F165 soak → V5 → S3 decision** (already CLAUDE.md's "next scheduled work") | G2 | Rick's next **two** real weekly `check-dates.js` runs (first ~Fri 10-09/Sat 10-10, second a week later) | V5 with Rick, then an S3 build session if chosen |
-| G-F | **F72 email half** — the five remaining mail functions tenant-aware (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`) | G3 | after G-B (same deploy discipline proven); D1 | 1–2 sessions, real-inbox checks need Rick |
+| G-F | **F72 email half** — the five remaining mail functions tenant-aware (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`) **plus the client signup gate** (`index.html:573` shows "Create one" only on the founding hostname; added to this row 2026-10-06, it had no owner after G-B) | G3 | after G-B (same deploy discipline proven); D1. The signup gate only once the five emails are tenant-aware, because opening it first sends a non-founding customer founding-branded approval mail | 1–2 sessions, real-inbox checks need Rick |
+| **G-J** | **F150 platform-wide anon-grant hardening** (added 2026-10-06; G-A's sweep widened F150 and Rick deferred it, which left G7b with no session) — `REVOKE` from `anon` across `public` on production, `ALTER DEFAULT PRIVILEGES` so new tables do not regain them, and settle staging's `order_submissions` / `settings` | G7b | **Rick's go first (he deferred it).** Precondition: prove every anon reader goes through a `SECURITY DEFINER` RPC (`is_maintenance_mode`, `resolve_tenant_by_slug`, `get_popular_series`, `get_pull_feed_week`) by grepping every client file and Edge Function for anon-key table reads before revoking; staging first, full suite, then production | 1 session, Rick runs SQL |
 | G-G | **F169 single-distributor import mode + F157 scoped delete** (scripts repo + one migration) | G4 | **after the November new-month import** (late Oct), so F165 S1's first real exercise runs on unchanged import code; D1 | 1 session |
-| G-H | **Open Phase 6: write the 6.x runbooks** | — | D1 reversed, G-A…G-G closed, D2–D4 answered | planning session |
+| G-H | **Open Phase 6: write the 6.x runbooks** | — | D1 reversed, G-A…G-G, G-I and G-J closed, D2–D4 answered *(G-I and G-J added 2026-10-06)* | planning session |
 
 **Not gates, but worth doing before any 6.x build:** **F170** (sign-in fixtures leak auth users when
 sign-in throws). 6.x will lean on the full suite and create many throwaway users; a one-file `try/finally`
@@ -701,6 +702,130 @@ recorded here and in § 13 F164, which is enough to recreate them).
 unchanged: **NOT READY** (G1, G2, G4, G5, G8, the rest of G3 and G7b stand; Shape D stands). **Next in this plan
 that needs no Phase 6 decision: none remaining except G-I's scripts half, which waits for the November import.**
 G-E (the F165 soak) is time-gated on Rick's next two weekly `check-dates.js` runs.
+
+> **Corrected 2026-10-06 (third readiness pass):** the "none remaining" sentence above missed **G-C**, which § 1
+> and § 3 D1 both say needs no Phase 6 decision and is the input D1 is waiting for. G-C is the next session;
+> its runbook is § 2f.
+
+---
+
+## 2f. Third readiness pass (2026-10-06, after G-D) and the Session G-C runbook
+
+### Re-measured, read-only, before writing this
+
+| Check | Result | Changed since G-D? |
+|---|---|---|
+| Wildcard DNS (`dns.google`, random `zzz-probe-*.pulllist.app`) | Status 3 (NXDOMAIN); `rjbookstop` / `comicstore` Status 0 | No |
+| F165 soak | `check-dates-state.json` last written **2026-10-02 15:54**, so no real S2 run yet | No |
+| F150 | production anon `GET /rest/v1/app_settings` → **200** | No |
+| Scripts repo | `main` == `origin/main` (`3ef4b89`), clean | No |
+| Client signup gate | `index.html:573` still founding-hostname only | No |
+
+**Verdict: still NOT READY.** Open: G1, G2, G3 (5 mail functions plus the signup gate), G4, G5, G7b, G8.
+Closed: G6, G7a. Shape D (Q3) still stands. **This pass changed the plan in three places:** G-C gets a
+runbook (below); G7b, left with no session after G-A, is now **G-J**; the client signup gate, left with no
+owner after G-B, is now part of **G-F**.
+
+### Found while writing the runbook: an unknown subdomain renders as the FOUNDING tenant (latent today)
+
+`TenantContext.resolve()` (`app.js:99-111`) logs `unknown tenant subdomain` and **falls through to step 4,
+`FOUNDING_TENANT`** (`app.js:142-145`). The pre-paint script sets `data-front-door="tenant"` from the hostname
+alone (`index.html:46`), so `anything.pulllist.app` would render the **tenant** front door with Ray & Judy's
+branding. **Unreachable today only because there is no wildcard** (NXDOMAIN). The moment G-C or 6.0 routes
+`*.pulllist.app` to the app, every typo and every squatted name impersonates the founding store. Phase 6
+provisional 6.1 (`tenants.status` + `resolve_tenant_by_slug` filtering) does not cover it: the gap is the
+client's fallback, not the RPC. **Not filed (Rick's call: file as F171, or fold into 6.1's scope).** For G-C it
+is a hard containment rule: the spike never routes a wildcard name to the real app.
+
+### Session G-C — runbook
+
+**Goal:** answer D4 (serving model) and give D1 a price. **Output: a decision record**, not code: a new doc
+`docs/phase-6.0-serving-model-spike.md` with measured answers, prices with source links and dates, and a
+recommendation. **Scope IN:** Cloudflare docs and pricing; read-only DNS and HTTP probes; optionally ONE
+contained live experiment (Phase 2), only on Rick's go, torn down in the same session. **Scope OUT:** any
+change to app code, `_headers`, the Pages project's custom domains, or the `rjbookstop` / `comicstore` /
+email records; any production Supabase write; filing the fallback finding without Rick.
+
+#### Step 0 — preflight (agent)
+
+`/preflight`; `git branch --show-current` == `staging`. Re-run the § 2f table's DNS row, halt if a wildcard
+already resolves (someone changed the zone).
+
+#### Step 1 — DNS inventory, read-only (agent)
+
+Through `dns.google`, record the answers for: the apex (`A`, `AAAA`, `MX`, `TXT`), `www`, `rjbookstop`,
+`comicstore`, `send`, `mta`, `resend._domainkey`, `ms1._domainkey`, `ms2._domainkey`, `_dmarc`, plus
+`_dmarc.<random>.pulllist.app` and `TXT <random>.pulllist.app`. Save as the Step 4 "before" baseline. Ask Rick
+to read the Cloudflare zone's record list and say whether any record exists that `dns.google` cannot reveal
+(for example an existing `*` record that is DNS-only, or a Worker route already on the zone).
+
+#### Step 2 — desk research (agent; cite each answer with URL and the date read)
+
+Answer, from Cloudflare's **current** docs, not memory:
+
+1. Can a **Pages** project take a wildcard custom domain (`*.pulllist.app`)? If not, is that documented?
+2. If not: does a **Worker route** `*.pulllist.app/*` plus a proxied wildcard DNS record work in front of a
+   Pages project, and what does a request for a hostname that is not a Pages custom domain receive? Can the
+   Worker serve the Pages build itself (Workers static assets) instead of proxying?
+3. **Route collision:** does a `*.pulllist.app/*` Worker route also intercept `rjbookstop.pulllist.app`, which
+   is a Pages custom domain? Route-precedence rules, and whether a no-Worker exclusion route exists.
+4. **TLS:** does Universal SSL cover first-level `*.pulllist.app` for proxied records? (Second level, e.g.
+   `*.spike.pulllist.app`, needs Advanced Certificate Manager, a paid add-on: record its price.)
+5. **DNS semantics:** explicit records take precedence over a wildcard; what a proxied wildcard answers for
+   `TXT` / `MX` / `_dmarc.<x>` (a CNAME wildcard would answer every type).
+6. **Model (b), Cloudflare for SaaS:** free custom-hostname allowance, per-hostname price after it, plan
+   requirements, and API for create/delete (the Phase 6 sweep must reclaim hostnames).
+7. **Model (c), status quo scaled:** the per-project Pages custom-domain limit on the current plan, since
+   `rjbookstop` / `comicstore` are provisioned that way today.
+8. **Workers free-tier limits** (requests/day) if every tenant page load passes through a Worker.
+
+**⏸ PAUSE → Rick** with a one-screen summary: each question answered or marked "docs unclear", plus a
+recommendation on whether Phase 2 is needed at all. If the docs answer 1–5 unambiguously, **skip Phase 2**.
+
+#### Step 3 — Phase 2, the contained live experiment (ONLY on Rick's explicit go)
+
+The experiment proves DNS + TLS + routing for a name that has no record, **without ever reaching the app**
+(the fallback above). Rick operates the Cloudflare dashboard; the agent writes the Worker and the checks.
+
+- **Worker (`pulllist-wildcard-spike`), code written by the agent and read by Rick before deploying:** if the
+  hostname matches `^spike-[a-z0-9]+\.pulllist\.app$`, return a fixed `200 text/plain` body echoing the
+  hostname and `X-Spike: 1`; **for every other hostname, `return fetch(request)` unchanged** (so a route
+  collision passes production traffic through rather than breaking it).
+- **Route:** the narrowest pattern Step 2 says is valid; `*.pulllist.app/*` only if nothing narrower works,
+  and then only with the pass-through above.
+- **DNS:** one proxied wildcard `*` record (target per Step 2's answer). Explicit records are untouched.
+- **Checks (each must be able to fail):** `curl -sv https://spike-<random>.pulllist.app/` → 200, `X-Spike: 1`,
+  a valid certificate covering the name (print the SAN); `https://rjbookstop.pulllist.app/` and
+  `comicstore` → the app's own bytes (hash `index.html` against `origin/main`, normalising Cloudflare's email
+  obfuscation as PR #159 records), **no** `X-Spike` header; Step 1's records re-queried, unchanged; and
+  `TXT` / `_dmarc` for a random name compared with the baseline.
+- **Teardown in the same session, in order:** delete the DNS record, delete the route, delete the Worker.
+  Verify: a random name is NXDOMAIN again (allow for TTL; re-query until it is, and record how long it
+  took), and `rjbookstop` / `comicstore` still serve `origin/main`'s bytes.
+- **Halt** on any unexpected result (a production hostname shows `X-Spike`, an email record changes):
+  tear down first, then report.
+
+#### Step 4 — record (agent, doc-only commit to `staging`)
+
+- `docs/phase-6.0-serving-model-spike.md`: the answers, prices with dates, the Phase 2 evidence or why it was
+  skipped, a recommendation for D4, and the per-tenant cost line D1 needs. It also lists what a real 6.0 must
+  do first: fix the unknown-slug fallback, and decide what an unclaimed name renders (404, or the apex
+  marketing page).
+- Update this doc's STATUS and § 1 G-C row, `phase-6-self-service-signup.md` § Readiness G1, and CLAUDE.md's
+  G-line. **G1 is CLOSED only if a model was proven live or the docs answered it unambiguously**; otherwise
+  it stays open with the unanswered question named.
+
+#### Completion criteria (G-C)
+
+- [ ] Step 1 baseline recorded; Step 2 questions 1–8 answered with sources or marked unclear
+- [ ] Rick's decision on Phase 2 recorded
+- [ ] If Phase 2 ran: every check result recorded, teardown verified (NXDOMAIN again, production bytes == `origin/main`)
+- [ ] Decision record committed; readiness docs updated; `/wrap-up` produced
+- [ ] The unknown-slug fallback either filed (Rick) or recorded as a 6.0 precondition
+
+#### Rollback
+
+Phase 2 only: delete the wildcard record, then the route, then the Worker. Nothing else is changed.
 
 ---
 

@@ -22,6 +22,11 @@
 > new tenant. **The sessions that close these gates are planned in `docs/pre-phase-6-gate-closure.md`**
 > (G-A tenant/settings hygiene first, runbook written).
 >
+> **Third pass 2026-10-06 (after G-D): verdict unchanged, nothing re-measured had moved.** G-C (the G1 spike) has a
+> runbook (`docs/pre-phase-6-gate-closure.md` § 2f) and is next; G7b now has a session (G-J); the client signup gate
+> is folded into G-F. **New pre-6.0 constraint:** an unknown `<slug>.pulllist.app` falls back to the FOUNDING tenant
+> (`app.js:142-145`), latent only because there is no wildcard (§ 2f).
+>
 > **Session G-B RAN 2026-10-06 (later the same day): G7a (F151) CLOSED and G3's engine half CLOSED; verdict still
 > NOT READY.** `register-tenant` no longer mints the dead secret (PR #171), and production now runs the reviewed
 > `register-tenant` (v11, F153 admin invite) and `register-customer` (v34, F72 S2a tenant-aware email), both
