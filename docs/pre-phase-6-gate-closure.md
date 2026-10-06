@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D runbook written 2026-10-06 (§ 2d), NOT STARTED; G-C, G-E..G-H NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; G-C, G-E..G-H NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -26,7 +26,7 @@ Since 10-04 only F163 work (PRs #168–#170) and the F170 filing landed; none of
 | G6 `tenants.plan` CHECK | No SQL file exists for it; column is `text NOT NULL DEFAULT 'free'` (technical-reference § 4.1). Production values still exact (`rjbookstop="pro"`, `comicstore="free"`) | Open |
 | G7a F151 | Production service-role read, **key names only**: both `comicstore` and `rjbookstop` still carry `mailerlite_webhook_secret`. **New finding about the fix:** `register-tenant/index.ts:177/196/347` still **generates, stores and returns** that secret on every new tenant, so deleting the key from today's rows alone would not close F151 | Open — wider than recorded |
 | G7b F150 | Anon `GET /rest/v1/app_settings` on production → **HTTP 200** (staging: 401) | Open |
-| G8 F164 | Creation path untraced | Open |
+| G8 F164 | Creation path untraced | Open *(2026-10-06, later: TRACED in session G-D, § 2e. Reachable, now Medium; stays open until the guard ships)* |
 
 **Also confirmed closed, so not in the plan:** F145's owed runbook item is done —
 `tenant-onboarding-runbook.md` Step 3a now carries the live hostname inventory (lines ~160–170),
@@ -46,7 +46,8 @@ Phase-6-motivated and wait on D1.
 | **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | **DONE 2026-10-06 — see § 2a for the result.** Closed G6 and the F151 rows; **did NOT close G7b** (the sweep widened F150 and Rick deferred it) | 1 session, Rick runs SQL |
 | G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A (**done**); `/promote-prod` needs Rick's explicit request. **Runbook: § 2b. DONE 2026-10-06 — see § 2c for the result.** Closed G7a and the engine half of G3; the client signup gate and the other five mail functions are still open (§ 2c) | 1 session |
 | G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change** | 1 session, Rick in Cloudflare dashboard |
-| G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything. **Runbook: § 2d** | ½ session |
+| G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything. **Runbook: § 2d. DONE 2026-10-06 — see § 2e for the result.** Did **NOT** close G8: the path is reachable (Medium), so G8 waits for G-I | ½ session |
+| **G-I** | **F164 guard** (new 2026-10-06): fix the import's two unfiltered reads, then the `preorders` trigger | G8 | **after G-D (done)**; the scripts-repo half belongs with G-G (same file, same "after the November import" reasoning, though production has no live exposure today); the trigger only AFTER the import fix is proven on staging; D1 not required for the design, but the trigger is only urgent at tenant N+1. **Plan: § 2e** | 1-2 sessions (scripts repo + one migration) |
 | G-E | **F165 soak → V5 → S3 decision** (already CLAUDE.md's "next scheduled work") | G2 | Rick's next **two** real weekly `check-dates.js` runs (first ~Fri 10-09/Sat 10-10, second a week later) | V5 with Rick, then an S3 build session if chosen |
 | G-F | **F72 email half** — the five remaining mail functions tenant-aware (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`) | G3 | after G-B (same deploy discipline proven); D1 | 1–2 sessions, real-inbox checks need Rick |
 | G-G | **F169 single-distributor import mode + F157 scoped delete** (scripts repo + one migration) | G4 | **after the November new-month import** (late Oct), so F165 S1's first real exercise runs on unchanged import code; D1 | 1 session |
@@ -485,7 +486,7 @@ ID consumed (F171 stays next free).** Rick requested the `/promote-prod` in-sess
 
 ---
 
-## 2d. Session G-D — runbook (F164 creation-path trace; written 2026-10-06, NOT STARTED)
+## 2d. Session G-D — runbook (F164 creation-path trace; written 2026-10-06; **DONE 2026-10-06, result in § 2e**)
 
 **Goal.** Answer the one question F164 left open, the one gate G8 asks: **can a client produce a
 `preorders` row whose `catalog_id` belongs to another tenant?** If yes, F164 is Medium and needs a
@@ -596,13 +597,110 @@ Record: § 13 F164 (trace, boundary text from both environments, test results, d
 
 ### Completion criteria (G-D)
 
-- [ ] Both rows, their catalog rows and both users identified (email prefixes only)
-- [ ] `reserve` usage-event check done for both rows, result stated with its limit
-- [ ] Policies, `current_tenant_id()` and `preorders` triggers read on BOTH environments
-- [ ] Reachability test run on staging with its negative control; test user and rows torn down, fresh read 0
-- [ ] Cross-tenant sweep run on both environments for every `catalog_id` table
-- [ ] Rick's disposition recorded (Medium + guard session planned, or closed); the two staging rows deleted or kept by his call
-- [ ] § 13 F164, Readiness G8, CLAUDE.md row, this doc's STATUS updated; `/wrap-up` produced
+- [x] Both rows, their catalog rows and both users identified (email prefixes only)
+- [x] `reserve` usage-event check done for both rows, result stated with its limit
+- [x] Policies, `current_tenant_id()` and `preorders` triggers read on BOTH environments
+- [x] Reachability test run on staging with its negative control; test user and rows torn down, fresh read 0
+- [x] Cross-tenant sweep run on both environments for every `catalog_id` table
+- [x] Rick's disposition recorded (Medium + guard session planned); the two staging rows deleted by his call
+- [x] § 13 F164, Readiness G8, CLAUDE.md row and this doc's STATUS updated (`/wrap-up` is the session's closing message, not a file)
+
+---
+
+## 2e. Session G-D result (2026-10-06) and the guard plan (G-I)
+
+**Ran: every step, 0 through 7. F164 is raised from Low (tentative) to MEDIUM and stays OPEN; G8 stays OPEN.
+No new finding ID consumed (F171 stays next free).** Rick's disposition on the four decisions: "defaults"
+(Medium + a guard session; import fix first; the import defect folded into F164; the two staging rows deleted).
+
+**Answer to G8's question: yes, a client can produce a cross-tenant `preorders` row, and the two staging rows
+were written by the import script, not by a customer.** Full evidence in § 13 F164 ("G-D trace"); the short form:
+
+| Question | Result |
+|---|---|
+| The rows and their users | `16bfdcb6…` and `ef0b74f3…`, 2026-09-11 22:56:51Z / 22:55:31Z. Both owners are long-lived founding-tenant staging test accounts (one non-admin, one admin). Both catalog rows are the `demoshop` copies (2026-09-03) of PRH "Primary Title" covers that have a founding twin, and each owner subscribes to exactly that series |
+| Did the app write them? | No `usage_events` of any type for either user that evening (and none staging-wide on 09-10 / 09-11), but that is **weak evidence**: the logger is fire-and-forget and the non-admin account has never logged a `reserve`. **Decisive:** 77 `weekly_shipment` rows were created one second after the second preorder, and `autoReserveSubscriptions()` reads every tenant's subscriptions and catalog rows with no `tenant_id` filter (`import-staging.js` 981 / 1004; **production's `import.js` 983 / 1005 is identical**) and stamps inserts with the run's tenant. Strong, not proven (no import log exists) |
+| The boundary (staging AND production, Rick-run) | Identical: `users manage own preorders` and `admins manage tenant preorders` check only `tenant_id = current_tenant_id()` (profile-derived, `SECURITY DEFINER`); no policy or trigger relates `catalog_id` to `tenant_id`; the only `preorders` trigger is F109's `BEFORE DELETE`; `catalog` SELECT is tenant-scoped, no `anon` policy |
+| Reachability (staging, throwaway founding customer, its own JWT) | Cannot see or fetch any `demoshop` catalog row (0 rows), **but `POST preorders` with a foreign `catalog_id` and the founding `tenant_id` returned 201, and `PATCH catalog_id` on its own row returned 200.** A foreign `tenant_id` is refused (403). Negative control 201. Torn down: 0 rows, auth 404, staging back at 82 |
+| Sweep (every table with a catalog column, both environments) | Staging 2 cross-tenant (the two rows), **production 0**. `usage_events.catalog_id` is never populated; `reservation_history` has no catalog column. Added: row tenant versus owner's profile tenant on `preorders` and `subscriptions`, **0 mismatches on both** |
+| Rows deleted (Rick: "defaults") | Both, by exact id, before-state saved, fresh read 0; staging `preorders` 82 to 80; cross-tenant rows 0 |
+
+**Two exposures, not one.** (1) **The API path:** needs an authenticated, active customer and a foreign catalog
+UUID (random v4, hidden by RLS, not in the pull feed; id exposure through four argument-taking RPCs was not
+read). (2) **The import path:** a service-role writer that has already misfired once on staging. **Production's
+exposure is latent, not zero**: all 63 subscriptions are `rjbookstop`'s and `comicstore` has no catalog rows for
+2026-09 onward, so today it cannot misfire; it will the first time another tenant has a subscription or catalog
+rows for the month an import runs, i.e. at tenant N+1.
+
+**Interim rule, no code, until G-I lands.** Before ANY import on an environment (the November production import
+first), run these two read-only queries in the SQL Editor and stop if either shows a second tenant:
+
+```sql
+SELECT tenant_id, count(*) FROM subscriptions GROUP BY tenant_id;
+```
+
+```sql
+SELECT tenant_id, catalog_month, count(*) FROM catalog GROUP BY tenant_id, catalog_month ORDER BY catalog_month DESC, tenant_id;
+```
+
+Expect one tenant in the first, and, for the month being imported, only the import tenant in the second. (On
+2026-10-06 production read exactly that; staging reads `demoshop` for 2026-09 only, which is why a 2026-10
+staging import cannot misfire.)
+
+### G-I — the F164 guard (PLANNED, NOT STARTED; its own session; order matters)
+
+1. **Import scripts first (scripts repo, both `import.js` and `import-staging.js`).** Add
+   `tenant_id=eq.${TENANT_ID}` to the subscriptions read and the catalog read in `autoReserveSubscriptions()`;
+   select `tenant_id` and make `matchSubscriptions()` skip any subscription or catalog row whose tenant differs
+   from `tenantId`, so a regression in the reads cannot reintroduce the bug (the carry-forward `PATCH` takes its
+   `match.id` from the same list, so it is covered by the same change). Unit tests with two tenants' rows where
+   the **same `series_name` exists in both** (the real shape), negative-controlled (remove the filter, see red).
+   **Audit every other service-role read in both scripts for the same omission** rather than assuming these two
+   are the only ones (G-D grepped only for these patterns). Gate: a staging `--no-write` run that first
+   reproduces the old behaviour on the unchanged code (a control that shows a `demoshop` row in "To insert"),
+   then shows none. Same constraint as G-G: leave the November production import on unchanged code unless Rick
+   pulls this forward; production has no live exposure to justify hurrying.
+2. **Then the database guard (one migration under `docs/sql/`, both environments, Rick-run).** **Recommended: a
+   trigger** on `preorders`, `BEFORE INSERT OR UPDATE OF catalog_id, tenant_id`, `FOR EACH ROW`, raising `23514`
+   when no `catalog` row has `id = NEW.catalog_id AND tenant_id = NEW.tenant_id`; `SECURITY DEFINER` with a
+   pinned `search_path` (so the lookup does not depend on the caller's RLS visibility, which hides foreign rows
+   from customers); **no service-role exemption** (the service role is the writer that produced the rows; F109's
+   delete exemption is the wrong precedent for this half); an error message that does not echo the foreign
+   tenant. `UPDATE OF fulfilled` (auto-fulfil) does not fire it. Pre-flight: the G-D Step 5 / 5b sweeps must read
+   0 on both environments immediately before. Rollback: `DROP TRIGGER`, `DROP FUNCTION`.
+   **Alternative to evaluate, not the default: a composite foreign key** `(catalog_id, tenant_id) REFERENCES
+   catalog (id, tenant_id)` (needs `UNIQUE (id, tenant_id)` on `catalog`). It is declarative and covers the
+   service role with no function, but **PostgREST resource embedding is the untested risk**: a second FK between
+   `preorders` and `catalog` makes unhinted embeds ambiguous (`PGRST201`), and replacing the single-column FK
+   changes the relationship the app's `catalog:catalog_id(...)` hints resolve against. Read `app.js` and every
+   page's embeds before choosing it. `usage_events` and `weekly_shipment` (nullable `catalog_id`, `ON DELETE SET
+   NULL`) cannot take a composite FK as is (the `SET NULL` would null a `NOT NULL` tenant); both read 0
+   cross-tenant today, so they need no guard, only a re-sweep.
+3. **Why the order matters.** With the trigger first, the importer's batched `POST` fails as a whole on a
+   multi-tenant environment, and the script logs "Auto-reserve batch failed" and carries on, silently skipping
+   those subscribers. Verify after both: the G-D Step 4 reachability test re-run (the foreign-id `POST` and the
+   `PATCH` now refused, the negative control still 201), and a normal staging auto-reserve still inserts.
+4. **Record:** § 13 F164 RESOLVED, Phase 6 gate G8 closed, `technical-reference.md` § 7.1 (the `preorders`
+   section) gains the trigger.
+
+### NOT verified, stated plainly
+
+(a) **Production was never written**, so its API boundary is identical by policy text only; the 201 / 200 results
+are staging's. (b) **An admin JWT was not tested** (same tenant-only policy shape). (c) **The import as the
+writer is strong inference, not proof**: timing, the subscriptions, the standard-cover shape and the code agree,
+but no import log survives. (d) **The cross-tenant availability effect** (a foreign reference blocking the other
+tenant's catalog deletes via the FK `NO ACTION` and `purge_stale_catalog()`'s own-tenant guard) is inferred from
+function text, **not tested**. (e) **Four argument-taking RPCs were not read** (`get_pull_feed_week`,
+`get_popular_series`, `resolve_tenant_by_slug`, `is_maintenance_mode`), so id exposure through them is not
+excluded. (f) The `usage_events` log's absence is weak evidence on its own (fire-and-forget; one account never
+logs reserves; a silent day). (g) The scratch scripts (`gd-*.mjs`) lived in the session scratchpad and are not
+committed; the deleted rows' before-state is in the same scratchpad, session-temporary (the two ids and shapes are
+recorded here and in § 13 F164, which is enough to recreate them).
+
+**Hand-off.** G-D is done and **G8 is still open**; the path forward is G-I above, then G8 closes. Phase 6 verdict
+unchanged: **NOT READY** (G1, G2, G4, G5, G8, the rest of G3 and G7b stand; Shape D stands). **Next in this plan
+that needs no Phase 6 decision: none remaining except G-I's scripts half, which waits for the November import.**
+G-E (the F165 soak) is time-gated on Rick's next two weekly `check-dates.js` runs.
 
 ---
 
@@ -646,7 +744,8 @@ publishing any record**; output is a decision record with prices, not code. `Ten
 script behaviour for an unknown slug (what `<new>.pulllist.app` renders before the tenant exists) is
 part of the answer.
 
-**G-D.** The two staging rows (founding `tenant_id`, `demoshop` `catalog_id`, test accounts,
+**G-D.** *(DONE 2026-10-06, result in § 2e: the hypothesis below, a profile-versus-URL tenant mismatch, was ruled out
+by `current_tenant_id()` reading the profile; the real writer was the import script.)* The two staging rows (founding `tenant_id`, `demoshop` `catalog_id`, test accounts,
 2026-09-11). Hypothesis to test first: a user whose profile tenant differs from the URL tenant
 (`?t=demoshop`) — the catalog is read under one tenant and `Preorders.add()` writes
 `TenantContext.current().id` from another. Does RLS's `preorders` INSERT check pin `catalog_id` to the
