@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B runbook written 2026-10-06 (§ 2b), NOT STARTED; G-C..G-H NOT STARTED | staging=G-A 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-C..G-H NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -44,7 +44,7 @@ Phase-6-motivated and wait on D1.
 | # | Session | Closes | Gate / precondition | Size |
 |---|---|---|---|---|
 | **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | **DONE 2026-10-06 — see § 2a for the result.** Closed G6 and the F151 rows; **did NOT close G7b** (the sweep widened F150 and Rick deferred it) | 1 session, Rick runs SQL |
-| G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A (**done**); `/promote-prod` needs Rick's explicit request. **Runbook: § 2b** | 1 session |
+| G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A (**done**); `/promote-prod` needs Rick's explicit request. **Runbook: § 2b. DONE 2026-10-06 — see § 2c for the result.** Closed G7a and the engine half of G3; the client signup gate and the other five mail functions are still open (§ 2c) | 1 session |
 | G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change** | 1 session, Rick in Cloudflare dashboard |
 | G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything | ½ session |
 | G-E | **F165 soak → V5 → S3 decision** (already CLAUDE.md's "next scheduled work") | G2 | Rick's next **two** real weekly `check-dates.js` runs (first ~Fri 10-09/Sat 10-10, second a week later) | V5 with Rick, then an S3 build session if chosen |
@@ -245,7 +245,7 @@ No rotation: the value authorizes nothing since 2026-08-30. **F151 stays OPEN af
 
 ---
 
-## 2b. Session G-B — runbook (engine to production; written 2026-10-06, NOT STARTED)
+## 2b. Session G-B — runbook (engine to production; written 2026-10-06; **DONE 2026-10-06, result in § 2c**)
 
 **Goal.** `register-tenant` stops generating, storing and returning the dead `mailerlite_webhook_secret`
 (closes **F151**), and production finally runs the reviewed `register-tenant` (F153 admin invite) and
@@ -378,21 +378,110 @@ rows. Doc-only commit to `staging`, pushed. `/wrap-up`.
 
 ### Completion criteria (G-B)
 
-- [ ] Step 0 re-measure matched; Step 1 rollback artifacts saved and hashed
-- [ ] `register-tenant` edited; `grep webhook` shows only comments; committed via `--ff-only` to `staging`
-- [ ] Harness control observed **red** on staging v22, then **green** after the staging deploy; invite harness `invite_sent` true; 0 orphaned auth users
-- [ ] Staging `verify_jwt` OFF before and after; deployed artifact hash == committed source
-- [ ] Runbook + technical-reference updated; F151 recorded
-- [ ] `/promote-prod` run on Rick's explicit request, PR = `register-tenant/index.ts` + docs only (or explicitly not requested — then F151 stays staging-only and Steps 5–6 are carried forward)
-- [ ] Production `register-tenant` and `register-customer` deployed from `origin/main`'s tree; `verify_jwt` OFF before/after both; artifact hashes == `origin/main`
-- [ ] 6a and 6b run with teardown verified by fresh read, or each recorded as a skipped residual with Rick's reason
-- [ ] Docs, CLAUDE.md and status token updated; `/wrap-up` produced
+- [x] Step 0 re-measure matched; Step 1 rollback artifacts saved and hashed
+- [x] `register-tenant` edited; `grep webhook` shows only comments; committed via `--ff-only` to `staging` (`784a51c`)
+- [x] Harness control observed **red** on staging v22 (8 of 8 new assertions), then **green** (15/15) after the staging deploy (v23); invite harness `invite_sent` true; 0 orphaned auth users
+- [x] Staging `verify_jwt` OFF before and after; deployed artifact hash == committed source (`8748d2c0f19da63a`)
+- [x] Runbook + technical-reference updated; F151 recorded
+- [x] `/promote-prod` run on Rick's explicit request, PR #171 = `register-tenant/index.ts` + docs only (9 files, read on GitHub)
+- [x] Production `register-tenant` (v10 to v11) and `register-customer` (v33 to v34) deployed from `origin/main`'s tree; `verify_jwt` OFF before/after both; artifact hashes == `origin/main`
+- [x] 6a and 6b run with teardown verified by fresh read (neither skipped; see § 2c for the three 6a attempts and 6b's workaround)
+- [x] Docs, CLAUDE.md and status token updated; `/wrap-up` produced (this commit)
 
 ### Rollback
 
 - Staging: `git revert` the fix commit and redeploy (`--no-verify-jwt`); nothing else depends on the field.
 - Production functions: redeploy from Step 1's downloaded v10 / v33 with `--no-verify-jwt`.
 - Production test rows from Step 6: the runbook's FK-ordered teardown.
+
+### 2c. Session G-B result (2026-10-06)
+
+**Ran: every step, 0 through 7, neither smoke skipped. F151 is RESOLVED on BOTH environments. No new finding
+ID consumed (F171 stays next free).** Rick requested the `/promote-prod` in-session and merged PR #171.
+
+- **Step 0.** Matched the § 2b table exactly: production `register-tenant` v10 / `register-customer` v33,
+  staging v22 / v36, blobs `b0a649b9f6` / `e83ee5562d` on both branches, and no tenant on either project
+  carrying the key (names only). `/preflight` clean; one out-of-scope doc flag noted and left alone
+  (`order-restriction-alert-badge.md` reads IN PROGRESS with F132 and F133 both resolved-looking; F133
+  variant (b) was re-dispositioned rather than closed, so probably a false flag).
+- **Step 1.** Production v10 / v33 downloaded to the session scratchpad before anything else. Hashes:
+  `register-tenant` `f173bbf9be064cab`, `register-customer` `0fe8af2683fa011c`. Both equal the expected
+  pre-F153 / pre-S2a sources (`d4d5250~1`, `efadbf0~1`) **modulo CR**: a download lands CRLF on this Windows
+  tree, so compare modulo CR or against the working-tree file. **The scratchpad is session-temporary:** the
+  rollback is re-derivable from git at those two refs (hash-equal), which is what a later session should use.
+- **Step 2.** `784a51c`: secret generation removed, `settings: {}` explicit, response is
+  `{ tenant_id, admin_user_id, slug, invite_sent }`, header docblock corrected; `grep -n webhook` hits the two
+  comment lines only. The first wording of my own comment overstated F151's read claim ("readable by every
+  authenticated user"); softened to "can be read ... (inferred, not yet probed with a real JWT)" before commit.
+- **Step 3.** Extended `f72-s0-plan-allowlist.mjs` (two assertions per created tenant, key NAMES only): **red 8
+  of 8 on staging v22** (response keys included `webhook_secret`, `settings` held `mailerlite_webhook_secret`),
+  the seven original assertions green; **15/15 green on v23** after the deploy. `verify_jwt` read OFF by
+  behaviour before and after (the function's own `{"error":"Unauthorized"}`). Deployed artifact byte-identical
+  to the committed source (`8748d2c0f19da63a`). `f72-admin-invite-verify.mjs` 7/7, `invite_sent` true. Fresh read:
+  0 harness tenants, profiles or auth users (967 auth users scanned, paginated).
+- **Step 4.** Runbook and technical-reference updated (`4e5f7b6`), old wording kept visible.
+- **Step 5.** **PR #171, merge `3fadc00`** (parents `b5be5d7` main + `08d1f4e`; staging tip `4e5f7b6`). Merge
+  RESULT asserted per file: `register-tenant/index.ts` == staging; `register-customer/index.ts`, `app.js` and
+  every page identical on both branches, so the `merge=ours` driver had nothing to discard; `config.js` ==
+  `origin/main` (prod ref x1, staging ref x0); `supabase/migrations/` still 2 files; the eight docs == staging.
+  PR file list read **on GitHub itself**: 9 files, no `config.js`, nothing under `supabase/migrations/`,
+  `MERGEABLE`, Cloudflare check passed. **Write-smoke skipped, from the diff:** nothing in it touches `Preorders`
+  or the reserve path. Production deploys from a worktree of `origin/main` (not the working tree): `register-tenant`
+  **v10 to v11**, `register-customer` **v33 to v34**, each with `verify_jwt` probed by behaviour OFF before and
+  after and deployed `--no-verify-jwt`; read-back hashes `8748d2c0f19da63a` (== staging v23) and `931c29e433431936`
+  (CR-stripped `bb0a3a51599a12f4`, the S2a hash recorded 2026-09-03). The worktree's admin folder under `.git/`
+  resisted removal once (a OneDrive reparse-point lock) and was then removed.
+- **6a, `register-tenant` on production, three attempts, and the first two are worth keeping.** (1) The address first
+  supplied (the operator's own Outlook address) already belongs to an **active `rjbookstop` customer**, so the function
+  returned **409 `admin_email_exists`**. Checked by fresh read instead of assumed: **no tenant row was left**
+  (the function creates the tenant first, so this exercised its compensation path for free), the existing
+  customer's profile and auth user were untouched (compensation only deletes an auth user it created itself),
+  and no email was sent (the invite follows the profile insert). (2) The operator submitted the address
+  **with literal angle brackets**, copied from **my placeholder**, which returned a 500 `Failed to create admin user`;
+  **reproduced on staging**: GoTrue itself answers `400 validation_failed: invalid format`, and a clean address on
+  the same code returns 200. Production was unchanged. (3) A clean address succeeded: response keys exactly
+  `admin_user_id, invite_sent, slug, tenant_id`, `invite_sent` true; service-role read: `plan` `free` (the real
+  writer passed `tenants_plan_check` on production), `settings` `{}`, `branding` `{}`, one profile (`is_admin`,
+  `active`); `settings` empty on all 3 tenants. **Delivered email:** From `PULLLIST <noreply@pulllist.app>`,
+  `dkim=pass` `pulllist.app` (selector `resend`) plus `amazonses.com`, `spf=pass` via `send.pulllist.app`,
+  `dmarc=pass`, links direct (no click tracker), no tracking pixel, shop link the apex `?t=<slug>` (not an
+  unprovisioned subdomain). Rick ran the FK-ordered teardown; **fresh service-role read: tenant, profile, every
+  tenant-scoped table 0, auth user 404, production back to exactly `comicstore` and `rjbookstop`.**
+- **6b, `register-customer` free-tier email on production.** `comicstore.pulllist.app` shows **no "Create one"
+  link, by design**: `index.html:573` reveals it only when the hostname slug is the founding tenant's. Reached
+  the live path without any code change by revealing the link in DevTools (the click handler is bound
+  unconditionally and the submit posts the page's resolved slug). **Email:** From `The Comic Store
+  <noreply@pulllist.app>`, subject "The Comic Store — Your PULLLIST access is being set up", footer "The Comic
+  Store · Sent via the PullList pre-order system" with **no phone and no address**, **no Ray & Judy's name,
+  phone, address or city anywhere**, `dkim` / `spf` / `dmarc` all pass. The database agreed: one profile in
+  `comicstore`, `pending`, non-admin, no preorders or subscriptions. Deleted with Rick's go by a guarded
+  service-role script (exact address, exactly one pending non-admin `comicstore` profile, matching auth user, no
+  preorders or subscriptions, else abort); **fresh read: 0 profiles, auth 404, 0 pending in `comicstore`.**
+- **Two credential-in-the-paste events, both bounded.** The pasted email in 6a and again in 6b carried a live
+  one-time link token. Neither was repeated anywhere, and deleting the auth user kills the token (done in both
+  cases within the session). **For a future smoke, paste headers only (stop at the first blank line) and replace
+  any link with `[link]`.** *(My 6b instruction asked for exactly that and the whole message came anyway; the
+  instruction should say "do not paste the body".)*
+- **Observed, deliberately NOT filed and NOT fixed (no ID consumed; Rick's call):** (1) **the client signup gate
+  is still founding-only** (`index.html:573`), so although the server path and the free-tier email are now live on
+  production, no non-founding customer can reach native signup; Phase 6 needs it relaxed, and it belongs with the
+  rest of G3. (2) `register-tenant` validates the admin address only for an `@`, so a malformed address surfaces as
+  a 500 rather than a 400 (operator-facing, and the tenant is compensated away); a stricter check is a small change.
+- **NOT verified, stated plainly:** (a) the set-password link was **not clicked**, so the apex set-password page
+  was not seen for a recovery link on production; (b) **inbox versus spam is not established** for either email
+  (the headers do not say), and both went to a PrivateEmail-hosted mailbox, **not Microsoft, so F152's Outlook
+  question is untouched**; (c) the `plan = 'pro'` path was not exercised on production (only `free`); (d) the paid
+  branch of `register-customer`'s email was **not live-tested** (staging's V6 proved it byte-identical to the old
+  template; a test signup on `rjbookstop` would land in the real store's Pending panel); (e) the full Playwright
+  suite was **not run**: no web byte changed and the suite tests the deployed site, so the evidence is the harnesses
+  above, not a green suite; (f) no reserve write-smoke (the diff never touches it); (g) a real Turnstile pass was
+  done by Rick's hands in 6b, so that gate is exercised, but only once.
+- **Hand-off.** **G7a (F151) closed.** **G3's engine half closed** (production runs F153's invite and S2a's
+  tenant-aware email). **Still open in G3:** the client signup gate (observation 1), and the five other mail
+  functions (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`), which are
+  session G-F. **G7b (F150) is unchanged and still the open half of G7.** Verdict: **Phase 6 still NOT READY**
+  (G1, G2, G4, G5, G8, the rest of G3 and G7b stand; Shape D stands). **Next in this plan that needs no Phase 6
+  decision: G-D (F164 trace).**
 
 ---
 

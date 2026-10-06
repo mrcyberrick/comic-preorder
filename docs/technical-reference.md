@@ -2381,8 +2381,8 @@ Returns `{ tenant_id, admin_user_id, slug, invite_sent }` on success (`invite_se
 is F153's admin set-password email; see § 13 F153). *(Previously `{ tenant_id,
 admin_user_id, slug, webhook_secret }`, then `{ ..., webhook_secret, invite_sent }`.
 **`webhook_secret` was removed from the response by F151 on 2026-10-06**: deployed on
-staging that day; production runs the older shape until session G-B Step 5 deploys
-it, see § 13 F151.)*
+staging that day and on production later the same day (v11, PR #171), see § 13 F151.
+Production's v10, which still returned it, ran until then.)*
 
 **`approve-customer`**: admin-only state change from pending to active.
 Verifies the caller is admin via service-role profile lookup, updates
@@ -5745,9 +5745,21 @@ reasoning — only the disposition changed, not the diagnosis.
   hashes **byte-identical** to the committed source (`8748d2c0f19da63a`; the git blob matches it modulo the
   CRLF the Windows working tree adds). `f72-admin-invite-verify.mjs` read `invite_sent: true` (7/7). A fresh
   read afterwards found 0 harness tenants, 0 profiles and 0 harness auth users (967 scanned, paginated).
-  **Production is untouched at this point: v10 still returns and stores the key.** The sibling harness's
-  printout used to *add* a `webhook_secret: '[redacted]'` key whether or not the response carried one; fixed
-  so it no longer implies the field exists.
+  **Production was untouched at that point: v10 still returned and stored the key** *(superseded the same day,
+  next bullet)*. The sibling harness's printout used to *add* a `webhook_secret: '[redacted]'` key whether or not
+  the response carried one; fixed so it no longer implies the field exists.
+- **UPDATE 2026-10-06, later the same session: F151 IS RESOLVED ON BOTH ENVIRONMENTS.** Promoted as **PR #171
+  (merge `3fadc00`)** at Rick's explicit request, then `register-tenant` was deployed to production from a
+  worktree of `origin/main` (**v10 to v11**, `--no-verify-jwt`; `verify_jwt` read OFF by behaviour before and
+  after; downloaded artifact hash `8748d2c0f19da63a`, equal to `origin/main` and to staging's v23).
+  **Measured on production, not inferred:** a real throwaway tenant created through the deployed function
+  returned exactly `admin_user_id, invite_sent, slug, tenant_id` with `invite_sent` true, and a service-role read
+  of the new row showed `plan` `free`, `settings` `{}` (zero keys), `branding` `{}`; across all 3 tenants every
+  `settings` was empty. The tenant was then torn down FK-ordered (Rick ran the SQL) and a fresh read confirmed
+  tenant, profile and every tenant-scoped table 0 and the auth user 404. **Still unprobed, as filed:** the
+  authenticated-read claim (no real user JWT was ever used; a column-level GRANT on `tenants` would flip it). It
+  matters much less now: the writer no longer puts anything there and every existing row is `{}`. **No finding ID
+  consumed; F171 stays next free.** Record: `docs/pre-phase-6-gate-closure.md` § 2c.
 - **Related:** **F72** (whose planning surfaced this — `docs/f72-multi-tenant-branding.md` § 6).
   **F73 / F74** (the webhook-secret credential-handling lineage — this is the same secret, now
   outliving its own feature). **F150** (filed one day earlier, same "found during planning, filed not
@@ -5806,7 +5818,7 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F153 — `register-tenant` created a new tenant's admin account with no way to sign in at all
 
-- **2026-09-29: the SOURCE is promoted to production (PR #159, merge `5b661ff`) but the fix is NOT DEPLOYED.** It lives in the `register-tenant` Edge Function, and Edge Functions deploy from the working tree, not from a branch. Production still runs the 2026-09-02 S0 deploy (v10), so a tenant created there today still gets no invite email. Deploying is Rick's call; read the live `verify_jwt` from the dashboard first (F93).
+- **2026-10-06: DEPLOYED TO PRODUCTION (session G-B), so F153 is now RESOLVED on BOTH environments.** `register-tenant` **v11** on production (from a worktree of `origin/main`, `--no-verify-jwt`, `verify_jwt` OFF before and after by behaviour, artifact hash `8748d2c0f19da63a` equal to `origin/main`). **Measured live on production with a real throwaway tenant:** `invite_sent` **true**; the delivered email read `From: PULLLIST <noreply@pulllist.app>`, `dkim=pass` for `pulllist.app` (selector `resend`) and `amazonses.com`, `spf=pass`, `dmarc=pass`, direct links (no click tracker), no tracking pixel, and the shop link is the apex `?t=<slug>` URL. The tenant was torn down and a fresh read confirmed 0 rows and the auth user 404. **Not verified:** the set-password link was not clicked, and inbox versus spam is not established (the receiving server was PrivateEmail-hosted, not Microsoft, so F152 is untouched). The invite's wording in this entry still describes what was designed 2026-09-03; the same deploy also removed F151's `webhook_secret` from the response, so the production response is now `{ tenant_id, admin_user_id, slug, invite_sent }`. Record: `docs/pre-phase-6-gate-closure.md` § 2c. *(Before this deploy this bullet read: "2026-09-29: the SOURCE is promoted to production (PR #159, merge `5b661ff`) but the fix is NOT DEPLOYED. It lives in the `register-tenant` Edge Function, and Edge Functions deploy from the working tree, not from a branch. Production still runs the 2026-09-02 S0 deploy (v10), so a tenant created there today still gets no invite email. Deploying is Rick's call; read the live `verify_jwt` from the dashboard first (F93).")*
 - **Status:** filed AND RESOLVED same session, 2026-09-03. Found while answering a plain question
   ("how does first login work?") — not a scoping session, not a scheduled audit.
 - **What happened, measured, not inferred.** `register-tenant/index.ts` (259 lines, full file read)
@@ -5855,8 +5867,9 @@ reasoning — only the disposition changed, not the diagnosis.
   uncommitted): the new shop's own name renders, the apex link is always used, no founding-tenant
   literal appears anywhere, a hostile `display_name` is HTML-escaped rather than injected, one
   assertion negative-control tested. Unit suite 279/279 (unchanged — no import-script code touched).
-- **Where:** staging only (`puoaiyezsreowpwxzxhj`). **Not production** — separate explicit request
-  per CLAUDE.md § Staging Only.
+- **Where:** staging (`puoaiyezsreowpwxzxhj`) when fixed; **production (`plgegklqtdjxeglvyjte`) since
+  2026-10-06**, see the first bullet. *(Previously: "staging only. **Not production** — separate explicit
+  request per CLAUDE.md § Staging Only.")*
 - **Related:** **F72** (found while working through F72's own free-tier resequence, but scoped
   separately — this is a missing onboarding mechanism, not a branding leak). **F130** (the
   orphaned-auth-user failure mode this fix's own teardown checked against). **F145** (the
