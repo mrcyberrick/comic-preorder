@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B..G-H NOT STARTED | staging=G-A 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B runbook written 2026-10-06 (§ 2b), NOT STARTED; G-C..G-H NOT STARTED | staging=G-A 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -44,7 +44,7 @@ Phase-6-motivated and wait on D1.
 | # | Session | Closes | Gate / precondition | Size |
 |---|---|---|---|---|
 | **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | **DONE 2026-10-06 — see § 2a for the result.** Closed G6 and the F151 rows; **did NOT close G7b** (the sweep widened F150 and Rick deferred it) | 1 session, Rick runs SQL |
-| G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A; `/promote-prod` needs Rick's explicit request | 1 session |
+| G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A (**done**); `/promote-prod` needs Rick's explicit request. **Runbook: § 2b** | 1 session |
 | G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change** | 1 session, Rick in Cloudflare dashboard |
 | G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything | ½ session |
 | G-E | **F165 soak → V5 → S3 decision** (already CLAUDE.md's "next scheduled work") | G2 | Rick's next **two** real weekly `check-dates.js` runs (first ~Fri 10-09/Sat 10-10, second a week later) | V5 with Rick, then an S3 build session if chosen |
@@ -245,6 +245,157 @@ No rotation: the value authorizes nothing since 2026-08-30. **F151 stays OPEN af
 
 ---
 
+## 2b. Session G-B — runbook (engine to production; written 2026-10-06, NOT STARTED)
+
+**Goal.** `register-tenant` stops generating, storing and returning the dead `mailerlite_webhook_secret`
+(closes **F151**), and production finally runs the reviewed `register-tenant` (F153 admin invite) and
+`register-customer` (F72 S2a tenant-aware email) that have sat on `main` undeployed since 2026-09-03.
+
+**Measured at planning (2026-10-06), so the session can check it has not moved:**
+
+| Fact | Value |
+|---|---|
+| Production deployed versions | `register-tenant` **v10** (2026-09-03 02:00Z, S0 build, no invite); `register-customer` **v33** (2026-09-02, pre-S2a) |
+| Staging deployed versions | `register-tenant` **v22** (2026-09-03 20:04Z); `register-customer` **v36** (2026-09-03 16:03Z) |
+| Source | Last commits: `register-tenant` `d4d5250` (F153), `register-customer` `efadbf0` (S2a). Blobs identical on `origin/main` and `origin/staging` (`b0a649b9f6` / `e83ee5562d`) |
+| Writer of the dead key | `register-tenant/index.ts:176-177` (generate), `:196` (`settings: { mailerlite_webhook_secret }`), `:347` (`webhook_secret` in the response); header docblock `:8` describes it |
+| Consumers of `webhook_secret` | **None functional.** Local harnesses `f72-admin-invite-verify.mjs`, `f72-demo-tenant-setup.mjs`, `f72-s0-plan-allowlist.mjs` only redact or ignore it. Docs that describe it: `tenant-onboarding-runbook.md` (lines ~11, 38, 70, 73, 203-204) and `technical-reference.md` (~2368, 2378, and § 13 F151) |
+| Production secrets present (names only) | `APP_BASE_URL`, `FOUNDING_TENANT_ID`, `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME`, `RESEND_API_KEY`, `TENANT_PROVISION_SECRET`, `TURNSTILE_SECRET_KEY` — everything both functions read. Dormant, **out of scope**: `MAILERLITE_WEBHOOK_SECRET`, `MAILERSEND_API_KEY` (F99's optional M8) |
+| Promotion shape | `origin/staging` is 4 commits ahead of `origin/main`; its only non-doc difference is the expected `config.js` + `supabase/migrations/` asymmetry (F125). Every `docs/sql` file reads `prod=APPLIED` or `N/A`, so `/promote-prod` step 0 is clear. **The promotion will carry exactly `register-tenant/index.ts` plus docs** |
+
+**Scope IN:** the `register-tenant` edit; its staging deploy; the doc updates; one `/promote-prod`
+(**only on Rick's explicit request in-session**); production deploys of `register-tenant` and
+`register-customer`; the production smokes in Step 6 (each Rick's go).
+**Scope OUT:** any other Edge Function (G-F), F150 (deferred), deleting dormant secrets, any client
+or SQL change, any change to `register-customer`'s source. Stop and ask for anything else.
+
+### Step 0 — preflight and re-measure (agent, read-only)
+
+`/preflight`; `git branch --show-current` = `staging`. Re-run `supabase functions list` on both projects
+and the blob comparison above; **halt if any version or blob differs from the table** (someone deployed
+or edited in between). Re-confirm production `tenants` carry no `mailerlite_webhook_secret` key (service
+role, key names only), so Step 6's "no key" result can be attributed to the new code.
+
+### Step 1 — save the production rollback artifacts FIRST (agent, read-only)
+
+```bash
+supabase functions download register-tenant   --project-ref plgegklqtdjxeglvyjte --workdir <scratch>/rollback-prod
+supabase functions download register-customer --project-ref plgegklqtdjxeglvyjte --workdir <scratch>/rollback-prod
+```
+
+Record each `index.ts` sha256. These are the **exact** v10 / v33 bytes production runs today and the
+rollback source if Step 5 misbehaves (redeploy them with `--no-verify-jwt` from that workdir). Expected:
+`register-customer` should match `git show efadbf0~1:supabase/functions/register-customer/index.ts`
+and `register-tenant` should match `git show d4d5250~1:...`; **record, don't halt,** if they differ — the
+download is authoritative. The repo tree must not be touched by the download (it goes to scratch).
+
+### Step 2 — the code change (feature branch → staging)
+
+`git checkout -B fix/f151-register-tenant-secret refs/heads/staging` (the bare `staging` refname is
+ambiguous; see Known Issues). In `supabase/functions/register-tenant/index.ts`:
+- delete the secret generation (`:176-177`);
+- insert `settings: {}` in place of `settings: { mailerlite_webhook_secret: webhookSecret }` (`:196`) —
+  keep the key explicit so a reader sees the choice; the column default is also `'{}'`;
+- drop `webhook_secret: webhookSecret,` from the success response (`:347`);
+- correct the header docblock (`:8`) so it no longer promises a webhook secret, naming F151.
+
+`grep -n "webhook" supabase/functions/register-tenant/index.ts` afterwards must return **only** the new
+explanatory comment(s). No other file in `supabase/` changes. Commit (`fix(F151): ...`, Bash heredoc),
+`git merge --ff-only` into `staging`. **Do not push yet** — Step 3 needs the old deploy as its control.
+
+### Step 3 — staging: control red, deploy, then green
+
+1. **Extend `f72-s0-plan-allowlist.mjs`** (local-only harness) with two assertions per created tenant:
+   the response object has **no `webhook_secret` key**, and the tenant's `settings` read back by service
+   role has **zero keys**. Run it **now, against staging's current v22**: the two new assertions must go
+   **red** (that is the negative control, for free) and every existing assertion stays green. Teardown
+   must still leave 0 tenants / 0 profiles / 0 orphaned auth users.
+2. **Measure `verify_jwt` by behaviour** before deploying: an unauthenticated `POST` to
+   `/functions/v1/register-tenant` → the function's own `{"error":"Unauthorized"}` means **OFF**; the
+   gateway's `{"code":401,"message":"Missing authorization header"}` means ON. Expected OFF.
+3. Deploy: `supabase functions deploy register-tenant --project-ref puoaiyezsreowpwxzxhj --no-verify-jwt`
+   (only if step 2 read OFF; otherwise halt — the CLI default is ON, the F93 hazard). Re-probe → still OFF.
+4. **Read back the artifact:** `functions download` to scratch; sha256 must equal the committed
+   `index.ts`.
+5. Re-run the extended `f72-s0-plan-allowlist.mjs` → **all green** (7 original + the new ones);
+   `f72-admin-invite-verify.mjs` → `invite_sent` true. Fresh read: 0 harness tenants, 0 orphaned auth users.
+6. `git push origin staging`.
+
+### Step 4 — docs (staging, doc-only commit)
+
+- `tenant-onboarding-runbook.md`: Step 1's expected response becomes
+  `{ tenant_id, admin_user_id, slug, invite_sent }`; the "save the first four values" line and the
+  credential-rule lines (~11, 38, 73) stop referring to a `webhook_secret`; the § ~203 note says the field
+  is gone as of this date (keep the old wording visible, per convention).
+- `technical-reference.md`: `register-tenant` description (~2368) and return shape (~2378); § 13 F151 →
+  **RESOLVED on staging** (production after Step 5), with the measurements.
+- This doc: § 2c result (written at the end), STATUS token.
+
+### Step 5 — promotion and production deploys
+
+1. **⏸ PAUSE → Rick:** ask for an explicit `/promote-prod`. Without it, stop here with staging done.
+2. `/promote-prod` as the skill runs it. Assertions specific to this one: the merge RESULT's
+   `register-tenant/index.ts` == staging's; `register-customer/index.ts` unchanged and == staging's;
+   `app.js` and every page identical on both branches; PR file list read **on GitHub itself** =
+   `register-tenant/index.ts` + docs only, no `config.js`, nothing under `supabase/migrations/`.
+   Write-smoke: **skipped** — the diff never touches `Preorders` or the reserve path (state it from the diff).
+3. Deploy **from `origin/main`'s tree, not the working tree**: `git worktree add <scratch>/main-tree
+   origin/main`, deploy with `--workdir <scratch>/main-tree`, remove the worktree after.
+4. For **each** of `register-tenant` and `register-customer` on production (`plgegklqtdjxeglvyjte`):
+   behaviour-probe `verify_jwt` (for `register-customer`, an unauthenticated `POST {}` → the function's
+   own validation/Turnstile error = OFF; the gateway's message = ON); expected **OFF** for both; deploy with
+   `--no-verify-jwt`; re-probe; `functions download` to scratch and sha256 == `origin/main`'s `index.ts`;
+   `functions list` shows the version advanced.
+5. **If any probe or hash fails:** redeploy that function from Step 1's rollback artifact and halt.
+
+### Step 6 — production smokes (each one Rick's go; skipped ones are recorded as residuals)
+
+- **6a `register-tenant` (recommended — first production run of the F153 invite and of G-A's constraint
+  with the real writer).** Agent prepares the curl from the runbook; **Rick substitutes the operator
+  secret and runs it**, creating a throwaway tenant (slug e.g. `gb-smoke-1006`, `plan` omitted, admin
+  email a Rick-controlled inbox). Rick pastes the response; agent confirms the keys are exactly
+  `tenant_id, admin_user_id, slug, invite_sent` and `invite_sent` is `true`. Service-role read: `settings`
+  has zero keys, `plan` = `free`. Rick checks the inbox: invite arrived (and whether in spam — F152 is
+  about Outlook), delivered headers show `From: PULLLIST <noreply@pulllist.app>` with `dkim=pass` for
+  `pulllist.app`, the link lands on the apex set-password page (do not need to complete it). **Teardown**
+  per `tenant-onboarding-runbook.md` § Rollback, FK-ordered, Rick-run; then a fresh read: 0 rows for that
+  tenant id and the auth user gone (404).
+- **6b `register-customer` free-tier email (recommended).** Rick signs up a test customer at
+  `comicstore.pulllist.app` (the `free` tenant; never the real store, whose Pending panel staff watch) with a
+  Rick-controlled inbox. The email's from-name, subject and greeting carry **comicstore's display name**;
+  no Ray & Judy's name, phone or address anywhere. Then delete the pending profile and its auth user
+  (service role, Rick's go), fresh read 0. The paid branch (`rjbookstop`) is **not** live-tested: S2a's
+  harness proved its output byte-identical to the old template (V6), and a test signup there would land in
+  the real store's Pending panel.
+
+### Step 7 — record
+
+§ 2c result here; § 13 F151 **RESOLVED both environments** (or staging-only if Step 5 did not run);
+§ 13 F153 production half; F72 S2a deployed on production; CLAUDE.md: a promotion entry in the usual
+shape (gates, served/deployed verification, what was NOT verified, finding-ID disposition: **closes F151,
+no new ID**), the F151/F153 table rows, and the Readiness line; `phase-6-self-service-signup.md` G3/G7a
+rows. Doc-only commit to `staging`, pushed. `/wrap-up`.
+
+### Completion criteria (G-B)
+
+- [ ] Step 0 re-measure matched; Step 1 rollback artifacts saved and hashed
+- [ ] `register-tenant` edited; `grep webhook` shows only comments; committed via `--ff-only` to `staging`
+- [ ] Harness control observed **red** on staging v22, then **green** after the staging deploy; invite harness `invite_sent` true; 0 orphaned auth users
+- [ ] Staging `verify_jwt` OFF before and after; deployed artifact hash == committed source
+- [ ] Runbook + technical-reference updated; F151 recorded
+- [ ] `/promote-prod` run on Rick's explicit request, PR = `register-tenant/index.ts` + docs only (or explicitly not requested — then F151 stays staging-only and Steps 5–6 are carried forward)
+- [ ] Production `register-tenant` and `register-customer` deployed from `origin/main`'s tree; `verify_jwt` OFF before/after both; artifact hashes == `origin/main`
+- [ ] 6a and 6b run with teardown verified by fresh read, or each recorded as a skipped residual with Rick's reason
+- [ ] Docs, CLAUDE.md and status token updated; `/wrap-up` produced
+
+### Rollback
+
+- Staging: `git revert` the fix commit and redeploy (`--no-verify-jwt`); nothing else depends on the field.
+- Production functions: redeploy from Step 1's downloaded v10 / v33 with `--no-verify-jwt`.
+- Production test rows from Step 6: the runbook's FK-ordered teardown.
+
+---
+
 ## 3. Decisions only Rick can make (with recommendations)
 
 | # | Decision | Recommendation |
@@ -258,7 +409,8 @@ No rotation: the value authorizes nothing since 2026-08-30. **F151 stays OPEN af
 
 ## 4. Notes for the later sessions (enough to plan them; each gets its own plan doc when its turn comes)
 
-**G-B.** Remove `webhookSecret` (lines ~177/196/347 of `register-tenant/index.ts`): `settings: {}` on
+**G-B.** *(Superseded by the full runbook in § 2b, 2026-10-06; this paragraph was the planning sketch.)*
+Remove `webhookSecret` (lines ~177/196/347 of `register-tenant/index.ts`): `settings: {}` on
 insert, drop `webhook_secret` from the response; update `tenant-onboarding-runbook.md` Step 1's expected
 response (it currently tells the operator to save `webhook_secret`). Grep the local Playwright folder
 (via Bash) for consumers of `webhook_secret`. Deploy to staging after measuring `verify_jwt` **by
