@@ -2364,8 +2364,10 @@ customer-facing. Auth gate is `TENANT_PROVISION_SECRET` via the
 or absent → 401. Validates `slug` against a DNS-safe lowercase pattern
 and a function-level reserved-word denylist (`www`, `admin`, both founding
 slugs, etc.) → 400 on either failure. Service-role INSERT into `tenants`
-(`plan = 'free'`, `settings` seeded with a fresh per-tenant
-`mailerlite_webhook_secret`, `branding` from the request body or `{}`);
+(`plan` from the allowlisted input, default `'free'` (F72 S0); `settings`
+**`{}`** (F151, 2026-10-06 — it used to be seeded with a fresh per-tenant
+`mailerlite_webhook_secret`, dead config since 2026-08-30); `branding` from the
+request body or `{}`);
 unique-slug violation (`23505`) → 409 `slug_taken`; check-constraint
 violation (`23514`) → 400 `invalid_slug`. Creates the first admin via the
 GoTrue admin API (no direct `auth.users` insert) and a matching
@@ -2375,7 +2377,12 @@ after a partial write the function attempts best-effort compensation
 (delete profile → auth user → tenant, reverse FK order) before returning
 500. Any residue is fully removable via the FK-ordered teardown in
 `docs/phase-4.1-canary-procedure.md` (exercised end-to-end in 5.4 S4).
-Returns `{ tenant_id, admin_user_id, slug, webhook_secret }` on success.
+Returns `{ tenant_id, admin_user_id, slug, invite_sent }` on success (`invite_sent`
+is F153's admin set-password email; see § 13 F153). *(Previously `{ tenant_id,
+admin_user_id, slug, webhook_secret }`, then `{ ..., webhook_secret, invite_sent }`.
+**`webhook_secret` was removed from the response by F151 on 2026-10-06**: deployed on
+staging that day; production runs the older shape until session G-B Step 5 deploys
+it, see § 13 F151.)*
 
 **`approve-customer`**: admin-only state change from pending to active.
 Verifies the caller is admin via service-role profile lookup, updates
@@ -5723,6 +5730,24 @@ reasoning — only the disposition changed, not the diagnosis.
   `register-tenant` to production. **Still unprobed, as filed:** the authenticated-read claim (no real user
   JWT was used; a column-level GRANT on `tenants` would flip it). With the rows gone it matters less: there is
   nothing of value left to read until the writer runs again.
+- **UPDATE 2026-10-06, session G-B: THE WRITER IS FIXED AND DEPLOYED ON STAGING (code `784a51c`); PRODUCTION
+  STILL RUNS THE OLD WRITER until Step 5 deploys it, so F151 is RESOLVED ON STAGING ONLY at this point.**
+  `register-tenant/index.ts` no longer generates the secret, stores `settings: {}` explicitly (the column
+  default is also `'{}'`) and returns `{ tenant_id, admin_user_id, slug, invite_sent }`; `grep -n webhook`
+  on the file now hits only the two explanatory comment lines. **Measured, with a real negative control:**
+  the extended local harness `f72-s0-plan-allowlist.mjs` (two new assertions per created tenant, key NAMES
+  only, never a value) was run against staging's then-current **v22** and went **red 8 of 8 new assertions**
+  (response keys `[admin_user_id, invite_sent, slug, tenant_id, webhook_secret]`, `settings` keys
+  `[mailerlite_webhook_secret]`) with the seven original assertions green; after the deploy to **v23**
+  (`--no-verify-jwt`; `verify_jwt` read OFF by behaviour before AND after, the function's own
+  `{"error":"Unauthorized"}`) it read **15/15 green**, response keys `[admin_user_id, invite_sent, slug,
+  tenant_id]`, `settings` keys `[]` on all four plan variants. The deployed artifact was downloaded and
+  hashes **byte-identical** to the committed source (`8748d2c0f19da63a`; the git blob matches it modulo the
+  CRLF the Windows working tree adds). `f72-admin-invite-verify.mjs` read `invite_sent: true` (7/7). A fresh
+  read afterwards found 0 harness tenants, 0 profiles and 0 harness auth users (967 scanned, paginated).
+  **Production is untouched at this point: v10 still returns and stores the key.** The sibling harness's
+  printout used to *add* a `webhook_secret: '[redacted]'` key whether or not the response carried one; fixed
+  so it no longer implies the field exists.
 - **Related:** **F72** (whose planning surfaced this — `docs/f72-multi-tenant-branding.md` § 6).
   **F73 / F74** (the webhook-secret credential-handling lineage — this is the same secret, now
   outliving its own feature). **F150** (filed one day earlier, same "found during planning, filed not
