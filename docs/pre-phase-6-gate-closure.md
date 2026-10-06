@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-C..G-H NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D runbook written 2026-10-06 (§ 2d), NOT STARTED; G-C, G-E..G-H NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -46,7 +46,7 @@ Phase-6-motivated and wait on D1.
 | **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | **DONE 2026-10-06 — see § 2a for the result.** Closed G6 and the F151 rows; **did NOT close G7b** (the sweep widened F150 and Rick deferred it) | 1 session, Rick runs SQL |
 | G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A (**done**); `/promote-prod` needs Rick's explicit request. **Runbook: § 2b. DONE 2026-10-06 — see § 2c for the result.** Closed G7a and the engine half of G3; the client signup gate and the other five mail functions are still open (§ 2c) | 1 session |
 | G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change** | 1 session, Rick in Cloudflare dashboard |
-| G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything | ½ session |
+| G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything. **Runbook: § 2d** | ½ session |
 | G-E | **F165 soak → V5 → S3 decision** (already CLAUDE.md's "next scheduled work") | G2 | Rick's next **two** real weekly `check-dates.js` runs (first ~Fri 10-09/Sat 10-10, second a week later) | V5 with Rick, then an S3 build session if chosen |
 | G-F | **F72 email half** — the five remaining mail functions tenant-aware (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`) | G3 | after G-B (same deploy discipline proven); D1 | 1–2 sessions, real-inbox checks need Rick |
 | G-G | **F169 single-distributor import mode + F157 scoped delete** (scripts repo + one migration) | G4 | **after the November new-month import** (late Oct), so F165 S1's first real exercise runs on unchanged import code; D1 | 1 session |
@@ -482,6 +482,127 @@ ID consumed (F171 stays next free).** Rick requested the `/promote-prod` in-sess
   session G-F. **G7b (F150) is unchanged and still the open half of G7.** Verdict: **Phase 6 still NOT READY**
   (G1, G2, G4, G5, G8, the rest of G3 and G7b stand; Shape D stands). **Next in this plan that needs no Phase 6
   decision: G-D (F164 trace).**
+
+---
+
+## 2d. Session G-D — runbook (F164 creation-path trace; written 2026-10-06, NOT STARTED)
+
+**Goal.** Answer the one question F164 left open, the one gate G8 asks: **can a client produce a
+`preorders` row whose `catalog_id` belongs to another tenant?** If yes, F164 is Medium and needs a
+database guard before tenant N+1 is public; if no, it closes as stray test data. **This session traces and
+decides; it does not build a guard** (that would be its own session, F109's trigger as the precedent).
+
+**Re-checked at planning (2026-10-06):** G-A and G-B are done (§ 2a, § 2c), so this is next in the order
+that needs no Phase 6 decision. F165's soak has not started (`check-dates-state.json` still dated
+2026-10-02), so G-E is not ready. F164's record (technical-reference § 13) gives the two staging rows:
+`16bfdcb6…` (Power Rangers Unlimited #5, `84428401340605011`, non-admin test account, 2026-09-11 22:56Z)
+and `ef0b74f3…` (Amazing Spider-Man #1004, `75960623001300411`, test admin, 22:55Z); both carry the
+founding `tenant_id` and point at `demoshop` catalog rows. Production had 0 of 3,495 on 2026-09-29.
+**Two cheap facts from planning:** no local harness or fixture mentions either item code or title, and
+the fixtures' service-role catalog lookups all key on an id or the `ZZTEST` prefix, so no fixture is an
+obvious culprit. The 22:55Z window falls the evening before the 2026-09-12 admin-badges commits, whose
+Playwright runs raced and were interrupted (CLAUDE.md records it); that is a lead, not a finding.
+
+**Scope IN:** read-only reads on both projects; one constructive reachability test on **staging only**
+with a throwaway user, torn down; Rick-run read-only SQL for policy, function and trigger text; § 13 and
+doc updates; deleting the two stale staging rows **only on Rick's go**. **Scope OUT:** any guard, trigger,
+policy or RPC change; any production write; client code; F150. Stop and ask for anything else.
+
+### Step 0 — preflight (agent)
+
+`/preflight`; `git branch --show-current` = `staging`. Read technical-reference § 4.4 (`preorders`),
+§ 7.1 (RLS), § 13 F164 and F109 (`/sql-check`).
+
+### Step 1 — what the two rows and their users are (agent, service role, staging, read-only)
+
+Read both `preorders` rows in full; their `catalog` rows (`tenant_id`, `catalog_month`, `created_at`);
+both users' `user_profiles` (`tenant_id`, `is_admin`, `status`, `created_at`) and auth user `email` prefix
+and `created_at`. **Do not print full emails**; the prefix (`pw-…`, `pw-admin-…`, a person) is what
+identifies the source. Record whether either user still exists.
+
+### Step 2 — the discriminating test: did the app write them?
+
+`Preorders.add()` logs a `reserve` usage event through `UsageEvents.reserve()` (`app.js` ~1152; metadata
+carries `title`, `distributor`, `catalog_month`, no catalog id). Query `usage_events` for each user,
+`event_type = 'reserve'`, between 22:45Z and 23:05Z on 2026-09-11, and compare `metadata.title` and the
+event's `tenant_id` with the row.
+- **A matching `reserve` event** → the write came through the app's client path: go to Step 3 to find
+  how the page got hold of a `demoshop` catalog id.
+- **No event** → a service-role or direct REST write (a harness, a script, a hand query). Note it, then
+  still run Step 3, because the question G8 asks is whether the client path **can**, not whether it **did**.
+State plainly that the event write is fire-and-forget (`.catch(() => {})`), so its absence is strong
+evidence, not proof.
+
+### Step 3 — read the live boundary (Rick runs read-only SQL on staging AND production; paste results)
+
+```sql
+-- policies on the two tables that matter
+SELECT tablename, policyname, cmd, roles::text, qual, with_check
+FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('preorders', 'catalog')
+ORDER BY tablename, policyname;
+
+-- what current_tenant_id() actually reads (profile row, JWT claim, ...)
+SELECT pg_get_functiondef('public.current_tenant_id()'::regprocedure);
+
+-- triggers on preorders (F109's ordered-cancel guard should be here; is anything checking catalog tenancy?)
+SELECT tgname, pg_get_triggerdef(oid) FROM pg_trigger
+WHERE tgrelid = 'public.preorders'::regclass AND NOT tgisinternal ORDER BY tgname;
+```
+
+Agent compares the two environments and records: does any INSERT/UPDATE `with_check` or trigger relate
+`catalog_id` to the row's `tenant_id`? Is `catalog` SELECT tenant-scoped for `authenticated` (and, given
+F150, is there any `anon` policy)? Expected from the docs: no check relates them.
+
+### Step 4 — constructive reachability test (staging only, throwaway user)
+
+The real boundary is the REST API with a user's JWT, not the page, so test that directly:
+1. Create a throwaway **founding-tenant** customer (active, non-admin) with a password grant (F107; no
+   magic link), the way `admin-tab-counts-pending-verify.mjs` does.
+2. **Can it see a foreign catalog id?** With its JWT, `GET /rest/v1/catalog?select=id&tenant_id=eq.<demoshop>&limit=1`.
+   Record the count. (If 0, an attacker must learn an id elsewhere: note where ids appear to a customer,
+   e.g. URLs or anon-readable surfaces, without hunting further.)
+3. **Can it write one?** Take a `demoshop` catalog id **from the service role** and, with the user's JWT,
+   `POST /rest/v1/preorders` `{ user_id: <self>, catalog_id: <demoshop id>, tenant_id: <founding>, quantity: 1 }`.
+   Also try the mirror (`tenant_id: <demoshop>`), which RLS should refuse.
+4. **Negative control:** the same POST with a **founding** catalog id must succeed (so a refusal in 3 means
+   the guard worked, not that the request was malformed).
+5. Teardown: delete every row the test created (service role), then the user; fresh read 0 rows, auth 404.
+
+**Result rule.** 3 succeeds → **reachable**: F164 becomes **Medium**, and a cross-tenant write needs
+nothing more than a known catalog id. 3 refused while 4 succeeds → **not reachable** through the API
+boundary; the two rows came from a privileged writer.
+
+### Step 5 — sweep (read-only, both environments)
+
+Cross-tenant references in every table with a `catalog_id`: `preorders`, `usage_events` (nullable),
+`weekly_shipment` (nullable), plus `reservation_history` if it carries one (check § 4 first). Count rows
+whose `catalog_id` resolves to a catalog row of a different `tenant_id`, paged with `content-range`
+verified. Production is read-only. Expected: staging 2 in `preorders`; production 0.
+
+### Step 6 — ⏸ PAUSE → Rick, then record
+
+Present: which path wrote the rows, whether the API boundary allows it, the sweep, and the recommendation.
+- **Reachable:** file the severity change in § 13 F164 (Medium), and write a guard design into this doc
+  as a later session (a `BEFORE INSERT OR UPDATE OF catalog_id, tenant_id` trigger on `preorders` raising
+  when `catalog.tenant_id <> NEW.tenant_id`, F109's shape; consider the same for `subscriptions` only if
+  it references catalog rows). G8 stays open until that guard ships.
+- **Not reachable:** F164 closes as stray privileged-writer data; G8 closes.
+- **Either way, Rick's call:** delete the two staging rows (they still skew the pre-v2 parity check and
+  will mislead the next reader). If yes, guarded delete by exact id, fresh read 0.
+
+Record: § 13 F164 (trace, boundary text from both environments, test results, disposition), this doc's
+§ 2e result and STATUS token, the Phase 6 Readiness G8 row, CLAUDE.md's F164 row. Doc-only commit to
+`staging`, pushed. `/wrap-up`.
+
+### Completion criteria (G-D)
+
+- [ ] Both rows, their catalog rows and both users identified (email prefixes only)
+- [ ] `reserve` usage-event check done for both rows, result stated with its limit
+- [ ] Policies, `current_tenant_id()` and `preorders` triggers read on BOTH environments
+- [ ] Reachability test run on staging with its negative control; test user and rows torn down, fresh read 0
+- [ ] Cross-tenant sweep run on both environments for every `catalog_id` table
+- [ ] Rick's disposition recorded (Medium + guard session planned, or closed); the two staging rows deleted or kept by his call
+- [ ] § 13 F164, Readiness G8, CLAUDE.md row, this doc's STATUS updated; `/wrap-up` produced
 
 ---
 
