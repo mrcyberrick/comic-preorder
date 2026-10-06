@@ -569,6 +569,44 @@ Rick asked for the promotion ("2) promote Prod") after approving the copy. **PR 
 - **V12, human check, NOT YET REPORTED:** Rick opens his own production My List; the "No longer coming" badge should read **14**. Until he says so, the finding is fixed and promoted but not confirmed by eye.
 - **Day one, as predicted in § 12:** 0 customers newly see the section, 4 of the 5 who already had it get more cards (+19 rows, worst 9), Rick's own account goes 0 -> 14, and the printed list loses a block that had been printing. Nothing was written to production data by this promotion; the one schema change (the nullable column) was applied by Rick beforehand and holds 0 cleared rows.
 
+## 18. Addendum: supplier-rejected cards stop prompting calls, and the customer can Remove them (Rick, 2026-10-05). DESIGN, NOT BUILT
+
+**The ask.** Right after the promotion: "The store doesn't need a lot of phone calls if the answer is that the supplier
+rejected it." **Measured on production's 48 eligible rows (2026-10-05):** 33 are supplier-rejected, of which 5 are open (these
+have Remove) and **28 are rejected and already closed**, which show "Contact store" with no Remove; the other 15 are
+did-not-arrive. So 43 of 48 cards invited a call, and most of them for an outcome that needs no conversation. **This is a side
+effect of F163 itself:** before it, a rejected reservation that auto-fulfilled was hidden entirely. Asked how to fix it, Rick chose
+**"Reword and let customers Remove them"** over reword-only and over leaving it.
+
+**What changes.**
+1. **A customer may Remove a supplier-rejected card even when it is closed (fulfilled).** This REVERSES § 2 decision X ("no Remove
+   for fulfilled rows") for rejected rows only. Withdrawn rows already had it. **The database already permits it:** the F109 delete
+   trigger blocks only a ledger that nets above zero and never reads \`fulfilled\`, and \`users manage own preorders\` is ALL. The
+   only thing refusing it is the app's \`Preorders.cancel()\` guard, so the allowance goes **inside \`Preorders.cancel()\`** (\`app.js\`),
+   the F110 pattern (\`mylist.html\` and the guard must agree, and one copy of a safeguard beats two): a fulfilled row is
+   cancellable when its code is supplier-rejected (the ledger has rows and nets to <= 0, i.e. \`get_ordered_codes()\` state
+   \`unavailable\`) **and** its \`arrival_outcome\` is not \`arrived\` (a book on the shelf is never "rejected"). The delete query's
+   defensive \`fulfilled = false\` race guard is skipped under the same condition.
+2. **\`mylist.html\`:** \`canRemove = isWithdrawn || isRejected\` (the \`&& !item.fulfilled\` goes). Every supplier-rejected or withdrawn
+   card now has Remove; **"Contact store" remains only on did-not-arrive and damaged cards** (15 of 48 today), and the admin "Clear"
+   remains for exactly those.
+3. **Copy (PROPOSED, Rick approves at his staging validation):** the section note becomes "The store has confirmed these will not be
+   coming to you, so there is nothing to collect or pay for. Remove clears an item from your list. If an item didn't arrive or
+   arrived damaged, contact the store." The chip title and the Remove confirm are unchanged.
+
+**Side effects, stated so they are decisions and not discoveries.** (a) Removing deletes the reservation row, so the record of what
+that customer was promised is gone; Rick chose that knowingly over a hide flag for the customer side. (b) \`UsageEvents.cancel\` is
+logged for these removals, which nudges the analytics cancel count slightly. (c) \`Preorders.cancel()\` is shared: on \`catalog.html\`
+a closed, rejected, not-arrived current-month reservation can now be un-reserved, which it could not before; consistent, and the
+full suite is the check. (d) **\`app.js\` carries \`merge=ours\`**: the promotion must assert the merge RESULT for \`app.js\` (the driver
+has dropped it three times); today \`main\`'s copy equals staging's, so it only bites if both sides change before then.
+
+**Not changing:** schema (none), the did-not-arrive / damaged wording, the withdrawn panel, the admin Clear, the 180-day window.
+
+**Plan:** harness first against the current bytes (the new assertions RED), then the change in \`app.js\` + \`mylist.html\`, harness
+green on the working tree, negative controls, push, deployed-bytes harness, full suite, teardown re-read; production only on Rick's
+explicit \`/promote-prod\`. **No finding ID consumed (feature build; F170 stays next free).**
+
 ## References
 
 `docs/technical-reference.md` § 13 **F163** (owner record), **F115** (what `arrival_outcome` means),
