@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** COMPLETE except one human check — PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; build `9fbb71b`, admin Clear `6583a6c`, `mylist.html` only; its SQL `prod=APPLIED` the same day). Open: Rick's own production My List count (the read-only replay says 14) **A further follow-up, § 18 (supplier-rejected cards removable by the customer, `57cc20a`, `app.js` + `mylist.html`), is BUILT AND VERIFIED ON STAGING and NOT promoted: production still says "Contact store" on closed rejected cards.** · staging=2026-10-06 · prod=2026-10-05 · PR=#168 · findings: F163 (closes, pending that check; owner record in `docs/technical-reference.md` § 13). *(This token read "IN PROGRESS — BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)*
+**STATUS:** COMPLETE except one human check — PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; build `9fbb71b`, admin Clear `6583a6c`, `mylist.html` only; its SQL `prod=APPLIED` the same day). Open: Rick's own production My List count (the read-only replay said 14 on 2026-10-05 and says 11 on 2026-10-06, as three of his older rows crossed the 180-day window) · **Follow-ups PROMOTED 2026-10-06 (PR #169, merge `95ff4d2`): supplier-rejected Remove and the "store is handling it" wording (§§ 18, 20). One more, § 19 (an empty main list shows the section inside the empty-state block, `4e2b0ea`), is BUILT AND VERIFIED ON STAGING and NOT promoted.** · staging=2026-10-06 · prod=2026-10-06 · PR=#168, #169 · findings: F163 (closes, pending that check; owner record in `docs/technical-reference.md` § 13). *(This token read "IN PROGRESS — BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)*
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -268,7 +268,7 @@ itself one way here and another there.
   with an empty main list and 3 section rows, the section's top is **2,246 px = 2.39 viewport heights on
   desktop (1350x940) and 3,476 px = 4.22 on a phone (412x823)**. It sits behind the full-viewport hold
   **and** the 24-cover "New #1 issues" discovery grid that `renderList()` loads into the same container
-  for an empty, non-impersonated list. **Stopped and asked Rick; ANSWERED: accept, the section stays below
+  for an empty, non-impersonated list. **(REVERSED 2026-10-06, see § 19.) Stopped and asked Rick; ANSWERED: accept, the section stays below
   the list for everyone** (alternatives offered and not built: above the list for the empty branch only;
   inside the empty-state block, above the discovery grid). **Not measured:** the impersonated empty-list
   case (the 2 paper accounts with an empty main list, readable only by impersonation), which skips the
@@ -460,7 +460,7 @@ rule, not the table cell, is what governs. (5) **For V12 after promotion:** the 
 the served bytes, as does the old chip title `The store has this on order`). Check the **statement** form instead: a line
 matching `^\s+if \(i\.fulfilled\) return false;` must read x0 (it does on staging today). (6) Rick has **not** validated.
 
-## 16. Addendum: an admin can CLEAR a card (Rick, 2026-10-05). BUILT AND VERIFIED ON STAGING 2026-10-05; NOT promoted
+## 16. Addendum: an admin can CLEAR a card (Rick, 2026-10-05). BUILT AND VERIFIED ON STAGING 2026-10-05; PROMOTED TO PRODUCTION 2026-10-05 (PR #168). *(This heading read "NOT promoted" until 2026-10-06.)*
 
 **The ask.** Rick, looking at the staging demo: "can the admin clear it from the list if they contact the store?" Measured
 answer: **not from the app today**, except Remove on withdrawn and open-rejected cards. The section's Remove calls
@@ -569,7 +569,7 @@ Rick asked for the promotion ("2) promote Prod") after approving the copy. **PR 
 - **V12, human check, NOT YET REPORTED:** Rick opens his own production My List; the "No longer coming" badge should read **14**. Until he says so, the finding is fixed and promoted but not confirmed by eye.
 - **Day one, as predicted in § 12:** 0 customers newly see the section, 4 of the 5 who already had it get more cards (+19 rows, worst 9), Rick's own account goes 0 -> 14, and the printed list loses a block that had been printing. Nothing was written to production data by this promotion; the one schema change (the nullable column) was applied by Rick beforehand and holds 0 cleared rows.
 
-## 18. Addendum: supplier-rejected cards stop prompting calls, and the customer can Remove them (Rick, 2026-10-05). BUILT AND VERIFIED ON STAGING 2026-10-05; NOT promoted
+## 18. Addendum: supplier-rejected cards stop prompting calls, and the customer can Remove them (Rick, 2026-10-05). BUILT AND VERIFIED ON STAGING 2026-10-05; PROMOTED TO PRODUCTION 2026-10-06 (PR #169). *(This heading read "NOT promoted" until the promotion.)*
 
 **The ask.** Right after the promotion: "The store doesn't need a lot of phone calls if the answer is that the supplier
 rejected it." **Measured on production's 48 eligible rows (2026-10-05):** 33 are supplier-rejected, of which 5 are open (these
@@ -628,6 +628,57 @@ explicit \`/promote-prod\`. **No finding ID consumed (feature build; F170 stays 
 - **Verified:** a new current-month damaged fixture (P) beside the existing did-not-arrive one (E), with MT1 (desktop rows), MT2 and MT3 (mobile cards at 390 px, asserting the line fits and is not truncated). **RED observed against the old page, then 85/85 on the working tree and 89 PASS / 0 FAIL on the deployed bytes** (its own final line). **Four negative controls, each red, the repo file's sha256 unchanged:** old desktop line -> MT1; old mobile line -> MT3; **removing the wrap -> MT3, which proves the "not cut off" check really detects truncation**; old chip hover text -> MT1. Spec 25 gained V9 (a current-month did-not-arrive and damaged row in the MAIN list say the store already knows and never "contact the store"). **Full suite 160 passed (23.9 min)**, 0 failed; teardown re-read from the database: nothing this session created is left. Layout shift unchanged (0.006 desktop / 0.005 mobile); screenshots inspected (the longer lines wrap to two lines in the table and fit on the mobile cards).
 - **A bug in my OWN harness, found and fixed (not a page defect):** two regexes lost a backslash in the shell step that wrote them (`/s+/g` instead of `/\s+/g`), so the test deleted every letter "s" from the text and could never match "already knows". The first RED run used that buggy test, so the RED was **re-observed after the fix** against the old page, where the old text is visible in the log ("⚠ Did not arrive — contact the store."), confirming the failures were about the page.
 - **Production:** unchanged. It still shows "Contact store" on the 28 closed rejected cards (until the supplier-rejected build above is promoted) and on the 15 did-not-arrive cards.
+
+## 19. Addendum: an empty main list shows "No longer coming" inside the empty-state block (Rick, 2026-10-06). BUILT AND VERIFIED ON STAGING 2026-10-06; NOT promoted
+
+**The ask.** Rick, after PR #168 went live, with a production screenshot (impersonating a real customer whose main list is empty):
+"Your list is empty, when shown has the NO LONGER COMING much further down before visible." This is the case § 7 flagged and § 7
+recorded as ACCEPTED on 2026-10-05 (2.39 viewport heights down on desktop, 4.22 on a phone, measured for a non-impersonated
+customer; the impersonated case was only inferred, not measured). Seen live, he asked to revisit it, and chose **"Inside the
+empty-state block"** over "above the list for empty lists" and over leaving it. It reverses § 7's accepted placement for the
+empty-main-list case ONLY. The customer who most needs this notice is the one whose list is empty *because* the items are not coming.
+
+**Why it is far down.** When the main list is empty, \`renderList()\` keeps the F141 \`.loading-reserve\` hold (a full viewport) on the
+empty-state block so nothing shrinks (measured: dropping it scored 0.613 -> 1.048 CLS), and the section sits after \`#list-container\`.
+
+**The design.** When the list itself is empty (\`allItems\` is empty, NOT a filter with no matches), move the existing
+\`#unavailable-section\` element INSIDE the \`.empty-state\` block, under the "Your list is empty" message and the Browse Catalog
+button. It then fills space that is already reserved (the block is at least a viewport tall), so the page height does not change
+and nothing shifts. In every other case it stays where it is (directly after \`#list-container\`).
+- **The one real hazard, and the reason for the plan:** \`renderList()\` rewrites \`container.innerHTML\`. If the section lives inside
+  the container's old content when that happens, **the element is destroyed** (its cards, handlers and the toggle with it). So the
+  section is "parked" back at its home position BEFORE every rewrite, and "seated" in the empty block AFTER one that is empty. It
+  re-renders on every search keystroke and filter change, so this runs often.
+- **Text alignment:** \`.empty-state\` centres its text; the section needs \`text-align: left\` there or the cards' text would centre.
+- Not changed: the section's content, copy, Remove / Clear rules, the 180-day window, print (it is still hidden), \`app.js\`, schema.
+- A **no-matches search** on a non-empty list also shows the full-screen block; the section deliberately stays below the list there
+  (the list is not empty; the customer has reservations).
+
+**Checks (harness, RED first):** the section is inside the empty-state block and within ~450 px of that block's top, on desktop and a
+phone; left-aligned; **survives a search re-render with all its cards**; the impersonated empty list (the screenshot's case) puts it
+in the same place; a no-matches search leaves it below the list with its cards intact; and **layout shift for an empty-list account
+with the section is within 0.01 of the same account without it**. Negative controls: do not seat it; do not park it before a rewrite
+(the destroy hazard, expected to show as lost cards after a search); drop the left-align.
+
+**Scope and promotion.** \`mylist.html\` only, staging first, a **separate follow-up** to PR #169 (which is reviewed as it stands). No
+finding ID consumed (feature change to F163's own surface; F170 stays next free).
+
+
+**Build record (2026-10-06, staging only; `mylist.html` only, commit `4e2b0ea`, served byte-identical on the plain URL, sha256 prefix `2c0e97400f3c491a`).** When the main list is genuinely empty, `#unavailable-section` is moved into the `.empty-state` block under the message and the Browse Catalog button; otherwise it stays directly after `#list-container`. `parkUnavailableSection()` runs FIRST in `renderList()` and before the load-error rewrite; `seatUnavailableSection()` runs only after an empty write; `.empty-state #unavailable-section { text-align: left; }`.
+- **Measured (harness, staging): section top 2.39 -> 0.80 viewport heights on desktop, 4.22 -> 1.07 on a phone, 0.76 for the impersonated empty list (the production screenshot's case).** On a phone it still sits just past the first screen because the page header, notice, stats and toolbar stack above the list; it is one short scroll away instead of four screens. Not changed: the empty block's own 64 px top padding, which would gain a little more on a phone.
+- **Verified:** RED first (12 named failures, 0 crashes: PV9a/b/c/e/f on both widths, PV9d on desktop, PV9g impersonated); **100/100 on the working tree; 108 PASS / 0 FAIL on the deployed bytes** (its own final line). New checks: the section is inside the block and within 450 px of its top, left-aligned, inside the FIRST desktop viewport, survives a search re-render with all 3 cards (and again once cleared), the impersonated empty list agrees, a NO-MATCHES search on a non-empty list leaves it BELOW the list with every card (PE1/PE1b), and **layout shift for an empty-list account with the section is the same as without it (0.006 desktop / 0.005 mobile; PV5e)**. Spec 25 gained V10 (10 tests). Screenshots inspected (desktop, impersonated, phone).
+- **Negative controls, 3/3 red, the repo file's sha256 unchanged:** never seat it -> PV9a/b/d/g (and c/e/f); drop the park call -> PS1; drop the left-align rule -> PV9c (text-align computes to `center`, so that hazard is real).
+- **ONE INVARIANT IS ONLY CHECKED STATICALLY, and I am saying so:** "park before every container rewrite". Only `loadList()` after a seated render (the admin Shelf Order Apply) rewrites a seated container with non-empty content, and no UI path in the harness reaches it. PS1 reads the page's own served script and asserts each of the 3 `container.innerHTML =` writes has a `parkUnavailableSection()` earlier in its function. It proves the call is present, not that a rewrite would be survived at runtime. Note too that the "destroyed" hazard is a DETACH, not a loss of the JS object: after an empty -> empty rewrite the old element could simply be re-appended, so a search re-render alone would NOT have caught a missing park, which is why PV9e passing does not prove the park exists.
+- **Two bugs in my OWN harness, found and fixed:** the first RED run **crashed** (not a valid RED) because the filter input is hidden behind the magnifier on a phone-width page, so `locator.fill()` timed out; the harness now sets the value and fires the page's own `input` event (`setSearch`), and the RED was re-run to completion. (And earlier the same day a regex lost a backslash, recorded in the § 18 wording record.)
+- **Full suite: 160 passed + 1 FLAKY (24.2 min), not "161 passed".** The flaky test is spec 15 "Order Builder opens with a multi-select FOC-cycle list…": its first attempt failed on `net::ERR_NAME_NOT_RESOLVED` while the `adminPage` fixture navigated to the Supabase magic link (a DNS failure on the test machine before any page loaded, the same signature recorded 2026-09-30), and it passed on retry. Unrelated to this change. **That failed attempt leaked one auth user**: `adminPage` creates the user and then `signInVia` threw before `use()`, so its teardown never ran. I classified it (exact `pw-admin-<8 hex>@example.test` shape, created 17:31Z, 0 preorders, exactly one candidate), deleted it and re-read: auth user 404, profile 0 rows. Everything else this session created is gone; the four August `pw-*` tenants and one `TEST_PW_` catalog row (F130 family) are untouched. The fixture leak path is NOT fixed and NOT filed (test-infra, Rick's call).
+- **Stated plainly:** Chromium only; staging only; nothing in git asserts any of it (suite and harness are gitignored); a real phone has not been used. **Not promoted:** Rick's explicit `/promote-prod` is required, `mylist.html` only (no `app.js`, so no `merge=ours` question this time). Feature change, **no finding ID consumed** (F170 stays next free).
+
+## 20. Production (2026-10-06): PR #169 verification record
+
+Rick requested the promotion ("/promote-prod") and merged **PR #169 (merge `95ff4d2`**, parents `fcba6ba` and `997b6a5`) at 16:53Z. It carried the supplier-rejected Remove (§ 18), the section wording and the main-list alignment (§ 18's wording follow-ups). Gates, the served-bytes verification and the replay are in CLAUDE.md § Current Migration Phase ("PROMOTED TO PRODUCTION 2026-10-06 -- F163 follow-ups"). In this doc's terms:
+- **Served bytes:** `app.js` (`883d34292426afad`), `mylist.html` (`2a837dae7ac8d8a1`) and five other files byte-identical to `origin/main` on `pulllist.app` and `rjbookstop.pulllist.app`; the new markers present, the old text x0, the staging-only § 19 code absent.
+- **Replay (read-only, 2026-10-06):** 45 eligible rows, 10 accounts: **30 supplier-rejected, all with Remove (25 newly), 15 did-not-arrive**. **Rick's own account reads 11 (it read 14 on 10-05; three of his older rows crossed the 180-day window).** The § 12 "day one" figures are therefore a day old and drift by a few rows a week at the window's edge, as § 9 B1 predicted.
+- **Not verified:** a real cancel on production (the diff changes `Preorders.cancel()`; the evidence is staging's harness, VG3 / VC3 / VH3, and the suite); WebKit or a real phone; Rick's own count.
 
 ## References
 
