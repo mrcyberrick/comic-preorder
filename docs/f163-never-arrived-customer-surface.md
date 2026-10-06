@@ -1,6 +1,6 @@
 # F163 — A confirmed-terminal reservation keeps a lasting place on the customer's My List (design)
 
-**STATUS:** COMPLETE except one human check — PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; build `9fbb71b`, admin Clear `6583a6c`, `mylist.html` only; its SQL `prod=APPLIED` the same day). Open: Rick's own production My List count (the read-only replay said 14 on 2026-10-05 and says 11 on 2026-10-06, as three of his older rows crossed the 180-day window) · **Follow-ups PROMOTED 2026-10-06 (PR #169, merge `95ff4d2`): supplier-rejected Remove and the "store is handling it" wording (§§ 18, 20). One more, § 19 (an empty main list shows the section inside the empty-state block, `4e2b0ea`), is BUILT AND VERIFIED ON STAGING and NOT promoted.** · staging=2026-10-06 · prod=2026-10-06 · PR=#168, #169 · findings: F163 (closes, pending that check; owner record in `docs/technical-reference.md` § 13). *(This token read "IN PROGRESS — BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)*
+**STATUS:** COMPLETE, BOTH ENVIRONMENTS — PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; build `9fbb71b`, admin Clear `6583a6c`, `mylist.html` only; its SQL `prod=APPLIED` the same day). **Follow-ups PROMOTED 2026-10-06: PR #169 (merge `95ff4d2`; supplier-rejected Remove and the "store is handling it" wording, §§ 18, 20) and PR #170 (merge `b5be5d7`; an empty main list shows the section inside the empty-state block, `4e2b0ea`, §§ 19, 21).** · staging=2026-10-06 · prod=2026-10-06 · PR=#168, #169, #170 · findings: F163 (closed; owner record in `docs/technical-reference.md` § 13). *(This token read "COMPLETE except one human check" until Rick reported his own count on 2026-10-06, and earlier "IN PROGRESS — BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)*
 
 Owner doc for the build of F163. **Design only: no app code, no SQL, no DB write, no deploy.** The only
 database contact was a read-only, paginated, tenant-scoped service-role measurement on production
@@ -406,7 +406,7 @@ total** (from 5). Nothing is written. Printed lists lose a block that has been p
 - [x] full suite: 156 passed, 0 failed (from the log's own line; 151 baseline + 5 new local-spec tests, which reconcile exactly); teardown re-read (§ 15: nothing of this session left; August F130 leftovers untouched)
 - [x] § 13 item 1 answered (Rick 2026-10-04: no confirm/undo, do not wait) and item 2 answered (no in-person notice)
 - [x] Rick validated the build on staging, including approving the copy (§ 4). **2026-10-05: Rick looked at the staging demo account (including the admin Clear) and said "Demo looks good - can clear"; when asked to approve the copy explicitly (the section note and the chip hover text, quoted to him) he answered "yes".** The demo account was torn down at his word and re-read as 0 rows. **Not covered by his words: a real phone, and the empty-main-list case (he had already accepted that placement).** The "No longer coming" copy as approved: note "The store has confirmed these will not be coming to you. Where there is a Remove button it only clears your list; otherwise contact the store with any questions."; chip title "Confirmed by the store — contact them with questions".
-- [x] `/promote-prod` only on Rick's explicit request after that validation; V12 recorded (§ 17). **Open inside V12: Rick's own My List count against the replay's 14.**
+- [x] `/promote-prod` only on Rick's explicit request after that validation; V12 recorded (§ 17). **Open inside V12: Rick's own My List count against the replay's 14.** *(Closed 2026-10-06: Rick reported 11, equal to that day's replay; § 21.)*
 - [x] § 13 F163, the CLAUDE.md row and this STATUS token advanced (2026-10-05, build session)
 
 ## 15. Build record (2026-10-05, staging only; the evidence behind § 14)
@@ -566,7 +566,7 @@ withdrawn, and production last read 0 marks (2026-09-27), so the panel is empty 
 Rick asked for the promotion ("2) promote Prod") after approving the copy. **PR #168, merge `fcba6ba`** (parents `5fc1b6c` main and `0f0b321`; the staging tip it carried was `cc88ced`). Gates, the served-bytes verification on both hostnames, the markers and the read-only replay are recorded in CLAUDE.md § Current Migration Phase ("PROMOTED TO PRODUCTION 2026-10-05 -- F163"). In this doc's terms:
 - **V12, served bytes:** `mylist.html` byte-identical to `origin/main` on `pulllist.app` and `rjbookstop.pulllist.app` (also `app.js`, `config.js`, `arrivals.html`, `admin.html`, `catalog.html`, `style.css`). Positive markers present; the old guard as a STATEMENT x0 (the string itself reads x1 because a comment quotes it, as § 15 predicted).
 - **V12, replay:** a GET-only service-role replay of § 4's predicate against production's database: **48 eligible rows, 10 accounts**, Rick's own account **14**, real customers 9 / 8 / 4 / 2 / 1. Identical to § 1.3 and § 1.5, so nothing has drifted.
-- **V12, human check, NOT YET REPORTED:** Rick opens his own production My List; the "No longer coming" badge should read **14**. Until he says so, the finding is fixed and promoted but not confirmed by eye.
+- **V12, human check, ~~NOT YET REPORTED~~ REPORTED 2026-10-06: Rick's count is 11** (§ 21; the replay's 14 was 10-05's figure and three of his rows have since aged out of the window, so 11 is the expected value that day). Original text: Rick opens his own production My List; the "No longer coming" badge should read **14**. Until he says so, the finding is fixed and promoted but not confirmed by eye.
 - **Day one, as predicted in § 12:** 0 customers newly see the section, 4 of the 5 who already had it get more cards (+19 rows, worst 9), Rick's own account goes 0 -> 14, and the printed list loses a block that had been printing. Nothing was written to production data by this promotion; the one schema change (the nullable column) was applied by Rick beforehand and holds 0 cleared rows.
 
 ## 18. Addendum: supplier-rejected cards stop prompting calls, and the customer can Remove them (Rick, 2026-10-05). BUILT AND VERIFIED ON STAGING 2026-10-05; PROMOTED TO PRODUCTION 2026-10-06 (PR #169). *(This heading read "NOT promoted" until the promotion.)*
@@ -581,13 +581,13 @@ effect of F163 itself:** before it, a rejected reservation that auto-fulfilled w
 **What changes.**
 1. **A customer may Remove a supplier-rejected card even when it is closed (fulfilled).** This REVERSES § 2 decision X ("no Remove
    for fulfilled rows") for rejected rows only. Withdrawn rows already had it. **The database already permits it:** the F109 delete
-   trigger blocks only a ledger that nets above zero and never reads \`fulfilled\`, and \`users manage own preorders\` is ALL. The
-   only thing refusing it is the app's \`Preorders.cancel()\` guard, so the allowance goes **inside \`Preorders.cancel()\`** (\`app.js\`),
-   the F110 pattern (\`mylist.html\` and the guard must agree, and one copy of a safeguard beats two): a fulfilled row is
-   cancellable when its code is supplier-rejected (the ledger has rows and nets to <= 0, i.e. \`get_ordered_codes()\` state
-   \`unavailable\`) **and** its \`arrival_outcome\` is not \`arrived\` (a book on the shelf is never "rejected"). The delete query's
-   defensive \`fulfilled = false\` race guard is skipped under the same condition.
-2. **\`mylist.html\`:** \`canRemove = isWithdrawn || isRejected\` (the \`&& !item.fulfilled\` goes). Every supplier-rejected or withdrawn
+   trigger blocks only a ledger that nets above zero and never reads `fulfilled`, and `users manage own preorders` is ALL. The
+   only thing refusing it is the app's `Preorders.cancel()` guard, so the allowance goes **inside `Preorders.cancel()`** (`app.js`),
+   the F110 pattern (`mylist.html` and the guard must agree, and one copy of a safeguard beats two): a fulfilled row is
+   cancellable when its code is supplier-rejected (the ledger has rows and nets to <= 0, i.e. `get_ordered_codes()` state
+   `unavailable`) **and** its `arrival_outcome` is not `arrived` (a book on the shelf is never "rejected"). The delete query's
+   defensive `fulfilled = false` race guard is skipped under the same condition.
+2. **`mylist.html`:** `canRemove = isWithdrawn || isRejected` (the `&& !item.fulfilled` goes). Every supplier-rejected or withdrawn
    card now has Remove; **"Contact store" remains only on did-not-arrive and damaged cards** (15 of 48 today), and the admin "Clear"
    remains for exactly those.
 3. **Copy (PROPOSED; SUPERSEDED the next day by the wording follow-up at the end of this section):** the section note became "The store has confirmed these will not be
@@ -595,17 +595,17 @@ effect of F163 itself:** before it, a rejected reservation that auto-fulfilled w
    arrived damaged, contact the store." The chip title and the Remove confirm are unchanged.
 
 **Side effects, stated so they are decisions and not discoveries.** (a) Removing deletes the reservation row, so the record of what
-that customer was promised is gone; Rick chose that knowingly over a hide flag for the customer side. (b) \`UsageEvents.cancel\` is
-logged for these removals, which nudges the analytics cancel count slightly. (c) \`Preorders.cancel()\` is shared: on \`catalog.html\`
+that customer was promised is gone; Rick chose that knowingly over a hide flag for the customer side. (b) `UsageEvents.cancel` is
+logged for these removals, which nudges the analytics cancel count slightly. (c) `Preorders.cancel()` is shared: on `catalog.html`
 a closed, rejected, not-arrived current-month reservation can now be un-reserved, which it could not before; consistent, and the
-full suite is the check. (d) **\`app.js\` carries \`merge=ours\`**: the promotion must assert the merge RESULT for \`app.js\` (the driver
-has dropped it three times); today \`main\`'s copy equals staging's, so it only bites if both sides change before then.
+full suite is the check. (d) **`app.js` carries `merge=ours`**: the promotion must assert the merge RESULT for `app.js` (the driver
+has dropped it three times); today `main`'s copy equals staging's, so it only bites if both sides change before then.
 
 **Not changing:** schema (none), the did-not-arrive / damaged wording, the withdrawn panel, the admin Clear, the 180-day window.
 
-**Plan:** harness first against the current bytes (the new assertions RED), then the change in \`app.js\` + \`mylist.html\`, harness
+**Plan:** harness first against the current bytes (the new assertions RED), then the change in `app.js` + `mylist.html`, harness
 green on the working tree, negative controls, push, deployed-bytes harness, full suite, teardown re-read; production only on Rick's
-explicit \`/promote-prod\`. **No finding ID consumed (feature build; F170 stays next free).**
+explicit `/promote-prod`. **No finding ID consumed (feature build; F170 stays next free).**
 
 
 **Build record (2026-10-05, staging only).** Commit `57cc20a` (`app.js` and `mylist.html`, +50/-34 in total; both served byte-identical to the commit on the plain URL: `app.js` `883d34292426afad`, `mylist.html` `e3863603511f433b`). `Preorders.cancel()` reads the signed ledger ONCE, up front, and a closed row is cancellable when the code is `unavailable` (rejected) and `arrival_outcome` is not `arrived`; `mylist.html` has `canRemove = isWithdrawn || isRejected` and the reworded note ("...so there is nothing to collect or pay for. Remove clears an item from your list. If an item didn't arrive or arrived damaged, contact the store."). **Copy is PROPOSED: Rick approves it at his staging validation.**
@@ -629,7 +629,7 @@ explicit \`/promote-prod\`. **No finding ID consumed (feature build; F170 stays 
 - **A bug in my OWN harness, found and fixed (not a page defect):** two regexes lost a backslash in the shell step that wrote them (`/s+/g` instead of `/\s+/g`), so the test deleted every letter "s" from the text and could never match "already knows". The first RED run used that buggy test, so the RED was **re-observed after the fix** against the old page, where the old text is visible in the log ("⚠ Did not arrive — contact the store."), confirming the failures were about the page.
 - **Production:** unchanged. It still shows "Contact store" on the 28 closed rejected cards (until the supplier-rejected build above is promoted) and on the 15 did-not-arrive cards.
 
-## 19. Addendum: an empty main list shows "No longer coming" inside the empty-state block (Rick, 2026-10-06). BUILT AND VERIFIED ON STAGING 2026-10-06; NOT promoted
+## 19. Addendum: an empty main list shows "No longer coming" inside the empty-state block (Rick, 2026-10-06). BUILT AND VERIFIED ON STAGING 2026-10-06; PROMOTED TO PRODUCTION 2026-10-06 (PR #170). *(This heading read "NOT promoted" until the promotion.)*
 
 **The ask.** Rick, after PR #168 went live, with a production screenshot (impersonating a real customer whose main list is empty):
 "Your list is empty, when shown has the NO LONGER COMING much further down before visible." This is the case § 7 flagged and § 7
@@ -638,19 +638,19 @@ customer; the impersonated case was only inferred, not measured). Seen live, he 
 empty-state block"** over "above the list for empty lists" and over leaving it. It reverses § 7's accepted placement for the
 empty-main-list case ONLY. The customer who most needs this notice is the one whose list is empty *because* the items are not coming.
 
-**Why it is far down.** When the main list is empty, \`renderList()\` keeps the F141 \`.loading-reserve\` hold (a full viewport) on the
-empty-state block so nothing shrinks (measured: dropping it scored 0.613 -> 1.048 CLS), and the section sits after \`#list-container\`.
+**Why it is far down.** When the main list is empty, `renderList()` keeps the F141 `.loading-reserve` hold (a full viewport) on the
+empty-state block so nothing shrinks (measured: dropping it scored 0.613 -> 1.048 CLS), and the section sits after `#list-container`.
 
-**The design.** When the list itself is empty (\`allItems\` is empty, NOT a filter with no matches), move the existing
-\`#unavailable-section\` element INSIDE the \`.empty-state\` block, under the "Your list is empty" message and the Browse Catalog
+**The design.** When the list itself is empty (`allItems` is empty, NOT a filter with no matches), move the existing
+`#unavailable-section` element INSIDE the `.empty-state` block, under the "Your list is empty" message and the Browse Catalog
 button. It then fills space that is already reserved (the block is at least a viewport tall), so the page height does not change
-and nothing shifts. In every other case it stays where it is (directly after \`#list-container\`).
-- **The one real hazard, and the reason for the plan:** \`renderList()\` rewrites \`container.innerHTML\`. If the section lives inside
+and nothing shifts. In every other case it stays where it is (directly after `#list-container`).
+- **The one real hazard, and the reason for the plan:** `renderList()` rewrites `container.innerHTML`. If the section lives inside
   the container's old content when that happens, **the element is destroyed** (its cards, handlers and the toggle with it). So the
   section is "parked" back at its home position BEFORE every rewrite, and "seated" in the empty block AFTER one that is empty. It
   re-renders on every search keystroke and filter change, so this runs often.
-- **Text alignment:** \`.empty-state\` centres its text; the section needs \`text-align: left\` there or the cards' text would centre.
-- Not changed: the section's content, copy, Remove / Clear rules, the 180-day window, print (it is still hidden), \`app.js\`, schema.
+- **Text alignment:** `.empty-state` centres its text; the section needs `text-align: left` there or the cards' text would centre.
+- Not changed: the section's content, copy, Remove / Clear rules, the 180-day window, print (it is still hidden), `app.js`, schema.
 - A **no-matches search** on a non-empty list also shows the full-screen block; the section deliberately stays below the list there
   (the list is not empty; the customer has reservations).
 
@@ -660,7 +660,7 @@ in the same place; a no-matches search leaves it below the list with its cards i
 with the section is within 0.01 of the same account without it**. Negative controls: do not seat it; do not park it before a rewrite
 (the destroy hazard, expected to show as lost cards after a search); drop the left-align.
 
-**Scope and promotion.** \`mylist.html\` only, staging first, a **separate follow-up** to PR #169 (which is reviewed as it stands). No
+**Scope and promotion.** `mylist.html` only, staging first, a **separate follow-up** to PR #169 (which is reviewed as it stands). No
 finding ID consumed (feature change to F163's own surface; F170 stays next free).
 
 
@@ -671,14 +671,23 @@ finding ID consumed (feature change to F163's own surface; F170 stays next free)
 - **ONE INVARIANT IS ONLY CHECKED STATICALLY, and I am saying so:** "park before every container rewrite". Only `loadList()` after a seated render (the admin Shelf Order Apply) rewrites a seated container with non-empty content, and no UI path in the harness reaches it. PS1 reads the page's own served script and asserts each of the 3 `container.innerHTML =` writes has a `parkUnavailableSection()` earlier in its function. It proves the call is present, not that a rewrite would be survived at runtime. Note too that the "destroyed" hazard is a DETACH, not a loss of the JS object: after an empty -> empty rewrite the old element could simply be re-appended, so a search re-render alone would NOT have caught a missing park, which is why PV9e passing does not prove the park exists.
 - **Two bugs in my OWN harness, found and fixed:** the first RED run **crashed** (not a valid RED) because the filter input is hidden behind the magnifier on a phone-width page, so `locator.fill()` timed out; the harness now sets the value and fires the page's own `input` event (`setSearch`), and the RED was re-run to completion. (And earlier the same day a regex lost a backslash, recorded in the § 18 wording record.)
 - **Full suite: 160 passed + 1 FLAKY (24.2 min), not "161 passed".** The flaky test is spec 15 "Order Builder opens with a multi-select FOC-cycle list…": its first attempt failed on `net::ERR_NAME_NOT_RESOLVED` while the `adminPage` fixture navigated to the Supabase magic link (a DNS failure on the test machine before any page loaded, the same signature recorded 2026-09-30), and it passed on retry. Unrelated to this change. **That failed attempt leaked one auth user**: `adminPage` creates the user and then `signInVia` threw before `use()`, so its teardown never ran. I classified it (exact `pw-admin-<8 hex>@example.test` shape, created 17:31Z, 0 preorders, exactly one candidate), deleted it and re-read: auth user 404, profile 0 rows. Everything else this session created is gone; the four August `pw-*` tenants and one `TEST_PW_` catalog row (F130 family) are untouched. The fixture leak path is NOT fixed and NOT filed (test-infra, Rick's call).
-- **Stated plainly:** Chromium only; staging only; nothing in git asserts any of it (suite and harness are gitignored); a real phone has not been used. **Not promoted:** Rick's explicit `/promote-prod` is required, `mylist.html` only (no `app.js`, so no `merge=ours` question this time). Feature change, **no finding ID consumed** (F170 stays next free).
+- **Stated plainly:** Chromium only; staging only; nothing in git asserts any of it (suite and harness are gitignored); a real phone has not been used. ~~**Not promoted:** Rick's explicit `/promote-prod` is required, `mylist.html` only (no `app.js`, so no `merge=ours` question this time).~~ **PROMOTED the same day: PR #170 (§ 21).** Feature change, **no finding ID consumed** (F170 stays next free).
 
 ## 20. Production (2026-10-06): PR #169 verification record
 
 Rick requested the promotion ("/promote-prod") and merged **PR #169 (merge `95ff4d2`**, parents `fcba6ba` and `997b6a5`) at 16:53Z. It carried the supplier-rejected Remove (§ 18), the section wording and the main-list alignment (§ 18's wording follow-ups). Gates, the served-bytes verification and the replay are in CLAUDE.md § Current Migration Phase ("PROMOTED TO PRODUCTION 2026-10-06 -- F163 follow-ups"). In this doc's terms:
-- **Served bytes:** `app.js` (`883d34292426afad`), `mylist.html` (`2a837dae7ac8d8a1`) and five other files byte-identical to `origin/main` on `pulllist.app` and `rjbookstop.pulllist.app`; the new markers present, the old text x0, the staging-only § 19 code absent.
+- **Served bytes:** `app.js` (`883d34292426afad`), `mylist.html` (`2a837dae7ac8d8a1`) and five other files byte-identical to `origin/main` on `pulllist.app` and `rjbookstop.pulllist.app`; the new markers present, the old text x0, the staging-only § 19 code absent (it shipped later the same day, PR #170, § 21).
 - **Replay (read-only, 2026-10-06):** 45 eligible rows, 10 accounts: **30 supplier-rejected, all with Remove (25 newly), 15 did-not-arrive**. **Rick's own account reads 11 (it read 14 on 10-05; three of his older rows crossed the 180-day window).** The § 12 "day one" figures are therefore a day old and drift by a few rows a week at the window's edge, as § 9 B1 predicted.
-- **Not verified:** a real cancel on production (the diff changes `Preorders.cancel()`; the evidence is staging's harness, VG3 / VC3 / VH3, and the suite); WebKit or a real phone; Rick's own count.
+- **Not verified:** a real cancel on production (the diff changes `Preorders.cancel()`; the evidence is staging's harness, VG3 / VC3 / VH3, and the suite); WebKit or a real phone; ~~Rick's own count~~ (reported 2026-10-06: 11, § 21).
+
+## 21. Production (2026-10-06): PR #170 verification record, and the own-count check closed
+
+Rick requested the promotion (`/promote-prod`, adding "My List is 11") and merged **PR #170 (merge `b5be5d7`**, parents `95ff4d2` and `4d862d4`) at 18:03Z. It carried § 19 only: an empty main list shows the section inside the empty-state block (`mylist.html`, +26 lines; staging code `4e2b0ea`, staging tip `c32b36a`). Gates, the served-bytes verification and the finding-ID disposition are in CLAUDE.md § Current Migration Phase ("PROMOTED TO PRODUCTION 2026-10-06 -- F163 follow-up: an empty My List ..."). In this doc's terms:
+- **Served bytes:** `mylist.html` (`2c0e97400f3c491a`, the same bytes staging served when the harness ran 108/108 and the suite 160 passed + 1 flaky), `app.js` (`883d34292426afad`, unchanged), `config.js`, `catalog.html`, `arrivals.html`, `admin.html` and `style.css` byte-identical to `origin/main` on `pulllist.app` and `rjbookstop.pulllist.app`; `parkUnavailableSection` x3, `seatUnavailableSection` x2, the conditional seat call x1, the left-align rule x1; the earlier markers still present.
+- **V12 human check closed:** Rick reported "My List is 11". The read-only replay's figure for his own account on 2026-10-06 is 11 (14 on 10-05, before three rows crossed the 180-day window), so the two agree. His words do not say which element he read, so this is a count match rather than a visual check of the empty-list placement.
+- **Not verified:** the empty-list placement as rendered on production (the screenshot that prompted it was the before state); WebKit or a real phone; the park-before-rewrite invariant at runtime (static check only, § 19); nothing in git asserts any of it.
+- **Write-smoke:** skipped; `mylist.html` only, with no `app.js`, `Preorders` or reserve/cancel path in the diff.
+- **Disposition:** feature change, no finding ID consumed (F170 stays next free). F163 has nothing left open on this surface.
 
 ## References
 
