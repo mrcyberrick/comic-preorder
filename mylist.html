@@ -694,7 +694,9 @@
     <div class="month-arrivals-body">
       <p id="unavailable-note" style="margin:0 0 10px;font-size:0.78rem;color:var(--text-secondary)">
         The store has confirmed these will not be coming to you, so there is nothing to collect or pay for.
-        Remove clears an item from your list. If an item didn't arrive or arrived damaged, contact the store.
+        Remove clears an item from your list. If an item didn't arrive or arrived damaged, the store already
+        knows and handles it with the supplier. A replacement, if one is ordered, may take longer, and you
+        don't need to do anything.
       </p>
       <div class="month-arrivals-grid" id="unavailable-grid"></div>
     </div>
@@ -1593,8 +1595,9 @@ function confirmDialog(message, okLabel = 'Remove') {
   //
   // SUPERSEDED for rejected rows, same day, by Rick (2026-10-05): "the store doesn't need a lot of phone calls if the answer is
   // that the supplier rejected it." A closed supplier-rejected row is now removable too: Preorders.cancel() (app.js) was
-  // taught the allowance (the database already permitted it), and `canRemove = isWithdrawn || isRejected`. "Contact store"
-  // now appears only on did-not-arrive and damaged cards, which is also where the admin Clear applies.
+  // taught the allowance (the database already permitted it), and `canRemove = isWithdrawn || isRejected`. The chip (now
+  // "Store is handling this", reworded again 2026-10-06 so it does not invite a call) appears only on did-not-arrive and
+  // damaged cards, which is also where the admin Clear applies.
   //
   // Rick's call, 2026-09-21: Remove appears here and ONLY here. The
   // current-month table's rejected rows stay badge-only exactly as the
@@ -1663,11 +1666,16 @@ function confirmDialog(message, okLabel = 'Remove') {
             ${canRemove
               ? `<button class="btn btn-danger btn-sm cancel-btn-unavailable" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
                          style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>`
-              // Title was "The store has this on order — contact them": TRUE for a net > 0 row, FALSE for a
-              // supplier-rejected or never-arrived one, which is now most of what this chip sits on. Same wording
-              // as the main table's own did-not-arrive chip, so the two surfaces cannot say different things.
-              : `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions"
-                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>${isAdminViewer
+              // REWORDED 2026-10-06 (Rick). History: this was "The store has this on order — contact them" (true only for
+              // a net > 0 row), then "⚠ Contact store" / "Confirmed by the store — contact them with questions" (2026-10-04).
+              // It now sits ONLY on did-not-arrive and damaged cards (a withdrawn or supplier-rejected card has Remove), and
+              // for those the store already knows, claims it with the supplier, and may have a replacement on order, so a
+              // call-to-action invites calls about something already in hand. It says the store is handling it instead.
+              // Deliberately NEUTRAL, not the red alarm style: there is nothing for the customer to do. wrap allowed: the
+              // label is longer than the card's 100px at this size. NOT the main table's wording: its chips and lines for the
+              // same states still say "contact the store"; Rick asked for this section only.
+              : `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do."
+                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center;white-space:normal;line-height:1.25;color:var(--text-secondary);background:var(--bg-elevated);border-color:var(--border)">Store is handling this</span>${isAdminViewer
                   // ADMIN ONLY, and only where there is no Remove (Remove already clears a card, by deleting the
                   // reservation). Hides the card for everyone; the reservation is kept. See the grid handler below.
                   ? `<button class="btn btn-secondary btn-sm clear-btn-unavailable" data-preorder-id="${item.id}"
