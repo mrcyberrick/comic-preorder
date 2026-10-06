@@ -629,6 +629,40 @@ explicit \`/promote-prod\`. **No finding ID consumed (feature build; F170 stays 
 - **A bug in my OWN harness, found and fixed (not a page defect):** two regexes lost a backslash in the shell step that wrote them (`/s+/g` instead of `/\s+/g`), so the test deleted every letter "s" from the text and could never match "already knows". The first RED run used that buggy test, so the RED was **re-observed after the fix** against the old page, where the old text is visible in the log ("⚠ Did not arrive — contact the store."), confirming the failures were about the page.
 - **Production:** unchanged. It still shows "Contact store" on the 28 closed rejected cards (until the supplier-rejected build above is promoted) and on the 15 did-not-arrive cards.
 
+## 19. Addendum: an empty main list shows "No longer coming" inside the empty-state block (Rick, 2026-10-06). DESIGN, NOT BUILT
+
+**The ask.** Rick, after PR #168 went live, with a production screenshot (impersonating a real customer whose main list is empty):
+"Your list is empty, when shown has the NO LONGER COMING much further down before visible." This is the case § 7 flagged and § 7
+recorded as ACCEPTED on 2026-10-05 (2.39 viewport heights down on desktop, 4.22 on a phone, measured for a non-impersonated
+customer; the impersonated case was only inferred, not measured). Seen live, he asked to revisit it, and chose **"Inside the
+empty-state block"** over "above the list for empty lists" and over leaving it. It reverses § 7's accepted placement for the
+empty-main-list case ONLY. The customer who most needs this notice is the one whose list is empty *because* the items are not coming.
+
+**Why it is far down.** When the main list is empty, \`renderList()\` keeps the F141 \`.loading-reserve\` hold (a full viewport) on the
+empty-state block so nothing shrinks (measured: dropping it scored 0.613 -> 1.048 CLS), and the section sits after \`#list-container\`.
+
+**The design.** When the list itself is empty (\`allItems\` is empty, NOT a filter with no matches), move the existing
+\`#unavailable-section\` element INSIDE the \`.empty-state\` block, under the "Your list is empty" message and the Browse Catalog
+button. It then fills space that is already reserved (the block is at least a viewport tall), so the page height does not change
+and nothing shifts. In every other case it stays where it is (directly after \`#list-container\`).
+- **The one real hazard, and the reason for the plan:** \`renderList()\` rewrites \`container.innerHTML\`. If the section lives inside
+  the container's old content when that happens, **the element is destroyed** (its cards, handlers and the toggle with it). So the
+  section is "parked" back at its home position BEFORE every rewrite, and "seated" in the empty block AFTER one that is empty. It
+  re-renders on every search keystroke and filter change, so this runs often.
+- **Text alignment:** \`.empty-state\` centres its text; the section needs \`text-align: left\` there or the cards' text would centre.
+- Not changed: the section's content, copy, Remove / Clear rules, the 180-day window, print (it is still hidden), \`app.js\`, schema.
+- A **no-matches search** on a non-empty list also shows the full-screen block; the section deliberately stays below the list there
+  (the list is not empty; the customer has reservations).
+
+**Checks (harness, RED first):** the section is inside the empty-state block and within ~450 px of that block's top, on desktop and a
+phone; left-aligned; **survives a search re-render with all its cards**; the impersonated empty list (the screenshot's case) puts it
+in the same place; a no-matches search leaves it below the list with its cards intact; and **layout shift for an empty-list account
+with the section is within 0.01 of the same account without it**. Negative controls: do not seat it; do not park it before a rewrite
+(the destroy hazard, expected to show as lost cards after a search); drop the left-align.
+
+**Scope and promotion.** \`mylist.html\` only, staging first, a **separate follow-up** to PR #169 (which is reviewed as it stands). No
+finding ID consumed (feature change to F163's own surface; F170 stays next free).
+
 ## References
 
 `docs/technical-reference.md` § 13 **F163** (owner record), **F115** (what `arrival_outcome` means),
