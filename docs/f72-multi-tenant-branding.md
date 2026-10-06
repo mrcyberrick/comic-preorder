@@ -500,6 +500,16 @@ match a bad test.)*
 > Not applied — out of S0's scope as written, raised for Rick's call. Production's current values
 > were verified exact (`rjbookstop='pro'`, `comicstore='free'`, read 2026-09-02), so nothing is
 > wrong today; this is about the next hand-typed UPDATE, not this one.
+>
+> **APPLIED 2026-10-06 on BOTH environments (Rick, session G-A of `docs/pre-phase-6-gate-closure.md`;
+> `docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`).** POST check on each: one `pg_constraint` row,
+> `convalidated` true, `CHECK ((plan = ANY (ARRAY['free'::text, 'pro'::text])))`. Staging was exercised
+> through the real writer afterwards: `f72-s0-plan-allowlist.mjs` 7/7 (`' PRO '` and `'pro'` become `pro`,
+> an omitted plan and `'paid'` become `free`, teardown left 0 tenants, profiles and orphaned auth users)
+> and the targeted tenant specs 07, 08, 09 and 20 passed 21/21. **Not exercised: a hand-typed
+> `UPDATE ... SET plan = 'Pro'` being refused.** The constraint is validated, which is what enforcement
+> means in Postgres, but nobody ran the rejection, deliberately (it would be a write against a real tenant
+> row or a throwaway one for no more evidence than `convalidated`).
 
 **(4) The Edge Function tier block — six identical copies, gated on byte-identity.** There is no
 `_shared/` folder in this repo and **zero cross-function imports exist today** (verified
@@ -1052,8 +1062,9 @@ gate, the generic-content definition, the link-by-tier rule — were answered 20
       matters, because a hand-typed `'Pro'` would have read as free (§ 4.0.1 residual)
 - [ ] **A durable staging `free`/`pro` tenant pair** — the `pw-*` fixtures are ephemeral (§ 4.0.2),
       so V3/V4 have no vehicle without this
-- [ ] **A CHECK constraint on `tenants.plan`** — new, raised 2026-09-02 by V11s. Not applied;
-      Rick's call. `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN
+- [x] **A CHECK constraint on `tenants.plan`** — raised 2026-09-02 by V11s, **APPLIED on both
+      environments 2026-10-06** (session G-A; see the note under § 4.0.1's residual). *(Previously read
+      "Not applied; Rick's call.")* `ALTER TABLE public.tenants ADD CONSTRAINT tenants_plan_check CHECK (plan IN
       ('free','pro'));` The function normalises, but **manual UPDATE is the primary path today**
       and bypasses it entirely
 - [x] ~~§ 4.1–§ 4.3 rewritten with explicit free/paid content per site~~ — **S0, S1a (web), S2a

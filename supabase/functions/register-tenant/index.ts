@@ -4,9 +4,16 @@
  * Service-role-only tenant provisioning. Not customer-facing — Phase 5 ships no
  * public self-serve signup page (that is Phase 6, gated on a wildcard-DNS/TLS
  * spike). Invoked directly (curl / future internal tooling) by an operator
- * holding TENANT_PROVISION_SECRET — claims a slug, creates the tenant row, the
- * first admin auth user + profile, and a per-tenant MailerLite webhook secret
- * for register-customer.
+ * holding TENANT_PROVISION_SECRET — claims a slug, creates the tenant row, and
+ * the first admin auth user + profile, then emails that admin a set-password link.
+ *
+ * No per-tenant MailerLite webhook secret is generated, stored or returned any
+ * more (F151, 2026-10-06). This function used to mint one into
+ * tenants.settings and return it as `webhook_secret`; the `?secret=` path that
+ * consumed it was removed from register-customer on 2026-08-30, so it was dead
+ * config on every tenant, and RLS filters rows, not columns, so a tenants.settings
+ * key can be read by any authenticated user of that tenant (inferred, not yet
+ * probed with a real JWT; see F151).
  *
  * Auth gate: TENANT_PROVISION_SECRET via the `x-operator-secret` header, checked
  * before any body parsing. This is a platform-operator action, distinct from any
@@ -173,9 +180,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ── Generate per-tenant webhook secret (for register-customer) ─
-    const webhookSecret = crypto.randomUUID().replace(/-/g, '')
-
     // ── Insert tenants row (service-role; unique slug is the final authority) ─
     const tenantInsertRes = await fetch(`${SUPABASE_URL}/rest/v1/tenants`, {
       method: 'POST',
@@ -193,7 +197,9 @@ Deno.serve(async (req) => {
         location,
         plan,
         branding,
-        settings: { mailerlite_webhook_secret: webhookSecret },
+        // Explicitly empty (F151): the column default is also '{}', but the choice is
+        // stated here so nobody re-adds a secret to a row tenant users can read.
+        settings: {},
       }),
     })
 
@@ -344,7 +350,7 @@ Deno.serve(async (req) => {
     }
 
     return Response.json(
-      { tenant_id: tenantId, admin_user_id: adminUserId, slug, webhook_secret: webhookSecret, invite_sent: inviteSent },
+      { tenant_id: tenantId, admin_user_id: adminUserId, slug, invite_sent: inviteSent },
       { headers: corsHeaders }
     )
 

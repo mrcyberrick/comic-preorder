@@ -403,6 +403,10 @@ since 2026-06-19. See § 13 F92.)*
 - PK: `id`
 - UNIQUE: `slug`
 - CHECK `tenants_slug_format_check`: `slug ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'` OR `slug ~ '^[a-z0-9]$'` (DNS-safe)
+- CHECK `tenants_plan_check`: `plan IN ('free', 'pro')`, **applied on BOTH environments 2026-10-06**
+  (`docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`; `convalidated` true). `Tier.isPaid()` tests
+  `=== 'pro'` exactly, so a hand-typed `'Pro'` is now rejected by the database instead of silently reading
+  as free. `register-tenant` still normalises (trim, lowercase, allowlist) before it reaches this.
 
 **Indexes:**
 - `tenants_pkey` on `id`
@@ -2360,8 +2364,10 @@ customer-facing. Auth gate is `TENANT_PROVISION_SECRET` via the
 or absent → 401. Validates `slug` against a DNS-safe lowercase pattern
 and a function-level reserved-word denylist (`www`, `admin`, both founding
 slugs, etc.) → 400 on either failure. Service-role INSERT into `tenants`
-(`plan = 'free'`, `settings` seeded with a fresh per-tenant
-`mailerlite_webhook_secret`, `branding` from the request body or `{}`);
+(`plan` from the allowlisted input, default `'free'` (F72 S0); `settings`
+**`{}`** (F151, 2026-10-06 — it used to be seeded with a fresh per-tenant
+`mailerlite_webhook_secret`, dead config since 2026-08-30); `branding` from the
+request body or `{}`);
 unique-slug violation (`23505`) → 409 `slug_taken`; check-constraint
 violation (`23514`) → 400 `invalid_slug`. Creates the first admin via the
 GoTrue admin API (no direct `auth.users` insert) and a matching
@@ -2371,7 +2377,12 @@ after a partial write the function attempts best-effort compensation
 (delete profile → auth user → tenant, reverse FK order) before returning
 500. Any residue is fully removable via the FK-ordered teardown in
 `docs/phase-4.1-canary-procedure.md` (exercised end-to-end in 5.4 S4).
-Returns `{ tenant_id, admin_user_id, slug, webhook_secret }` on success.
+Returns `{ tenant_id, admin_user_id, slug, invite_sent }` on success (`invite_sent`
+is F153's admin set-password email; see § 13 F153). *(Previously `{ tenant_id,
+admin_user_id, slug, webhook_secret }`, then `{ ..., webhook_secret, invite_sent }`.
+**`webhook_secret` was removed from the response by F151 on 2026-10-06**: deployed on
+staging that day; production runs the older shape until session G-B Step 5 deploys
+it, see § 13 F151.)*
 
 **`approve-customer`**: admin-only state change from pending to active.
 Verifies the caller is admin via service-role profile lookup, updates
@@ -5565,6 +5576,9 @@ reasoning — only the disposition changed, not the diagnosis.
   `information_schema.role_table_grants` for `app_settings` before creating anything, specifically so
   a surprise here halts the run rather than proceeding on a false premise. It did. **Open, not
   started** — filed per Rick's explicit call (file now, fix later), not fixed inline.
+  **2026-10-06 (session G-A): the broader sweep this entry said was missing WAS RUN; the finding is
+  WIDER than filed, and it is still NOT fixed (Rick deferred it). See the dated update at the end of
+  this entry.**
 - **Severity: Low today, confirmed by a live test, not inferred.** A direct anon-key HTTP read
   against production (`GET .../rest/v1/app_settings?key=eq.maintenance_mode`) returned **`200, []`**
   — the query is *permitted* (unlike staging, which hard-401s: `42501 permission denied`) but RLS
@@ -5595,8 +5609,58 @@ reasoning — only the disposition changed, not the diagnosis.
   found incidentally; a broader sweep (`information_schema.role_table_grants` across all tables,
   diffed staging vs prod) has not been run.
 - **Where:** production Supabase project (`plgegklqtdjxeglvyjte`) only — staging confirmed clean.
+  *(2026-10-06: "production only" and "staging confirmed clean" are both superseded: see the update
+  below. Staging also grants `anon` full DML on two tables, and production's grants are on every table.)*
 - **Related:** **F149** (whose promotion surfaced this), **F64** (the existing prod↔staging DDL
   divergence catalogue — this is the same class, one more instance).
+- **UPDATE 2026-10-06, session G-A (`docs/pre-phase-6-gate-closure.md` § 2 Step 1): the sweep ran on BOTH
+  projects, the three open questions above are answered, and the fix was DEFERRED, not applied.**
+  Rick ran one read-only query per project (per-table RLS state, `anon` privileges from
+  `information_schema.role_table_grants` AND from `has_table_privilege`, `pg_default_acl`, and
+  `pg_policies`). I cross-checked from outside with anon-key REST probes (a `limit=0` request per table,
+  with `Prefer: count=exact` so no row data was returned): no row data was read.
+  - **Anon grants, per table.** Production: **all seven privileges (DELETE, INSERT, REFERENCES, SELECT,
+    TRIGGER, TRUNCATE, UPDATE) on all 11 `public` tables** (`app_settings`, `catalog`, `order_submissions`,
+    `preorders`, `reservation_history`, `settings`, `subscriptions`, `tenants`, `usage_events`,
+    `user_profiles`, `weekly_shipment`). Staging: **none on 9 of them, but the same full set on
+    `order_submissions` and `settings`.** `admin_preorders` (a view, outside the SQL sweep's table scope)
+    returned 401 to anon on both projects in the REST probe. **So this
+    is not an `app_settings` divergence: 9 of 11 tables differ.** The REST probe agreed for SELECT:
+    production 200 on those 9 where staging returns 401 `42501`.
+  - **Direction correction.** **Production is at the Supabase platform default; staging is the partly
+    hardened environment.** The default ACLs are **identical on both projects** (24 rows; for `postgres` and
+    for `supabase_admin` in `public`, `anon` receives `arwdDxtm` on tables, `rwU` on sequences, `X` on
+    functions), so any table created on either project is born with anon grants unless someone revokes them.
+    Why `order_submissions` and `settings` escaped staging's hardening is **not traced**; a one-off revoke
+    followed by later table creation would fit, but that is a guess, not a measurement.
+  - **Answers to the entry's open questions.** (1) **RLS is enabled** on production's `app_settings`
+    (`relrowsecurity` true), and on all 11 tables on both projects. (2) Production's `app_settings` has
+    exactly four policies, **all `TO authenticated`** (`admins delete / insert / update tenant app_settings`,
+    `users read tenant app_settings`), identical to staging's. (3) **Across the whole `public` schema each
+    project has 28 policies, and none is applicable to `anon` or `public`** (`roles && {anon,public}`
+    returned no rows on either). Anon-visible row count is **0 on every exposed table on both projects.**
+  - **Severity is unchanged: Low, no active exposure.** The grant is the outer gate and RLS the inner one,
+    and no policy admits `anon`. The write-side claim was an inference from the doc's policy list in the
+    filing; it now rests on a complete policy audit instead, which is firmer but **still not an anon write
+    probe** (never run, judged too risky). `TRUNCATE` ignores RLS, but PostgREST has no TRUNCATE verb, so
+    I believe it is not reachable through the API; that is inference, not something exercised. What the
+    open grants cost is defence in depth: one future policy written `TO public`, or a view or function
+    that bypasses RLS, would be reachable by an unauthenticated caller with the public anon key.
+  - **Decision (Rick, 2026-10-06): skip the runbook's Step 2 and defer F150, scope widened, no new finding
+    ID.** The runbook's own rule applied (revoke nothing if any table other than `app_settings` differs).
+    An `app_settings`-only revoke was offered and declined: it would leave 10 tables at the platform
+    default and the "matches staging" safety argument holds only for the nine hardened ones.
+    **Production anon `GET /rest/v1/app_settings` still returns HTTP 200** (re-read after this session's
+    other writes); the F149 RPC `is_maintenance_mode` still answers anon `200` / `false`.
+  - **Fix direction, NOT planned and nothing decided:** a platform-wide pass: `REVOKE ALL ON ALL TABLES IN
+    SCHEMA public FROM anon` on production (and on staging for the two tables), plus `ALTER DEFAULT
+    PRIVILEGES FOR ROLE postgres, supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon` so new
+    tables stop inheriting. The evidence that it is safe is that staging's nine hardened tables already run
+    the full suite and the anon flows (`resolve_tenant_by_slug`, `is_maintenance_mode` and
+    `get_popular_series` are `SECURITY DEFINER` RPCs and need no table grant). **Not established:** that
+    nothing reads `order_submissions` or `settings` as anon, which neither environment proves, since both
+    grant them. It needs its own session, with each anon-reachable flow checked. Out of scope here and
+    unexamined: `EXECUTE` grants on functions (F124's class) and the `storage` schema's default ACLs.
 
 #### F151 — `tenants.settings` still stores `mailerlite_webhook_secret` on every real tenant row, and the authenticated client path can read it
 
@@ -5649,6 +5713,41 @@ reasoning — only the disposition changed, not the diagnosis.
   `REVOKE`/`GRANT` on `tenants` is the durable fix; the client-side `select()` list is not.
 - **Where:** `tenants.settings` on **both** environments (unlike F150, which was production-only).
   Client read path: `app.js:82-86`.
+- **UPDATE 2026-10-06, session G-A: the EXISTING ROWS ARE CLEAN ON BOTH ENVIRONMENTS; the finding stays
+  OPEN because the WRITER is still live.** Rick ran `UPDATE public.tenants SET settings = settings -
+  'mailerlite_webhook_secret' WHERE jsonb_exists(settings, 'mailerlite_webhook_secret')` in one transaction
+  with the `tenants_plan_check` constraint (`docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`), staging
+  first, then production. Both POST checks read 0 carriers, and I re-read both projects through the service
+  role (key names only, never a value): **every `settings` is `{}` on all 9 tenants** (staging 7:
+  `raysandjudys`, `demoshop`, `riverside-comics` and four `pw-*` fixtures; production 2: `rjbookstop`,
+  `comicstore`). Staging had **three** carriers, not the one the 2026-09-01 measurement found: `demoshop`
+  and `riverside-comics` were created later, **through `register-tenant`, which is the writer**.
+  **Still open: `supabase/functions/register-tenant/index.ts` generates the secret (line 177), stores it
+  as `settings: { mailerlite_webhook_secret }` (line 196) and returns it as `webhook_secret` in the response
+  (line 347), re-read 2026-10-06.** Any tenant created from now on carries the key again, so deleting today's
+  rows alone does not close F151. The writer fix (and the runbook Step 1 line that tells the operator to save
+  `webhook_secret`) is session G-B of `docs/pre-phase-6-gate-closure.md`, which also deploys
+  `register-tenant` to production. **Still unprobed, as filed:** the authenticated-read claim (no real user
+  JWT was used; a column-level GRANT on `tenants` would flip it). With the rows gone it matters less: there is
+  nothing of value left to read until the writer runs again.
+- **UPDATE 2026-10-06, session G-B: THE WRITER IS FIXED AND DEPLOYED ON STAGING (code `784a51c`); PRODUCTION
+  STILL RUNS THE OLD WRITER until Step 5 deploys it, so F151 is RESOLVED ON STAGING ONLY at this point.**
+  `register-tenant/index.ts` no longer generates the secret, stores `settings: {}` explicitly (the column
+  default is also `'{}'`) and returns `{ tenant_id, admin_user_id, slug, invite_sent }`; `grep -n webhook`
+  on the file now hits only the two explanatory comment lines. **Measured, with a real negative control:**
+  the extended local harness `f72-s0-plan-allowlist.mjs` (two new assertions per created tenant, key NAMES
+  only, never a value) was run against staging's then-current **v22** and went **red 8 of 8 new assertions**
+  (response keys `[admin_user_id, invite_sent, slug, tenant_id, webhook_secret]`, `settings` keys
+  `[mailerlite_webhook_secret]`) with the seven original assertions green; after the deploy to **v23**
+  (`--no-verify-jwt`; `verify_jwt` read OFF by behaviour before AND after, the function's own
+  `{"error":"Unauthorized"}`) it read **15/15 green**, response keys `[admin_user_id, invite_sent, slug,
+  tenant_id]`, `settings` keys `[]` on all four plan variants. The deployed artifact was downloaded and
+  hashes **byte-identical** to the committed source (`8748d2c0f19da63a`; the git blob matches it modulo the
+  CRLF the Windows working tree adds). `f72-admin-invite-verify.mjs` read `invite_sent: true` (7/7). A fresh
+  read afterwards found 0 harness tenants, 0 profiles and 0 harness auth users (967 scanned, paginated).
+  **Production is untouched at this point: v10 still returns and stores the key.** The sibling harness's
+  printout used to *add* a `webhook_secret: '[redacted]'` key whether or not the response carried one; fixed
+  so it no longer implies the field exists.
 - **Related:** **F72** (whose planning surfaced this — `docs/f72-multi-tenant-branding.md` § 6).
   **F73 / F74** (the webhook-secret credential-handling lineage — this is the same secret, now
   outliving its own feature). **F150** (filed one day earlier, same "found during planning, filed not
@@ -6620,13 +6719,13 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F163 — a reservation that genuinely never arrived appears in NEITHER My List section, so the customer can never be shown its arrival status
 
-- **Filed 2026-09-29. Status: FIXED AND PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; code `9fbb71b` plus the admin Clear `6583a6c`, `mylist.html` only), Medium. Rick validated on staging and approved the copy. **One human check is open: Rick's own production My List count (the replay says 14).** *(This status read "BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)* Design: `docs/f163-never-arrived-customer-surface.md` (STATUS IN PROGRESS; Rick's decisions § 2; build record § 15). *(This status read "DESIGN WRITTEN 2026-10-04 ... STATUS NOT STARTED, build not scheduled" until the build session.)* The filing's premise is PARTLY WRONG, corrected in the next bullet.** *(This line read "Status: OPEN, Medium, production and staging (code-level; measured on production). Filed, not fixed; found 2026-09-21 (PR #154 session) and recorded there as "remains unfiled" until now." until the design session.)*
+- **Filed 2026-09-29. Status: FIXED AND PROMOTED TO PRODUCTION 2026-10-05 (PR #168, merge `fcba6ba`; code `9fbb71b` plus the admin Clear `6583a6c`, `mylist.html` only), Medium. Rick validated on staging and approved the copy. **Rick's own production My List count was reported 2026-10-06 as 11, matching that day's replay (14 on 10-05, before three of his rows aged out of the 180-day window): no human check is open.** *(This status read "BUILT AND VERIFIED ON STAGING ... NOT promoted" until the promotion.)* Design: `docs/f163-never-arrived-customer-surface.md` (STATUS IN PROGRESS; Rick's decisions § 2; build record § 15). *(This status read "DESIGN WRITTEN 2026-10-04 ... STATUS NOT STARTED, build not scheduled" until the build session.)* The filing's premise is PARTLY WRONG, corrected in the next bullet.** *(This line read "Status: OPEN, Medium, production and staging (code-level; measured on production). Filed, not fixed; found 2026-09-21 (PR #154 session) and recorded there as "remains unfiled" until now." until the design session.)*
 - **⚠️ CORRECTION 2026-10-04: a "No longer coming" section ALREADY EXISTS and has been on production since 2026-09-29.** Commit `c514c79` (2026-09-21, "surface reservations the store confirmed will not arrive") added `#unavailable-section` / `allUnavailable` / `renderUnavailable()` to `mylist.html`, and it reached production inside **PR #159** (the 2026-09-29 full merge, the day this finding was filed). Served on `pulllist.app` and `rjbookstop.pulllist.app` (read 2026-10-04). **Nothing in the docs recorded it** (found by reading `mylist.html` in full for the design session); its only coverage is the local harness `mylist-no-longer-coming-verify.mjs`. So the Symptom below is true only for **fulfilled** rows: an **unfulfilled** stranded row carrying a human-confirmed signal (`withdrawn_at`, ledger net <= 0, `not_arrived`, `damaged`) IS shown. The section's `if (i.fulfilled) return false;` guard was **deliberate** (its harness fixture F records a first cut that selected 54 rows, not 23). The real remaining gap is that the section is a **~14-day transient**: `auto_fulfill_past_on_sale()` closes a row about two weeks after on-sale (F155 S3's deferral, then the next weekly import), `fulfilled` flips true, and the guard drops it silently. **Re-measured 2026-10-04 (production, read-only, paginated, parts reconcile):** 3,573 preorders; stranded **1,740** (grid: true/NULL 940, true/`arrived` 754, true/`not_arrived` 15, true/`unknown` 26, false/`unknown` 5); customer-relevant by outcome **46 rows / 40 titles** (was 42 / 36); **5 rows shown today** (all within 14 days of on-sale), **45 confirmed rows hidden by `fulfilled`** (30 supplier-rejected incl. 2 that also read `arrived`, 15 `not_arrived`, 0 withdrawn), **0 `unknown` rows without a confirmed signal** (all 31 stranded `unknown` are also supplier-rejected; the 26 S6-backfill rows were all later resolved by an admin, 12 arrived / 14 not arrived). **Design (Rick, 2026-10-04): extend the existing section instead of adding a bucket** — drop the open-only guard, add a 180-day window from on-sale, exclude a ledger-rejected row whose outcome is `arrived`, keep `unknown` staff-only, move the section below the main list (F161), keep it off the printed list, keep it in the impersonation view, and offer no Remove on fulfilled rows (`Preorders.cancel` refuses them). Day one: **0 customers newly see the section; 4 of the 5 who do get more cards (+19 rows, worst 9); Rick's own account 0 -> 14.** *(Built 2026-10-05, next bullet.)* **No finding ID consumed** (F170 remains next free).
 - **BUILT ON STAGING 2026-10-05 (`9fbb71b`; not promoted; Rick has not validated).** `mylist.html` only (+80/-39). The open-only guard is gone (its old wording kept in the code comment as superseded); a 180-day window from on-sale (`UNAVAILABLE_WINDOW_DAYS`, an undated row is kept); a ledger-rejected row whose `arrival_outcome` is `arrived` is excluded; bare `unknown` stays staff-only; Remove only where `Preorders.cancel()` and F109 allow it (`isWithdrawn || (isRejected && !item.fulfilled)`); the chip title no longer says "on order"; the section sits **below** `#list-container` and is hidden in print. **Verified:** extended local harness red on the pre-change bytes (20 named failures, no crash) and green on the working tree and the deployed bytes (65/65); six negative controls each observed red then reverted (repo file sha256 unchanged); full suite **156 passed** (151 + 5 new local-spec tests). **Layout shift (synthetic, Chromium): 0.006 desktop / 0.005 mobile with the section, identical to without it; the same open rows in the OLD position cost 0.131 / 0.202**, which is F161's mechanism measured directly. **One decision surfaced and was taken by Rick:** for an empty-main-list customer the section lands **2.39 viewport heights down on desktop and 4.22 on a phone** (behind the 100vh hold and the 24-cover discovery grid), past the plan's ~1.5 threshold; **Rick: accept, always below the list.** Not measured: the impersonated empty-list case. **Not verified:** WebKit or a real phone, production, and the copy, which Rick approves at his staging validation. Plan § 15 holds the full record and the V12 note (the old `if (i.fulfilled) return false` text still appears in a comment, so check the statement form, not the string).
 - **ADMIN "CLEAR" BUILT ON STAGING 2026-10-05 (`6583a6c`; not promoted).** Rick asked whether an admin can close a card the customer cannot (fulfilled or ordered rows have no Remove, so they only age out at 180 days); he chose a hide flag over deleting the reservation. **Schema:** `preorders.unavailable_dismissed_at timestamptz`, additive, nullable, no default (`docs/sql/2026-10-05-preorders-unavailable-dismissed.sql`, **APPLIED on BOTH environments 2026-10-05**; production verified independently through the REST API, 3,574 preorders and 0 cleared). **Client** (`mylist.html` only, no `app.js`): admins, impersonating or on their own list, get a confirm-gated Clear on cards with no Remove; it stamps the row and the card is hidden for everyone; the reservation, `fulfilled` and `arrival_outcome` are untouched; customers never get the button (a UI gate, F127 class). The cleared ids are read by their own paginated query and **fail open** (a missing column or failed read shows every card; the control that breaks this empties the whole section), and the write is judged by returned row count. **Verified:** harness 80/80 on the deployed bytes, six negative controls red, full suite **158 passed**, layout shift unchanged (0.006 / 0.005). **Not tested:** a silently RLS-filtered zero-row update (the harness cannot make a blocked admin). Plan § 16 holds the record, including the one prediction that was wrong. **Adjacent, answered and left alone:** the dashboard's "Withdrawn by Distributor" panel is read-only by F110 design; Rick chose to leave it as is.
 - **SUPPLIER-REJECTED CARDS REMOVABLE, BUILT ON STAGING 2026-10-05 (`57cc20a`; NOT promoted).** Rick, right after the promotion: the store should not get calls when the answer is "the supplier rejected it". Production had 28 of 48 cards rejected-and-closed saying "Contact store". He chose reword + customer Remove (reversing the "no Remove on closed rows" decision for rejected rows only). `Preorders.cancel()` (`app.js`) now allows a CLOSED row when its code is supplier-rejected (ledger nets <= 0) and `arrival_outcome` is not `arrived`; the F109 trigger already permitted it (it never reads `fulfilled`). `mylist.html`: `canRemove = isWithdrawn || isRejected`, note reworded; "Contact store" and the admin Clear remain only on the 15 did-not-arrive cards. **Verified:** harness RED first, 86/86 on the deployed bytes, 5 negative controls red (one needed tightening: the database trigger had masked a disabled client guard), full suite 159 passed. **`app.js` changed: assert its merge RESULT at promotion (`merge=ours`).** Plan § 18.
 - **WORDING FOLLOW-UP, BUILT ON STAGING 2026-10-06 (`483f843`; NOT promoted).** Rick: for an item that did not arrive or arrived damaged the store already knows, claims it with the supplier and may have a replacement on order, so the card must not prompt a call. Nothing in the app records a claim or a replacement, so the wording states the store's general process only. `mylist.html` only: the section note now says "the store already knows and handles it with the supplier. A replacement, if one is ordered, may take longer, and you don't need to do anything"; the chip on did-not-arrive / damaged cards says "Store is handling this" (neutral grey, wraps) instead of "⚠ Contact store". Harness RED first (3 expected failures), 86/86 on the deployed bytes, 3 negative controls red, full suite 159 passed. **Aligned the same day (`a601283`, Rick: "if we have one damaged item when 6 were ordered, I do not want six phone calls"):** the main table and mobile cards (4 visible lines, 4 chip hover titles) now say the same; the mobile line was already being truncated by its ellipsis, so it wraps. FOC passed / Locked unchanged on purpose. Harness 89/89 on the deployed bytes, 4 controls red (one proves truncation is detected), full suite 160 passed. Plan § 18.
-- **PROMOTED TO PRODUCTION 2026-10-06 (PR #169, merge `95ff4d2`): the supplier-rejected Remove and both wording follow-ups.** *(The two bullets above read "NOT promoted" until this promotion.)* Served bytes verified on both hostnames (`app.js` `883d34292426afad`, `mylist.html` `2a837dae7ac8d8a1`, byte-identical to `origin/main`); `app.js`'s `merge=ours` merge RESULT asserted equal to staging's copy. Read-only replay 2026-10-06: 45 eligible rows, 30 supplier-rejected (all with Remove, 25 newly) and 15 did-not-arrive. **Write-smoke not run; `Preorders.cancel()` IS in the diff, so the evidence is staging only.** No finding ID consumed. **A further follow-up is on STAGING ONLY (`4e2b0ea`, plan § 19, Rick from a production screenshot):** an empty main list shows "No longer coming" inside the empty-state block, directly under the message, instead of 2.4 (desktop) / 4.2 (phone) screens down; now 0.80 / 1.07, impersonated 0.76; layout shift unchanged; `mylist.html` only; harness 108/108 on the deployed bytes, full suite 160 passed + 1 flaky (DNS error in the sign-in fixture). Not promoted.
+- **PROMOTED TO PRODUCTION 2026-10-06 (PR #169, merge `95ff4d2`): the supplier-rejected Remove and both wording follow-ups.** *(The two bullets above read "NOT promoted" until this promotion.)* Served bytes verified on both hostnames (`app.js` `883d34292426afad`, `mylist.html` `2a837dae7ac8d8a1`, byte-identical to `origin/main`); `app.js`'s `merge=ours` merge RESULT asserted equal to staging's copy. Read-only replay 2026-10-06: 45 eligible rows, 30 supplier-rejected (all with Remove, 25 newly) and 15 did-not-arrive. **Write-smoke not run; `Preorders.cancel()` IS in the diff, so the evidence is staging only.** No finding ID consumed. **A further follow-up PROMOTED TO PRODUCTION the same day (PR #170, merge `b5be5d7`; staging `4e2b0ea`, plan §§ 19 and 21; Rick, from a production screenshot):** an empty main list shows "No longer coming" inside the empty-state block, directly under the message, instead of 2.4 (desktop) / 4.2 (phone) screens down; now 0.80 / 1.07, impersonated 0.76; layout shift unchanged; `mylist.html` only; harness 108/108 on the deployed bytes, full suite 160 passed + 1 flaky (DNS error in the sign-in fixture). Served bytes verified on both hostnames (`mylist.html` `2c0e97400f3c491a`, byte-identical to `origin/main`); no write-smoke (`mylist.html` only; no `app.js`, `Preorders` or reserve/cancel path in the diff). No finding ID consumed.
 - **Symptom.** A prior-month reservation whose on-sale date has passed and whose title did not arrive is on no customer surface. `mylist.html:965` narrows `allItems` to `catalog_month === currentMonth`, and the split at `:1001-1002` puts a row in Upcoming Arrivals only if `on_sale_date >= today` (`inMainTable` / `inUpcoming`). A prior-month, past-on-sale row fails both. The customer-facing copy already exists and has no row to render on: `⚠ Did not arrive — contact the store.` (`mylist.html:1167`, `:1241`; also `:1548`, `:1714`). *(Line numbers re-read from disk 2026-09-29; the 2026-09-21 record cited ≈`:937-940` and `:1099`, which had moved.)*
 - **Root cause.** F155's stranding mechanism at its terminal case. F155 fixed date *drift* (a title whose date moves); it does not help a title that will never arrive, which still ages out of both sections. Admin can mark the outcome (F134/F143) and the Follow-Up panel clears, but the outcome cannot reach the customer.
 - **Measured fresh on production 2026-09-29 (service-role, read-only, tenant-scoped, paginated).** Stranded shape = joined `catalog_month` ≠ `2026-10` AND `on_sale_date < 2026-09-29`: **1,602** of 3,494 preorders. Breakdown `fulfilled` × `arrival_outcome`, reconciled to that total: true/NULL **939** + true/`arrived` **621** + true/`unknown` **24** + true/`not_arrived` **15** + false/`unknown` **3** = **1,602**. **Customer-relevant rows (outcome ∈ `not_arrived`,`unknown`,`damaged`): 42** = 24 + 15 + 3 (`damaged` 0), across **36 distinct titles**, by `catalog_month`: 2026-07 17, 2026-06 10, 2026-03 6, 2026-05 5, 2026-04 4. Unfulfilled with NULL outcome in the stranded set: **0**, so the "unfulfilled, no shipment evidence" shape has no instances today.
@@ -6748,7 +6847,17 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Trigger.** The same as the F157 design: the first single-distributor tenant, or Phase 6 S0, whichever comes first. Phase 6 is currently **NOT READY** (`docs/phase-6-self-service-signup.md` § Readiness), and Rick's 2026-08-29 Shape D decision still stands, so nothing is scheduled.
 - **Related:** **F157** (the zero-row guard that refuses a missing file, and the scoped-delete design), **F131** (every tenant's catalog comes from one operator; the same "no operator in the loop" assumption), **F66** and **F110** (the RPC matches zero rows), **F137** (the month query this inherits), **Phase 6 G4 / G5**.
 
-Next free finding ID: **F170**.
+#### F170 — the Playwright sign-in fixtures leak their auth user whenever sign-in throws before `use()` is reached, because teardown sits after `await use()` with no `finally`
+
+- **Filed 2026-10-06. Status: OPEN, filed not fixed (Rick: "log leak"), no build scheduled.** **Severity: Low.** Staging only, test-infrastructure only: no product code, customer data or production exposure. The suite is local-only and untracked in every repo (§ What's tracked vs local-only), so no repo file carries this code and this entry is its only record.
+- **The mechanism, read from `fixtures/auth.ts` on 2026-10-06.** Five fixtures share one shape: `authenticatedPage`, `authedUser` and `adminPage` in `test`, and `authenticatedPage` and `authedUser` in `pwTest`. Each does `createUser(...)`, then a sign-in step (`generateMagicLink` plus `signInVia`, or `signInWithPassword`, which calls `mintPasswordSession`), then `await use(...)`, then `await deleteUser(userId)`. Playwright runs the rest of a fixture only if `use()` was reached, so **any throw between `createUser` and `use()` skips `deleteUser`** and the user stays in staging's GoTrue and `user_profiles`. The throwers in that window: `signInVia` (its own 20 s timeout, and `page.goto(link)`, which sits OUTSIDE its `try` and so can raise a raw network error), `generateMagicLink` (any non-OK GoTrue response), and `mintPasswordSession` (either of its two calls). `createUser` itself is already safe: it compensates for its own profile failure (F95).
+- **The incident that found it.** 2026-10-06, the full suite after the empty-list change: spec 15's "Order Builder opens with a multi-select FOC-cycle list..." failed its first attempt on `net::ERR_NAME_NOT_RESOLVED` while the `adminPage` fixture navigated to the magic link (a DNS failure on the test machine before any page loaded), then passed on retry. The failed attempt left one `pw-admin-<8 hex>@example.test` user (created 17:31Z, 0 preorders, exactly one candidate). It was deleted by hand after classifying it, and re-read: auth user 404, profile 0 rows. **The retry hides this**: the summary shows one "flaky" line and nothing says a user was left behind.
+- **Why it is distinct from F95 and F130.** F95 was orphaned profiles from an unchecked FK delete (fixed). F130 is a large backlog of auth users, located mostly in users created INSIDE test bodies with no matching delete (specs 10 and 11) plus an undiagnosed `pw-iso` set; its 2026-08-18 note records the opposite window, that fixture teardown DOES run after a test timeout. **F170 is the setup window: the user exists, the test body never started, teardown never runs.**
+- **Not measured, stated plainly.** (1) How often it fires: one observed leak, in the one suite run where a setup step threw and was caught. (2) Whether it explains any of F130's roughly 156 one-off `pw-<uuid8>` long-tail users: its three fixture prefixes (`pw-`, `pw-au-`, `pw-admin-`) are a plausible match, **not tested**. (3) Whether earlier setup failures leaked too: the same DNS error signature was recorded on 2026-09-30 (spec 10, two failures), and the F72 S0 session (2026-09-02) recorded three timeouts "while setting up authenticatedPage", which is this same window by construction. None of those was checked for a leftover user.
+- **Fix direction (nothing decided).** Wrap each fixture's sign-in and `use()` in `try { ... } finally { await deleteUser(userId) }`, ideally through one shared helper so five copies cannot drift. One hazard to design around: a `deleteUser` failure inside `finally` must not mask the original sign-in error (the shape `createUser` already uses for its own compensation, F95). One file, small. **This finding does not change F130's rule:** classify before bulk-deleting any backlog; fixing F170 only stops new orphans of this shape.
+- **Related:** F130 (the backlog and its classification), F95 (profile-side orphans, fixed), F107 (magic-link rate limiting: a source of exactly these setup-window throws), F91 (the GoTrue admin header and retry path in the same file).
+
+Next free finding ID: **F171**.
 
 ---
 

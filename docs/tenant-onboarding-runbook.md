@@ -8,7 +8,9 @@
 
 **Prerequisite reading:** `docs/phase-5.5-second-tenant-onboarding.md` § 1 (decisions), § 3 (out of scope), § 6 (rollback tiers). This runbook distills the S0–S3 pattern from 5.5 into operational steps.
 
-**Credential rule (F73/F74 lesson): Never paste the `webhook_secret` from `register-tenant` into any chat, transcript, or committed file.** Save it to a local scratch file only.
+**Credential rule (F73/F74 lesson): Never paste a credential into any chat, transcript, or committed file.** That means the operator secret you send in `x-operator-secret`, and any secret a response ever carries. Save responses to a local scratch file only.
+
+*(This rule previously named one credential: "Never paste the `webhook_secret` from `register-tenant` into any chat, transcript, or committed file." **`register-tenant` no longer generates, stores or returns a `webhook_secret` — F151, 2026-10-06, deployed on staging that day; production when session G-B's Step 5 deploys it (until then production's v10 still returns one).** The rule's point is unchanged, and it is worded generally now so it does not depend on which field exists.)*
 
 ---
 
@@ -35,7 +37,7 @@ If the desired slug is on the denylist or fails the format check, ask the operat
 
 ## Step 1 — Create the tenant via `register-tenant`
 
-Claude prepares the curl; Rick substitutes the operator secret and runs it. Save the response to a local scratch file — **do not paste `webhook_secret` into chat**.
+Claude prepares the curl; Rick substitutes the operator secret and runs it. Save the response to a local scratch file. *(Previously: "…— **do not paste `webhook_secret` into chat**." The field is gone from the response as of F151, 2026-10-06; see the note on Step 4.)*
 
 **Prepare a JSON body file** (PowerShell, local shell):
 
@@ -67,10 +69,12 @@ curl.exe -s -X POST "https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/regis
 **Expected response (`200`):**
 
 ```json
-{ "tenant_id": "...", "admin_user_id": "...", "slug": "...", "webhook_secret": "...", "invite_sent": true }
+{ "tenant_id": "...", "admin_user_id": "...", "slug": "...", "invite_sent": true }
 ```
 
-**Save the first four values to a local scratch file. Do not paste `webhook_secret` into chat.**
+*(Before F151, 2026-10-06, the response was `{ tenant_id, admin_user_id, slug, webhook_secret, invite_sent }`. **If a production response still carries `webhook_secret`, production is still running the pre-F151 `register-tenant` (v10): do not paste it anywhere, and the new tenant's `settings` will hold the dead key until the Step 4 SQL in `docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql` is re-run for it.**)*
+
+**Save all four values to a local scratch file.** None is a secret, but `tenant_id` and `admin_user_id` are what the rollback below needs.
 **Check `invite_sent`** — `false` means the tenant and admin were created correctly but the
 invite email failed to send; see Step 5 for the fallback.
 
@@ -203,6 +207,13 @@ is judged on its JSON body.
 **`register-tenant` may still return a `webhook_secret`, and `tenants.settings` may still carry
 `mailerlite_webhook_secret`. Both are DEAD CONFIG. Nothing reads either one.** Do not configure a
 webhook with it, and do not treat its presence as a step you have missed.
+
+> **Update 2026-10-06 (F151, session G-B): the field is GONE from `register-tenant`.** It no longer
+> generates, stores or returns a `webhook_secret`; a new tenant's `settings` is `{}` and the response is
+> `{ tenant_id, admin_user_id, slug, invite_sent }`. Deployed on **staging** 2026-10-06; on **production**
+> once Step 5 of session G-B runs (`docs/pre-phase-6-gate-closure.md` § 2b), until which production's v10
+> still returns and stores it. The paragraph above is kept as written because it is still true of any
+> not-yet-redeployed project and of any tenant row created before the fix.
 
 **How a new tenant's customers actually get accounts — the two live paths:**
 
