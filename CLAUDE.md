@@ -13,6 +13,9 @@ comic pre-order system. **Read this file in full at the start of every session.*
 spike. **Readiness assessed 2026-10-04: Phase 6 is NOT ready to open** (S0 never run, F145
 confirms no wildcard record exists; F72's email half and F165 still open; Rick's 2026-08-29 "Shape D,
 small features" decision still stands). Gate list in `docs/phase-6-self-service-signup.md` § Readiness.
+**Re-checked 2026-10-06: unchanged. Gate-closure sessions planned in `docs/pre-phase-6-gate-closure.md`**
+(G-A tenant/settings hygiene: F150 sweep + fix, `tenants_plan_check`, F151 row cleanup; runbook ready, not
+started). Note: F151's fix also needs `register-tenant` to stop minting the secret (G-B).
 **Active sub-deploy:** none.
 **Next scheduled work: soak F165 S2 through Rick's next two real weekly `check-dates.js` runs (no hard
 date; the first records first sightings and can raise nothing, the second is the first that can list a

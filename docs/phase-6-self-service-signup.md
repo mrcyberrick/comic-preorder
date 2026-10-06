@@ -17,6 +17,11 @@
 
 ## Readiness — assessed 2026-10-04 (verdict: NOT READY; do not open Phase 6 yet)
 
+> **Re-checked 2026-10-06: unchanged, every measurable gate re-measured.** One correction: G7's F151
+> fix is wider than recorded, because `register-tenant` still mints and stores the dead secret on every
+> new tenant. **The sessions that close these gates are planned in `docs/pre-phase-6-gate-closure.md`**
+> (G-A tenant/settings hygiene first, runbook written).
+
 Measured against the repo, both branches and the served production bytes on 2026-10-04, not
 against this stub's June text.
 
