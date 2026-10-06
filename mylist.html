@@ -79,6 +79,8 @@
     /* "No longer coming" sits BELOW the main list (F163, Rick Q3 2026-10-04), so it needs the gap that its old
        position above the list got from the section before it. */
     #unavailable-section { margin-top: 24px; }
+    /* When the main list is empty the section is seated INSIDE .empty-state (plan § 19), which centres its text. */
+    .empty-state #unavailable-section { text-align: left; }
 
     /* FOC-locked rows */
     .foc-locked-row { opacity: 0.8; }
@@ -1008,6 +1010,7 @@ function confirmDialog(message, okLabel = 'Remove') {
       loadDismissedIds(targetUserId),
     ]);
     if (error) {
+      parkUnavailableSection();        // this rewrites the container too: do not destroy a seated section (plan § 19)
       container.innerHTML = `<div class="alert alert-error">Failed to load your list: ${error.message}</div>`;
       return;
     }
@@ -1090,7 +1093,28 @@ function confirmDialog(message, okLabel = 'Remove') {
     renderUnavailable();
   }
 
+  // F163 (Rick, 2026-10-06, plan § 19): when the main list itself is EMPTY, "No longer coming" is shown INSIDE the empty-state
+  // block, directly under "Your list is empty", instead of a screen or more further down (Rick, from a production screenshot).
+  // That block is already a full viewport tall (F141), so the section fills reserved space and adds no layout shift. In every
+  // other case, including a search with no matches on a NON-empty list, it stays "home": directly after #list-container.
+  //
+  // ⚠ THE HAZARD: renderList() rewrites container.innerHTML, and an element sitting inside the container when that happens is
+  // DESTROYED along with its cards, handlers and toggle. So the section is PARKED back at home BEFORE every container rewrite
+  // and SEATED in the empty block only AFTER one that is empty. renderList() runs on every search keystroke and filter change,
+  // so this runs often. Do not write container.innerHTML anywhere without parking first.
+  const unavailableSection = document.getElementById('unavailable-section');
+  function parkUnavailableSection() {
+    if (unavailableSection && unavailableSection.parentElement !== container.parentElement) {
+      container.insertAdjacentElement('afterend', unavailableSection);
+    }
+  }
+  function seatUnavailableSection() {
+    const host = container.querySelector('.empty-state');
+    if (unavailableSection && host) host.appendChild(unavailableSection);
+  }
+
   function renderList() {
+    parkUnavailableSection();          // FIRST, before anything can rewrite the container (see the hazard above)
     const search = searchEl.value.trim().toLowerCase();
     const dist   = distEl.value;
 
@@ -1137,6 +1161,8 @@ function confirmDialog(message, okLabel = 'Remove') {
           ${!allItems.length ? '<a href="catalog.html" class="btn btn-primary" style="margin-top:16px">Browse Catalog</a>' : ''}
         </div>
         ${isEmptyList && !AdminContext.isActive() ? '<div id="first-issues-section"></div>' : ''}`;
+      // A genuinely EMPTY list (not a filter with no matches): seat "No longer coming" inside the block just written (plan § 19).
+      if (isEmptyList) seatUnavailableSection();
 
       // When the list is truly empty and not in admin context, load #1 issues
       // as a discovery prompt below the empty state message.
