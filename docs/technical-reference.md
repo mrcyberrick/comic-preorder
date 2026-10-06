@@ -403,6 +403,10 @@ since 2026-06-19. See § 13 F92.)*
 - PK: `id`
 - UNIQUE: `slug`
 - CHECK `tenants_slug_format_check`: `slug ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'` OR `slug ~ '^[a-z0-9]$'` (DNS-safe)
+- CHECK `tenants_plan_check`: `plan IN ('free', 'pro')`, **applied on BOTH environments 2026-10-06**
+  (`docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`; `convalidated` true). `Tier.isPaid()` tests
+  `=== 'pro'` exactly, so a hand-typed `'Pro'` is now rejected by the database instead of silently reading
+  as free. `register-tenant` still normalises (trim, lowercase, allowlist) before it reaches this.
 
 **Indexes:**
 - `tenants_pkey` on `id`
@@ -5565,6 +5569,9 @@ reasoning — only the disposition changed, not the diagnosis.
   `information_schema.role_table_grants` for `app_settings` before creating anything, specifically so
   a surprise here halts the run rather than proceeding on a false premise. It did. **Open, not
   started** — filed per Rick's explicit call (file now, fix later), not fixed inline.
+  **2026-10-06 (session G-A): the broader sweep this entry said was missing WAS RUN; the finding is
+  WIDER than filed, and it is still NOT fixed (Rick deferred it). See the dated update at the end of
+  this entry.**
 - **Severity: Low today, confirmed by a live test, not inferred.** A direct anon-key HTTP read
   against production (`GET .../rest/v1/app_settings?key=eq.maintenance_mode`) returned **`200, []`**
   — the query is *permitted* (unlike staging, which hard-401s: `42501 permission denied`) but RLS
@@ -5595,8 +5602,58 @@ reasoning — only the disposition changed, not the diagnosis.
   found incidentally; a broader sweep (`information_schema.role_table_grants` across all tables,
   diffed staging vs prod) has not been run.
 - **Where:** production Supabase project (`plgegklqtdjxeglvyjte`) only — staging confirmed clean.
+  *(2026-10-06: "production only" and "staging confirmed clean" are both superseded: see the update
+  below. Staging also grants `anon` full DML on two tables, and production's grants are on every table.)*
 - **Related:** **F149** (whose promotion surfaced this), **F64** (the existing prod↔staging DDL
   divergence catalogue — this is the same class, one more instance).
+- **UPDATE 2026-10-06, session G-A (`docs/pre-phase-6-gate-closure.md` § 2 Step 1): the sweep ran on BOTH
+  projects, the three open questions above are answered, and the fix was DEFERRED, not applied.**
+  Rick ran one read-only query per project (per-table RLS state, `anon` privileges from
+  `information_schema.role_table_grants` AND from `has_table_privilege`, `pg_default_acl`, and
+  `pg_policies`). I cross-checked from outside with anon-key REST probes (a `limit=0` request per table,
+  with `Prefer: count=exact` so no row data was returned): no row data was read.
+  - **Anon grants, per table.** Production: **all seven privileges (DELETE, INSERT, REFERENCES, SELECT,
+    TRIGGER, TRUNCATE, UPDATE) on all 11 `public` tables** (`app_settings`, `catalog`, `order_submissions`,
+    `preorders`, `reservation_history`, `settings`, `subscriptions`, `tenants`, `usage_events`,
+    `user_profiles`, `weekly_shipment`). Staging: **none on 9 of them, but the same full set on
+    `order_submissions` and `settings`.** `admin_preorders` (a view, outside the SQL sweep's table scope)
+    returned 401 to anon on both projects in the REST probe. **So this
+    is not an `app_settings` divergence: 9 of 11 tables differ.** The REST probe agreed for SELECT:
+    production 200 on those 9 where staging returns 401 `42501`.
+  - **Direction correction.** **Production is at the Supabase platform default; staging is the partly
+    hardened environment.** The default ACLs are **identical on both projects** (24 rows; for `postgres` and
+    for `supabase_admin` in `public`, `anon` receives `arwdDxtm` on tables, `rwU` on sequences, `X` on
+    functions), so any table created on either project is born with anon grants unless someone revokes them.
+    Why `order_submissions` and `settings` escaped staging's hardening is **not traced**; a one-off revoke
+    followed by later table creation would fit, but that is a guess, not a measurement.
+  - **Answers to the entry's open questions.** (1) **RLS is enabled** on production's `app_settings`
+    (`relrowsecurity` true), and on all 11 tables on both projects. (2) Production's `app_settings` has
+    exactly four policies, **all `TO authenticated`** (`admins delete / insert / update tenant app_settings`,
+    `users read tenant app_settings`), identical to staging's. (3) **Across the whole `public` schema each
+    project has 28 policies, and none is applicable to `anon` or `public`** (`roles && {anon,public}`
+    returned no rows on either). Anon-visible row count is **0 on every exposed table on both projects.**
+  - **Severity is unchanged: Low, no active exposure.** The grant is the outer gate and RLS the inner one,
+    and no policy admits `anon`. The write-side claim was an inference from the doc's policy list in the
+    filing; it now rests on a complete policy audit instead, which is firmer but **still not an anon write
+    probe** (never run, judged too risky). `TRUNCATE` ignores RLS, but PostgREST has no TRUNCATE verb, so
+    I believe it is not reachable through the API; that is inference, not something exercised. What the
+    open grants cost is defence in depth: one future policy written `TO public`, or a view or function
+    that bypasses RLS, would be reachable by an unauthenticated caller with the public anon key.
+  - **Decision (Rick, 2026-10-06): skip the runbook's Step 2 and defer F150, scope widened, no new finding
+    ID.** The runbook's own rule applied (revoke nothing if any table other than `app_settings` differs).
+    An `app_settings`-only revoke was offered and declined: it would leave 10 tables at the platform
+    default and the "matches staging" safety argument holds only for the nine hardened ones.
+    **Production anon `GET /rest/v1/app_settings` still returns HTTP 200** (re-read after this session's
+    other writes); the F149 RPC `is_maintenance_mode` still answers anon `200` / `false`.
+  - **Fix direction, NOT planned and nothing decided:** a platform-wide pass: `REVOKE ALL ON ALL TABLES IN
+    SCHEMA public FROM anon` on production (and on staging for the two tables), plus `ALTER DEFAULT
+    PRIVILEGES FOR ROLE postgres, supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon` so new
+    tables stop inheriting. The evidence that it is safe is that staging's nine hardened tables already run
+    the full suite and the anon flows (`resolve_tenant_by_slug`, `is_maintenance_mode` and
+    `get_popular_series` are `SECURITY DEFINER` RPCs and need no table grant). **Not established:** that
+    nothing reads `order_submissions` or `settings` as anon, which neither environment proves, since both
+    grant them. It needs its own session, with each anon-reachable flow checked. Out of scope here and
+    unexamined: `EXECUTE` grants on functions (F124's class) and the `storage` schema's default ACLs.
 
 #### F151 — `tenants.settings` still stores `mailerlite_webhook_secret` on every real tenant row, and the authenticated client path can read it
 
@@ -5649,6 +5706,23 @@ reasoning — only the disposition changed, not the diagnosis.
   `REVOKE`/`GRANT` on `tenants` is the durable fix; the client-side `select()` list is not.
 - **Where:** `tenants.settings` on **both** environments (unlike F150, which was production-only).
   Client read path: `app.js:82-86`.
+- **UPDATE 2026-10-06, session G-A: the EXISTING ROWS ARE CLEAN ON BOTH ENVIRONMENTS; the finding stays
+  OPEN because the WRITER is still live.** Rick ran `UPDATE public.tenants SET settings = settings -
+  'mailerlite_webhook_secret' WHERE jsonb_exists(settings, 'mailerlite_webhook_secret')` in one transaction
+  with the `tenants_plan_check` constraint (`docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`), staging
+  first, then production. Both POST checks read 0 carriers, and I re-read both projects through the service
+  role (key names only, never a value): **every `settings` is `{}` on all 9 tenants** (staging 7:
+  `raysandjudys`, `demoshop`, `riverside-comics` and four `pw-*` fixtures; production 2: `rjbookstop`,
+  `comicstore`). Staging had **three** carriers, not the one the 2026-09-01 measurement found: `demoshop`
+  and `riverside-comics` were created later, **through `register-tenant`, which is the writer**.
+  **Still open: `supabase/functions/register-tenant/index.ts` generates the secret (line 177), stores it
+  as `settings: { mailerlite_webhook_secret }` (line 196) and returns it as `webhook_secret` in the response
+  (line 347), re-read 2026-10-06.** Any tenant created from now on carries the key again, so deleting today's
+  rows alone does not close F151. The writer fix (and the runbook Step 1 line that tells the operator to save
+  `webhook_secret`) is session G-B of `docs/pre-phase-6-gate-closure.md`, which also deploys
+  `register-tenant` to production. **Still unprobed, as filed:** the authenticated-read claim (no real user
+  JWT was used; a column-level GRANT on `tenants` would flip it). With the rows gone it matters less: there is
+  nothing of value left to read until the writer runs again.
 - **Related:** **F72** (whose planning surfaced this — `docs/f72-multi-tenant-branding.md` § 6).
   **F73 / F74** (the webhook-secret credential-handling lineage — this is the same secret, now
   outliving its own feature). **F150** (filed one day earlier, same "found during planning, filed not

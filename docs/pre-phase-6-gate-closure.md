@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** PLANNED — G-A NOT STARTED (2026-10-06) | staging=— | prod=— | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B..G-H NOT STARTED | staging=G-A 2026-10-06 | prod=G-A 2026-10-06 (SQL only, Rick-run) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -43,7 +43,7 @@ Phase-6-motivated and wait on D1.
 
 | # | Session | Closes | Gate / precondition | Size |
 |---|---|---|---|---|
-| **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | none — **ready now; handoff below** | 1 session, Rick runs SQL |
+| **G-A** | **Tenant & settings hygiene (SQL only, both envs)** — F150 sweep + fix, `tenants_plan_check`, F151 row cleanup | G6, G7b, half of G7a | **DONE 2026-10-06 — see § 2a for the result.** Closed G6 and the F151 rows; **did NOT close G7b** (the sweep widened F150 and Rick deferred it) | 1 session, Rick runs SQL |
 | G-B | **Engine to production** — `register-tenant` stops minting the webhook secret (closes F151), then deploy `register-tenant` (F153 invite) + `register-customer` (F72 S2a) to production | rest of G7a, engine half of G3 | after G-A; `/promote-prod` needs Rick's explicit request | 1 session |
 | G-C | **S0 serving-model spike** — wildcard `*.pulllist.app` + TLS on Pages; price (a) wildcard vs (b) CF-for-SaaS | G1 | none technically; **PAUSE before any DNS change** | 1 session, Rick in Cloudflare dashboard |
 | G-D | **F164 creation-path trace** (read-only investigation) | G8 | none; can run in parallel with anything | ½ session |
@@ -183,19 +183,65 @@ No rotation: the value authorizes nothing since 2026-08-30. **F151 stays OPEN af
 
 ### Completion criteria (G-A)
 
-- [ ] Step 1 sweep results recorded for both environments, and Rick's PAUSE decision recorded
-- [ ] Production anon `app_settings` → 401, F149 RPC still `200/false` (or F150 explicitly deferred by Rick)
-- [ ] `tenants_plan_check` present on both (POST query returns the row on each)
-- [ ] 0 tenants carry `mailerlite_webhook_secret` on both
-- [ ] SQL file committed with both environments `APPLIED`/`N/A`; no `PENDING` left
-- [ ] Targeted tenant-creating specs green on staging after Step 3
-- [ ] Docs updated; status update produced (`/wrap-up`)
+- [x] Step 1 sweep results recorded for both environments, and Rick's PAUSE decision recorded *(§ 13 F150; decision: skip Step 2, defer F150, scope widened, no new ID)*
+- [x] ~~Production anon `app_settings` → 401~~, F149 RPC still `200/false` **or F150 explicitly deferred by Rick** *(the 401 was NOT achieved and is not claimed: production anon `GET app_settings` still reads 200. This box is ticked on its second branch only: Rick deferred F150 on 2026-10-06, and the F149 RPC re-read `200` / `false` on both projects)*
+- [x] `tenants_plan_check` present on both (POST query returns the row on each) *(`convalidated` true on each)*
+- [x] 0 tenants carry `mailerlite_webhook_secret` on both *(POST check 0 on each; independently re-read through the service role, every `settings` is `{}` on all 9 tenants)*
+- [x] SQL file committed with both environments `APPLIED`/`N/A`; no `PENDING` left *(`docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`)*
+- [x] Targeted tenant-creating specs green on staging after Step 3 *(07, 08, 09, 20: 21 passed in 2.3 min, exit 0, from the log's own summary; plus `f72-s0-plan-allowlist.mjs` 7/7)*
+- [x] Docs updated; status update produced (`/wrap-up`)
 
 ### Rollback
 
 - F150: `GRANT SELECT ON public.app_settings TO anon;` (restore only SELECT unless Rick asks for the full prior set).
 - G6: `ALTER TABLE public.tenants DROP CONSTRAINT tenants_plan_check;`
 - F151: not reversible and not needed — the value is dead config.
+
+### 2a. Session G-A result (2026-10-06)
+
+**Ran:** Step 0, Step 1, Step 3 and Step 4 on both environments (staging first), Step 5. **Did NOT run: Step 2.**
+
+- **Step 0.** Every baseline matched § 0 (production anon `GET app_settings` 200, staging 401; production's two
+  tenants carry the key). One difference worth knowing: **staging carried the key on THREE tenants**
+  (`raysandjudys`, `demoshop`, `riverside-comics`), not the one the 2026-09-01 measurement recorded; the two
+  newer ones were created through `register-tenant`, which is the writer G-B must fix.
+- **Step 1, and the PAUSE.** The runbook's own branch applied: **9 of 11 tables differ, not only
+  `app_settings`**, so nothing was revoked. Production anon holds all seven table privileges on all 11 `public`
+  tables; staging holds none on 9 and the full set on `order_submissions` and `settings`. RLS is on for all 11 on
+  both, default ACLs are identical (the platform default), and **no policy applies to `anon` or `public` on
+  either project (28 policies each)**; anon sees 0 rows on every exposed table on both. **Rick (2026-10-06): skip
+  Step 2, defer F150, scope widened, no new ID.** Full diff: § 13 F150. A cross-check I ran before Rick's paste
+  (anon-key REST probes, `limit=0` plus a count header, no row data) predicted the branch and agreed with the SQL.
+- **Step 3.** `tenants_plan_check` applied on staging, then production; `convalidated` true on both. Local
+  Playwright fixtures were swept via Bash first: `fixtures/tenant.ts` inserts only `slug` and `display_name`
+  (so `plan` takes the `'free'` default), and no spec or fixture writes another plan value. Staging afterwards:
+  targeted specs **07, 08, 09 and 20: 21 passed (2.3 min), exit 0**; `f72-s0-plan-allowlist.mjs` 7/7 (the real
+  `register-tenant` writer through the constraint, teardown 0 tenants / 0 profiles / 0 orphaned auth users).
+- **Step 4.** The key was deleted on both; 0 carriers on both by Rick's POST check and by my service-role
+  read-back (every `settings` is `{}` on all 9 tenants). **F151 stays OPEN**, because the writer is live.
+- **Deviations from the runbook as written, all deliberate:** (1) one combined **round-1** read-only query per
+  project carried the F150 sweep and the Step 3 and 4 PRE checks (the SQL Editor shows only the last
+  statement's result, and Steps 3 and 4 do not depend on the pause); (2) the sweep gained a `has_table_privilege`
+  column, because `information_schema.role_table_grants` only lists grants whose grantor or grantee is an
+  enabled role; (3) `jsonb_exists(settings, 'k')` replaces `settings ? 'k'`, the same test without a `?` the
+  editor might read as a placeholder; (4) Steps 3 and 4 ran in ONE transaction per project; (5) the POST query
+  gained `convalidated`. One hiccup: Rick's first production paste lacked the `app_settings` policy rows (they
+  sort first), which looked like "zero policies"; a follow-up policy query showed they were present and the top
+  of the paste had been cut.
+- **Not verified, stated plainly:** (a) a hand-typed `UPDATE ... SET plan = 'Pro'` being **refused** was not
+  run (`convalidated` is the evidence); (b) **no anon write probe** was run against either project, so
+  "nothing writable by anon" rests on the complete policy audit, not on an attempt; (c) the targeted specs, not
+  the full suite, ran (by the runbook's design), and only on staging: nothing exercised `register-tenant` on
+  production; (d) the REST cross-check scripts live in the session scratchpad and are not committed.
+- **Hand-off to G-B.** Deleting the rows did not close F151: `register-tenant/index.ts` lines 177, 196 and 347
+  (re-read this session) still generate, store and return the secret. G-B removes that, updates
+  `tenant-onboarding-runbook.md` Step 1's expected response, and deploys `register-tenant` and
+  `register-customer` to production. **A tenant created before G-B ships carries the key again**, and the
+  cleanup SQL here is not worth re-running until the writer is gone.
+- **New decision owed (Rick), not scheduled:** F150's platform-wide revoke. The fix direction and what is not
+  yet established are in § 13 F150; it needs its own session. **It stays the open half of gate G7b** ("must be
+  clean before strangers get admin accounts"), so Phase 6 cannot open until it is closed or explicitly
+  waived; it is not urgent under Shape D, where no stranger gets an account.
 
 ---
 
