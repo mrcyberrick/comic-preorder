@@ -687,7 +687,7 @@ Rick requested the promotion (`/promote-prod`, adding "My List is 11") and merge
 - **V12 human check closed:** Rick reported "My List is 11". The read-only replay's figure for his own account on 2026-10-06 is 11 (14 on 10-05, before three rows crossed the 180-day window), so the two agree. His words do not say which element he read, so this is a count match rather than a visual check of the empty-list placement.
 - **Not verified:** the empty-list placement as rendered on production (the screenshot that prompted it was the before state); WebKit or a real phone; the park-before-rewrite invariant at runtime (static check only, § 19); nothing in git asserts any of it.
 - **Write-smoke:** skipped; `mylist.html` only, with no `app.js`, `Preorders` or reserve/cancel path in the diff.
-- **Disposition:** feature change, no finding ID consumed (F170 stays next free). F163 has nothing left open on this surface.
+- **Disposition:** feature change, no finding ID consumed (F170 stayed next free until later the same day, when an unrelated test-infra finding, the Playwright fixture leak, took it; F171 is now next). F163 has nothing left open on this surface.
 
 ## References
 
