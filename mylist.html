@@ -693,8 +693,8 @@
     </div>
     <div class="month-arrivals-body">
       <p id="unavailable-note" style="margin:0 0 10px;font-size:0.78rem;color:var(--text-secondary)">
-        The store has confirmed these will not be coming to you. Where there is a Remove button it only
-        clears your list; otherwise contact the store with any questions.
+        The store has confirmed these will not be coming to you, so there is nothing to collect or pay for.
+        Remove clears an item from your list. If an item didn't arrive or arrived damaged, contact the store.
       </p>
       <div class="month-arrivals-grid" id="unavailable-grid"></div>
     </div>
@@ -1591,6 +1591,11 @@ function confirmDialog(message, okLabel = 'Remove') {
   // misleading message. `canRemove = isWithdrawn || (isRejected && !item.fulfilled)`. A WITHDRAWN row is exempt from
   // both guards (F110 § 2.2), so it keeps Remove whether or not it is fulfilled. Informational only otherwise.
   //
+  // SUPERSEDED for rejected rows, same day, by Rick (2026-10-05): "the store doesn't need a lot of phone calls if the answer is
+  // that the supplier rejected it." A closed supplier-rejected row is now removable too: Preorders.cancel() (app.js) was
+  // taught the allowance (the database already permitted it), and `canRemove = isWithdrawn || isRejected`. "Contact store"
+  // now appears only on did-not-arrive and damaged cards, which is also where the admin Clear applies.
+  //
   // Rick's call, 2026-09-21: Remove appears here and ONLY here. The
   // current-month table's rejected rows stay badge-only exactly as the
   // 2026-08-06 decision set them, because that reasoning — a live cycle
@@ -1633,9 +1638,12 @@ function confirmDialog(message, okLabel = 'Remove') {
           : isNotArrived
             ? '⚠ Did not arrive'
             : '⚠ Arrived damaged';
-      // == what the SERVER and Preorders.cancel() permit: F109 allows withdrawn or ledger net <= 0, and cancel()
-      // refuses a fulfilled row unless it is withdrawn. Superseded form: `isWithdrawn || isRejected` (open rows only).
-      const canRemove = isWithdrawn || (isRejected && !item.fulfilled);
+      // == what the SERVER and Preorders.cancel() permit: F109 allows withdrawn or ledger net <= 0, and cancel() (app.js)
+      // refuses a fulfilled row unless it is withdrawn OR supplier-rejected-and-not-arrived (F163, Rick 2026-10-05). Every
+      // card in this section that is `isRejected` is by construction not 'arrived' (that case is filtered out above), so
+      // the two agree. Superseded forms: `isWithdrawn || isRejected` (open rows only, 2026-09-21), then
+      // `isWithdrawn || (isRejected && !item.fulfilled)` (2026-10-04, the "no Remove on closed rows" decision).
+      const canRemove = isWithdrawn || isRejected;
       const cover = c.cover_url
         // onerror MUST also add .loaded — see the fade-in loop below for why.
         // COVER_PLACEHOLDER is a .webp file, not a data: URI, so the
