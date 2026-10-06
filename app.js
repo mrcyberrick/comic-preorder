@@ -1711,7 +1711,7 @@ const Preorders = {
     // though no admin ever clicked anything.
     const { data: existing, error: lookupErr } = await db
       .from('preorders')
-      .select('id, fulfilled, catalog:catalog_id(distributor, item_code, upc, isbn, withdrawn_at)')
+      .select('id, fulfilled, arrival_outcome, catalog:catalog_id(distributor, item_code, upc, isbn, withdrawn_at)')
       .eq('user_id', userId)
       .eq('catalog_id', catalogId)
       .maybeSingle();
@@ -1727,43 +1727,51 @@ const Preorders = {
     // isFocPast()/isFocLocked() are untouched.
     const isWithdrawn = !!c.withdrawn_at;
 
-    if (!isWithdrawn && existing.fulfilled) {
-      return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
-    }
-
-    // Second guard: refuse to cancel a code the store has already submitted
-    // to the distributor (order_submissions), independent of fulfilled —
-    // Rick's direction, F101/F102 session: "ordered" locks the customer the
-    // same way "fulfilled" (arrived) already does.
+    // The ordered-state guard (below) and the supplier-rejected allowance both read the same signed ledger, so it is
+    // read ONCE, up front. Superseded order: the fulfilled refusal used to come first and skip this read entirely.
     //
-    // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now
-    // returns a signed order_state ('ordered' | 'unavailable') instead of a
-    // bare row match — a code with only a zero/negative net quantity (a
-    // rejection, or an adjustment that corrected the order away) is NOT
-    // "already placed" and must not lock the customer out. Checking mere
-    // presence here would be the same false-promise the RPC itself was
-    // reworked to stop making on My List (V-B2).
+    // Refuse to cancel a code the store has already submitted to the distributor (order_submissions), independent of
+    // fulfilled — Rick's direction, F101/F102 session: "ordered" locks the customer the same way "fulfilled" (arrived)
+    // already does.
+    //
+    // order-loop-closure Session B (F117/F108 § 4.4): get_ordered_codes() now returns a signed order_state
+    // ('ordered' | 'unavailable') instead of a bare row match — a code with only a zero/negative net quantity (a
+    // rejection, or an adjustment that corrected the order away) is NOT "already placed" and must not lock the
+    // customer out. Checking mere presence here would be the same false-promise the RPC itself was reworked to stop
+    // making on My List (V-B2).
+    let orderState = null;                       // 'ordered' | 'unavailable' | null (no ledger rows for this code)
     if (!isWithdrawn) {
       const orderCode = exportCode(c, c.distributor);
       if (orderCode) {
-        // F162 — same truncation risk as getOrderedCodes() above, and this
-        // is the call site that actually blocks the delete, not just a
-        // display label: an un-paginated call here means a genuinely-ordered
-        // code the response happened to drop lets the cancel through for
-        // real. Paginated via fetchAllRows(), same fix, same reasoning.
+        // F162 — same truncation risk as getOrderedCodes() above, and this is the call site that actually blocks the
+        // delete, not just a display label: an un-paginated call here means a genuinely-ordered code the response
+        // happened to drop lets the cancel through for real. Paginated via fetchAllRows(), same fix, same reasoning.
         const { data: ordered } = await fetchAllRows(() => db.rpc('get_ordered_codes'));
-        const alreadyOrdered = (ordered || []).some(o =>
-          o.distributor === c.distributor && o.order_code === orderCode && o.order_state === 'ordered');
-        if (alreadyOrdered) {
-          return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
-        }
+        const hit = (ordered || []).find(o => o.distributor === c.distributor && o.order_code === orderCode);
+        orderState = hit ? hit.order_state : null;
       }
     }
 
+    // F163 (Rick, 2026-10-05): "the store doesn't need a lot of phone calls if the answer is that the supplier
+    // rejected it." A CLOSED reservation may be cancelled when the supplier REJECTED its code (the ledger has rows and
+    // nets to <= 0) and nothing shows the book arrived. The database already permits this (F109 blocks only a ledger
+    // that nets > 0 and never reads `fulfilled`); only this client guard stood in the way. `arrival_outcome = 'arrived'`
+    // keeps it refused: that book is on the shelf, whatever the ledger says. Withdrawn titles are handled above.
+    const rejectedAndNotArrived = !isWithdrawn && orderState === 'unavailable' && existing.arrival_outcome !== 'arrived';
+
+    // Guard: refuse to cancel a fulfilled row (unless withdrawn, or supplier-rejected as above).
+    if (!isWithdrawn && existing.fulfilled && !rejectedAndNotArrived) {
+      return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+    }
+
+    if (orderState === 'ordered') {
+      return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
+    }
+
     let deleteQuery = db.from('preorders').delete().eq('user_id', userId).eq('catalog_id', catalogId);
-    // Defensive race guard — skipped for withdrawn rows since a withdrawn
-    // reservation is cancellable even if it has since become fulfilled.
-    if (!isWithdrawn) deleteQuery = deleteQuery.eq('fulfilled', false);
+    // Defensive race guard — skipped for withdrawn rows since a withdrawn reservation is cancellable even if it has
+    // since become fulfilled, and for a supplier-rejected one for the same reason (F163, 2026-10-05).
+    if (!isWithdrawn && !rejectedAndNotArrived) deleteQuery = deleteQuery.eq('fulfilled', false);
     const { error } = await deleteQuery;
     return { error };
   },

@@ -693,8 +693,10 @@
     </div>
     <div class="month-arrivals-body">
       <p id="unavailable-note" style="margin:0 0 10px;font-size:0.78rem;color:var(--text-secondary)">
-        The store has confirmed these will not be coming to you. Where there is a Remove button it only
-        clears your list; otherwise contact the store with any questions.
+        The store has confirmed these will not be coming to you, so there is nothing to collect or pay for.
+        Remove clears an item from your list. If an item didn't arrive or arrived damaged, the store already
+        knows and handles it with the supplier. A replacement, if one is ordered, may take longer, and you
+        don't need to do anything.
       </p>
       <div class="month-arrivals-grid" id="unavailable-grid"></div>
     </div>
@@ -1243,9 +1245,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                     : isRejected
                       ? `<div class="col-sub withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
                       : isNotArrived
-                        ? `<div class="col-sub withdrawn-notice">\u26A0 Did not arrive &mdash; contact the store.</div>`
+                        ? `<div class="col-sub withdrawn-notice">\u26A0 Did not arrive &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
                         : isDamaged
-                          ? `<div class="col-sub withdrawn-notice">\u26A0 Arrived damaged &mdash; contact the store.</div>`
+                          ? `<div class="col-sub withdrawn-notice">\u26A0 Arrived damaged &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
                       : isOrdered
                         ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
                             ? ' &middot; arriving ' + formatDate(arrivingOn)
@@ -1272,9 +1274,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
                     : isNotArrived
-                      ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Didn't arrive</span>`
+                      ? `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do.">⚠ Didn't arrive</span>`
                       : isDamaged
-                        ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Damaged</span>`
+                        ? `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do.">⚠ Damaged</span>`
                         : isOrdered
                       ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
@@ -1318,9 +1320,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                   : isRejected
                     ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Rejected by the supplier &mdash; this title will not arrive as scheduled.</div>`
                     : isNotArrived
-                      ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Did not arrive &mdash; contact the store.</div>`
+                      ? `<div class="mobile-card-series withdrawn-notice" style="white-space:normal">\u26A0 Did not arrive &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
                       : isDamaged
-                        ? `<div class="mobile-card-series withdrawn-notice">\u26A0 Arrived damaged &mdash; contact the store.</div>`
+                        ? `<div class="mobile-card-series withdrawn-notice" style="white-space:normal">\u26A0 Arrived damaged &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
                     : isOrdered
                       ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
                           ? ' &middot; arriving ' + formatDate(arrivingOn)
@@ -1345,9 +1347,9 @@ function confirmDialog(message, okLabel = 'Remove') {
                   ${isWithdrawn
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
                     : isNotArrived
-                      ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Didn't arrive</span>`
+                      ? `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do.">⚠ Didn't arrive</span>`
                       : isDamaged
-                        ? `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions">⚠ Damaged</span>`
+                        ? `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do.">⚠ Damaged</span>`
                         : isOrdered
                       ? `<span class="foc-locked-chip" style="background:rgba(34,197,94,0.12);color:var(--success,#22c55e);border-color:rgba(34,197,94,0.3)" title="Order placed — contact the store to revert">✓ Order placed</span>`
                       : focLocked
@@ -1591,6 +1593,12 @@ function confirmDialog(message, okLabel = 'Remove') {
   // misleading message. `canRemove = isWithdrawn || (isRejected && !item.fulfilled)`. A WITHDRAWN row is exempt from
   // both guards (F110 § 2.2), so it keeps Remove whether or not it is fulfilled. Informational only otherwise.
   //
+  // SUPERSEDED for rejected rows, same day, by Rick (2026-10-05): "the store doesn't need a lot of phone calls if the answer is
+  // that the supplier rejected it." A closed supplier-rejected row is now removable too: Preorders.cancel() (app.js) was
+  // taught the allowance (the database already permitted it), and `canRemove = isWithdrawn || isRejected`. The chip (now
+  // "Store is handling this", reworded again 2026-10-06 so it does not invite a call) appears only on did-not-arrive and
+  // damaged cards, which is also where the admin Clear applies.
+  //
   // Rick's call, 2026-09-21: Remove appears here and ONLY here. The
   // current-month table's rejected rows stay badge-only exactly as the
   // 2026-08-06 decision set them, because that reasoning — a live cycle
@@ -1633,9 +1641,12 @@ function confirmDialog(message, okLabel = 'Remove') {
           : isNotArrived
             ? '⚠ Did not arrive'
             : '⚠ Arrived damaged';
-      // == what the SERVER and Preorders.cancel() permit: F109 allows withdrawn or ledger net <= 0, and cancel()
-      // refuses a fulfilled row unless it is withdrawn. Superseded form: `isWithdrawn || isRejected` (open rows only).
-      const canRemove = isWithdrawn || (isRejected && !item.fulfilled);
+      // == what the SERVER and Preorders.cancel() permit: F109 allows withdrawn or ledger net <= 0, and cancel() (app.js)
+      // refuses a fulfilled row unless it is withdrawn OR supplier-rejected-and-not-arrived (F163, Rick 2026-10-05). Every
+      // card in this section that is `isRejected` is by construction not 'arrived' (that case is filtered out above), so
+      // the two agree. Superseded forms: `isWithdrawn || isRejected` (open rows only, 2026-09-21), then
+      // `isWithdrawn || (isRejected && !item.fulfilled)` (2026-10-04, the "no Remove on closed rows" decision).
+      const canRemove = isWithdrawn || isRejected;
       const cover = c.cover_url
         // onerror MUST also add .loaded — see the fade-in loop below for why.
         // COVER_PLACEHOLDER is a .webp file, not a data: URI, so the
@@ -1655,11 +1666,19 @@ function confirmDialog(message, okLabel = 'Remove') {
             ${canRemove
               ? `<button class="btn btn-danger btn-sm cancel-btn-unavailable" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
                          style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>`
-              // Title was "The store has this on order — contact them": TRUE for a net > 0 row, FALSE for a
-              // supplier-rejected or never-arrived one, which is now most of what this chip sits on. Same wording
-              // as the main table's own did-not-arrive chip, so the two surfaces cannot say different things.
-              : `<span class="foc-locked-chip" title="Confirmed by the store — contact them with questions"
-                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center">⚠ Contact store</span>${isAdminViewer
+              // REWORDED 2026-10-06 (Rick). History: this was "The store has this on order — contact them" (true only for
+              // a net > 0 row), then "⚠ Contact store" / "Confirmed by the store — contact them with questions" (2026-10-04).
+              // It now sits ONLY on did-not-arrive and damaged cards (a withdrawn or supplier-rejected card has Remove), and
+              // for those the store already knows, claims it with the supplier, and may have a replacement on order, so a
+              // call-to-action invites calls about something already in hand. It says the store is handling it instead.
+              // Deliberately NEUTRAL, not the red alarm style: there is nothing for the customer to do. wrap allowed: the
+              // label is longer than the card's 100px at this size. The MAIN table's and the mobile cards' did-not-arrive /
+              // damaged lines and chip hover text were aligned to the same message the day after (2026-10-06, Rick: "if we have
+              // one damaged item when 6 were ordered, I do not want six phone calls"), so no surface here tells the customer
+              // to call about a state the store already has in hand. FOC passed / Locked still say "contact the store": there
+              // the customer genuinely cannot change the order themselves.
+              : `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do."
+                       style="margin-top:4px;width:100%;box-sizing:border-box;justify-content:center;text-align:center;white-space:normal;line-height:1.25;color:var(--text-secondary);background:var(--bg-elevated);border-color:var(--border)">Store is handling this</span>${isAdminViewer
                   // ADMIN ONLY, and only where there is no Remove (Remove already clears a card, by deleting the
                   // reservation). Hides the card for everyone; the reservation is kept. See the grid handler below.
                   ? `<button class="btn btn-secondary btn-sm clear-btn-unavailable" data-preorder-id="${item.id}"
