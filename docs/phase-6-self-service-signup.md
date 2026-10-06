@@ -17,6 +17,18 @@
 
 ## Readiness — assessed 2026-10-04 (verdict: NOT READY; do not open Phase 6 yet)
 
+> **Re-checked 2026-10-06: unchanged, every measurable gate re-measured.** One correction: G7's F151
+> fix is wider than recorded, because `register-tenant` still mints and stores the dead secret on every
+> new tenant. **The sessions that close these gates are planned in `docs/pre-phase-6-gate-closure.md`**
+> (G-A tenant/settings hygiene first, runbook written).
+>
+> **Session G-A RAN 2026-10-06: G6 CLOSED, G7 partly closed, verdict still NOT READY.** `tenants_plan_check`
+> is on both environments. F151's existing rows are cleaned on both, its writer (`register-tenant`) is G-B's.
+> F150's sweep found the grant divergence on 9 of 11 tables rather than one, so the planned `app_settings`
+> revoke was **not run** and F150 is deferred (Rick) as a wider, separate piece of work; no active exposure
+> was found. Record: `docs/pre-phase-6-gate-closure.md`, `docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql`,
+> `docs/technical-reference.md` § 13 F150 and F151.
+
 Measured against the repo, both branches and the served production bytes on 2026-10-04, not
 against this stub's June text.
 
@@ -32,8 +44,8 @@ Rick to reverse Q3 explicitly; the gates below are what that reversal would then
 | G3 | **F72 email half** — 5 mail functions founding-branded; S2a `register-customer` and F153's `register-tenant` are SOURCE-only on production (not deployed) | OPEN | any tenant taking real customers; a self-serve signup would receive no invite on production |
 | G4 | **F157 distributor-scoping** — a one-distributor tenant's single catalog is treated as a partial import | OPEN — **scoping DESIGNED 2026-10-04** (`docs/f157-distributor-scoping.md`, STATUS NOT STARTED, migration text written and not run, build deferred). **⚠️ Re-scoped by that work:** the RPC (`delete_dropped_catalog_items`) matches zero rows in its real wiring (F66, F110), so scoping it does **not** unblock a one-distributor tenant. What does is the import scripts' two mandatory positional catalog files, the month inferred from the Lunar filename, and F157's own zero-row guard aborting on a missing file, filed as **F169** (no owner, no plan, no workaround) | the eligibility gate's own "either PRH **or** Lunar" promise. **G4 is really F169**; the scoped delete rides along with it |
 | G5 | **F131** — every tenant's catalog comes from one operator's portal access; no self-service import | OPEN, structural | "no operator in the loop" (this phase's Goal) is false until solved |
-| G6 | **`tenants.plan` has no CHECK constraint** (`'Pro'` would persist and read free) | raised 2026-09-02, not applied | 6.3 writing plan/tier values |
-| G7 | **F151** (dead secret readable in `tenants.settings`), **F150** (prod `app_settings` anon grants) | OPEN, Low | must be clean before strangers get admin accounts |
+| G6 | **`tenants.plan` has no CHECK constraint** (`'Pro'` would persist and read free) | **CLOSED 2026-10-06** (session G-A): `tenants_plan_check` applied on BOTH environments, `convalidated` true; targeted specs 21/21 and the real-writer allowlist check 7/7 on staging afterwards. *(Was: raised 2026-09-02, not applied.)* | 6.3 writing plan/tier values |
+| G7 | **F151** (dead secret readable in `tenants.settings`), **F150** (prod `app_settings` anon grants) | **PARTLY CLOSED 2026-10-06 (session G-A), both halves still OPEN.** **F151:** the existing rows are clean on both environments (every `settings` is `{}`), but `register-tenant` still generates, stores and returns the secret (`index.ts` 177 / 196 / 347), so a new tenant re-adds it: closes in session G-B. **F150: the sweep ran and the finding is WIDER than filed**: production anon holds all seven table privileges on all 11 `public` tables (staging: none on 9, full on `order_submissions` and `settings`), RLS is on everywhere and no policy reaches `anon` or `public` on either project, so there is no active exposure. Rick **deferred the fix (2026-10-06)**; it needs its own platform-wide session. Production anon `GET app_settings` is still 200 | must be clean before strangers get admin accounts |
 | G8 | **F164** creation path untraced (cross-tenant `preorders` on staging) | OPEN | a cross-tenant write path would be Medium the day tenant N+1 is public |
 
 **Recommended order if Q3 is reversed:** G2 (deadline half done 2026-10-04; S2 landed and soaking; S3 still to decide) → G1 spike (cheap, ~1
