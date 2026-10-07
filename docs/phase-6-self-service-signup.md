@@ -1,6 +1,6 @@
 # Phase 6 — Open Self-Service Tenant Signup (STUB)
 
-**STATUS:** STUB — NOT READY (readiness assessed 2026-10-04, re-checked 2026-10-06 with pre-Phase-6 sessions G-A and G-B run, see § Readiness) | staging=— | prod=N/A | findings=F145,F72,F165,F157,F169,F151,F150
+**STATUS:** STUB — NOT READY (readiness assessed 2026-10-04, re-checked 2026-10-06 with pre-Phase-6 sessions G-A and G-B run, G-C desk spike run 2026-10-07 with G1 still open, see § Readiness) | staging=— | prod=N/A | findings=F145,F72,F165,F157,F169,F151,F150,F171
 
 **Status:** **Stub — not started.** Successor to Phase 5. This is a *thin coordinator stub* capturing the goal, the gating prerequisite, and the design decisions taken at 5.4 planning (2026-06-15). **Detailed sub-deploy runbooks are written when Phase 6 actually opens — after Phase 5 (5.5) closes** — per the Phase 3/4/5 pattern (plan-when-its-turn-comes; do not plan execution detail against future schema/infra state).
 **Predecessor:** Phase 5 — Second-Tenant Onboarding (`docs/phase-5-second-tenant-onboarding.md`). **Phase 6 does not begin until Phase 5 is Complete.**
@@ -27,6 +27,13 @@
 > is folded into G-F. **New pre-6.0 constraint:** an unknown `<slug>.pulllist.app` falls back to the FOUNDING tenant
 > (`app.js:142-145`), latent only because there is no wildcard (§ 2f).
 >
+> **Session G-C RAN 2026-10-07: gate G1 stays OPEN, verdict still NOT READY.** Desk research and read-only probes only
+> (Rick skipped the live experiment; nothing on any zone, Pages project or Worker was changed). **Cloudflare Pages cannot
+> take a wildcard custom domain**, so model (a) as this stub describes it does not exist: the DNS and certificate halves are
+> free, but serving needs a Worker layer that is unproven (Q2, Q3). Cost for D1: about $0 per tenant, a $5/month step past
+> 100,000 Workers requests a day. **F171** (an unknown subdomain renders as the founding tenant) filed and recorded as a 6.0
+> precondition. Record: `docs/phase-6.0-serving-model-spike.md`, `docs/pre-phase-6-gate-closure.md` § 2f.
+>
 > **Session G-B RAN 2026-10-06 (later the same day): G7a (F151) CLOSED and G3's engine half CLOSED; verdict still
 > NOT READY.** `register-tenant` no longer mints the dead secret (PR #171), and production now runs the reviewed
 > `register-tenant` (v11, F153 admin invite) and `register-customer` (v34, F72 S2a tenant-aware email), both
@@ -51,7 +58,7 @@ Rick to reverse Q3 explicitly; the gates below are what that reversal would then
 
 | # | Gate | State 2026-10-04 | Blocks |
 |---|---|---|---|
-| G1 | **S0 serving-model spike** (wildcard `*.pulllist.app` + TLS on Pages) | **Never run.** F145 measured there is **no** wildcard record: arbitrary subdomains are NXDOMAIN; `rjbookstop`/`comicstore` are individually provisioned custom hostnames | everything in 6.x |
+| G1 | **S0 serving-model spike** (wildcard `*.pulllist.app` + TLS on Pages) | **PARTLY ANSWERED 2026-10-07 (session G-C, desk research only), STILL OPEN.** **Pages cannot take a wildcard custom domain** (Cloudflare known issues), so the model below needs a Worker layer; DNS and TLS are available (a proxied wildcard record on any plan; Universal SSL already presents `*.pulllist.app`). **No model was proven live** (Rick skipped the experiment). Unanswered: **Q2** (does a wildcard route fronting Pages serve a name Pages has not registered, and with what) and **Q3** (does a broad Worker route collide with the Pages custom domains, which Cloudflare says may refuse to coexist with a routed Worker). Cost: about $0 per tenant, $5/month past 100,000 Workers requests a day. Record: `docs/phase-6.0-serving-model-spike.md`. *(Was: "Never run." F145 measured there is **no** wildcard record: arbitrary subdomains are NXDOMAIN; `rjbookstop`/`comicstore` are individually provisioned custom hostnames. Both still true.)* | everything in 6.x |
 | G2 | **F165** — automatic withdrawal mark fires on import timing | OPEN, High — **exposure removed 2026-10-04**: S1 landed (scripts `5919130`), no import can mark a title withdrawn. S2 (weekly candidate report) landed the same day (scripts `3ef4b89`, report-only, soaking through two real weekly runs); S3 (confirm-to-mark) not built; first real-import proof is the November import | a self-serve tenant's first import would inherit it |
 | G3 | **F72 email half** — 5 mail functions founding-branded; ~~S2a `register-customer` and F153's `register-tenant` are SOURCE-only on production (not deployed)~~ **DEPLOYED to production 2026-10-06 (session G-B): `register-tenant` v11 and `register-customer` v34, verified live (the admin invite and a free-tier signup email, both with clean `dkim`/`spf`/`dmarc`, no founding identity in the free-tier email)** | **PARTLY CLOSED 2026-10-06: the engine half is done; STILL OPEN: (1) the five other mail functions (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`, session G-F), and (2) the CLIENT signup gate: `index.html:573` shows "Create one" only on the founding hostname, so no non-founding customer can reach native signup (the server path accepts any slug)** | any tenant taking real customers |
 | G4 | **F157 distributor-scoping** — a one-distributor tenant's single catalog is treated as a partial import | OPEN — **scoping DESIGNED 2026-10-04** (`docs/f157-distributor-scoping.md`, STATUS NOT STARTED, migration text written and not run, build deferred). **⚠️ Re-scoped by that work:** the RPC (`delete_dropped_catalog_items`) matches zero rows in its real wiring (F66, F110), so scoping it does **not** unblock a one-distributor tenant. What does is the import scripts' two mandatory positional catalog files, the month inferred from the Lunar filename, and F157's own zero-row guard aborting on a missing file, filed as **F169** (no owner, no plan, no workaround) | the eligibility gate's own "either PRH **or** Lunar" promise. **G4 is really F169**; the scoped delete rides along with it |
@@ -83,6 +90,12 @@ then write the 6.x runbooks. G5 is a product decision, not a session.
    `verify_jwt` first, F93) before any 6.x work assumes it.
 6. **6.3's "logo upload"**: there is no storage bucket or upload path today; the page-banner custom
    image (`page_banner`, paid tier) takes an `https:` URL only. Sizing 6.3 must include storage.
+7. **(2026-10-07, G-C) Model (a)'s "one wildcard record + one wildcard certificate, no per-tenant custom hostname" is
+   true of DNS and TLS and false of serving.** Cloudflare Pages does not accept a wildcard custom domain, so something
+   else must serve the app for a name Pages has never registered (a Worker route in front, or a move to Workers static
+   assets). Also: a wildcard is not "one DNS record on a throwaway label": it changes the answer for every unregistered
+   name, including `www` and `staging`, which are NXDOMAIN today. And an unknown subdomain currently renders as the
+   founding tenant (F171), which must be fixed before any wildcard serves the real app.
 
 ---
 
