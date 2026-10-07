@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; third readiness pass 2026-10-06: verdict unchanged, G-C runbook written (§ 2f), G-J (F150 platform-wide) added, signup gate folded into G-F; **G-C DONE 2026-10-07** (desk research and read-only probes; Rick skipped the live experiment; Phase 6 gate G1 stays OPEN; result in `docs/phase-6.0-serving-model-spike.md`; F171 filed); G-E..G-H, G-J NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted), G-C 2026-10-07 (docs only) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only), G-C 2026-10-07 (read-only; no zone, Pages, Worker or Supabase change) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170,F171
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; third readiness pass 2026-10-06: verdict unchanged, G-C runbook written (§ 2f), G-J (F150 platform-wide) added, signup gate folded into G-F; **G-C DONE 2026-10-07**; fourth readiness pass 2026-10-07: D1 = keep Shape D (Rick), G-K (F171 fix) runbook in § 2g, NEXT (desk research and read-only probes; Rick skipped the live experiment; Phase 6 gate G1 stays OPEN; result in `docs/phase-6.0-serving-model-spike.md`; F171 filed); G-E..G-H, G-J NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted), G-C 2026-10-07 (docs only) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only), G-C 2026-10-07 (read-only; no zone, Pages, Worker or Supabase change) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170,F171
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -52,6 +52,7 @@ Phase-6-motivated and wait on D1.
 | G-F | **F72 email half** — the five remaining mail functions tenant-aware (`approve-customer`, `invite-customer`, `notify-customers`, `reset-password`, `send-my-list`) **plus the client signup gate** (`index.html:573` shows "Create one" only on the founding hostname; added to this row 2026-10-06, it had no owner after G-B) | G3 | after G-B (same deploy discipline proven); D1. The signup gate only once the five emails are tenant-aware, because opening it first sends a non-founding customer founding-branded approval mail | 1–2 sessions, real-inbox checks need Rick |
 | **G-J** | **F150 platform-wide anon-grant hardening** (added 2026-10-06; G-A's sweep widened F150 and Rick deferred it, which left G7b with no session) — `REVOKE` from `anon` across `public` on production, `ALTER DEFAULT PRIVILEGES` so new tables do not regain them, and settle staging's `order_submissions` / `settings` | G7b | **Rick's go first (he deferred it).** Precondition: prove every anon reader goes through a `SECURITY DEFINER` RPC (`is_maintenance_mode`, `resolve_tenant_by_slug`, `get_popular_series`, `get_pull_feed_week`) by grepping every client file and Edge Function for anon-key table reads before revoking; staging first, full suite, then production | 1 session, Rick runs SQL |
 | G-G | **F169 single-distributor import mode + F157 scoped delete** (scripts repo + one migration) | G4 | **after the November new-month import** (late Oct), so F165 S1's first real exercise runs on unchanged import code; D1 | 1 session |
+| **G-K** | **F171 fix** (added 2026-10-07): an unknown `<slug>.pulllist.app` renders a neutral page, never the founding store; a lookup failure is told apart from a miss | 6.0 precondition (F171) | none; Rick chose it as the next session 2026-10-07. **Runbook: § 2g. NEXT SESSION.** | 1 session |
 | G-H | **Open Phase 6: write the 6.x runbooks** | — | D1 reversed, G-A…G-G, G-I and G-J closed, D2–D4 answered *(G-I and G-J added 2026-10-06)* | planning session |
 
 **Not gates, but worth doing before any 6.x build:** **F170** (sign-in fixtures leak auth users when
@@ -826,6 +827,126 @@ The experiment proves DNS + TLS + routing for a name that has no record, **witho
 #### Rollback
 
 Phase 2 only: delete the wildcard record, then the route, then the Worker. Nothing else is changed.
+
+---
+
+## 2g. Fourth readiness pass (2026-10-07, after G-C) and the Session G-K runbook (F171)
+
+### Where things stand
+
+Re-measured 2026-10-07: wildcard still NXDOMAIN; `check-dates-state.json` still dated **2026-10-02** (the F165
+soak has not started); scripts repo `main` == `origin/main` (`3ef4b89`). G-C is done (G1 stays open,
+`phase-6.0-serving-model-spike.md`), F171 is filed. **Verdict: NOT READY.** Open: G1, G2, G3 (five mail
+functions plus the signup link), G4, G5, G7b, G8, and F171 as a 6.0 precondition.
+
+**Rick's decisions, 2026-10-07:** **D1: keep Shape D** and revisit after the November import (G2, G4 and G8
+cannot close before it anyway, so nothing is lost by waiting). **Next session: the F171 fix (G-K).** Every
+other session is either time-gated (G-E: the next two weekly `check-dates.js` runs; G-I scripts half and G-G:
+after the November import, with § 2e's two pre-import queries run first), needs Rick's go (G-J), or needs D1
+(G-F, G-H). F170 stays a cheap pre-6.x item.
+
+### Session G-K — runbook: an unknown `<slug>.pulllist.app` must never render as the founding store
+
+**Goal:** close F171. On a tenant-subdomain hostname (`tenantSlugFromHostname()` returns a label), a lookup
+miss never becomes `FOUNDING_TENANT`, and a lookup **failure** is told apart from a **miss**.
+
+**Scope IN:** `app.js` (`lookupTenantBySlug`, `TenantContext.resolve`, one new halt-and-render helper
+modelled on `checkMaintenanceMode()` at `app.js:1236`); the `forgot-password.html:104-108` comment that cites
+step 4; a local-only harness; docs.
+
+**Scope OUT:** `index.html`'s pre-paint script and front-door reconciliation (unchanged: the halt replaces
+the body after them); `resolve_tenant_by_slug` or any SQL; 6.1's `tenants.status`; any DNS or Cloudflare
+change; behaviour on non-tenant hostnames (apex, `*.pages.dev`, localhost), where `?t=`, `sessionStorage` and
+the founding default stay exactly as they are; the signed-in profile route (step 1), which already wins
+before the subdomain step and is not changed. Anything else: stop and ask.
+
+**Facts the design rests on (read 2026-10-07):** `lookupTenantBySlug()` (`app.js:53-62`) returns `null` for
+both "the RPC returned no row" and "the RPC errored or threw". `resolve()` steps: 1 profile (signed in),
+1.5 subdomain, 2 `?t=`, 3 `sessionStorage`, 4 `FOUNDING_TENANT` (`app.js:142-145`). Callers: `initNav()`
+(`app.js:678`, every nav page), `index.html:560`, `forgot-password.html:109`, `catalog.html:299`; each calls
+`Branding.apply(current())` or `current()` right after. `checkMaintenanceMode()` already replaces
+`document.body` and throws to halt page init, which is the pattern to reuse. **Staging has no
+`*.pulllist.app` hostnames** (only `*.pages.dev`), so the subdomain path can only be exercised by making the
+browser believe it is on such a hostname (Step 3).
+
+#### Step 0 — preflight (agent)
+
+`/preflight`; `git branch --show-current` == `staging`. Re-read the files above from disk; halt if
+`app.js:39-62` or `99-146` no longer matches the facts above. Branch `feature/f171-unknown-subdomain`.
+
+#### Step 1 — PAUSE → Rick: what an unclaimed name renders (the product call F171 leaves open)
+
+Recommended: **(A) a neutral "no store at this address" page**: the PULLLIST wordmark (no tenant name,
+colour or logo, no sign-in form), one line of text, a link to `https://pulllist.app`. Alternatives: **(B)**
+redirect to the apex marketing page (a squatted label then reads as endorsed by the platform); **(C)** a bare
+404-style page with no link. Also confirm two smaller calls (recommended answers in brackets): on a
+tenant-subdomain hostname, are `?t=` and `sessionStorage` ignored [yes: the hostname is authoritative there];
+and on an RPC **failure**, show a "can't reach this store right now" page with a Retry button rather than any
+branding [yes]. Record the answers in this section before writing code.
+
+#### Step 2 — the code change (feature branch)
+
+1. `lookupTenantBySlug(slug)` returns `{ tenant, failed }`: `failed: true` on an RPC error or throw;
+   `tenant: null, failed: false` on a clean empty result. Update its three call sites; steps 2 and 3 keep
+   their current meaning (any non-tenant result falls through).
+2. In `resolve()`, when `tenantSlugFromHostname()` returns a label: a hit behaves as today; a miss calls the
+   new halt helper with the "not found" page; a failure calls it with the "unavailable" page (Retry reloads).
+   Steps 2-4 are **skipped** on a tenant-subdomain hostname (per Step 1). The helper sets
+   `_source = 'unknown-subdomain'` or `'lookup-failed'`, renders with `textContent` (the label is
+   attacker-chosen: never `innerHTML` it) and throws, like `checkMaintenanceMode()`.
+3. Update the `forgot-password.html` comment; no behaviour change there beyond inheriting the halt.
+4. `node --check app.js`.
+
+#### Step 3 — local harness, RED on the current deployed bytes BEFORE pushing
+
+`playwright/f171-unknown-subdomain-verify.mjs` (local-only, the `f149-maintenance-verify.mjs` convention).
+It makes Chromium believe it is on `https://<label>.pulllist.app/` by intercepting that origin with
+`page.route` and answering from `https://staging.pulllist.pages.dev/` via `route.fetch()` with the URL
+rewritten, so `location.hostname` is the `pulllist.app` label and the page talks to **staging** Supabase via
+staging's `config.js`. Prove the interception first: assert `location.hostname`, and that the served
+`app.js` hash equals staging's. Cases:
+
+- **V1** unknown label (`zz-f171-<random>`) on `index.html`: no founding display name, logo or accent
+  anywhere in rendered text or styles; the not-found page shows; no sign-in form.
+- **V2** the same on `catalog.html` (an `initNav()` page, signed out): same page, no redirect loop.
+- **V3** real staging tenants (`raysandjudys`, `demoshop`) render their OWN names (regression guard).
+- **V4** RPC failure: `page.route` aborts `**/rpc/resolve_tenant_by_slug` on a real label, giving the
+  unavailable page and no founding branding; Retry with the abort removed renders the tenant.
+- **V5** non-tenant hostnames unchanged: `staging.pulllist.pages.dev/?t=demoshop` still resolves `demoshop`;
+  bare `staging.pulllist.pages.dev` still resolves the founding tenant.
+- **V6** a hostile-looking label (as far as DNS label rules allow) renders as text; no element injected.
+- **V7** zero uncaught page errors other than the halt's own expected throw (assert its message).
+
+**Run it against the CURRENT deployed staging bytes first: V1, V2 and V4 must go RED** (founding branding
+appears). If they pass on the old code, the harness is not testing what it claims: halt and fix the harness.
+
+#### Step 4 — staging: push, confirm served bytes, green
+
+`/deploy-staging` (`--ff-only`). Confirm the new bytes on the **plain URL** (`curl -L`, a marker string from
+the change). Harness **all green** against the deployed bytes; then the **full Playwright suite once**
+(`resolve()` runs on every page), reading the log's own `N passed` line, not a launcher's exit notice.
+
+#### Step 5 — record (agent, doc-only commit to `staging`)
+
+§ 13 F171: **RESOLVED on staging**, with the harness results and Rick's Step 1 choices; the CLAUDE.md
+findings row and next-pointer; `phase-6.0-serving-model-spike.md` § 6 (precondition met on staging); this
+doc's STATUS and § 1. **Not promoted:** production is a separate step on Rick's explicit `/promote-prod`,
+which must (a) assert `app.js`'s merge RESULT (`merge=ours`), (b) verify on production that
+`rjbookstop.pulllist.app` and `comicstore.pulllist.app` still render their own names signed out (read-only,
+no account), and (c) optionally re-run V1 and V3 through the same interception against `pulllist.pages.dev`
+(read-only against production's anon RPC).
+
+#### Completion criteria (G-K)
+
+- [ ] Rick's Step 1 choices recorded before any code
+- [ ] Harness RED on the old deployed bytes (V1, V2, V4), then all green on the new deployed bytes
+- [ ] Full suite green once on the deployed bytes (count from the log's own summary)
+- [ ] F171 recorded RESOLVED on staging; docs updated; `/wrap-up` produced
+- [ ] Production promotion left for Rick's explicit request (or done under `/promote-prod` with (a)-(c))
+
+#### Rollback
+
+Revert the feature commit on `staging` and push; nothing else changes (no SQL, no DNS).
 
 ---
 
