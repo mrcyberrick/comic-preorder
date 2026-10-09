@@ -1,6 +1,6 @@
 # Catalog redesign: hero, search + filter toggle, Top picks rail
 
-**STATUS:** NOT STARTED | staging=— | prod=— | findings=— (feature build; one pre-existing defect found while planning, § 6, proposed as F172, NOT yet filed)
+**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`; full record in § 9) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
 
 **Last verified against live: 2026-10-09** (read from `origin/staging`; `catalog.html`, `style.css` and `app.js` are byte-identical on `origin/main` and `origin/staging`, so nothing unpromoted sits under this work).
 
@@ -92,7 +92,9 @@ The original decision text follows, kept for the record; D2, D3, D6 and the hero
 - Blocked (pending/paused) users: show the rail; the modal already blocks reserving.
 - Hidden in print.
 
-### 3.4 Nav (`style.css` only)
+### 3.4 Nav (`style.css` only) — NOT BUILT: measured to be a no-op (Rick, 2026-10-09: "Skip (d)")
+
+**Execution-session finding, and the reason nothing was built.** The rule below changes nothing. `.nav-inner` is already `justify-content: space-between` with three flex children, and for three items that places the links exactly midway between the logo and the user block, which is what `margin: 0 auto` does too. Measured on the live bytes (authenticated, `/catalog`): the gap from the logo to the links and from the links to the user block were **equal at every width tested: 274.8 / 184.8 / 84.8 / 24.0 px at 1350 / 1100 / 900 / 700 px**. What looks off is different: the user block ("Welcome, name" plus Sign Out) is wider than the logo, so the links' centre sits **65.1 px left of the page's true centre** at 900 to 1350 px (25.9 px at 700). The design's own mock (`justify-content: space-between` plus `margin: 0 auto`) has the same offset. Centring on the page instead would be a visible change the design did not ask for, would need a narrow-width guard so it cannot worsen the unfiled 641-760px overflow, and would put one more risk on the seven-page nav; Rick chose to skip rather than ship it or dead CSS. No nav CSS changed, so the seven-page hash check is unchanged by construction (V2 still run: all seven pages read nav `6888702FB15A`, footer `94D490107E55`). The original text follows, kept for the record.
 
 `@media (min-width: 641px) { .nav-links { margin: 0 auto; } }`. No markup change, so the seven-page nav hash check must still read identical. Verify the Admin ▾ panel still opens unclipped at 641, 900 and 1280px.
 
@@ -131,8 +133,103 @@ Per-month hero art; staff picks or any new recommendation backend; the other thr
 ## 8. Completion criteria
 
 - [x] D1-D10 confirmed or overridden by Rick before execution (2026-10-09, § 2; D6's reading to be re-confirmed if in doubt)
-- [ ] Search row, panel, rail and nav built (no hero, D2) on a feature branch, merged `--ff-only` to `staging`, pushed
-- [ ] V1-V6 green (V7 if D10 stands), each with its evidence recorded in this doc
-- [ ] Specs 10, 20, 24 updated for D1 and passing; full suite green post-push
+- [x] Search row, panel and rail built (no hero, D2) on feature branches, merged `--ff-only` to `staging`, pushed. **Nav (§ 3.4) NOT built: measured to be a no-op, Rick chose "Skip".**
+- [x] V1-V6 green (V7 too, D10 stood), each with its evidence recorded in this doc (§ 9.5). **V5 failed once, was diagnosed and fixed (§ 9.3), then met.**
+- [x] Specs 10, 20, 24 updated for D1 and passing; full suite green post-push (161 passed on the first build and again on the final bytes, § 9.7)
 - [x] § 6 filed or explicitly declined by Rick (2026-10-09: "Fix without an ID"; see § 6 Disposition)
-- [ ] This doc's STATUS token and CLAUDE.md updated (finding-ID disposition stated: none consumed unless § 6 is filed)
+- [x] This doc's STATUS token and CLAUDE.md updated (finding-ID disposition: none consumed; F172 remains the next free ID)
+
+## 9. Execution record (2026-10-09, STAGING ONLY)
+
+### 9.1 What shipped to staging, and what did not
+
+| Commit | What |
+|---|---|
+| `95022b2` (a) | **§ 6 fix.** `Recommendations.getCatalogIds()` selects and returns `publisher, foc_date, order_requirement, price_usd` too, so `CatalogFilters.hides()` finally has the fields it reads. Own commit, as D10 required. |
+| `1f6fae1` (b) | Search row with the Filters toggle beside it at every width, collapsed panel (D1) remembered per user in `localStorage`, ISBN placeholder (D5). |
+| `9b59773` (c) | The Top picks rail: `getTopPicks`, memoised ranking, `buildComicCard(…, opts)`, markup, paging, modal and "See more" wiring. |
+| `fcf9500` (e) | **CLS fix found by gate V5** (§ 9.3). |
+| (d) nav | **Not built.** The rule was measured to be a no-op (§ 3.4); Rick: "Skip". |
+
+Files: `app.js`, `catalog.html`, `style.css` (+ this doc). No SQL, no `config.js`, no Edge Function, no `assets/`, no other page. The header card, `#page-banner`, `#catalog-subtitle` and `#deadline-banner` are untouched: the diff contains no line mentioning them, and V3 H1/H2 assert it.
+
+Two questions were put to Rick this session and answered: § 6 "**Fix without an ID**" (F172 stays free) and § 3.4 "**Skip (d)**".
+
+### 9.2 Baseline (step 1), measured before any edit
+
+Lighthouse via `lighthouse-auth.mjs --path=/catalog`, authenticated, against the staging bytes that were deployed before this work. **Account: a brand-new throwaway "Lighthouse Probe" customer on the founding tenant, no reservations, no subscriptions** (a fresh account is the shape of the 0.02 catalog reading in § 5; it is NOT Rick's heavy account). A first attempt failed for a tooling reason (a Git-Bash `/c/...` output path handed to a Windows Node process) and wrote nothing; it is not a result.
+
+| Run | Mobile score | LCP | TBT | CLS | Desktop score | CLS |
+|---|---|---|---|---|---|---|
+| 1 | 90 | 3.1 s | 210 ms | 0.018 | 100 | 0.025 |
+| 2 | 93 | 3.1 s | 30 ms | 0.018 | 100 | 0.025 |
+
+The mobile score has a 3-point noise band on this probe that comes from TBT alone (CLS and LCP were identical across the runs).
+
+### 9.3 V5 FAILED the first time, and the cause was the rail's own placement
+
+The first deployed build scored **CLS 0.064 desktop / 0.117 mobile** (stable across four runs; mobile score 76 to 95 because of TBT noise on top), against the 0.05 gate. The Lighthouse report named the element: **`section#top-picks` moving twice**. A layout-shift probe (harness group `cls`) named the cause and the pixels: `#top-picks` moved **+70 px and +71 px** on desktop and **+23 / +87 / +107 px** on a phone, i.e. the **order deadline banner** (revealed after `Settings.getOrderDeadline()`) and then the **subscription promo banner** (revealed after the subscriptions load), both above the rail.
+
+This is F141 Pattern B again, from the other side. Section 3.3 forbade `display: none` to shown for the rail itself but did not account for what sits above it. Before the rail existed nothing visible sat below those banners: the grid was an empty, unpainted `div` until its skeletons rendered, after both banners had landed, so their arrival shifted nothing that was scored. **The plan's "in the HTML from first paint with placeholders" is therefore superseded:** the section keeps its space from first paint but is `visibility: hidden` (`data-pending`) until the deadline read has settled (bounded at 3 s) and the promo banner has rendered, and is revealed just before the first `loadCatalog()`, the same moment the grid's own skeletons appear. `visibility` keeps layout and an unpainted element's movement is not a shift. Result: `#top-picks` no longer appears in any shift; only `.search-block` moves, as it did before this work.
+
+### 9.4 V5, after the fix (deployed bytes, same probe, same account shape)
+
+| Run | Mobile score | LCP | TBT | CLS | Desktop score | CLS |
+|---|---|---|---|---|---|---|
+| deadline set, 1 | 97 | 2.4 s | 90 ms | 0.022 | 100 | 0.018 |
+| deadline set, 2 | 97 | 2.4 s | 30 ms | 0.022 | 99 | 0.018 |
+| deadline set, 3 | 97 | 2.5 s | 20 ms | 0.022 | 100 | 0.018 |
+| **no deadline** (cleared, then restored) | 98 | 2.4 s | 10 ms | 0.010 | 100 | 0.011 |
+| 30 reservations seeded, deadline set | 98 | 2.2 s | 20 ms | 0.022 | 100 | 0.018 |
+
+Gate: CLS at most 0.05 on both form factors, with and without a deadline: **met** (worst 0.022). Performance not more than 2 points below baseline: **met** (mobile 97 to 98 against 90 to 93; desktop 99 to 100 against 100). **Mobile CLS is 0.004 above its baseline (0.022 against 0.018) while desktop is 0.007 below (0.018 against 0.025)**; both far inside the gate. `order_deadline` was cleared for the no-deadline run and put back, then re-read: **value and `updated_at` identical** (`2026-10-23`, `2026-10-02T10:46:57.456+00:00`). (A first V5 runner's clear step failed on a path error and changed nothing, which I verified by re-reading the row before trusting any "no deadline" figure; that run was a duplicate of the with-deadline runs and is discarded.)
+
+### 9.5 Gates
+
+| Gate | Result | Evidence |
+|---|---|---|
+| **V1** syntax | green | `node --check app.js` and the one inline `<script>` of `catalog.html`, on the merged tree, twice (before the first push and again for the CLS fix). `buildComicCard`'s default output is byte-identical to the old function (8 old-vs-new comparisons). |
+| **V2** nav + footer | green | All seven pages hash to nav `6888702FB15A` and footer `94D490107E55` (one distinct value each); the six other pages are not in the diff. |
+| **V3** harness, deployed bytes | **22 of 22**, then 28 of 28 with the extras | `playwright/catalog-top-picks-verify.mjs` against the served bytes (served `app.js`, `catalog.html`, `style.css`, `config.js` hashed equal to the committed blobs first, on the plain URL). H1-H2 header and deadline banner unchanged; T1-T5 toggle, panel, badge, persistence; R1-R7 rail; A1-A3 arrows and paging (run at 1100 px so three pages are not clamped to the end: 2304 px landed, 2304 expected); M1-M2 modal and reserve (a pick that is NOT on the grid page; the row lands with the right `tenant_id`); S1 See more; P1 phone. Plus N1 (Admin ▾ unclipped at 641 / 900 / 1280) and PRINT (no rail, no art), and C1-C2 (CLS probe, 0.017 desktop / 0.023 mobile). |
+| **V4** suite | see § 9.7 | Specs 10, 20 and 24 updated for D1 (one shared `openFilters(page)` helper in `fixtures/catalog.ts`, 6 call sites). **Negative control: spec 20 with the calls removed fails with "`#filter-variants` element is not visible"**, so the edit was necessary. |
+| **V5** | met after one fix | § 9.3 and § 9.4. |
+| **V6** screenshots | inspected | 1350 / 900 / 700 / 393 / 320 px, closed, rail and open states, from the deployed bytes; print emulation shows no rail and no art. |
+| **V7** § 6 reproduction | **RED on the old bytes, GREEN on the new** | Hiding "Marvel" in `catalog_filters` and choosing Recommended For You: old bytes showed **4 of 5** cards from the hidden publisher (under a "filtered by store settings" note); new bytes show **0 of 1**. `catalog_filters` was restored after every run and re-read: **167 bytes, `updated_at 2026-09-29T14:54:40.858`, identical.** |
+
+### 9.6 Negative controls (each new assertion seen red before it was trusted)
+
+`--mutate=<name>` serves a COPY of the tree with one deliberate fault and requires the named check to go red. **All went red**: R2 `rail-uses-comic-card`, R3 `rail-keeps-actions`, R4 `rail-many-per-series`, R5 `rail-ignores-reserved`, R6 `rail-allows-variants`, R7 `rail-ignores-visibility`, T1 `panel-open-by-default`, T2 `toggle-inert`, T3 `panel-not-remembered`, T4 `badge-blind-to-covers`, A1 `prev-arrow-always-on`, A2 `paging-no-accumulate`, A3 `next-arrow-always-on`, M1+M2 `modal-ignores-picks`, S1 `see-more-no-select`, P1 `arrows-on-phone`, R3b `rail-title-unpinned`, H1 `header-class-changed`, H2 `deadline-banner-moved`, N1 `nav-links-scroll` (the design's `overflow-x: auto` on `.nav-links` clips the Admin ▾ panel, as § 3.4 warned), C1+C2 `rail-painted-early` (reproduces 0.0623 / 0.1326 exactly), V7b (old bytes).
+
+**Three controls did not go red the first time, and each was a flaw in my check or mutation, not in the app:** R5 and A3 each have TWO layers that do the same job (`getTopPicks` and a re-check after the row fetch; `syncPicksArrows` and the immediate set in `pagePicks`), so breaking one proved nothing; both mutations now break both. **R3b was vacuous**: it compared card heights inside the rail, which a flex row stretches equal whatever the titles are; it now compares the rail's height with placeholders against its height with real cards (369.05 px both; without the two-line title pin 353.45 against 369.05, a 15.6 px shift). **Not given a dedicated mutation, stated plainly:** T5 (closed state remembered, nearly trivial because closed is the default), R1 (existence), PRINT, V7a.
+
+### 9.7 V4 final run
+
+Full suite, run directly with `npx playwright test --reporter=line` (not `run-smoke.ps1`), against the deployed final bytes. The first full run, on the build before the CLS fix, was **161 passed, 26.1 min, exit 0**; because the fix changes `catalog.html` and `style.css` the suite was run again on the final bytes: **161 passed, 25.0 min, exit 0, 0 failed, 0 flaky** (the run's own summary line; its teardown restored `catalog_filters`, 167 bytes, and deleted its synthetic tenant). Afterwards all four `app_settings` rows I touch or depend on (`catalog_filters`, `order_deadline`, `page_banner`, `maintenance_mode`) were re-read: values and `updated_at` identical to before the session, and no harness or Lighthouse user was left.
+
+### 9.8 Deviations from the plan as written
+
+1. **The search row, count and toggle share one CSS grid** (`.search-block`, with the two old wrappers `display: contents`). The plan moved the toggle into `.toolbar-header`, but on a phone the search box is hidden in favour of the header magnifier, which would have left the toggle alone on its own line; the grid keeps count and toggle on one line as before.
+2. **The phone toggle is icon-only (44 px)**; before this it was a labelled "Filters" pill. The plan specified the 50 px icon button with an `aria-label`; the label text is gone on phones too.
+3. **`.order('id')` added** to `getCatalogIds()`'s paged select (the F140 tiebreaker rule), so "the first standard cover of each series" is the same on every load. Not in the plan.
+4. **`Recommendations.invalidate()`** is called after every reserve or cancel (the memoised ranking holds the customer's signal).
+5. **The caption reads "Popular with other customers"** when no pick came from the customer's own history, instead of claiming reservations they do not have. The ranking uses reservations and history only, not subscriptions; the design's wording is used when at least one pick is personal.
+6. `getTopPicks` returns `[{ id, tier }]`, not `id[]` (the caption needs the tier).
+7. The empty-picks case **hides** the section (`hidden`) rather than removing it, so an admin switching to a customer who has picks can bring it back.
+8. **§ 9.3:** the rail's placeholders are not painted from first paint; see above.
+9. **§ 3.4 not built.**
+
+### 9.9 Not verified, and known limits
+
+- **Chromium only.** No WebKit, no real phone. The phone swipe was exercised with `scrollBy`, not a real touch gesture.
+- **A staging customer with no history gets one or two picks** (the popular list is short there); the 20-card rail was exercised with seeded `reservation_history`. **Production's popular data and a 1,345-row signal were not measured**; the 30-reservation account above is the heaviest measured.
+- **A returning customer who left the filter panel open** gets one shift when the page restores it (it is restored before the first fetch but after sign-in). V5 measured the closed default only.
+- **Not exercised:** a pending or paused account, the admin customer switch (`loadTopPicks()` on change), keyboard navigation of the rail (cards are not focusable, as the grid's are not).
+- **The 641-760 px nav overflow is untouched.** An admin at 700 px shows a horizontal scroll in the nav probe; nav CSS and markup are not in the diff (V2), and CLAUDE.md already records the overflow as pre-existing and unfiled.
+- **Nothing in git asserts any of this.** The Playwright suite and the harness are gitignored local files; the harness and its 21 mutations live only in `catalogs/scripts/playwright/`.
+- **A harness run killed mid-flight** (while I restarted the negative-control batch) skipped its own cleanup: one throwaway `pw-ctp-` user was left and deleted by hand, and `catalog_filters` was re-read and found intact.
+
+### 9.10 For the promotion (a separate, explicitly requested `/promote-prod`)
+
+- **`app.js` carries `merge=ours`**; its merge RESULT must be asserted equal to staging's copy (the driver has dropped it three times). **G-K, the F171 fix, also edits `app.js`** (a different region, `TenantContext`); land one and promote it, then the other, or promote together, and assert `app.js` either way.
+- Scope is exactly `app.js`, `catalog.html`, `style.css` plus docs. **Write-smoke is warranted**: this touches `catalog.html` and `app.js` on the reserve path, and reserving from the rail's modal is a new route into `toggleReserve()` (reserve one title as a real customer, confirm the row and its `tenant_id`, cancel).
+- A staging customer's catalog now has a new **collapsed** filter panel and an icon-only toggle on phones; worth Rick looking at on a real phone before production.
