@@ -2128,7 +2128,29 @@ const Recommendations = {
   //
   // Items with no series affiliation are omitted; the view stays focused on
   // content the customer is likely to care about.
-  async getCatalogIds(userId, month) {
+  //
+  // MEMOISED per (userId, month) for the page's lifetime, as a promise so two
+  // callers that arrive together share one fetch. The Top picks rail and the
+  // "Recommended For You" view both rank the whole month (about three paged
+  // requests plus the user's reservation signal, which runs to 1,345+ rows on the
+  // heaviest account); without this each would pay for it separately.
+  // The result object is SHARED: callers filter and slice it, never mutate it.
+  // A reservation or cancellation changes the signal, so catalog.html calls
+  // invalidate() after either; a failed fetch drops its own entry so it retries.
+  _idsCache: new Map(),
+  invalidate() { this._idsCache.clear(); },
+  getCatalogIds(userId, month) {
+    const key = `${userId}|${month}`;
+    let p = this._idsCache.get(key);
+    if (!p) {
+      p = this._buildCatalogIds(userId, month);
+      this._idsCache.set(key, p);
+      p.catch(() => { if (this._idsCache.get(key) === p) this._idsCache.delete(key); });
+    }
+    return p;
+  },
+
+  async _buildCatalogIds(userId, month) {
     const [userSignal, popularSeries] = await Promise.all([
       this._getUserSignal(userId),
       this._getPopularSeries(month),
@@ -2161,6 +2183,12 @@ const Recommendations = {
         .select('id, series_name, distributor, variant_type, publisher, foc_date, order_requirement, price_usd')
         .eq('catalog_month', month)
         .not('series_name', 'is', null)
+        // A unique tiebreaker: .range() pages without an ORDER BY are not
+        // guaranteed to be stable across separate requests (the F140 rule). It
+        // matters more now that the Top picks rail takes "the first standard
+        // cover of each series" from this list, which must not change between
+        // two page loads of the same data.
+        .order('id', { ascending: true })
         .range(from, Math.min(from + 999, total - 1));
       if (!data || data.length === 0) break;
       seriesRows.push(...data);
@@ -2175,6 +2203,8 @@ const Recommendations = {
       if (!byKey.has(key)) byKey.set(key, []);
       byKey.get(key).push({
         id: row.id,
+        series_name: row.series_name,
+        distributor: row.distributor,
         variant_type: row.variant_type,
         publisher: row.publisher,
         foc_date: row.foc_date,
@@ -2190,7 +2220,7 @@ const Recommendations = {
     // Tier 1: items from series the user has reserved before
     for (const key of userSignal) {
       for (const item of (byKey.get(key) || [])) {
-        if (!seen.has(item.id)) { personalItems.push(item); seen.add(item.id); }
+        if (!seen.has(item.id)) { personalItems.push({ ...item, tier: 'personal' }); seen.add(item.id); }
       }
     }
 
@@ -2198,15 +2228,51 @@ const Recommendations = {
     for (const series of popularSeries) {
       const key = `${series.series_name}||${series.distributor}`;
       for (const item of (byKey.get(key) || [])) {
-        if (!seen.has(item.id)) { popularItems.push(item); seen.add(item.id); }
+        if (!seen.has(item.id)) { popularItems.push({ ...item, tier: 'popular' }); seen.add(item.id); }
       }
     }
 
     return {
-      // each: { id, variant_type, publisher, foc_date, order_requirement, price_usd }
+      // each: { id, series_name, distributor, variant_type, publisher, foc_date,
+      //         order_requirement, price_usd, tier: 'personal' | 'popular' }
       items: [...personalItems, ...popularItems],
       hasPersonal: userSignal.size > 0,
     };
+  },
+
+  // The Top picks rail (catalog.html): an ordered list of { id, tier }, best
+  // first, at most `limit` long, built from the same ranking the Recommended view
+  // uses so the two cannot disagree about what "recommended" means.
+  //
+  // A pick is a title the customer could still reserve and would plausibly want
+  // to look at, so a row is DROPPED when it is:
+  //   - already reserved by this customer (`reservedIds`, a Map or Set of ids);
+  //   - past its FOC (isFocLocked, the same test the Reserve button uses);
+  //   - not a standard cover. Variants and allocation-restricted rows are the
+  //     long tail of a month and would crowd out the issues people subscribe to;
+  //   - hidden by the tenant's catalog visibility config (`cfg`), via the one
+  //     shared CatalogFilters.hides() predicate, so a publisher the store hides
+  //     cannot reappear in a carousel;
+  //   - a second title from a series already picked. ONE PER SERIES, the first
+  //     in rank, so one popular series cannot fill the whole rail.
+  // The reservation exemption CatalogFilters.apply() offers is deliberately not
+  // used: a reserved title is not a pick whether or not a filter would hide it.
+  async getTopPicks(userId, month, { reservedIds = null, cfg = null, limit = 20 } = {}) {
+    const { items } = await this.getCatalogIds(userId, month);
+    const picks = [];
+    const series = new Set();
+    for (const item of items) {
+      if (picks.length >= limit) break;
+      if (reservedIds && reservedIds.has(item.id)) continue;
+      if (isFocLocked(item.foc_date)) continue;
+      if (!isStandardCoverType(item.variant_type)) continue;
+      if (cfg && CatalogFilters.hides(item, cfg, month)) continue;
+      const key = `${item.series_name}||${item.distributor}`;
+      if (series.has(key)) continue;
+      series.add(key);
+      picks.push({ id: item.id, tier: item.tier });
+    }
+    return picks;
   },
 };
 
@@ -2525,7 +2591,18 @@ function renderSkeletons(count = 12, container) {
 // immutable for a year, so re-exporting the art REQUIRES bumping to -v3.
 const COVER_PLACEHOLDER = 'comic-cover-fallback-v2.webp';
 
-function buildComicCard(comic, reservedQty, focLocked = false) {
+// opts (all optional; the default call sites pass none and get exactly the card
+// they always did):
+//   rootClass    the card's root class. The Top picks rail passes 'pick-card'
+//                and NEVER 'comic-card': specs and page code use `.comic-card`
+//                to mean "the grid has loaded" and to locate a title's card, so a
+//                second .comic-card per title (one in the rail, one in the grid)
+//                breaks `.first()` and strict locators. The same reason
+//                renderSkeletons() avoids it.
+//   hideActions  omit the .comic-actions row (the rail has no Reserve button:
+//                a click opens the modal, which reserves).
+function buildComicCard(comic, reservedQty, focLocked = false, opts = {}) {
+  const rootClass = opts.rootClass || 'comic-card';
   const isReserved = reservedQty > 0;
   const coverHtml = `<img
     src="${comic.cover_url ? escapeHtml(comic.cover_url) : COVER_PLACEHOLDER}"
@@ -2568,8 +2645,17 @@ function buildComicCard(comic, reservedQty, focLocked = false) {
                     :                            '+ Reserve';
   const btnDisabled = focLocked ? 'disabled' : '';
 
+  // The actions row is its own string so that, when shown, the card's markup is
+  // character-for-character what it was before `opts` existed.
+  const actionsHtml = opts.hideActions ? '' : `      <div class="comic-actions">
+        <button class="${btnClass}" data-id="${comic.id}" ${btnDisabled}>
+          ${btnText}
+        </button>
+      </div>
+`;
+
   return `
-    <div class="comic-card" data-id="${comic.id}">
+    <div class="${rootClass}" data-id="${comic.id}">
       <div class="comic-cover">
         <div class="distributor-badge badge-${comic.distributor.toLowerCase()}">${escapeHtml(comic.distributor)}</div>
         ${reservedBadge}${focBadge}${restrictionBadge}
@@ -2583,12 +2669,7 @@ function buildComicCard(comic, reservedQty, focLocked = false) {
           <span class="comic-date">${saleDate}</span>
         </div>
       </div>
-      <div class="comic-actions">
-        <button class="${btnClass}" data-id="${comic.id}" ${btnDisabled}>
-          ${btnText}
-        </button>
-      </div>
-    </div>
+${actionsHtml}    </div>
   `;
 }
 

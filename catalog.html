@@ -187,6 +187,42 @@
     </button>
   </div>
 
+  <!-- Top picks rail (docs/catalog-top-picks-redesign.md § 3.3). In the HTML from
+       first paint with its height already spoken for by eight placeholder cards:
+       it is never display:none -> shown, which is the F141 Pattern B shape (a
+       section revealed above content). The placeholders use the real card's own
+       structural classes, and .pick-card pins the title block to two lines, so a
+       real card is exactly as tall as the placeholder it replaces. If the picks
+       come back empty the section is hidden (a deliberate, rare shift: a tenant
+       with no reservation history at all). No Reserve button here; a card opens
+       the same detail modal the grid uses. Hidden in print. -->
+  <section class="top-picks" id="top-picks" aria-labelledby="top-picks-title">
+    <div class="top-picks-head">
+      <h2 id="top-picks-title">Top picks for you</h2>
+      <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and subscriptions</span>
+      <button type="button" class="top-picks-more" id="top-picks-more">See more <span aria-hidden="true">&rsaquo;</span></button>
+    </div>
+    <div class="top-picks-rail">
+      <div class="top-picks-track" id="top-picks-track">
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+      </div>
+      <div class="top-picks-fade" aria-hidden="true"></div>
+      <button type="button" class="top-picks-arrow top-picks-prev" id="top-picks-prev" aria-label="Previous" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <button type="button" class="top-picks-arrow top-picks-next" id="top-picks-next" aria-label="Next" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
+    </div>
+  </section>
+
   <!-- Catalog Grid -->
   <div id="catalog-grid" class="catalog-grid"></div>
 
@@ -347,6 +383,10 @@
   let allItems = [];
   let totalCount = 0;
   let modalComicId = null;
+  // The Top picks rail's rows, by id. openModal() and toggleReserve() resolve a
+  // title from `allItems`, which only ever holds the CURRENT GRID PAGE, so a pick
+  // that is not on that page would otherwise be unopenable. See loadTopPicks().
+  const pickItems = new Map();
 
   // Fetches the total reserved quantity for the current catalog month only.
   // Runs once on init (and on admin context switch) to populate currentMonthQty.
@@ -761,6 +801,7 @@
       currentMonthQty = await loadCurrentMonthQty(AdminContext.resolveUserId(user.id));
       document.getElementById('stat-reserved').textContent = currentMonthQty;
       await loadCatalog(1);
+      loadTopPicks();   // the rail follows the customer being managed
     });
   }
 
@@ -1385,7 +1426,7 @@
     // Hard guard — never allow reserve or cancel on FOC-locked items.
     // Defense-in-depth: this fires even if a disabled button somehow triggers a click.
     // comicObj is declared once here and reused throughout the function.
-    const comicObj = comic || allItems.find(c => c.id === catalogId) || null;
+    const comicObj = comic || allItems.find(c => c.id === catalogId) || pickItems.get(catalogId) || null;
     if (isFocLocked(comicObj && comicObj.foc_date)) return;
     const isReserved = reservedIds.has(catalogId);
     const targetUserId = AdminContext.resolveUserId(user.id);
@@ -1423,6 +1464,11 @@
     // present, so this is correct from either the card or the modal call site.
     syncCardState(catalogId);
     syncModalState(catalogId);
+    // A reserve or cancel changes the customer's signal, so the memoised ranking
+    // behind the Recommended view and the rail is stale. It is dropped here and
+    // rebuilt on its next use; the rail itself only loses the card just reserved.
+    Recommendations.invalidate();
+    syncPickState(catalogId);
   }
 
   function updateReservedStat() {
@@ -1438,7 +1484,7 @@
 
   // ── Modal ─────────────────────────────────────────────────
   function openModal(catalogId) {
-    const comic = allItems.find(c => c.id === catalogId);
+    const comic = allItems.find(c => c.id === catalogId) || pickItems.get(catalogId);
     if (!comic) return;
     modalComicId = catalogId;
 
@@ -1620,6 +1666,145 @@
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+  // ── Top picks rail ────────────────────────────────────────
+  // docs/catalog-top-picks-redesign.md § 3.3. Ranked by Recommendations (the same
+  // ranking the "Recommended For You" view uses), one title per series, standard
+  // covers only, nothing the customer already reserved, nothing the store hides.
+  // Started once at the very end of init, AFTER the first loadCatalog() has
+  // resolved, so it never delays the grid's own requests.
+  const picksSection = document.getElementById('top-picks');
+  const picksTrack   = document.getElementById('top-picks-track');
+  const picksPrev    = document.getElementById('top-picks-prev');
+  const picksNext    = document.getElementById('top-picks-next');
+  const picksMore    = document.getElementById('top-picks-more');
+  const picksCaption = document.getElementById('top-picks-caption');
+  let picksRun      = 0;      // newest loadTopPicks() call; an older one that finishes late is dropped
+  let picksTarget   = null;   // scrollLeft a smooth page is heading for, so rapid clicks accumulate
+  let picksTargetAt = 0;
+
+  function realPickCards() {
+    return picksTrack.querySelectorAll('.pick-card:not(.pick-card--placeholder)');
+  }
+  // Hidden, not removed, so an admin switching to a customer who DOES have picks
+  // can bring it back. This is the one shift the rail can cause, and it is
+  // accepted: it only happens for a tenant with no reservation history at all.
+  function hidePicksSection() { picksSection.hidden = true; }
+
+  // Prev is hidden at the start, Next at the end. Thresholds are the design's:
+  // 8px from the start, 12px from the end (sub-pixel scroll positions never land
+  // exactly on 0 or max).
+  function syncPicksArrows() {
+    const el = picksTrack;
+    if (picksTarget != null &&
+        (Math.abs(el.scrollLeft - picksTarget) <= 4 || Date.now() - picksTargetAt > 700)) picksTarget = null;
+    const has = realPickCards().length > 0;
+    const max = el.scrollWidth - el.clientWidth;
+    picksPrev.hidden = !has || el.scrollLeft <= 8;
+    picksNext.hidden = !has || el.scrollLeft >= max - 12;
+  }
+
+  // One page = as many whole cards as fit in 85% of the visible width, snapped to
+  // a card edge. A click within 700ms of the last one starts from where the last
+  // one was HEADING, not from where the smooth scroll has got to, so three quick
+  // clicks move three pages instead of three partial ones.
+  function pagePicks(dir) {
+    const el = picksTrack;
+    const first = el.querySelector('.pick-card');
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 14;
+    const pitch = (first ? first.getBoundingClientRect().width : 178) + gap;
+    const max = el.scrollWidth - el.clientWidth;
+    const fresh = picksTarget != null && Date.now() - picksTargetAt <= 700;
+    const from = fresh ? picksTarget : el.scrollLeft;
+    const steps = Math.max(1, Math.floor((el.clientWidth * 0.85) / pitch));
+    const next = Math.max(0, Math.min(max, Math.round((from + dir * steps * pitch) / pitch) * pitch));
+    picksTarget = next;
+    picksTargetAt = Date.now();
+    el.scrollTo({ left: next, behavior: 'smooth' });
+    picksPrev.hidden = next <= 8;
+    picksNext.hidden = next >= max - 12;
+  }
+
+  async function loadTopPicks() {
+    const run = ++picksRun;
+    if (!currentMonth) { hidePicksSection(); return; }
+    try {
+      const picks = await Recommendations.getTopPicks(
+        AdminContext.resolveUserId(user.id), currentMonth,
+        { reservedIds, cfg: catalogFilterCfg });
+      if (run !== picksRun) return;
+      if (!picks.length) { hidePicksSection(); return; }
+
+      // Full rows for the picked ids in ONE query, then restore rank order
+      // (.in() returns rows in arbitrary order) — the Recommended view's two-step.
+      const ids = picks.map(p => p.id);
+      const { data, error } = await db.from('catalog').select('*').in('id', ids);
+      if (run !== picksRun) return;
+      if (error) throw error;
+      const byId = new Map((data || []).map(r => [r.id, r]));
+      // reservedIds can change while the query is in flight (a reserve from the
+      // grid), so drop anything reserved by now rather than render a stale pick.
+      const rows = ids.map(id => byId.get(id)).filter(r => r && !reservedIds.has(r.id));
+      if (!rows.length) { hidePicksSection(); return; }
+
+      rows.forEach(r => pickItems.set(r.id, r));
+      picksTrack.innerHTML = rows
+        .map(c => buildComicCard(c, 0, false, { rootClass: 'pick-card', hideActions: true }))
+        .join('');
+      picksTrack.scrollLeft = 0;
+      picksTrack.querySelectorAll('img').forEach(img => {   // same fade-in as the grid
+        if (img.complete) img.classList.add('loaded');
+        else {
+          img.addEventListener('load',  () => img.classList.add('loaded'));
+          img.addEventListener('error', () => img.classList.add('loaded'));
+        }
+      });
+      // Honest caption: "your reservations" only when at least one pick actually
+      // came from the customer's own history. A newcomer sees what is popular.
+      picksCaption.textContent = picks.some(p => p.tier === 'personal')
+        ? 'Based on your reservations and subscriptions'
+        : 'Popular with other customers';
+      picksSection.hidden = false;
+      syncPicksArrows();
+    } catch (err) {
+      if (run !== picksRun) return;
+      console.warn('Top picks unavailable:', err);
+      hidePicksSection();
+    }
+  }
+
+  // A pick that has just been reserved no longer qualifies, so it leaves the rail.
+  // (syncCardState() is grid-scoped and cannot see rail cards.)
+  function syncPickState(catalogId) {
+    if (!reservedIds.has(catalogId)) return;
+    const card = picksTrack.querySelector(`.pick-card[data-id="${catalogId}"]`);
+    if (!card) return;
+    card.remove();
+    if (!realPickCards().length) hidePicksSection(); else syncPicksArrows();
+  }
+
+  picksTrack.addEventListener('click', e => {
+    const card = e.target.closest('.pick-card');
+    if (!card || card.classList.contains('pick-card--placeholder')) return;
+    openModal(card.dataset.id);
+  });
+  picksTrack.addEventListener('scroll', syncPicksArrows, { passive: true });
+  ['wheel', 'pointerdown', 'touchstart'].forEach(t =>
+    picksTrack.addEventListener(t, () => { picksTarget = null; }, { passive: true }));
+  picksPrev.addEventListener('click', () => pagePicks(-1));
+  picksNext.addEventListener('click', () => pagePicks(1));
+  window.addEventListener('resize', debounce(syncPicksArrows, 150));
+
+  // "See more ›" is the Recommended For You view, entered through the SAME path
+  // the select's own change handler takes, so the pin, the filter badge and the
+  // grid reload all behave exactly as if the customer had chosen it there.
+  picksMore.addEventListener('click', () => {
+    resEl.value = 'recommended';
+    maybeResavePin();
+    syncFilterBadge();
+    loadCatalog(1);
+    grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
 
   // Show analytics nav link for admins
   if (profile?.is_admin) {
@@ -1671,6 +1856,10 @@
 
   // Reflect any restored pinned state in the badge on load
   syncFilterBadge();
+
+  // Last, and not awaited: the grid is already on screen (this runs after
+  // `await loadCatalog()` above), and the rail must not hold up anything else.
+  loadTopPicks();
 
 })();
 </script>
