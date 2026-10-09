@@ -1,6 +1,6 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
@@ -42,6 +42,29 @@ CSV files go in the folder **above** that one (`..\catalogs\`).
   variables in `.env`, because it loads `import.js`.
 - `--include-unreserved` — `check-dates.js` only. Also checks, and corrects, dates on
   **unreserved** current-month titles. Off by default.
+
+---
+
+## Before ANY import (Run A or Run B): confirm there is no second tenant (F164)
+
+Until the guard in `docs/pre-phase-6-gate-closure.md` § 2e (session G-I) is built, the import's
+auto-reserve reads **every** tenant's subscriptions and catalog rows with no tenant filter. With one
+tenant that is harmless; the first time a second tenant has either, an import can write a
+reservation across tenants. This is not a prompt — nothing in the script stops you — so run both
+queries first (Supabase → SQL Editor, on the environment you are importing to) and **stop if either
+shows a second tenant**:
+
+```sql
+SELECT tenant_id, count(*) FROM subscriptions GROUP BY tenant_id;
+```
+```sql
+SELECT tenant_id, catalog_month, count(*) FROM catalog GROUP BY tenant_id, catalog_month ORDER BY catalog_month DESC, tenant_id;
+```
+
+Expect one tenant in the first. In the second, expect only the founding tenant for the month you
+are importing. Production read exactly that on 2026-10-06 and again on 2026-10-09 (63 subscriptions,
+one tenant; 2026-10 all one tenant; a second tenant held only 2 rows, in 2026-06, which is harmless).
+Staging holds `demoshop` rows for 2026-09, which is why a 2026-10 staging import cannot misfire.
 
 ---
 
@@ -111,7 +134,17 @@ Both numbers should be close. A **normalised count far below the raw count** mea
 being rejected — usually a changed export format. A normalised count of **zero aborts the run**
 (see Troubleshooting).
 
-**The two reports:**
+**The reports:**
+- `N reserved title(s) PINNED to a superseded listing (F122)` — **act on this one.** A title was
+  re-listed under a newer month with a different date, but the reservations still point at the old
+  row, so customers see the **wrong date** (and once that stale date passes, the title drops out of
+  My List entirely). The import cannot fix it: its upsert keys on the month. The by-hand repair
+  (a production write — yours, not the script's) is in `docs/technical-reference.md` § 13 F122,
+  "Repair applied 2026-08-10": `UPDATE` each reservation's `catalog_id` to the newest listing's id,
+  **filtered on the expected old `catalog_id`** so a changed state matches zero rows and writes
+  nothing; if that customer already holds the newest row (a unique pair), delete the redundant older
+  reservation only **after** the `UPDATE`. The report prints on shipment weeks too (a same-month
+  refresh), so read it there as well.
 - `N unreserved title(s) changed in-store date` — date revisions found.
 - `N title(s) are about to be marked fulfilled with nothing showing they arrived` — books the
   customer is about to be told "Order placed" for. Non-blocking by design. Note them; they land
@@ -232,6 +265,11 @@ files that already loaded is safe. A file that yields no rows is called out by n
   ```powershell
   node .\build-pull-feed.js --publish
   ```
+- If the failure says `HTTP 401 ... Bad credentials`, **republishing will fail the same way**: the
+  GitHub token in `.env` (`GITHUB_TOKEN_PULL_FEED`) is dead (expired or revoked; seen on 2026-10-09). Create a new fine-grained token scoped to **contents: read and write on
+  `weekly-pull-feed` only**, put it in `.env` in place of the old value, then run the command above.
+  Do this before **Tuesday 22:00 UTC**; the live feed's `pull-feed-generated` stamp is what the
+  newsletter's stale guard reads. Write down the expiry date you choose so the next lapse is not a surprise.
 
 ### 5. Restore `.env` (ad-hoc only)
 Uncomment `GITHUB_TOKEN_PULL_FEED`. Do it now, not later — the next weekly run needs it.
@@ -412,7 +450,7 @@ and answer the email prompt again.
 | `Unrecognized shipment format` | The file isn't a Lunar code invoice or a PRH delivery invoice. Check you downloaded the invoice, not a summary |
 | `❌ Shipment file not found` or `❌ … repeats …`, then `Skipping shipment import` | A path is wrong, or two paths are the same delivery. **Nothing was read or written for the shipment, and the feed was not published.** Fix the list and run again with every file for the week |
 | `⚠️ … contributed 0 rows` | That file parsed to nothing. Usually the wrong download, or a summary rather than the invoice. The other files still loaded, so re-run with the right file **and** the rest of the week's files |
-| `Pull-feed publish failed` | The shipment landed; the feed did not. Run `node .\build-pull-feed.js --publish` (Run B, Step 4) |
+| `Pull-feed publish failed` | The shipment landed; the feed did not. Run `node .\build-pull-feed.js --publish` (Run B, Step 4). If the message says `HTTP 401 ... Bad credentials`, the token is dead: replace it first (Run B, Step 4) |
 | `No .csv files in …\recheck` or `Skipped (unrecognised header)` (`check-dates.js`) | The folder is empty, or the file is not a Lunar All Products export or a PRH master-data file. Re-download it |
 | Wrong catalog month imported | Re-import that month's real file under the correct month; see `monthly-catalog-refresh.md` |
 
