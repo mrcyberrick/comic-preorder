@@ -1,6 +1,6 @@
 # Catalog redesign: hero, search + filter toggle, Top picks rail
 
-**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; then round three `f15ba8b` + `aab315d`: the rail collapses while a search or filter is active, and a collapsed rail leaves only "Show top picks"; full record in § 9, § 10 and § 11) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
+**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; then round three `f15ba8b` + `aab315d`: the rail collapses while a search or filter is active, and a collapsed rail leaves only "Show top picks"; then `504c07d`: unpinning resets the Filters badge; full record in § 9, § 10 and § 11) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
 
 **Last verified against live: 2026-10-09** (read from `origin/staging`; `catalog.html`, `style.css` and `app.js` are byte-identical on `origin/main` and `origin/staging`, so nothing unpromoted sits under this work).
 
@@ -312,7 +312,9 @@ Rick, verbatim: **"Okay I see the the search/filter runs on desktop and the rail
 3. Labels: "Hide" / "Show top picks".
 4. Collapse is instant, with no animation.
 
-### 11.4 Observed, NOT fixed and NOT filed (Rick's call)
+### 11.4 Observed, then FIXED the same day at Rick's report (`504c07d`)
+
+**RESOLVED.** Rick: "when I set a filter and unpin it the badge count is not reset until the page is refreshed." The cause below was right; the fix is one `syncFilterBadge()` call in the unpin path, applied **at every width** (the phone's layout is unchanged, PAR1-PAR4 still pass; only this bug is fixed there too). Check **UN1 (desktop) and UN2 (phone)** reproduce his exact steps with no reload: set a filter, pin it, unpin it. **Red on the deployed bytes before the fix** (controls all defaults, button still `has-filters` with a "1" badge, at both widths), green after, red again with the call removed (negative control `unpin-badge-not-synced`). Harness 46 of 46 on the deployed bytes; **full suite on the final bytes 161 passed (27.0 min), exit 0, no retries**, and afterwards the four staging settings rows are identical and no harness user remains. No finding ID consumed. The text below is the earlier "observed, not fixed" note, kept as written.
 
 **Unpinning leaves the Filters button claiming a filter is active.** The unpin path resets the controls and reloads without re-running `syncFilterBadge()`. Measured on the deployed bytes: after an unpin the controls read `|||standard` (all defaults) while the button still has its accent border and a **"1" badge**. It is pre-existing (the original inline-style code behaved the same) and it is on every width. It was left alone on purpose: one added call fixes it, but would change the phone view that Rick asked to have restored exactly. It does not affect the rail (its rule reads the controls directly; RC6 passes). Options: fix it everywhere (a small improvement on the phone too), file it as F172, or leave it.
 
