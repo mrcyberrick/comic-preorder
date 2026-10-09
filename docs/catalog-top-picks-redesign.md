@@ -120,6 +120,8 @@ The original decision text follows, kept for the record; D2, D3, D6 and the hero
 
 ## 6. Pre-existing defect found while planning (proposed F172, not filed)
 
+**Disposition (Rick, 2026-10-09, asked at the start of the execution session): "Fix without an ID".** Not filed; **F172 stays the next free finding ID.** The fix still lands as its own commit (a), the `Recommendations` select widening; V7 is still run as the red-then-green reproduction, and its result is recorded here. *(The heading above still reads "proposed F172, not filed" because that was true when written and is still true; only the question of whether to file is now answered.)*
+
 `Recommendations.getCatalogIds()` selects `id, series_name, distributor, variant_type` and returns only `{ id, variant_type }`. The Recommended path then runs `applyVisibility(rankedItems)`, and `CatalogFilters.hides()` reads `publisher`, `foc_date`, `order_requirement` and `price_usd`, none of which those rows carry. So **with "Recommended For You" selected, hidden publishers, past-FOC titles, restricted-ratio rules and zero-price hiding are not applied** (cover class is only partly judged, from `variant_type` alone). Inferred from the code, not reproduced live; V7 is the reproduction. Severity likely Low-Medium (a customer-chosen view, tenant settings silently ignored). Filing is Rick's call (`/file-finding`); the fix is the select widening in § 3.3.
 
 ## 7. Out of scope
@@ -132,5 +134,5 @@ Per-month hero art; staff picks or any new recommendation backend; the other thr
 - [ ] Search row, panel, rail and nav built (no hero, D2) on a feature branch, merged `--ff-only` to `staging`, pushed
 - [ ] V1-V6 green (V7 if D10 stands), each with its evidence recorded in this doc
 - [ ] Specs 10, 20, 24 updated for D1 and passing; full suite green post-push
-- [ ] § 6 filed or explicitly declined by Rick
+- [x] § 6 filed or explicitly declined by Rick (2026-10-09: "Fix without an ID"; see § 6 Disposition)
 - [ ] This doc's STATUS token and CLAUDE.md updated (finding-ID disposition stated: none consumed unless § 6 is filed)
