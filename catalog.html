@@ -25,14 +25,9 @@
        larger image and its arrival waited on that whole chain. 11 KB, immutable-cached. -->
   <link rel="preload" as="image" href="assets/banner-v3.webp">
   <style>
-    /* Search + filter toggle row — always visible */
-    .toolbar-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .toolbar-header .search-wrap { flex: 1 1 auto; }
+    /* The search row, filter toggle, filter panel and results line moved to
+       style.css (Catalog search row) when the Top picks redesign made them one
+       rule set for every width. */
 
     /* FOC-locked reserve button — distinct from both reserved (red) and normal (grey) */
     .btn-reserve.foc-locked,
@@ -54,45 +49,6 @@
        Elements kept in the DOM (not deleted) — several JS call sites still
        set their textContent — just hidden everywhere now. */
     #stats-bar { display: none; }
-
-    /* Desktop: filter toggle hidden, panel always shown as normal toolbar */
-    @media (min-width: 641px) {
-      #btn-filter-toggle { display: none !important; }
-      #filter-panel      { display: flex !important; }
-    }
-
-    /* Mobile: toggle shown, panel hidden until opened */
-    @media (max-width: 640px) {
-      #btn-filter-toggle { display: flex !important; }
-      #filter-panel {
-        display: none;
-        flex-direction: column;
-        gap: 8px;
-        background: var(--bg-card, #1a1a1a);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 12px;
-        margin-bottom: 12px;
-      }
-      #filter-panel.open { display: flex; }
-      #filter-panel .filter-select,
-      #filter-panel #btn-pin-filters {
-        width: 100%;
-        box-sizing: border-box;
-      }
-      #filter-panel #btn-pin-filters { text-align: left; }
-    }
-
-    /* Filters button moves in-line with the "Showing N of M items" text
-       (was in .toolbar-header next to search) — desktop is unaffected,
-       since #btn-filter-toggle is already display:none there (line ~35). */
-    .results-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 16px;
-    }
   </style>
 </head>
 <body>
@@ -139,6 +95,11 @@
     <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1>Monthly Catalog</h1>
     <p id="catalog-subtitle">Browse and reserve your comics</p>
+    <!-- The order-deadline message centred over the banner, at wide desktop widths only
+         (>= 1101px; style.css .deadline-hero). Out of flow, so its late arrival moves nothing.
+         Filled by the same code as #deadline-banner below, which keeps the phone and
+         narrower-desktop layout exactly as it was. -->
+    <div id="deadline-hero" class="deadline-hero" style="display:none" role="status" aria-live="polite"></div>
   </div>
 
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
@@ -168,36 +129,37 @@
     </div>
   </div>
 
-  <!-- Toolbar: search always visible -->
-  <div class="toolbar-header">
-    <div class="search-wrap">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-      <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
+  <!-- Search row + results line. The DOM is the pre-redesign phone layout (a search box that
+       is hidden on a phone in favour of the header magnifier, then the results count with the
+       Filters button beside it); at >= 641px style.css turns .search-block into a grid and puts
+       the toggle beside the search box, which works wherever the button sits because the two
+       wrappers are display:contents there. Desktop is the redesign; a phone is unchanged. -->
+  <div class="search-block">
+    <div class="toolbar-header">
+      <div class="search-wrap">
+        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
+      </div>
     </div>
-  </div>
-
-  <!-- Results count + mobile Filters toggle, in-line (moved 2026-08-15 —
-       was in .toolbar-header next to search; #btn-filter-toggle is
-       desktop-hidden regardless, see the @media rules above). Placed
-       BEFORE #filter-panel (moved 2026-08-15, second pass) so the button
-       stays fixed in place when tapped — the panel expands below it and
-       pushes the grid down, not the button that opens it. -->
-  <div class="results-toolbar">
-    <div style="font-size:0.8rem; color:var(--text-muted)" id="results-count"></div>
-    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
-      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
-             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
-             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
-             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
-      </svg>
-      Filters
-      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
-            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
-    </button>
+    <div class="results-toolbar">
+      <div id="results-count"></div>
+      <!-- Phone: the labelled "Filters" pill it always was. Desktop (>= 641px): an icon-only 50px
+           button beside the search box, panel collapsed by default and remembered per user. The
+           count badge keeps chosen or pinned filters visible while the panel is shut. -->
+      <button type="button" id="btn-filter-toggle" class="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Filters">
+        <svg class="ft-icon-m" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+        </svg>
+        <svg class="ft-icon-d" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+          <circle cx="15" cy="6" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="14" cy="18" r="2.2"/>
+        </svg>
+        <span class="filter-toggle-label">Filters</span>
+        <span id="filter-active-count" class="filter-toggle-badge"></span>
+      </button>
+    </div>
   </div>
 
   <div class="toolbar" id="filter-panel">
@@ -231,6 +193,50 @@
       📌 Pin filters
     </button>
   </div>
+
+  <!-- Top picks rail (docs/catalog-top-picks-redesign.md § 3.3). In the HTML from
+       first paint with its height already spoken for by eight placeholder cards:
+       it is never display:none -> shown, which is the F141 Pattern B shape (a
+       section revealed above content). The placeholders use the real card's own
+       structural classes, and .pick-card pins the title block to two lines, so a
+       real card is exactly as tall as the placeholder it replaces. If the picks
+       come back empty the section is hidden (a deliberate, rare shift: a tenant
+       with no reservation history at all). No Reserve button here; a card opens
+       the same detail modal the grid uses. Hidden in print. -->
+  <section class="top-picks" id="top-picks" aria-labelledby="top-picks-title" data-pending>
+    <div class="top-picks-head">
+      <h2 id="top-picks-title">Top picks for you</h2>
+      <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and the store's most popular reservations</span>
+      <button type="button" class="top-picks-more" id="top-picks-more">See more <span aria-hidden="true">&rsaquo;</span></button>
+      <!-- Hide / "Show top picks". Collapsing removes the cards AND the title, caption and See more
+           (style.css .is-collapsed), leaving only this control. It collapses by itself while a search
+           is typed or any filter other than the defaults is chosen (a pinned filter included), and
+           the customer can open it again by hand; see syncPicksCollapse() in the script below. -->
+      <button type="button" class="top-picks-collapse" id="top-picks-collapse" aria-expanded="true" aria-controls="top-picks-rail">
+        <span class="tpc-label">Hide</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"></polyline></svg>
+      </button>
+    </div>
+    <div class="top-picks-rail" id="top-picks-rail">
+      <div class="top-picks-track" id="top-picks-track">
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+        <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
+      </div>
+      <div class="top-picks-fade" aria-hidden="true"></div>
+      <button type="button" class="top-picks-arrow top-picks-prev" id="top-picks-prev" aria-label="Previous" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <button type="button" class="top-picks-arrow top-picks-next" id="top-picks-next" aria-label="Next" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
+    </div>
+  </section>
 
   <!-- Catalog Grid -->
   <div id="catalog-grid" class="catalog-grid"></div>
@@ -392,6 +398,10 @@
   let allItems = [];
   let totalCount = 0;
   let modalComicId = null;
+  // The Top picks rail's rows, by id. openModal() and toggleReserve() resolve a
+  // title from `allItems`, which only ever holds the CURRENT GRID PAGE, so a pick
+  // that is not on that page would otherwise be unopenable. See loadTopPicks().
+  const pickItems = new Map();
 
   // Fetches the total reserved quantity for the current catalog month only.
   // Runs once on init (and on admin context switch) to populate currentMonthQty.
@@ -415,6 +425,33 @@
   const countEl     = document.getElementById('results-count');
   const paginEl     = document.getElementById('pagination');
   const overlay     = document.getElementById('modal-overlay');
+
+  // ── Filter panel: collapsed by default; on DESKTOP also remembered per user ────
+  // The redesign is desktop only (Rick, 2026-10-09: "Restore previous mobile view. This change is
+  // for desktop view only"), and "desktop" is the same 641px line style.css uses. A phone always
+  // started with the panel closed and never remembered it, so it neither restores nor saves.
+  // Declared HERE rather than beside the click handler at the bottom of the
+  // script so the restore below runs before the first awaited fetch. A panel
+  // that opens a second late would push the grid down after first paint, which
+  // is the one kind of movement this page's F141 work removed.
+  // Wrapped in try/catch because storage throws outright in some privacy modes
+  // and a page that cannot remember a convenience must still render.
+  const desktopMQ = window.matchMedia('(min-width: 641px)');
+  const filterToggleBtn = document.getElementById('btn-filter-toggle');
+  const filterPanel     = document.getElementById('filter-panel');
+  const filterBadge     = document.getElementById('filter-active-count');
+  const FILTERS_OPEN_KEY = `pulllist_filters_open_${user.id}`;
+
+  function setFiltersOpen(open, persist) {
+    filterPanel.classList.toggle('open', open);
+    filterToggleBtn.setAttribute('aria-expanded', String(open));
+    if (persist && desktopMQ.matches) {
+      try { localStorage.setItem(FILTERS_OPEN_KEY, open ? '1' : '0'); } catch { /* convenience only */ }
+    }
+  }
+  try {
+    if (desktopMQ.matches && localStorage.getItem(FILTERS_OPEN_KEY) === '1') setFiltersOpen(true, false);
+  } catch { /* storage unavailable: stay collapsed */ }
 
   // ── Pinned Filter Persistence ─────────────────────────────
   // Saves/restores distributor, publisher, reserved-view, and variant filters
@@ -466,6 +503,11 @@
       resEl.value     = '';
       variantEl.value = 'standard';
       searchEl.value  = '';
+      // The Filters button's count badge and accent border are driven by the controls, but this reset
+      // wrote the controls directly and never re-ran the sync, so the button went on claiming
+      // "1 filter" after an unpin until the page was reloaded (Rick, 2026-10-09). Every other path
+      // that changes a control calls it; this one did not. It applies at every width.
+      syncFilterBadge();
       loadCatalog(1);
     } else {
       savePinnedFilters();
@@ -495,6 +537,72 @@
     searchEl.value  = '';
     updatePinBtn(false);
   }
+
+  // ── Top picks rail: collapse while a search or filter is active ──────────
+  // Rick, 2026-10-09: the rail should hide or collapse when search or a filter is in use, and
+  // collapse is the better of the two because a filter can be PINNED: a hidden rail would stay
+  // hidden for good, a collapsed header can always be opened.
+  // "Active" = search text, or any filter other than the defaults (the same four the Filters
+  // badge counts: distributor, publisher, the view select, covers). "See more" sets the view to
+  // Recommended, which is a filter, so it collapses the rail too: the grid is now showing it.
+  //
+  // The rule acts on TRANSITIONS, not on every keystroke: when search/filters become active the
+  // rail collapses, when they stop being active it opens, and a customer who opens it by hand
+  // while a filter is on keeps it open until the next transition. Declared HERE, ahead of the
+  // rail's own block at the bottom of the script, because the first sync must run before the rail
+  // is first painted (a pinned filter loads collapsed, with no flash of the open rail); it uses
+  // getElementById rather than the rail's consts for the same reason (they are declared later).
+  let picksOpen = true;
+  let picksLastActive = null;
+  let onPicksExpanded = null;                 // set by the rail block: re-measures its arrows once visible
+  function filtersOrSearchActive() {
+    return searchEl.value.trim() !== ''
+        || distEl.value !== '' || pubEl.value !== '' || resEl.value !== ''
+        || variantEl.value !== 'standard';
+  }
+  function applyPicksOpen() {
+    const section = document.getElementById('top-picks');
+    const btn = document.getElementById('top-picks-collapse');
+    if (!section || !btn) return;
+    section.classList.toggle('is-collapsed', !picksOpen);
+    btn.setAttribute('aria-expanded', String(picksOpen));
+    btn.querySelector('.tpc-label').textContent = picksOpen ? 'Hide' : 'Show top picks';
+    if (picksOpen && onPicksExpanded) onPicksExpanded();
+  }
+  // What this customer chose by hand, remembered per user, for each of the two situations:
+  //   { active: true|false, inactive: true|false }   (true = open)
+  // "active" = a search or a non-default filter is on; "inactive" = neither. Nothing remembered =
+  // the automatic rule (collapsed while active, open otherwise). Rick, 2026-10-09: a pinned filter
+  // collapses the rail on every visit, and having to click "Show top picks" each time was too much,
+  // so a hand-open under a filter is kept. Desktop only: a phone has no rail and no button, so it
+  // neither reads nor writes this (and a phone's storage stays exactly as it was).
+  // Every access is wrapped: storage throws outright in some privacy modes, and a convenience that
+  // cannot be saved must not stop the page rendering.
+  const PICKS_PREF_KEY = `pulllist_picks_open_${user.id}`;
+  function loadPicksPrefs() {
+    if (!desktopMQ.matches) return {};
+    try {
+      const p = JSON.parse(localStorage.getItem(PICKS_PREF_KEY));
+      return p && typeof p === 'object' ? p : {};
+    } catch { return {}; }
+  }
+  function savePicksPref(situation, open) {
+    if (!desktopMQ.matches) return;
+    try {
+      const p = loadPicksPrefs();
+      p[situation] = open;
+      localStorage.setItem(PICKS_PREF_KEY, JSON.stringify(p));
+    } catch { /* convenience only */ }
+  }
+  function syncPicksCollapse() {
+    const active = filtersOrSearchActive();
+    if (active === picksLastActive) return;   // no transition: leave a manual choice alone
+    picksLastActive = active;
+    const remembered = loadPicksPrefs()[active ? 'active' : 'inactive'];
+    picksOpen = typeof remembered === 'boolean' ? remembered : !active;
+    applyPicksOpen();
+  }
+  syncPicksCollapse();                         // pinned filters were restored just above
 
   // Helper: standard cover test used for client-side variant filtering
   function isStandardCover(item) {
@@ -676,8 +784,14 @@
   // ── Order deadline banner ─────────────────────────────────────
   // Reads the admin-set order_deadline from settings.
   // Shown only while the deadline has not yet passed — hides itself automatically.
+  // `deadlineReady` is kept (it used to be fire-and-forget) because the Top picks rail
+  // must not be PAINTED until this has settled: at desktop widths below 1101px the row under
+  // the header still appears after an await and pushes everything below it down (at 1101px and
+  // up the message is the out-of-flow pill over the banner and moves nothing). See the reveal
+  // just before the first loadCatalog().
+  let deadlineReady = Promise.resolve();
   if (currentMonth) {
-    Settings.getOrderDeadline().then(deadline => {
+    deadlineReady = Settings.getOrderDeadline().then(deadline => {
       if (!deadline) return;
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -691,6 +805,13 @@
       const monthLabel = new Date(parseInt(my), parseInt(mm) - 1, 1)
         .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+      // The SAME message goes into two elements and style.css shows one of them by width:
+      //   #deadline-banner  the row under the header, as it always was (phones, and any desktop
+      //                     width below 1101px where a centred pill would run into the title);
+      //   #deadline-hero    a pill centred over the banner art (>= 1101px).
+      // Only the tooltip direction differs. The banner row opens its tooltip DOWNWARD
+      // (foc-label--below, so it cannot run off a phone's edge); the hero sits inside the
+      // header, whose overflow:hidden would clip a downward tooltip, so it opens UPWARD.
       const banner = document.getElementById('deadline-banner');
       banner.innerHTML =
         '<span style="font-size:1rem;flex-shrink:0">⏰</span>' +
@@ -698,7 +819,16 @@
         ' <span class="foc-label foc-label--below" data-tooltip="Final Order Cutoff — the date the shop must submit your order to the distributor">What\'s this?</span>' +
         '</span>';
       banner.style.display = 'flex';
-    });
+      // The hero is flowing, centred text with the clock inline: as a flex row the clock stacked on
+      // its own line above the sentence once the pill was narrower than the two side by side.
+      const hero = document.getElementById('deadline-hero');
+      if (hero) {
+        hero.innerHTML =
+          '<span aria-hidden="true">⏰</span> Reserve by <strong>' + formatted + '</strong> to lock in your ' + monthLabel + ' picks.' +
+          ' <span class="foc-label" data-tooltip="Final Order Cutoff — the date the shop must submit your order to the distributor">What\'s this?</span>';
+        hero.style.display = 'block';
+      }
+    }).catch(() => { /* a failed deadline read just means no banner, as before */ });
   }
 
   // ── Subscription promo banner ─────────────────────────────────
@@ -783,6 +913,7 @@
       currentMonthQty = await loadCurrentMonthQty(AdminContext.resolveUserId(user.id));
       document.getElementById('stat-reserved').textContent = currentMonthQty;
       await loadCatalog(1);
+      loadTopPicks();   // the rail follows the customer being managed
     });
   }
 
@@ -819,10 +950,32 @@
     if (pinned?.publisher) pubEl.value = pinned.publisher;
   }
 
+  // ── Paint the Top picks rail now, not before ─────────────
+  // Found by the V5 measurement (2026-10-09): with the rail painted from first
+  // paint, catalog CLS went 0.025 -> 0.064 desktop and 0.018 -> 0.117 mobile, all of
+  // it section#top-picks moving TWICE. The cause is what sits above it: the order
+  // deadline banner (revealed after an await) and the subscription promo banner
+  // (revealed after the subscriptions load) each push the page down when they
+  // arrive. Before the rail existed nothing visible sat below them (the grid was an
+  // empty, unpainted div until its skeletons rendered, after both had landed), so
+  // their arrival shifted nothing.
+  // The section keeps its space from first paint (it is only visibility:hidden, which
+  // takes layout but is not painted, so its position changing is not a shift) and is
+  // revealed here: the deadline banner has settled (bounded at 3s so a stalled read
+  // cannot hold it back) and the promo banner was rendered above. This is the same
+  // moment the grid's own skeletons appear, so the page fills in exactly as it did.
+  // Desktop only: a phone has no rail (style.css hides it), so a phone must not wait for anything
+  // here. That keeps the phone's load order exactly what it was before the redesign.
+  if (desktopMQ.matches) await Promise.race([deadlineReady, new Promise(r => setTimeout(r, 3000))]);
+  document.getElementById('top-picks')?.removeAttribute('data-pending');
+
   await loadCatalog();
 
   // ── Load + Render ─────────────────────────────────────────
   async function loadCatalog(page = 1) {
+    // Every filter change, a search, a pin reset and "See more" all come through here, so this is
+    // the one place that sees them all. Paging does not change what is active, so it is a no-op.
+    syncPicksCollapse();
     // F141: PAGE_SIZE, not a literal. This used to be 10 while PAGE_SIZE is
     // 50, so the grid reserved two desktop rows and then grew to ten.
     renderSkeletons(PAGE_SIZE, grid);
@@ -1407,7 +1560,7 @@
     // Hard guard — never allow reserve or cancel on FOC-locked items.
     // Defense-in-depth: this fires even if a disabled button somehow triggers a click.
     // comicObj is declared once here and reused throughout the function.
-    const comicObj = comic || allItems.find(c => c.id === catalogId) || null;
+    const comicObj = comic || allItems.find(c => c.id === catalogId) || pickItems.get(catalogId) || null;
     if (isFocLocked(comicObj && comicObj.foc_date)) return;
     const isReserved = reservedIds.has(catalogId);
     const targetUserId = AdminContext.resolveUserId(user.id);
@@ -1445,6 +1598,11 @@
     // present, so this is correct from either the card or the modal call site.
     syncCardState(catalogId);
     syncModalState(catalogId);
+    // A reserve or cancel changes the customer's signal, so the memoised ranking
+    // behind the Recommended view and the rail is stale. It is dropped here and
+    // rebuilt on its next use; the rail itself only loses the card just reserved.
+    Recommendations.invalidate();
+    syncPickState(catalogId);
   }
 
   function updateReservedStat() {
@@ -1460,7 +1618,7 @@
 
   // ── Modal ─────────────────────────────────────────────────
   function openModal(catalogId) {
-    const comic = allItems.find(c => c.id === catalogId);
+    const comic = allItems.find(c => c.id === catalogId) || pickItems.get(catalogId);
     if (!comic) return;
     modalComicId = catalogId;
 
@@ -1642,6 +1800,165 @@
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+  // ── Top picks rail ────────────────────────────────────────
+  // docs/catalog-top-picks-redesign.md § 3.3. Ranked by Recommendations (the same
+  // ranking the "Recommended For You" view uses), one title per series, standard
+  // covers only, nothing the customer already reserved, nothing the store hides.
+  // Started once at the very end of init, AFTER the first loadCatalog() has
+  // resolved, so it never delays the grid's own requests.
+  const picksSection = document.getElementById('top-picks');
+  const picksTrack   = document.getElementById('top-picks-track');
+  const picksPrev    = document.getElementById('top-picks-prev');
+  const picksNext    = document.getElementById('top-picks-next');
+  const picksMore    = document.getElementById('top-picks-more');
+  const picksCaption = document.getElementById('top-picks-caption');
+  let picksRun      = 0;      // newest loadTopPicks() call; an older one that finishes late is dropped
+  let picksTarget   = null;   // scrollLeft a smooth page is heading for, so rapid clicks accumulate
+  let picksTargetAt = 0;
+
+  function realPickCards() {
+    return picksTrack.querySelectorAll('.pick-card:not(.pick-card--placeholder)');
+  }
+  // Hidden, not removed, so an admin switching to a customer who DOES have picks
+  // can bring it back. This is the one shift the rail can cause, and it is
+  // accepted: it only happens for a tenant with no reservation history at all.
+  function hidePicksSection() { picksSection.hidden = true; }
+
+  // Prev is hidden at the start, Next at the end. Thresholds are the design's:
+  // 8px from the start, 12px from the end (sub-pixel scroll positions never land
+  // exactly on 0 or max).
+  function syncPicksArrows() {
+    const el = picksTrack;
+    if (picksTarget != null &&
+        (Math.abs(el.scrollLeft - picksTarget) <= 4 || Date.now() - picksTargetAt > 700)) picksTarget = null;
+    const has = realPickCards().length > 0;
+    const max = el.scrollWidth - el.clientWidth;
+    picksPrev.hidden = !has || el.scrollLeft <= 8;
+    picksNext.hidden = !has || el.scrollLeft >= max - 12;
+  }
+
+  // One page = as many whole cards as fit in 85% of the visible width, snapped to
+  // a card edge. A click within 700ms of the last one starts from where the last
+  // one was HEADING, not from where the smooth scroll has got to, so three quick
+  // clicks move three pages instead of three partial ones.
+  function pagePicks(dir) {
+    const el = picksTrack;
+    const first = el.querySelector('.pick-card');
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 14;
+    const pitch = (first ? first.getBoundingClientRect().width : 178) + gap;
+    const max = el.scrollWidth - el.clientWidth;
+    const fresh = picksTarget != null && Date.now() - picksTargetAt <= 700;
+    const from = fresh ? picksTarget : el.scrollLeft;
+    const steps = Math.max(1, Math.floor((el.clientWidth * 0.85) / pitch));
+    const next = Math.max(0, Math.min(max, Math.round((from + dir * steps * pitch) / pitch) * pitch));
+    picksTarget = next;
+    picksTargetAt = Date.now();
+    el.scrollTo({ left: next, behavior: 'smooth' });
+    picksPrev.hidden = next <= 8;
+    picksNext.hidden = next >= max - 12;
+  }
+
+  async function loadTopPicks() {
+    const run = ++picksRun;
+    // Desktop only (Rick, 2026-10-09). A phone gets no rail, and style.css hides it there, so
+    // do not spend the ranking fetch or the row query on something nobody can see. If the
+    // window is later widened past 641px the matchMedia listener below calls this again.
+    if (!desktopMQ.matches) return;
+    if (!currentMonth) { hidePicksSection(); return; }
+    try {
+      const picks = await Recommendations.getTopPicks(
+        AdminContext.resolveUserId(user.id), currentMonth,
+        { reservedIds, cfg: catalogFilterCfg });
+      if (run !== picksRun) return;
+      if (!picks.length) { hidePicksSection(); return; }
+
+      // Full rows for the picked ids in ONE query, then restore rank order
+      // (.in() returns rows in arbitrary order) — the Recommended view's two-step.
+      const ids = picks.map(p => p.id);
+      const { data, error } = await db.from('catalog').select('*').in('id', ids);
+      if (run !== picksRun) return;
+      if (error) throw error;
+      const byId = new Map((data || []).map(r => [r.id, r]));
+      // reservedIds can change while the query is in flight (a reserve from the
+      // grid), so drop anything reserved by now rather than render a stale pick.
+      const rows = ids.map(id => byId.get(id)).filter(r => r && !reservedIds.has(r.id));
+      if (!rows.length) { hidePicksSection(); return; }
+
+      rows.forEach(r => pickItems.set(r.id, r));
+      picksTrack.innerHTML = rows
+        .map(c => buildComicCard(c, 0, false, { rootClass: 'pick-card', hideActions: true }))
+        .join('');
+      picksTrack.scrollLeft = 0;
+      picksTrack.querySelectorAll('img').forEach(img => {   // same fade-in as the grid
+        if (img.complete) img.classList.add('loaded');
+        else {
+          img.addEventListener('load',  () => img.classList.add('loaded'));
+          img.addEventListener('error', () => img.classList.add('loaded'));
+        }
+      });
+      // The caption says what the rail actually contains. Rick (2026-10-09): picks are "based on
+      // reservations and most popular reservations for the store". "Reservations" is the
+      // customer's own (their history plus this month's), "popular" is the store's most-reserved
+      // series (get_popular_series). A customer with no history sees the popular half only, and
+      // the caption says so rather than claiming reservations they do not have.
+      const hasPersonal = picks.some(p => p.tier === 'personal');
+      const hasPopular  = picks.some(p => p.tier === 'popular');
+      picksCaption.textContent = hasPersonal && hasPopular
+        ? 'Based on your reservations and the store\'s most popular reservations'
+        : hasPersonal ? 'Based on your reservations'
+        : 'The store\'s most popular reservations';
+      picksSection.hidden = false;
+      syncPicksArrows();
+    } catch (err) {
+      if (run !== picksRun) return;
+      console.warn('Top picks unavailable:', err);
+      hidePicksSection();
+    }
+  }
+
+  // A pick that has just been reserved no longer qualifies, so it leaves the rail.
+  // (syncCardState() is grid-scoped and cannot see rail cards.)
+  function syncPickState(catalogId) {
+    if (!reservedIds.has(catalogId)) return;
+    const card = picksTrack.querySelector(`.pick-card[data-id="${catalogId}"]`);
+    if (!card) return;
+    card.remove();
+    if (!realPickCards().length) hidePicksSection(); else syncPicksArrows();
+  }
+
+  picksTrack.addEventListener('click', e => {
+    const card = e.target.closest('.pick-card');
+    if (!card || card.classList.contains('pick-card--placeholder')) return;
+    openModal(card.dataset.id);
+  });
+  picksTrack.addEventListener('scroll', syncPicksArrows, { passive: true });
+  ['wheel', 'pointerdown', 'touchstart'].forEach(t =>
+    picksTrack.addEventListener(t, () => { picksTarget = null; }, { passive: true }));
+  picksPrev.addEventListener('click', () => pagePicks(-1));
+  picksNext.addEventListener('click', () => pagePicks(1));
+  window.addEventListener('resize', debounce(syncPicksArrows, 150));
+  desktopMQ.addEventListener('change', e => { if (e.matches) loadTopPicks(); });
+
+  // "See more ›" is the Recommended For You view, entered through the SAME path
+  // the select's own change handler takes, so the pin, the filter badge and the
+  // grid reload all behave exactly as if the customer had chosen it there.
+  // Hide / Show by hand. It moves picksOpen and REMEMBERS the choice for the situation the customer
+  // is in (a search or filter on, or neither): the next time they are in that situation the rail
+  // starts the way they left it. Between transitions the automatic rule leaves a hand choice alone.
+  onPicksExpanded = () => requestAnimationFrame(syncPicksArrows);
+  document.getElementById('top-picks-collapse').addEventListener('click', () => {
+    picksOpen = !picksOpen;
+    savePicksPref(picksLastActive ? 'active' : 'inactive', picksOpen);   // remembered for this situation
+    applyPicksOpen();
+  });
+  picksMore.addEventListener('click', () => {
+    resEl.value = 'recommended';
+    maybeResavePin();
+    syncFilterBadge();
+    loadCatalog(1);
+    grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
 
   // Show analytics nav link for admins
   if (profile?.is_admin) {
@@ -1657,16 +1974,17 @@
   // ── Filter Events ─────────────────────────────────────────
   const debouncedLoad = debounce(() => loadCatalog(1), 350);
   searchEl.addEventListener('input', debouncedLoad);
+  // The grid reload waits 350ms after the last keystroke; the rail should not. It collapses on the
+  // first character, so the results the customer is typing toward are not pushed down by it.
+  searchEl.addEventListener('input', syncPicksCollapse);
   distEl.addEventListener('change',    () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
   pubEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
   resEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
   variantEl.addEventListener('change', () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
 
-  // ── Mobile filter toggle ──────────────────────────────────
-  const filterToggleBtn = document.getElementById('btn-filter-toggle');
-  const filterPanel     = document.getElementById('filter-panel');
-  const filterBadge     = document.getElementById('filter-active-count');
-
+  // ── Filter toggle (every width) ───────────────────────────
+  // Elements and the open/closed restore are declared with the other elements
+  // near the top of this script (setFiltersOpen, FILTERS_OPEN_KEY).
   function syncFilterBadge() {
     const active = [
       distEl.value !== '',
@@ -1676,23 +1994,24 @@
       variantEl.value !== 'standard',
     ].filter(Boolean).length;
 
-    if (active > 0) {
-      filterBadge.textContent   = active;
-      filterBadge.style.display = 'inline';
-      filterToggleBtn.style.borderColor = 'var(--accent)';
-    } else {
-      filterBadge.style.display = 'none';
-      filterToggleBtn.style.borderColor = 'var(--border)';
-    }
+    // "Filters are on" is a class now (.has-filters): it gives the button its accent border and
+    // shows the count badge, both in the stylesheet. They used to be inline styles, and an inline
+    // border-color outranks the desktop open-state rule, so a panel opened with no filters would
+    // have kept whichever colour this function last wrote.
+    filterToggleBtn.classList.toggle('has-filters', active > 0);
+    filterBadge.textContent = active > 0 ? String(active) : '';
   }
 
   filterToggleBtn.addEventListener('click', () => {
-    const isOpen = filterPanel.classList.toggle('open');
-    filterToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    setFiltersOpen(!filterPanel.classList.contains('open'), true);
   });
 
   // Reflect any restored pinned state in the badge on load
   syncFilterBadge();
+
+  // Last, and not awaited: the grid is already on screen (this runs after
+  // `await loadCatalog()` above), and the rail must not hold up anything else.
+  loadTopPicks();
 
 })();
 </script>

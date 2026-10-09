@@ -2128,15 +2128,43 @@ const Recommendations = {
   //
   // Items with no series affiliation are omitted; the view stays focused on
   // content the customer is likely to care about.
-  async getCatalogIds(userId, month) {
+  //
+  // MEMOISED per (userId, month) for the page's lifetime, as a promise so two
+  // callers that arrive together share one fetch. The Top picks rail and the
+  // "Recommended For You" view both rank the whole month (about three paged
+  // requests plus the user's reservation signal, which runs to 1,345+ rows on the
+  // heaviest account); without this each would pay for it separately.
+  // The result object is SHARED: callers filter and slice it, never mutate it.
+  // A reservation or cancellation changes the signal, so catalog.html calls
+  // invalidate() after either; a failed fetch drops its own entry so it retries.
+  _idsCache: new Map(),
+  invalidate() { this._idsCache.clear(); },
+  getCatalogIds(userId, month) {
+    const key = `${userId}|${month}`;
+    let p = this._idsCache.get(key);
+    if (!p) {
+      p = this._buildCatalogIds(userId, month);
+      this._idsCache.set(key, p);
+      p.catch(() => { if (this._idsCache.get(key) === p) this._idsCache.delete(key); });
+    }
+    return p;
+  },
+
+  async _buildCatalogIds(userId, month) {
     const [userSignal, popularSeries] = await Promise.all([
       this._getUserSignal(userId),
       this._getPopularSeries(month),
     ]);
 
-    // Fetch id + series + variant_type for the full catalog month.
+    // Fetch the light columns for the full catalog month.
     // variant_type is included so the caller can filter standard covers BEFORE
     // paginating — filtering after slicing causes short pages and empty grid cells.
+    // publisher, foc_date, order_requirement and price_usd are there for the same
+    // reason: CatalogFilters.hides() reads exactly those fields, and the caller
+    // runs this list through it. Until 2026-10-09 the select stopped at
+    // variant_type, so with "Recommended For You" chosen the tenant's hidden
+    // publishers, past-FOC rule, restricted-ratio rules and zero-price rule were
+    // all silently skipped (cover class was judged from variant_type alone).
     const countRes = await db
       .from('catalog')
       .select('*', { count: 'exact', head: true })
@@ -2152,21 +2180,37 @@ const Recommendations = {
     for (let from = 0; from < total; from += 1000) {
       const { data } = await db
         .from('catalog')
-        .select('id, series_name, distributor, variant_type')
+        .select('id, series_name, distributor, variant_type, publisher, foc_date, order_requirement, price_usd')
         .eq('catalog_month', month)
         .not('series_name', 'is', null)
+        // A unique tiebreaker: .range() pages without an ORDER BY are not
+        // guaranteed to be stable across separate requests (the F140 rule). It
+        // matters more now that the Top picks rail takes "the first standard
+        // cover of each series" from this list, which must not change between
+        // two page loads of the same data.
+        .order('id', { ascending: true })
         .range(from, Math.min(from + 999, total - 1));
       if (!data || data.length === 0) break;
       seriesRows.push(...data);
       if (data.length < 1000) break;
     }
 
-    // Build series key → [{id, variant_type}] lookup
+    // Build series key → [row] lookup. Each row keeps every column the visibility
+    // rules read (see the select above), not just id + variant_type.
     const byKey = new Map();
     for (const row of seriesRows) {
       const key = `${row.series_name}||${row.distributor}`;
       if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key).push({ id: row.id, variant_type: row.variant_type });
+      byKey.get(key).push({
+        id: row.id,
+        series_name: row.series_name,
+        distributor: row.distributor,
+        variant_type: row.variant_type,
+        publisher: row.publisher,
+        foc_date: row.foc_date,
+        order_requirement: row.order_requirement,
+        price_usd: row.price_usd,
+      });
     }
 
     const seen         = new Set();
@@ -2176,7 +2220,7 @@ const Recommendations = {
     // Tier 1: items from series the user has reserved before
     for (const key of userSignal) {
       for (const item of (byKey.get(key) || [])) {
-        if (!seen.has(item.id)) { personalItems.push(item); seen.add(item.id); }
+        if (!seen.has(item.id)) { personalItems.push({ ...item, tier: 'personal' }); seen.add(item.id); }
       }
     }
 
@@ -2184,14 +2228,80 @@ const Recommendations = {
     for (const series of popularSeries) {
       const key = `${series.series_name}||${series.distributor}`;
       for (const item of (byKey.get(key) || [])) {
-        if (!seen.has(item.id)) { popularItems.push(item); seen.add(item.id); }
+        if (!seen.has(item.id)) { popularItems.push({ ...item, tier: 'popular' }); seen.add(item.id); }
       }
     }
 
     return {
-      items: [...personalItems, ...popularItems], // each: { id, variant_type }
+      // each: { id, series_name, distributor, variant_type, publisher, foc_date,
+      //         order_requirement, price_usd, tier: 'personal' | 'popular' }
+      items: [...personalItems, ...popularItems],
       hasPersonal: userSignal.size > 0,
     };
+  },
+
+  // The Top picks rail (catalog.html): an ordered list of { id, tier }, at most `limit`
+  // long, built from the same ranking the Recommended view uses so the two cannot
+  // disagree about what "recommended" means.
+  //
+  // BLENDED, not stacked (Rick, 2026-10-09: picks are "based on reservations and most
+  // popular reservations for the store"). The ranking is two tiers: series the customer has
+  // reserved before (tier 'personal'), then the store's most-reserved series
+  // (get_popular_series, tier 'popular'). Taking the list top-down fills the whole rail from
+  // the first tier for anyone with a real history, so the store's popular titles never
+  // appear. Instead the two tiers ALTERNATE, personal first, so both are always represented;
+  // when one runs out the other fills the rest, and a customer with no history sees the
+  // popular half alone.
+  //
+  // A pick is a title the customer could still reserve and would plausibly want
+  // to look at, so a row is DROPPED, before the two lists are merged, when it is:
+  //   - already reserved by this customer (`reservedIds`, a Map or Set of ids);
+  //   - past its FOC (isFocLocked, the same test the Reserve button uses);
+  //   - not a standard cover. Variants and allocation-restricted rows are the
+  //     long tail of a month and would crowd out the issues people subscribe to;
+  //   - hidden by the tenant's catalog visibility config (`cfg`), via the one
+  //     shared CatalogFilters.hides() predicate, so a publisher the store hides
+  //     cannot reappear in a carousel;
+  //   - a second title from a series already picked. ONE PER SERIES across both tiers, the
+  //     first in rank, so one popular series cannot fill the whole rail.
+  // The reservation exemption CatalogFilters.apply() offers is deliberately not
+  // used: a reserved title is not a pick whether or not a filter would hide it.
+  async getTopPicks(userId, month, { reservedIds = null, cfg = null, limit = 20 } = {}) {
+    const { items } = await this.getCatalogIds(userId, month);
+    const eligible = items.filter(item =>
+      !(reservedIds && reservedIds.has(item.id)) &&
+      !isFocLocked(item.foc_date) &&
+      isStandardCoverType(item.variant_type) &&
+      !(cfg && CatalogFilters.hides(item, cfg, month)));
+    const lists = [
+      { items: eligible.filter(i => i.tier === 'personal'), at: 0 },
+      { items: eligible.filter(i => i.tier === 'popular'),  at: 0 },
+    ];
+    const picks = [];
+    const series = new Set();
+    // Next pick from one list, skipping any series already taken; false when it is dry.
+    const take = (list) => {
+      while (list.at < list.items.length) {
+        const item = list.items[list.at++];
+        const key = `${item.series_name}||${item.distributor}`;
+        if (series.has(key)) continue;
+        series.add(key);
+        picks.push({ id: item.id, tier: item.tier });
+        return true;
+      }
+      return false;
+    };
+    // Alternate until both are dry or the rail is full. take() returning false for a dry list
+    // is what lets the other tier fill the remaining slots.
+    let more = true;
+    while (more && picks.length < limit) {
+      more = false;
+      for (const list of lists) {
+        if (picks.length >= limit) break;
+        if (take(list)) more = true;
+      }
+    }
+    return picks;
   },
 };
 
@@ -2510,7 +2620,18 @@ function renderSkeletons(count = 12, container) {
 // immutable for a year, so re-exporting the art REQUIRES bumping to -v3.
 const COVER_PLACEHOLDER = 'comic-cover-fallback-v2.webp';
 
-function buildComicCard(comic, reservedQty, focLocked = false) {
+// opts (all optional; the default call sites pass none and get exactly the card
+// they always did):
+//   rootClass    the card's root class. The Top picks rail passes 'pick-card'
+//                and NEVER 'comic-card': specs and page code use `.comic-card`
+//                to mean "the grid has loaded" and to locate a title's card, so a
+//                second .comic-card per title (one in the rail, one in the grid)
+//                breaks `.first()` and strict locators. The same reason
+//                renderSkeletons() avoids it.
+//   hideActions  omit the .comic-actions row (the rail has no Reserve button:
+//                a click opens the modal, which reserves).
+function buildComicCard(comic, reservedQty, focLocked = false, opts = {}) {
+  const rootClass = opts.rootClass || 'comic-card';
   const isReserved = reservedQty > 0;
   const coverHtml = `<img
     src="${comic.cover_url ? escapeHtml(comic.cover_url) : COVER_PLACEHOLDER}"
@@ -2553,8 +2674,17 @@ function buildComicCard(comic, reservedQty, focLocked = false) {
                     :                            '+ Reserve';
   const btnDisabled = focLocked ? 'disabled' : '';
 
+  // The actions row is its own string so that, when shown, the card's markup is
+  // character-for-character what it was before `opts` existed.
+  const actionsHtml = opts.hideActions ? '' : `      <div class="comic-actions">
+        <button class="${btnClass}" data-id="${comic.id}" ${btnDisabled}>
+          ${btnText}
+        </button>
+      </div>
+`;
+
   return `
-    <div class="comic-card" data-id="${comic.id}">
+    <div class="${rootClass}" data-id="${comic.id}">
       <div class="comic-cover">
         <div class="distributor-badge badge-${comic.distributor.toLowerCase()}">${escapeHtml(comic.distributor)}</div>
         ${reservedBadge}${focBadge}${restrictionBadge}
@@ -2568,12 +2698,7 @@ function buildComicCard(comic, reservedQty, focLocked = false) {
           <span class="comic-date">${saleDate}</span>
         </div>
       </div>
-      <div class="comic-actions">
-        <button class="${btnClass}" data-id="${comic.id}" ${btnDisabled}>
-          ${btnText}
-        </button>
-      </div>
-    </div>
+${actionsHtml}    </div>
   `;
 }
 

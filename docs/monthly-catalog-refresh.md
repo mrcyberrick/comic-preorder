@@ -1,7 +1,9 @@
 # Monthly Catalog Refresh — Step-by-Step Guide
 
-**Last updated:** 2026-08-22 (F136 S3 — added Step 3, the revision-sweep step;
-see warning below for the earlier F81 rewrite)
+**Last updated:** 2026-10-09 (shipment-file wording and the shipment re-run note corrected to match
+the scripts; the sequence itself is unchanged — `docs/import-sop.md` is canonical for sequence and
+was brought current the same day). Before that: 2026-08-22 (F136 S3 — added Step 3, the
+revision-sweep step; see warning below for the earlier F81 rewrite)
 **Applies to:** production (`import.js` → `pulllist.app`). The staging variant
 (`import-staging.js` → staging Supabase) follows the identical sequence.
 
@@ -249,8 +251,12 @@ cd C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts
 node .\import.js "..\Lunar_Product_Data_MMYY.csv" "..\YYYY_MM_PRH_metadata_full_active.csv"
 ```
 
-Optional: append shipment invoice paths as third/fourth arguments, or answer
-the interactive prompt. Answer "n" to skip shipment import early in the month.
+Optional: append shipment invoice paths after the two catalog files — **any number, any order**
+(one Lunar invoice plus one delivery-detail file per PRH delivery; format is detected from the file
+contents). Pass all of a week's files in the one run; a missing or repeated file skips the whole
+shipment import (the catalog part still runs). With none on the command line the script asks, taking
+one path per line until a blank line. Answer "n" to skip shipment import early in the month. The
+weekly procedure is `docs/import-sop.md` Run B.
 
 **Confirm the catalog month at the prompt.** This matters most when importing
 a new month's files before the calendar month starts — type the correct
@@ -304,8 +310,15 @@ Admin → toggle **Maintenance Mode OFF**. The catalog is live.
 - Auto-reserve: detects existing reservations and skips
 - New-month sequence: fires only when the import month is **greater** than the
   latest in the database — mid-month re-runs skip archive/purge entirely
-- Shipment import: upsert (Lunar path) / delete-then-insert (PRH path), safe
-  to re-run for the same week
+- Shipment import: PRH delivery files merge on `(tenant_id, distributor, upc,
+  on_sale_date)`; the Lunar code invoice deletes that on-sale date's Lunar rows
+  and re-inserts them. *(Corrected 2026-10-09 — this line had the two paths the
+  wrong way round. The code's own variable names are swapped, which is where the
+  mix-up comes from: `distributor = 'Lunar'` is the one that deletes first.)*
+  Safe to re-run for the same week **with all of that week's files**: quantities
+  for one title are summed across the files in a single run, but a later run
+  replaces what an earlier run stored, so a run holding only one of two
+  deliveries overwrites the other's quantity
 
 ---
 
