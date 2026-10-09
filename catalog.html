@@ -208,8 +208,15 @@
       <h2 id="top-picks-title">Top picks for you</h2>
       <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and the store's most popular reservations</span>
       <button type="button" class="top-picks-more" id="top-picks-more">See more <span aria-hidden="true">&rsaquo;</span></button>
+      <!-- Collapses the rail to this header. It does so by itself while a search is typed or any
+           filter other than the defaults is chosen (a pinned filter included), and the customer can
+           open it again by hand; see syncPicksCollapse() in the script below. -->
+      <button type="button" class="top-picks-collapse" id="top-picks-collapse" aria-expanded="true" aria-controls="top-picks-rail">
+        <span class="tpc-label">Hide</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"></polyline></svg>
+      </button>
     </div>
-    <div class="top-picks-rail">
+    <div class="top-picks-rail" id="top-picks-rail">
       <div class="top-picks-track" id="top-picks-track">
         <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
         <div class="pick-card pick-card--placeholder" aria-hidden="true"><div class="comic-cover"><div class="skeleton-block"></div></div><div class="comic-info"><div class="comic-title">&nbsp;</div><div class="comic-series">&nbsp;</div><div class="comic-meta"><span class="comic-price">&nbsp;</span></div></div></div>
@@ -524,6 +531,46 @@
     searchEl.value  = '';
     updatePinBtn(false);
   }
+
+  // ── Top picks rail: collapse while a search or filter is active ──────────
+  // Rick, 2026-10-09: the rail should hide or collapse when search or a filter is in use, and
+  // collapse is the better of the two because a filter can be PINNED: a hidden rail would stay
+  // hidden for good, a collapsed header can always be opened.
+  // "Active" = search text, or any filter other than the defaults (the same four the Filters
+  // badge counts: distributor, publisher, the view select, covers). "See more" sets the view to
+  // Recommended, which is a filter, so it collapses the rail too: the grid is now showing it.
+  //
+  // The rule acts on TRANSITIONS, not on every keystroke: when search/filters become active the
+  // rail collapses, when they stop being active it opens, and a customer who opens it by hand
+  // while a filter is on keeps it open until the next transition. Declared HERE, ahead of the
+  // rail's own block at the bottom of the script, because the first sync must run before the rail
+  // is first painted (a pinned filter loads collapsed, with no flash of the open rail); it uses
+  // getElementById rather than the rail's consts for the same reason (they are declared later).
+  let picksOpen = true;
+  let picksLastActive = null;
+  let onPicksExpanded = null;                 // set by the rail block: re-measures its arrows once visible
+  function filtersOrSearchActive() {
+    return searchEl.value.trim() !== ''
+        || distEl.value !== '' || pubEl.value !== '' || resEl.value !== ''
+        || variantEl.value !== 'standard';
+  }
+  function applyPicksOpen() {
+    const section = document.getElementById('top-picks');
+    const btn = document.getElementById('top-picks-collapse');
+    if (!section || !btn) return;
+    section.classList.toggle('is-collapsed', !picksOpen);
+    btn.setAttribute('aria-expanded', String(picksOpen));
+    btn.querySelector('.tpc-label').textContent = picksOpen ? 'Hide' : 'Show';
+    if (picksOpen && onPicksExpanded) onPicksExpanded();
+  }
+  function syncPicksCollapse() {
+    const active = filtersOrSearchActive();
+    if (active === picksLastActive) return;   // no transition: leave a manual choice alone
+    picksLastActive = active;
+    picksOpen = !active;
+    applyPicksOpen();
+  }
+  syncPicksCollapse();                         // pinned filters were restored just above
 
   // Helper: standard cover test used for client-side variant filtering
   function isStandardCover(item) {
@@ -894,6 +941,9 @@
 
   // ── Load + Render ─────────────────────────────────────────
   async function loadCatalog(page = 1) {
+    // Every filter change, a search, a pin reset and "See more" all come through here, so this is
+    // the one place that sees them all. Paging does not change what is active, so it is a no-op.
+    syncPicksCollapse();
     // F141: PAGE_SIZE, not a literal. This used to be 10 while PAGE_SIZE is
     // 50, so the grid reserved two desktop rows and then grew to ten.
     renderSkeletons(PAGE_SIZE, grid);
@@ -1860,6 +1910,13 @@
   // "See more ›" is the Recommended For You view, entered through the SAME path
   // the select's own change handler takes, so the pin, the filter badge and the
   // grid reload all behave exactly as if the customer had chosen it there.
+  // Hide / Show by hand. This only moves picksOpen; the auto rule resumes at the next transition
+  // between "something is active" and "nothing is".
+  onPicksExpanded = () => requestAnimationFrame(syncPicksArrows);
+  document.getElementById('top-picks-collapse').addEventListener('click', () => {
+    picksOpen = !picksOpen;
+    applyPicksOpen();
+  });
   picksMore.addEventListener('click', () => {
     resEl.value = 'recommended';
     maybeResavePin();
@@ -1883,6 +1940,9 @@
   // ── Filter Events ─────────────────────────────────────────
   const debouncedLoad = debounce(() => loadCatalog(1), 350);
   searchEl.addEventListener('input', debouncedLoad);
+  // The grid reload waits 350ms after the last keystroke; the rail should not. It collapses on the
+  // first character, so the results the customer is typing toward are not pushed down by it.
+  searchEl.addEventListener('input', syncPicksCollapse);
   distEl.addEventListener('change',    () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
   pubEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
   resEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });

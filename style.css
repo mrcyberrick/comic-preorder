@@ -974,6 +974,32 @@ button { cursor: pointer; font-family: var(--font-body); }
   white-space: nowrap;
 }
 .top-picks-more:hover { color: var(--accent-hover); }
+/* Hide / Show: collapses the rail to its header. The chevron points up while the rail is open
+   (this closes it) and down once collapsed (this opens it). */
+.top-picks-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.top-picks-collapse:hover { border-color: var(--border-accent); color: var(--text-primary); }
+.top-picks-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top-picks-collapse svg { transition: transform 0.15s; }
+.top-picks.is-collapsed .top-picks-collapse svg { transform: rotate(180deg); }
+/* Collapsed: just the header row, with the spacing tightened so it does not leave a gap
+   where the cards were. */
+.top-picks.is-collapsed .top-picks-rail { display: none; }
+.top-picks.is-collapsed .top-picks-head { margin-bottom: 0; }
+.top-picks.is-collapsed { margin-bottom: 18px; }
 .top-picks-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .top-picks-rail { position: relative; }
 .top-picks-track {
