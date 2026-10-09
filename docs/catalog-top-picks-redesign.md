@@ -1,6 +1,6 @@
 # Catalog redesign: hero, search + filter toggle, Top picks rail
 
-**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; full record in § 9 and § 10) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
+**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; then round three `f15ba8b` + `aab315d`: the rail collapses while a search or filter is active, and a collapsed rail leaves only "Show top picks"; full record in § 9, § 10 and § 11) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
 
 **Last verified against live: 2026-10-09** (read from `origin/staging`; `catalog.html`, `style.css` and `app.js` are byte-identical on `origin/main` and `origin/staging`, so nothing unpromoted sits under this work).
 
@@ -275,3 +275,47 @@ Rick's instruction, verbatim: **"Restore previous mobile view. This change is fo
 ### 10.5 Not verified
 
 **Chromium only**: no WebKit, no real phone (the phone claim is "equal to the pre-redesign build in Chromium at 393 and 320 px", which is strong but is not an iPhone). The **hover tooltip** on "What's this?" in the banner was inspected in screenshots only; a tooltip's pseudo-element cannot be asserted. A **desktop window narrowed across 641 / 1101 px** swaps the two message elements by CSS only, no JS, and was measured at fixed widths, not by dragging. The 641 to 1100 px "row under the header" view is unchanged from before this whole effort, but its pairing with the new rail above the grid at those widths was only screenshotted at 900 px.
+
+## 11. Round three: the rail collapses while a search or filter is active (Rick, 2026-10-09, after § 10)
+
+Rick, verbatim: **"Okay I see the the search/filter runs on desktop and the rail is still visiable I would like it to hide or collapse when search or filter is active. I am leaning to collapse since you can pin a filter."** Then, on seeing the first build: **"TOP PICKS FOR YOU title is still visiable when collapsed."** Commits `f15ba8b` (the collapse) and `aab315d` (the title), staging only, not promoted.
+
+### 11.1 What was built
+
+- **Collapse, not hide**, as Rick leaned, for his own reason: a filter can be pinned, so a hidden rail would stay hidden under it for good; a collapsed one can always be opened.
+- **Active** = search text, or any filter other than the defaults (distributor, publisher, the view select, covers; the four the Filters badge counts). **"See more" sets the view to Recommended, which is a filter, so it collapses the rail too**: the grid is then showing it.
+- **The rule acts on transitions, not on every keystroke.** It collapses when something becomes active and opens when nothing is. A rail opened by hand (the **Hide / Show top picks** button) stays open until the next transition, so typing another letter does not shut it again.
+- **Search collapses the rail on the first character**; the grid reload is debounced 350 ms and the rail does not wait for it. Every other trigger (filters, a pin reset, "See more") comes through `loadCatalog()`, which now syncs first.
+- **A pinned filter loads collapsed**, applied right after the pins are restored and before the rail is first painted (no flash of the open rail; measured CLS 0.015 on a pinned load).
+- **Collapsed means out of the way.** The first build kept the whole header row (title, caption, "See more", "Show") and removed only the cards, which Rick rejected. Collapsed now hides the cards **and** the title, caption and "See more", leaving one quiet, borderless **"Show top picks"** control under the results count. It cannot disappear entirely: under a pinned filter the rail is collapsed on every visit and that control is the only way to open it. **If Rick wants nothing at all there, say so, but a pinned filter then hides the rail permanently.**
+- Desktop only, as in § 10: on a phone the rail is `display: none` and the new logic only toggles a class on it. PAR1-PAR4 still show the phone equal to the pre-redesign build.
+
+### 11.2 Evidence (deployed staging bytes, served files hashed equal to the commit)
+
+| Check | Result |
+|---|---|
+| RC1 | No search or filter: open, with title, caption, "See more", cards and "Hide" offered. |
+| RC2 | Typing collapses on the first character (cards, **title, caption and "See more" all gone**, only "Show top picks"); clearing it opens it again. |
+| RC3 | A non-default filter collapses it; returning to the defaults opens it. |
+| RC4 | Opened by hand, it stays open while the search keeps changing, and the rule resumes at the next transition. |
+| RC5 | "See more" collapses it. |
+| RC6, RC7 | A pinned filter loads already collapsed and unpinning opens it; the pinned load shifts nothing (CLS 0.0146, unthrottled probe). |
+| Harness, whole | **44 of 44** (PAR1-PAR4, D1-D2, B1-B3, C1-C2, V7 and the rest all still green). |
+| Negative controls | **10 new, every one went red**: rail never collapses, search not counted, filters not counted, manual choice clobbered, Hide/Show button inert, pinned load not collapsed (two layers, both broken), collapse waiting for the debounce, and the title / caption / "See more" left visible when collapsed. |
+| Full suite, interim build (`f15ba8b`) | 160 passed + **1 flaky**, exit 0. The first attempt of `15-order-export-ledger:479` failed in its `adminPage` fixture's TEARDOWN with `deleteUser auth: 502 Bad Gateway` from Supabase's admin API (an infrastructure fault in an admin-page test; its assertions had not failed) and passed on retry. The 502 left one orphaned `pw-admin-` auth user (profile 0, reservations 0), which I classified by prefix and creation time and deleted (fresh read 404); the four `pw-pending-` users are the documented intended survivors and were left. |
+| **Full suite, final bytes (`aab315d`)** | **161 passed, 25.1 min, exit 0, no flaky, no retries**; teardown restored `catalog_filters` (167 bytes) and deleted its synthetic tenant. Afterwards `catalog_filters`, `order_deadline`, `page_banner` and `maintenance_mode` read identical (values and `updated_at`), and no harness or Lighthouse user remains. |
+
+### 11.3 Choices I made that the instruction did not specify
+
+1. The transition rule (above), rather than "always follow the filters", so a hand-opened rail is not fought. **The hand-open choice is not remembered across visits**, so a pinned filter means a click on "Show top picks" every visit.
+2. "See more" collapses the rail.
+3. Labels: "Hide" / "Show top picks".
+4. Collapse is instant, with no animation.
+
+### 11.4 Observed, NOT fixed and NOT filed (Rick's call)
+
+**Unpinning leaves the Filters button claiming a filter is active.** The unpin path resets the controls and reloads without re-running `syncFilterBadge()`. Measured on the deployed bytes: after an unpin the controls read `|||standard` (all defaults) while the button still has its accent border and a **"1" badge**. It is pre-existing (the original inline-style code behaved the same) and it is on every width. It was left alone on purpose: one added call fixes it, but would change the phone view that Rick asked to have restored exactly. It does not affect the rail (its rule reads the controls directly; RC6 passes). Options: fix it everywhere (a small improvement on the phone too), file it as F172, or leave it.
+
+### 11.5 Not verified
+
+Chromium only. The collapse has no animation, so there is no motion to check. Keyboard operation of the Hide / Show button was exercised by a script click, not a real keypress. A window resized across 641 px with the rail collapsed was not exercised (the rail is simply `display: none` below it).
