@@ -1,6 +1,6 @@
 # Catalog redesign: hero, search + filter toggle, Top picks rail
 
-**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`; full record in § 9) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
+**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; full record in § 9 and § 10) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
 
 **Last verified against live: 2026-10-09** (read from `origin/staging`; `catalog.html`, `style.css` and `app.js` are byte-identical on `origin/main` and `origin/staging`, so nothing unpromoted sits under this work).
 
@@ -232,4 +232,46 @@ Full suite, run directly with `npx playwright test --reporter=line` (not `run-sm
 
 - **`app.js` carries `merge=ours`**; its merge RESULT must be asserted equal to staging's copy (the driver has dropped it three times). **G-K, the F171 fix, also edits `app.js`** (a different region, `TenantContext`); land one and promote it, then the other, or promote together, and assert `app.js` either way.
 - Scope is exactly `app.js`, `catalog.html`, `style.css` plus docs. **Write-smoke is warranted**: this touches `catalog.html` and `app.js` on the reserve path, and reserving from the rail's modal is a new route into `toggleReserve()` (reserve one title as a real customer, confirm the row and its `tenant_id`, cancel).
-- A staging customer's catalog now has a new **collapsed** filter panel and an icon-only toggle on phones; worth Rick looking at on a real phone before production.
+- ~~A staging customer's catalog now has a new **collapsed** filter panel and an icon-only toggle on phones; worth Rick looking at on a real phone before production.~~ **Superseded by § 10: phones are back to the previous view.** Worth Rick looking at a real phone all the same, now to confirm it is unchanged.
+
+## 10. Round two: desktop only, blended picks, deadline message over the banner (Rick, 2026-10-09, after § 9)
+
+Rick's instruction, verbatim: **"Restore previous mobile view. This change is for desktop view only. Top Picks should Based on reservations and most popular reservations for the store. Move Reserve by message centered over banner."** Commit `3781c4b`, staging only, not promoted.
+
+### 10.1 How each point was read, and what was built
+
+| Point | Reading | Built |
+|---|---|---|
+| "Restore previous mobile view. This change is for desktop view only." | "Mobile" is the 640 px line the codebase already uses; "desktop" is 641 px and up. **Everything in § 9 is desktop only**: the search row, the collapsed panel and its memory, the rail. | The pre-redesign phone CSS is now the **base** (copied from the old inline block) and the redesign sits wholly inside `@media (min-width: 641px)`, so a phone cannot be reached by it. The labelled "Filters" pill is back beside the count (its DOM home, `.results-toolbar`); the panel is closed until tapped and **not remembered**; the rail is `display: none` and `loadTopPicks()` returns early, so **a phone never fetches it**; the pre-first-render wait for the deadline read is desktop-only too, so a phone's load order is what it was. |
+| "Top Picks should [be] based on reservations and most popular reservations for the store." | The rail blends the customer's own reservations (history plus this month's) with the store's most-reserved series (`get_popular_series`). The old order drained the personal list first, so anyone with a real history never saw a popular title (the 20-card test rail was 20 personal, 0 popular). | `getTopPicks()` **alternates**, personal first, one per series across both lists; whichever runs dry, the other fills the rest. Caption: "Based on your reservations and the store's most popular reservations"; no history: "The store's most popular reservations"; personal only: "Based on your reservations". **1:1 is my choice of ratio** (the instruction does not give one), one line in `getTopPicks` to change. |
+| "Move Reserve by message centered over banner." | The order-deadline message ("Reserve by October 23 to lock in your … picks. What's this?") moves **onto** the page banner, centred. | A second element, `#deadline-hero`, inside the banner, centred on its box (`left`/`top` 50%), out of flow. Shown at **>= 1101 px**; the original row under the header is untouched and is what phones and widths up to 1100 px keep. |
+
+**Why 1101 px.** The title block is about 330 px wide, so a pill centred on the card clears it only when (card width - pill width) / 2 exceeds that; the pill wraps to two lines down to 1101 px (12 px clear of the title there, 40 px at 1350). Below that it would sit on the title. **If Rick wants the message on the banner at narrower desktop widths too, that is a design question** (smaller type, or the pill beside rather than over the art), not a bug.
+
+### 10.2 Evidence (deployed staging bytes, served files hashed equal to the commit first)
+
+| Check | Result |
+|---|---|
+| **PAR1-PAR3, the phone against the pre-redesign build** | The commit before any of this work (`6ef128d`: `catalog.html`, `style.css`, `app.js`) is served next to the current build, same user and data. **Every element box (nav, header, deadline row, promo, toolbar rows, count, pill, panel, grid, first card) and the pill's computed style (padding, radius, colours, font, gap, size, label text), the badge, the count and the panel's style are EQUAL** at 393 and 320 px, in three states: closed, open, a non-default filter chosen. |
+| **PAR4, phone layout shift** | **Equal**, shift by shift: 0.0016, 0.0076, 0.0093 = 0.0185 in both builds (unthrottled probe). |
+| D1, D2 | At 1350 and 1101 px the pill is inside the banner, **dx 0, dy 0**, 40 / 12 px clear of the title text, and the row below the header is hidden; at 1100, 900, 700 and 393 px the row shows and the pill is hidden. |
+| B1-B3 | 18 personal + 2 popular on the 20-card test rail, order **P Q P Q …**; both captions exact. |
+| P1 (rewritten) | At 390 px: rail `display: none`, **no rail request made**, the "Filters" pill (8 px 13 px padding, 4 px radius) on the count line, panel closed, **not remembered after a reload**. |
+| Harness, whole | **37 of 37** on the deployed bytes. |
+| Lighthouse, final bytes | **Mobile 93 and 93, LCP 3.1 to 3.2 s, CLS 0.018**, the original baseline (90 and 93, 3.1 s, 0.018). **Desktop 100 and 100, CLS 0.011** (baseline 100, 0.025; the centred message is out of flow, which also removes the shift the row below caused). |
+| Negative controls | **18 new, every one went red** (blend stacked, both captions, rail shown on a phone, rail fetched on a phone, panel remembered on a phone, icon-only pill, wrapper box, hero not centred, hero shown when narrow, old row kept on desktop, and re-runs of the reserved / variants / visibility / panel / toggle / T3 / badge controls). A pre-flight that every mutation target still exists **caught three old mutations pointing at code I had rewritten** (they would have been silent no-ops); retargeted. |
+| Full suite, final bytes | **161 passed, 24.9 min, exit 0, 0 failed, 0 flaky** (the run's own summary line; teardown restored `catalog_filters`, 167 bytes, and deleted its synthetic tenant). Afterwards `catalog_filters`, `order_deadline`, `page_banner` and `maintenance_mode` were re-read: values and `updated_at` identical to the start of the session, no harness or Lighthouse user left, no temp tree left. |
+
+### 10.3 What the work found in its own earlier work
+
+1. **A first draft of the phone layout was NOT equal.** The new `.search-block` wrapper, a plain block on a phone, made the layout-shift metric blame the wrapper (whose box includes the 10 px of empty `.toolbar-header` spacing above the count) instead of `.results-toolbar`: identical movement (23 / 87 / 107 px), scored **27% higher** (0.0235 against 0.0185). Found by PAR4, fixed with `display: contents` on a phone, after which every individual shift matches.
+2. **A second draft's pill stacked the clock on its own line** above the sentence (a flex row too narrow for both); rendered as flowing text with the clock inline.
+3. The phone's "wait for the deadline read before the first grid render" (needed on desktop for the rail) was **gated to desktop** so a phone's load order is exactly what it was.
+
+### 10.4 Superseded by this round
+
+§ 3.3 D9 and the phone half of § 9.5 P1 (the 140 px swipe row); § 9.8 deviation 2 (the icon-only phone toggle); § 9.9's "swipe exercised with `scrollBy`" (there is no phone rail); the "Based on your reservations and subscriptions" and "Popular with other customers" captions. § 9.3's reasoning stands, but the deadline message no longer shifts anything at >= 1101 px (out of flow); the row below the header still does at 641 to 1100 px, which is why the rail is still held back until it has settled.
+
+### 10.5 Not verified
+
+**Chromium only**: no WebKit, no real phone (the phone claim is "equal to the pre-redesign build in Chromium at 393 and 320 px", which is strong but is not an iPhone). The **hover tooltip** on "What's this?" in the banner was inspected in screenshots only; a tooltip's pseudo-element cannot be asserted. A **desktop window narrowed across 641 / 1101 px** swaps the two message elements by CSS only, no JS, and was measured at fixed widths, not by dragging. The 641 to 1100 px "row under the header" view is unchanged from before this whole effort, but its pairing with the new rail above the grid at those widths was only screenshotted at 900 px.
