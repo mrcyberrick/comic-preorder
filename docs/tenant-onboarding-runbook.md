@@ -10,7 +10,7 @@
 
 **Credential rule (F73/F74 lesson): Never paste a credential into any chat, transcript, or committed file.** That means the operator secret you send in `x-operator-secret`, and any secret a response ever carries. Save responses to a local scratch file only.
 
-*(This rule previously named one credential: "Never paste the `webhook_secret` from `register-tenant` into any chat, transcript, or committed file." **`register-tenant` no longer generates, stores or returns a `webhook_secret` — F151, 2026-10-06, deployed on staging that day; production when session G-B's Step 5 deploys it (until then production's v10 still returns one).** The rule's point is unchanged, and it is worded generally now so it does not depend on which field exists.)*
+*(This rule previously named one credential: "Never paste the `webhook_secret` from `register-tenant` into any chat, transcript, or committed file." **`register-tenant` no longer generates, stores or returns a `webhook_secret` — F151, 2026-10-06, deployed on staging that day and on production later the same day (v11, PR #171); production's earlier v10 still returned one.** The rule's point is unchanged, and it is worded generally now so it does not depend on which field exists.)*
 
 ---
 
@@ -72,7 +72,7 @@ curl.exe -s -X POST "https://plgegklqtdjxeglvyjte.supabase.co/functions/v1/regis
 { "tenant_id": "...", "admin_user_id": "...", "slug": "...", "invite_sent": true }
 ```
 
-*(Before F151, 2026-10-06, the response was `{ tenant_id, admin_user_id, slug, webhook_secret, invite_sent }`. **If a production response still carries `webhook_secret`, production is still running the pre-F151 `register-tenant` (v10): do not paste it anywhere, and the new tenant's `settings` will hold the dead key until the Step 4 SQL in `docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql` is re-run for it.**)*
+*(Before F151, 2026-10-06, the response was `{ tenant_id, admin_user_id, slug, webhook_secret, invite_sent }`. **If a response ever carries `webhook_secret` again, that project is running a pre-F151 `register-tenant` (production's v10 did until 2026-10-06): do not paste it anywhere, and the new tenant's `settings` will hold the dead key until the Step 4 SQL in `docs/sql/2026-10-06-pre-phase-6-tenant-hygiene.sql` is re-run for it.**)* **Two input pitfalls seen on the first production run:** pass `admin_email` as a bare address (no `<angle brackets>`; the function only checks for an `@`, so a bracketed address fails in GoTrue and comes back as a 500 `Failed to create admin user`), and use an address with **no existing account on that project** (an existing one returns `409 admin_email_exists`). Both failures are compensated cleanly: the tenant row is removed and no email is sent.
 
 **Save all four values to a local scratch file.** None is a secret, but `tenant_id` and `admin_user_id` are what the rollback below needs.
 **Check `invite_sent`** — `false` means the tenant and admin were created correctly but the
@@ -210,10 +210,10 @@ webhook with it, and do not treat its presence as a step you have missed.
 
 > **Update 2026-10-06 (F151, session G-B): the field is GONE from `register-tenant`.** It no longer
 > generates, stores or returns a `webhook_secret`; a new tenant's `settings` is `{}` and the response is
-> `{ tenant_id, admin_user_id, slug, invite_sent }`. Deployed on **staging** 2026-10-06; on **production**
-> once Step 5 of session G-B runs (`docs/pre-phase-6-gate-closure.md` § 2b), until which production's v10
-> still returns and stores it. The paragraph above is kept as written because it is still true of any
-> not-yet-redeployed project and of any tenant row created before the fix.
+> `{ tenant_id, admin_user_id, slug, invite_sent }`. Deployed on **staging** and on **production** 2026-10-06
+> (production v11, PR #171; verified with a real throwaway tenant, `docs/pre-phase-6-gate-closure.md` § 2c).
+> The paragraph above is kept as written because it is still true of any project not yet redeployed and of any
+> tenant row created before the fix.
 
 **How a new tenant's customers actually get accounts — the two live paths:**
 
