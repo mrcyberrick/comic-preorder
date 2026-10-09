@@ -1,6 +1,6 @@
 # Catalog redesign: hero, search + filter toggle, Top picks rail
 
-**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; then round three `f15ba8b` + `aab315d`: the rail collapses while a search or filter is active, and a collapsed rail leaves only "Show top picks"; then `504c07d`: unpinning resets the Filters badge; full record in § 9, § 10 and § 11) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
+**STATUS:** COMPLETE ON STAGING, NOT PROMOTED | staging=2026-10-09 (commits `95022b2`, `1f6fae1`, `9b59773`, `fcf9500`, then Rick's round two `3781c4b`: DESKTOP ONLY, blended picks, deadline message over the banner; then round three `f15ba8b` + `aab315d`: the rail collapses while a search or filter is active, and a collapsed rail leaves only "Show top picks"; then `504c07d`: unpinning resets the Filters badge; then `3d77722`: the rail remembers a hand open/close per situation (round four, § 12); full record in § 9 to § 12) | prod=NOT PROMOTED (a separate, explicitly requested `/promote-prod`; see § 9.6 for what to assert) | findings=none consumed (feature build; the pre-existing defect in § 6 was fixed without an ID, Rick 2026-10-09; **F172 remains the next free finding ID**)
 
 **Last verified against live: 2026-10-09** (read from `origin/staging`; `catalog.html`, `style.css` and `app.js` are byte-identical on `origin/main` and `origin/staging`, so nothing unpromoted sits under this work).
 
@@ -307,7 +307,7 @@ Rick, verbatim: **"Okay I see the the search/filter runs on desktop and the rail
 
 ### 11.3 Choices I made that the instruction did not specify
 
-1. The transition rule (above), rather than "always follow the filters", so a hand-opened rail is not fought. **The hand-open choice is not remembered across visits**, so a pinned filter means a click on "Show top picks" every visit.
+1. The transition rule (above), rather than "always follow the filters", so a hand-opened rail is not fought. ~~**The hand-open choice is not remembered across visits**, so a pinned filter means a click on "Show top picks" every visit.~~ *(Superseded the same day: Rick asked for it to be remembered, see § 12.)*
 2. "See more" collapses the rail.
 3. Labels: "Hide" / "Show top picks".
 4. Collapse is instant, with no animation.
@@ -321,3 +321,35 @@ Rick, verbatim: **"Okay I see the the search/filter runs on desktop and the rail
 ### 11.5 Not verified
 
 Chromium only. The collapse has no animation, so there is no motion to check. Keyboard operation of the Hide / Show button was exercised by a script click, not a real keypress. A window resized across 641 px with the rail collapsed was not exercised (the rail is simply `display: none` below it).
+
+---
+
+## 12. Round four: the rail remembers a hand choice (Rick, 2026-10-09, after § 11)
+
+I asked whether a hand open/close should be remembered, because with a pinned filter the rail loads collapsed on every visit (§ 11.3 item 1). Rick answered **"Yes, remember it (build it first)"** and, in the same message, asked for the production promotion with it included. Commit `3d77722` (`catalog.html` only, +31/-3), staging only until the promotion.
+
+### 12.1 What was built
+
+- **Two situations, remembered separately:** *active* (a search or any non-default filter is on) and *inactive* (neither). Stored per user in `localStorage` under `pulllist_picks_open_<userId>` as `{ "active": true|false, "inactive": true|false }`. A situation with nothing stored keeps the automatic rule from § 11 (collapsed while active, open otherwise).
+- **Saved when the customer presses Hide / Show top picks**, under whichever situation they are in at that moment. **Applied when the situation changes** (including the first paint, once pinned filters are restored), in place of the automatic rule. Between changes nothing is applied, so a hand choice is still not fought (RC4).
+- **Desktop only.** On a phone there is no rail and no button, and the code returns before reading or writing, so a phone's storage is unchanged. Every storage access is wrapped in try/catch; a failure falls back to the automatic rule.
+- **"See more" now follows the remembered *active* choice,** because it makes the Recommended view a filter: a customer who left the rail open under filters sees it stay open there. Say so if that is not wanted.
+
+### 12.2 Evidence
+
+| Check | Result |
+|---|---|
+| MEM1 | Under a pinned filter: collapsed by default, a hand-open survives a reload, and so does a hand-close. |
+| MEM2 | With no filter: open by default, a hand-close survives a reload. |
+| MEM3 | The two situations are independent (active: open, inactive: collapsed). |
+| MEM4 | A second customer in the same browser starts from the default, not the first customer's choice. |
+| MEM5 | On a phone nothing is written, even when the hidden button is pressed from script (a check that nothing is written would pass trivially if nothing could ever call the writer). |
+| RC4 | **Changed with this round:** a rail opened by hand stays open while the search changes, and the choice is **remembered** at the next transition (it used to snap back to the automatic rule). RC5 and RC6 clear the stored choice first, so they still test the automatic rule. |
+| Negative controls | **5, every one went red on the checks it should:** choice not saved (MEM1-MEM3), not applied (MEM1-MEM3), one slot for both situations (MEM3), key not per user (MEM4), written on a phone (MEM5). |
+| Harness, working tree | collapse + memory groups **12 of 12**. |
+| Harness, whole, deployed bytes (served `catalog.html` hashed equal to the commit first) | **50 of 51.** The one failure was **PAR4** (phone layout shift equals the pre-redesign build): old 0.0185, new 0.0206. The three `results-toolbar` shifts matched exactly; the extra 0.002 was two `nav-logo` shifts (a `#text -3px` and a `0px`), i.e. a web-font swap landing inside the probe. **Run down rather than waved through:** four more deployed runs passed (0.0185, 0.0191, 0.0191, 0.0191), and four local runs, where old and new are served the same way, passed (0.0185, 0.0191, 0.0185, 0.0185) **and the OLD build showed the same 0.0005 `nav-logo` shift in one of them**. The memory code returns before doing anything on a phone and touches no layout. Not fully explained: the larger two-shift version was seen once and not reproduced. |
+| Full suite, deployed bytes | **161 passed, 25.5 min, exit 0, no failure, no flaky line** (the log's own summary; run directly with `npx playwright test --reporter=line`, not through `run-smoke.ps1`). The suite's teardown printed `catalog_filters restored (167 bytes)` and deleted its synthetic tenant. **No separate sweep for orphaned `pw-` auth users was run afterwards.** |
+
+### 12.3 Not verified
+
+Rick has not seen the remembered behaviour on staging. Layout shift and Lighthouse were **not re-measured** for the new case a remembered-open rail under a pinned filter makes possible (the open rail is painted from first paint in the space already reserved for it, so no shift is expected, but that is reasoning, not a measurement). The storage-throws path (private windows) is wrapped but not exercised by a script. The memory is per browser and per user, so a customer on a second device starts from the automatic rule. Chromium only.
