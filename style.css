@@ -380,6 +380,42 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .deadline-banner strong { color: var(--text-primary); }
 
+/* The same message, CENTRED OVER THE BANNER (catalog.html, Rick 2026-10-09: "Move Reserve
+   by message centered over banner"). A second element rather than a moved one, on purpose:
+   the original row below the header is left exactly as it was, so the phone layout and any
+   width where the pill cannot clear the title keep the view they had. Which of the two shows
+   is decided here by width, with !important because catalog.html also sets an inline
+   display:flex on whichever one has a deadline to show.
+   The pill is absolutely positioned inside .page-header--banner, so it takes no layout:
+   its arrival after an awaited fetch cannot shift anything, which also removes the shift the
+   row below caused at these widths.
+   The 1101px threshold is arithmetic, not taste: the title block is about 330px wide, so a
+   pill centred on the card clears it only when the card is wide enough that
+   (card width - pill width) / 2 > 346px. The pill's max-width shrinks it (it wraps to two
+   lines) down to 1101px; below that the old row is used. */
+.deadline-hero {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: block;                 /* flowing text with the clock inline, centred; wraps instead of stacking the clock on its own line */
+  max-width: min(520px, calc(100% - 700px));
+  padding: 12px 16px;
+  background: rgba(30, 14, 12, 0.88);
+  border: 1px solid rgba(232, 50, 28, 0.4);
+  border-radius: 7px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.deadline-hero strong { color: var(--text-primary); }
+.deadline-hero .foc-label { margin-left: 6px; }
+@media (min-width: 1101px) { #deadline-banner { display: none !important; } }
+@media (max-width: 1100px) { .deadline-hero   { display: none !important; } }
+@media print               { .deadline-hero   { display: none !important; } }
+
 /* ── Subscription Promo Banner (driven by tenants.branding.promo_banner) ──
    Neutral bg-elevated treatment — deliberately recedes so it doesn't visually
    compete with the red FOC deadline banner directly above it (2026-07-17,
@@ -723,119 +759,176 @@ button { cursor: pointer; font-family: var(--font-body); }
 .filter-select:focus { border-color: var(--border-accent); }
 
 /* ── Catalog search row, filter toggle, filter panel ─────────
-   (docs/catalog-top-picks-redesign.md § 3.2.) catalog.html only: .toolbar-header
-   and .search-block exist nowhere else, so none of this reaches My List or the
-   admin toolbars that share .search-wrap / .search-input.
+   catalog.html only: .toolbar-header, .results-toolbar, .search-block and
+   .filter-toggle exist nowhere else, so none of this reaches My List or the admin
+   toolbars that share .search-wrap / .search-input.
 
-   One grid holds the search box, the Filters toggle and the results line.
-   Desktop: search | toggle on row 1, the count across row 2. Phone (<=640px): the
-   search box is hidden (the header magnifier proxies #search, see NavSearch), so
-   the count and the toggle share row 1, which is where the toggle sat before
-   the redesign. .toolbar-header and .results-toolbar are display:contents so
-   their children are the grid items; the wrappers stay in the DOM only because
-   the existing `.toolbar-header .search-wrap:has(#search)` hide rule targets them. */
-.search-block {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 10px;
+   TWO LAYERS, and the order is the point (Rick, 2026-10-09: "Restore previous mobile
+   view. This change is for desktop view only"). The BASE rules below are the phone
+   layout exactly as it was before the Top picks redesign, copied from the inline
+   <style> block that used to sit in catalog.html: a labelled "Filters" pill beside the
+   results count, a panel that is closed until tapped, the search box hidden in favour
+   of the header magnifier (NavSearch). Everything new is inside
+   @media (min-width: 641px), so a phone cannot be reached by the redesign by
+   construction, which is a stronger guarantee than overriding it back. */
+
+/* ── Base = the phone layout, as it was ── */
+/* No box of its own on a phone, so the page behaves as it did before the wrapper existed.
+   (A plain block here made the layout-shift metric attribute the late-arriving banners' push
+   to this wrapper, whose box includes .toolbar-header's 10px of empty spacing: the same
+   23/87/107px of movement scored 27% higher, 0.0235 against 0.0185, found by the PAR4 probe.) */
+.search-block { display: contents; }
+.toolbar-header {
+  display: flex;
   align-items: center;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
-.search-block > .toolbar-header,
-.search-block > .results-toolbar { display: contents; }
-.toolbar-header .search-wrap { grid-column: 1; grid-row: 1; min-width: 0; }
-.toolbar-header .search-input {
-  /* A rounded rectangle, not a pill; 16px also stops iOS zooming on focus. */
-  height: 50px;
-  padding: 0 52px 0 24px;
-  background: var(--bg-elevated);
-  border-radius: 10px;
-  font-size: 1rem;
+.toolbar-header .search-wrap { flex: 1 1 auto; }
+.results-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
 }
-.toolbar-header .search-wrap svg { left: auto; right: 20px; width: 17px; height: 17px; }
+#results-count { font-size: 0.8rem; color: var(--text-muted); }
 
 .filter-toggle {
-  grid-column: 2;
-  grid-row: 1;
-  position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 50px;
-  height: 50px;
-  padding: 0;
+  gap: 7px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
+  padding: 8px 13px;
   color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: border-color 0.15s;
 }
-.filter-toggle circle { fill: var(--bg); }
-.filter-toggle:hover { border-color: var(--border-accent); }
-/* Open, or any filter other than the defaults chosen: the accent border. */
-.filter-toggle[aria-expanded="true"],
+.filter-toggle .ft-icon-d { display: none; }               /* the desktop icon */
+/* Any filter other than the defaults chosen: the accent border (was an inline style)
+   and the count badge (was set inline by JS). */
 .filter-toggle.has-filters { border-color: var(--accent); }
-.filter-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filter-toggle.has-filters .filter-toggle-badge { display: inline; }
 .filter-toggle-badge {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  min-width: 18px;
-  align-items: center;
-  justify-content: center;
+  display: none;                       /* shown only while a non-default filter is chosen */
   background: var(--accent);
   color: #fff;
   font-size: 0.65rem;
   font-weight: 700;
   padding: 1px 6px;
-  border-radius: 9px;
+  border-radius: 8px;
   line-height: 1.6;
 }
 
-/* The results line. min-height reserves its one line from first paint: it is
-   written by JS after the first fetch, and an empty block collapsing to zero
-   then growing by a line was a small layout shift of its own. */
-.results-toolbar #results-count {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  margin: 8px 0 0 4px;
-  min-height: calc(0.75rem * 1.6);
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-/* The panel: hidden until opened, one rule set at every width. Beats .toolbar
-   (display:flex) on specificity because it is an id. Selects keep their wide
-   desktop widths; the phone's full-width column layout is unchanged. */
+/* The panel: closed until tapped; a bordered column. */
 #filter-panel {
   display: none;
-  background: var(--bg);
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-card, #1a1a1a);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  margin: -6px 0 22px;
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
 }
 #filter-panel.open { display: flex; }
+#filter-panel .filter-select,
+#filter-panel #btn-pin-filters {
+  width: 100%;
+  box-sizing: border-box;
+}
+#filter-panel #btn-pin-filters { text-align: left; }
+
+/* ── Desktop (>= 641px): the redesign ─────────────────────────
+   One grid holds the search box, the Filters toggle and the results line: search | toggle
+   on row 1, the count across row 2. .toolbar-header and .results-toolbar are
+   display:contents so their children are the grid items, wherever the toggle sits in
+   the DOM (it stays in .results-toolbar, where the phone layout needs it). */
 @media (min-width: 641px) {
+  .search-block {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .search-block > .toolbar-header,
+  .search-block > .results-toolbar { display: contents; }
+  .toolbar-header .search-wrap { grid-column: 1; grid-row: 1; min-width: 0; }
+  .toolbar-header .search-input {
+    /* A rounded rectangle, not a pill; 16px also stops iOS zooming on focus. */
+    height: 50px;
+    padding: 0 52px 0 24px;
+    background: var(--bg-elevated);
+    border-radius: 10px;
+    font-size: 1rem;
+  }
+  .toolbar-header .search-wrap svg { left: auto; right: 20px; width: 17px; height: 17px; }
+
+  .filter-toggle {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    border-radius: 10px;
+  }
+  .filter-toggle .ft-icon-m,
+  .filter-toggle .filter-toggle-label { display: none; }   /* icon-only on desktop */
+  .filter-toggle .ft-icon-d { display: block; }
+  .filter-toggle circle { fill: var(--bg); }
+  .filter-toggle:hover { border-color: var(--border-accent); }
+  /* Open, or any non-default filter chosen: the accent border. (Open does NOT colour
+     it on a phone, which never did.) */
+  .filter-toggle[aria-expanded="true"],
+  .filter-toggle.has-filters { border-color: var(--accent); }
+  .filter-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .filter-toggle-badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 18px;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 6px;
+    border-radius: 9px;
+  }
+  .filter-toggle.has-filters .filter-toggle-badge { display: flex; }
+
+  /* The results line. min-height reserves its one line from first paint: it is
+     written by JS after the first fetch, and an empty block collapsing to zero
+     then growing by a line was a small layout shift of its own. */
+  .results-toolbar #results-count {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 8px 0 0 4px;
+    min-height: calc(0.75rem * 1.6);
+    font-size: 0.75rem;
+  }
+
+  /* The panel: collapsed by default (D1), a wide bordered row. */
+  #filter-panel {
+    flex-direction: row;
+    gap: 10px;
+    background: var(--bg);
+    border-radius: 10px;
+    padding: 14px;
+    margin: -6px 0 22px;
+  }
+  #filter-panel .filter-select,
+  #filter-panel #btn-pin-filters { width: auto; }
+  #filter-panel #btn-pin-filters { text-align: center; }
   #filter-panel #filter-publisher { min-width: 240px; }
   #filter-panel #filter-reserved  { min-width: 200px; }
   #filter-panel #filter-variants  { min-width: 150px; }
-}
-@media (max-width: 640px) {
-  .filter-toggle { width: 44px; height: 44px; }
-  .results-toolbar #results-count { grid-column: 1; grid-row: 1; margin: 0; }
-  #filter-panel {
-    flex-direction: column;
-    gap: 8px;
-    background: var(--bg-card);
-    border-radius: var(--radius);
-    padding: 12px;
-    margin: 0 0 12px;
-  }
-  #filter-panel .filter-select,
-  #filter-panel #btn-pin-filters { width: 100%; box-sizing: border-box; }
-  #filter-panel #btn-pin-filters { text-align: left; }
 }
 
 /* ── Top picks rail (catalog.html) ───────────────────────────
@@ -957,13 +1050,10 @@ button { cursor: pointer; font-family: var(--font-body); }
    arrived (catalog.html, "Paint the Top picks rail now, not before"). visibility,
    not display: it keeps the layout, and moving an unpainted element is not a shift. */
 .top-picks[data-pending] { visibility: hidden; }
-@media (max-width: 640px) {
-  /* A swipe row on a phone: smaller cards, no arrows. */
-  .pick-card { flex-basis: 140px; }
-  .top-picks-arrow { display: none; }
-  .top-picks-head { flex-wrap: wrap; row-gap: 4px; }
-  .top-picks-caption { order: 3; flex-basis: 100%; }   /* the caption drops under the title and link */
-}
+/* DESKTOP ONLY (Rick, 2026-10-09: "Restore previous mobile view. This change is for desktop
+   view only"). A phone gets no rail: it is not shown here and catalog.html does not even fetch
+   it below 641px. This replaces the 140px swipe row the first build gave phones. */
+@media (max-width: 640px) { .top-picks { display: none !important; } }
 @media print { .top-picks { display: none !important; } }
 
 /* ── Catalog Grid ──────────────────────────────────────────── */

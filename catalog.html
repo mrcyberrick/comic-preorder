@@ -95,6 +95,11 @@
     <div class="brand-banner" id="page-banner" aria-hidden="true"></div>
     <h1>Monthly Catalog</h1>
     <p id="catalog-subtitle">Browse and reserve your comics</p>
+    <!-- The order-deadline message centred over the banner, at wide desktop widths only
+         (>= 1101px; style.css .deadline-hero). Out of flow, so its late arrival moves nothing.
+         Filled by the same code as #deadline-banner below, which keeps the phone and
+         narrower-desktop layout exactly as it was. -->
+    <div id="deadline-hero" class="deadline-hero" style="display:none" role="status" aria-live="polite"></div>
   </div>
 
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
@@ -124,13 +129,11 @@
     </div>
   </div>
 
-  <!-- Search row + results line (Top picks redesign, 2026-10-09). One grid, three
-       items: the search box, the Filters toggle, and the results line. Desktop
-       reads search | toggle with the count on a line of its own beneath; on a
-       phone the search box is hidden (the header magnifier proxies #search, see
-       NavSearch) so the same grid puts the count and the toggle on ONE line, which
-       is where the toggle sat before this redesign. The two inner wrappers are
-       display:contents so their children are the grid items. -->
+  <!-- Search row + results line. The DOM is the pre-redesign phone layout (a search box that
+       is hidden on a phone in favour of the header magnifier, then the results count with the
+       Filters button beside it); at >= 641px style.css turns .search-block into a grid and puts
+       the toggle beside the search box, which works wherever the button sits because the two
+       wrappers are display:contents there. Desktop is the redesign; a phone is unchanged. -->
   <div class="search-block">
     <div class="toolbar-header">
       <div class="search-wrap">
@@ -139,19 +142,23 @@
         </svg>
         <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
       </div>
-      <!-- Collapsed by default at every width (D1); the state is remembered per user.
-           Icon-only with an aria-label; the count badge keeps pinned or chosen
-           filters visible while the panel is shut. -->
-      <button type="button" id="btn-filter-toggle" class="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Filters">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
-          <circle cx="15" cy="6" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="14" cy="18" r="2.2"/>
-        </svg>
-        <span id="filter-active-count" class="filter-toggle-badge" style="display:none"></span>
-      </button>
     </div>
     <div class="results-toolbar">
       <div id="results-count"></div>
+      <!-- Phone: the labelled "Filters" pill it always was. Desktop (>= 641px): an icon-only 50px
+           button beside the search box, panel collapsed by default and remembered per user. The
+           count badge keeps chosen or pinned filters visible while the panel is shut. -->
+      <button type="button" id="btn-filter-toggle" class="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Filters">
+        <svg class="ft-icon-m" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+        </svg>
+        <svg class="ft-icon-d" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+          <circle cx="15" cy="6" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="14" cy="18" r="2.2"/>
+        </svg>
+        <span class="filter-toggle-label">Filters</span>
+        <span id="filter-active-count" class="filter-toggle-badge"></span>
+      </button>
     </div>
   </div>
 
@@ -199,7 +206,7 @@
   <section class="top-picks" id="top-picks" aria-labelledby="top-picks-title" data-pending>
     <div class="top-picks-head">
       <h2 id="top-picks-title">Top picks for you</h2>
-      <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and subscriptions</span>
+      <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and the store's most popular reservations</span>
       <button type="button" class="top-picks-more" id="top-picks-more">See more <span aria-hidden="true">&rsaquo;</span></button>
     </div>
     <div class="top-picks-rail">
@@ -411,13 +418,17 @@
   const paginEl     = document.getElementById('pagination');
   const overlay     = document.getElementById('modal-overlay');
 
-  // ── Filter panel: collapsed by default, remembered per user ────
+  // ── Filter panel: collapsed by default; on DESKTOP also remembered per user ────
+  // The redesign is desktop only (Rick, 2026-10-09: "Restore previous mobile view. This change is
+  // for desktop view only"), and "desktop" is the same 641px line style.css uses. A phone always
+  // started with the panel closed and never remembered it, so it neither restores nor saves.
   // Declared HERE rather than beside the click handler at the bottom of the
   // script so the restore below runs before the first awaited fetch. A panel
   // that opens a second late would push the grid down after first paint, which
   // is the one kind of movement this page's F141 work removed.
   // Wrapped in try/catch because storage throws outright in some privacy modes
   // and a page that cannot remember a convenience must still render.
+  const desktopMQ = window.matchMedia('(min-width: 641px)');
   const filterToggleBtn = document.getElementById('btn-filter-toggle');
   const filterPanel     = document.getElementById('filter-panel');
   const filterBadge     = document.getElementById('filter-active-count');
@@ -426,12 +437,12 @@
   function setFiltersOpen(open, persist) {
     filterPanel.classList.toggle('open', open);
     filterToggleBtn.setAttribute('aria-expanded', String(open));
-    if (persist) {
+    if (persist && desktopMQ.matches) {
       try { localStorage.setItem(FILTERS_OPEN_KEY, open ? '1' : '0'); } catch { /* convenience only */ }
     }
   }
   try {
-    if (localStorage.getItem(FILTERS_OPEN_KEY) === '1') setFiltersOpen(true, false);
+    if (desktopMQ.matches && localStorage.getItem(FILTERS_OPEN_KEY) === '1') setFiltersOpen(true, false);
   } catch { /* storage unavailable: stay collapsed */ }
 
   // ── Pinned Filter Persistence ─────────────────────────────
@@ -695,8 +706,10 @@
   // Reads the admin-set order_deadline from settings.
   // Shown only while the deadline has not yet passed — hides itself automatically.
   // `deadlineReady` is kept (it used to be fire-and-forget) because the Top picks rail
-  // must not be PAINTED until this has settled: the banner appears after an await and
-  // pushes everything below it down. See the reveal just before the first loadCatalog().
+  // must not be PAINTED until this has settled: at desktop widths below 1101px the row under
+  // the header still appears after an await and pushes everything below it down (at 1101px and
+  // up the message is the out-of-flow pill over the banner and moves nothing). See the reveal
+  // just before the first loadCatalog().
   let deadlineReady = Promise.resolve();
   if (currentMonth) {
     deadlineReady = Settings.getOrderDeadline().then(deadline => {
@@ -713,6 +726,13 @@
       const monthLabel = new Date(parseInt(my), parseInt(mm) - 1, 1)
         .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+      // The SAME message goes into two elements and style.css shows one of them by width:
+      //   #deadline-banner  the row under the header, as it always was (phones, and any desktop
+      //                     width below 1101px where a centred pill would run into the title);
+      //   #deadline-hero    a pill centred over the banner art (>= 1101px).
+      // Only the tooltip direction differs. The banner row opens its tooltip DOWNWARD
+      // (foc-label--below, so it cannot run off a phone's edge); the hero sits inside the
+      // header, whose overflow:hidden would clip a downward tooltip, so it opens UPWARD.
       const banner = document.getElementById('deadline-banner');
       banner.innerHTML =
         '<span style="font-size:1rem;flex-shrink:0">⏰</span>' +
@@ -720,6 +740,15 @@
         ' <span class="foc-label foc-label--below" data-tooltip="Final Order Cutoff — the date the shop must submit your order to the distributor">What\'s this?</span>' +
         '</span>';
       banner.style.display = 'flex';
+      // The hero is flowing, centred text with the clock inline: as a flex row the clock stacked on
+      // its own line above the sentence once the pill was narrower than the two side by side.
+      const hero = document.getElementById('deadline-hero');
+      if (hero) {
+        hero.innerHTML =
+          '<span aria-hidden="true">⏰</span> Reserve by <strong>' + formatted + '</strong> to lock in your ' + monthLabel + ' picks.' +
+          ' <span class="foc-label" data-tooltip="Final Order Cutoff — the date the shop must submit your order to the distributor">What\'s this?</span>';
+        hero.style.display = 'block';
+      }
     }).catch(() => { /* a failed deadline read just means no banner, as before */ });
   }
 
@@ -856,7 +885,9 @@
   // revealed here: the deadline banner has settled (bounded at 3s so a stalled read
   // cannot hold it back) and the promo banner was rendered above. This is the same
   // moment the grid's own skeletons appear, so the page fills in exactly as it did.
-  await Promise.race([deadlineReady, new Promise(r => setTimeout(r, 3000))]);
+  // Desktop only: a phone has no rail (style.css hides it), so a phone must not wait for anything
+  // here. That keeps the phone's load order exactly what it was before the redesign.
+  if (desktopMQ.matches) await Promise.race([deadlineReady, new Promise(r => setTimeout(r, 3000))]);
   document.getElementById('top-picks')?.removeAttribute('data-pending');
 
   await loadCatalog();
@@ -1747,6 +1778,10 @@
 
   async function loadTopPicks() {
     const run = ++picksRun;
+    // Desktop only (Rick, 2026-10-09). A phone gets no rail, and style.css hides it there, so
+    // do not spend the ranking fetch or the row query on something nobody can see. If the
+    // window is later widened past 641px the matchMedia listener below calls this again.
+    if (!desktopMQ.matches) return;
     if (!currentMonth) { hidePicksSection(); return; }
     try {
       const picks = await Recommendations.getTopPicks(
@@ -1779,11 +1814,17 @@
           img.addEventListener('error', () => img.classList.add('loaded'));
         }
       });
-      // Honest caption: "your reservations" only when at least one pick actually
-      // came from the customer's own history. A newcomer sees what is popular.
-      picksCaption.textContent = picks.some(p => p.tier === 'personal')
-        ? 'Based on your reservations and subscriptions'
-        : 'Popular with other customers';
+      // The caption says what the rail actually contains. Rick (2026-10-09): picks are "based on
+      // reservations and most popular reservations for the store". "Reservations" is the
+      // customer's own (their history plus this month's), "popular" is the store's most-reserved
+      // series (get_popular_series). A customer with no history sees the popular half only, and
+      // the caption says so rather than claiming reservations they do not have.
+      const hasPersonal = picks.some(p => p.tier === 'personal');
+      const hasPopular  = picks.some(p => p.tier === 'popular');
+      picksCaption.textContent = hasPersonal && hasPopular
+        ? 'Based on your reservations and the store\'s most popular reservations'
+        : hasPersonal ? 'Based on your reservations'
+        : 'The store\'s most popular reservations';
       picksSection.hidden = false;
       syncPicksArrows();
     } catch (err) {
@@ -1814,6 +1855,7 @@
   picksPrev.addEventListener('click', () => pagePicks(-1));
   picksNext.addEventListener('click', () => pagePicks(1));
   window.addEventListener('resize', debounce(syncPicksArrows, 150));
+  desktopMQ.addEventListener('change', e => { if (e.matches) loadTopPicks(); });
 
   // "See more ›" is the Recommended For You view, entered through the SAME path
   // the select's own change handler takes, so the pin, the filter badge and the
@@ -1858,17 +1900,12 @@
       variantEl.value !== 'standard',
     ].filter(Boolean).length;
 
-    // The accent border for "filters are on" is a class now (.has-filters),
-    // not an inline style: an inline border-color outranks the stylesheet's
-    // open-state rule, so a panel opened with no filters would have kept
-    // whichever colour this function last wrote.
+    // "Filters are on" is a class now (.has-filters): it gives the button its accent border and
+    // shows the count badge, both in the stylesheet. They used to be inline styles, and an inline
+    // border-color outranks the desktop open-state rule, so a panel opened with no filters would
+    // have kept whichever colour this function last wrote.
     filterToggleBtn.classList.toggle('has-filters', active > 0);
-    if (active > 0) {
-      filterBadge.textContent   = active;
-      filterBadge.style.display = 'inline-flex';
-    } else {
-      filterBadge.style.display = 'none';
-    }
+    filterBadge.textContent = active > 0 ? String(active) : '';
   }
 
   filterToggleBtn.addEventListener('click', () => {
