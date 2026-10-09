@@ -23,7 +23,17 @@ Much of the design is already built in some form. The plan changes what exists r
 | Nav centred, Admin chevron | Admin ▾ is already a dropdown (S2b, PR #164) with its own chevron | Centre the links only; **no horizontal scroll** (D4) |
 | Catalog grid | `.catalog-grid` / `.comic-card` | Unchanged (gap stays 8px; the mock's 14px is not a requested change) |
 
-## 2. Decisions (defaults taken; Rick can override before the execution session starts)
+## 2. Decisions (Rick answered D1, D2, D5, D6 and D10 on 2026-10-09; D3, D4, D7, D8 and D9 are the planning defaults, not overridden)
+
+**Rick, 2026-10-09: "D1= Yes, D2= use existing hero(s), D5= ISBN, D6= drop 'You subscribe', 'Next in series' and 'Trending'. 'Staff pick' and the other three, D10= Yes".** How each answer is read, and where it changed the plan:
+
+- **D1 yes:** as written below.
+- **D2 "use existing hero(s)": NO hero work.** The catalog keeps the shared `.page-header--banner` card and `#deadline-banner` exactly as they are on all four pages. § 3.1 is withdrawn; D3 and the hero half of D9 no longer apply. The four-page match (PR #166) is preserved.
+- **D5 ISBN:** as written below.
+- **D6 read as "no reason chips at all":** all seven reasons are dropped (the three the data supports and the four it does not). The rail is ranked by `Recommendations` but its cards carry no chip. *If Rick meant something else, this is the one reading to re-confirm; the change is confined to `opts.reason` in § 3.3.*
+- **D10 yes:** the § 6 fix lands in the execution session as its own commit. Whether § 6 also takes a finding ID (F172) is still asked at the start of that session.
+
+The original decision text follows, kept for the record; D2, D3, D6 and the hero half of D9 are superseded by the answers above.
 
 - **D1 Filter panel collapsed by default on desktop too**, as designed. The toggle keeps its active-filter count badge (the mock has none, but pinned filters would otherwise be invisible and silent). Open/closed state persists per user in `localStorage` (`pulllist_filters_open_<userId>`), wrapped in try/catch.
 - **D2 The hero is catalog-only.** My List, Subscriptions and This Week keep the current header card. This knowingly breaks the four-page visual match PR #166 created; restyling all four is a separate decision. The title keeps its red offset shadow (Rick's 2026-10-02 choice); the mock does not show it, and dropping it would be an unrequested reversal.
@@ -38,7 +48,9 @@ Much of the design is already built in some form. The plan changes what exists r
 
 ## 3. Build
 
-### 3.1 Hero (`catalog.html`, `style.css`)
+### 3.1 Hero (`catalog.html`, `style.css`) — WITHDRAWN (D2, Rick 2026-10-09: use the existing hero)
+
+**Do not build this section.** No change to `.page-header--banner`, `#page-banner`, `#catalog-subtitle` or `#deadline-banner`. The text below is the withdrawn design, kept so a later session does not re-derive it.
 
 - Markup: keep `.page-header page-header--banner` (the blocked-account banner is inserted `afterend` of `.page-header`, `catalog.html:348`) and add `page-header--hero`. Keep `#page-banner`, `#catalog-subtitle` and the preload link. Move `#deadline-banner` inside the header, after the title block, and give it class `hero-deadline` in place of `deadline-banner`. Leave the JS that fills it (`catalog.html:676-701`) alone apart from what the move needs.
 - `.page-header--hero` (scoped, never the shared class): `--bg-card` background, 1px `--border`, radius 10px, min-height 140px, flex row, `align-items: center`, gap 32px, margin-bottom 20px, padding 0. Title block padding 26px 28px; h1 48px Bebas, .04em, margin-bottom 12px; subtitle 14px `--text-secondary`.
@@ -60,13 +72,12 @@ Much of the design is already built in some form. The plan changes what exists r
 **Data (`app.js`, `Recommendations`):**
 - Widen `getCatalogIds()`'s light select to `id, series_name, distributor, variant_type, publisher, foc_date, order_requirement, price_usd` and return them on each item, plus `tier: 'personal' | 'popular'`. Additive: the Recommended path keeps working and gains correct visibility filtering (§ 6).
 - Memoise per `(userId, month)` for the page's lifetime so the rail and the Recommended filter do not fetch twice.
-- New `Recommendations.getTopPicks(userId, month, { subscriptions, reservedIds, cfg, limit = 20 })` returning `[{ id, reason }]`: rank from `getCatalogIds()`; drop reserved ids, FOC-past rows (`isFocLocked`), non-standard covers (`isStandardCover`, the existing helpers), and rows `CatalogFilters.apply` hides; **one item per series** (first in rank); reason = "You subscribe" if the series key is in `subscriptions`, else "Next in series" for `personal`, else "Trending".
+- New `Recommendations.getTopPicks(userId, month, { reservedIds, cfg, limit = 20 })` returning an ordered `id[]` (no reason, D6): rank from `getCatalogIds()`; drop reserved ids, FOC-past rows (`isFocLocked`), non-standard covers (`isStandardCover`, the existing helpers), and rows `CatalogFilters.apply` hides; **one item per series** (first in rank).
 - Caller fetches full rows for the picked ids with one `.in('id', ids)` and restores order (the same two-step as the Recommended path).
-- Expectation to state, not fix: the import auto-reserves standard covers for subscribers, so "You subscribe" will be rare.
 
 **Render (`app.js` + `catalog.html`):**
-- `buildComicCard(comic, qty, focLocked, opts = {})` gains an optional `opts`: `{ rootClass, reason, hideActions }`. Default call sites are byte-for-byte unchanged in output. **The rail card's root class is `pick-card`, NOT `comic-card`** (the same reason `renderSkeletons()` avoids it: specs use `.comic-card` as "the grid has loaded" and locate cards by it; a second `.comic-card` per title breaks `.first()` and strict locators). `.pick-card` joins the `.comic-card` box rule and hover rule in `style.css`.
-- Reason chip: bottom-left of the cover, 10px inset, 11px/600, white on rgba(232,50,28,0.9), padding 3px 8px, radius 3px, `z-index: 2` (the hover-transform stacking note above `.distributor-badge`). Text via `escapeHtml`.
+- `buildComicCard(comic, qty, focLocked, opts = {})` gains an optional `opts`: `{ rootClass, hideActions }` (no `reason`: D6 dropped the chips). Default call sites are byte-for-byte unchanged in output. **The rail card's root class is `pick-card`, NOT `comic-card`** (the same reason `renderSkeletons()` avoids it: specs use `.comic-card` as "the grid has loaded" and locate cards by it; a second `.comic-card` per title breaks `.first()` and strict locators). `.pick-card` joins the `.comic-card` box rule and hover rule in `style.css`.
+- ~~Reason chip~~ **Not built (D6, Rick 2026-10-09).** The card's existing badges (distributor, Restricted) stay.
 - Markup in `catalog.html`, between `#filter-panel` and `#catalog-grid`: `<section class="top-picks" id="top-picks">` with header (h2 "Top picks for you" 26px Bebas, caption "Based on your reservations and subscriptions" 13px muted, "See more ›" 14px/600 accent, `margin-left: auto`), a relative wrapper, the track `#top-picks-track`, the right-edge fade, and two arrow buttons (`aria-label` "Previous"/"Next").
 - Track CSS per the README (flex, gap 14px, `overflow-x: auto`, `scroll-snap-type: x proximity`, padding 4px 0 6px, scrollbar hidden both ways); cards `flex: 0 0 178px; scroll-snap-align: start`; arrows 36px circles at top 42%, left/right -14px, hover accent. <=640px: cards 140px, arrows `display: none`.
 - Paging and arrow visibility: port `page()` / `sync()` from `Catalog.dc.html` verbatim in logic (pitch = card width + 14; steps = max(1, floor(clientWidth*0.85/pitch)); snap, clamp, smooth `scrollTo`; 700ms target accumulation; clear on `wheel`/`pointerdown`/`touchstart`; atStart <= 8, atEnd >= max - 12). Read the pitch from the first card's measured width so the phone size works. Run `sync()` on scroll and once after render.
@@ -87,10 +98,10 @@ Much of the design is already built in some form. The plan changes what exists r
 
 ## 4. Conflicts and warnings (pending work and recorded decisions)
 
-1. **Shared header card (PR #166).** `.page-header--banner` is one look on four pages. A catalog-only hero (D2) makes the catalog differ; restyling the shared class would change three pages nobody asked to change.
+1. ~~**Shared header card (PR #166).**~~ **Resolved by D2 (2026-10-09): the existing header is kept, so the four pages still match.**
 2. **Admin ▾ dropdown vs the mock's nav scroll** (D4). Applying `overflow-x: auto` to `.nav-links` would make the shipped S2b dropdown unreachable.
 3. **The nav is a seven-page contract.** CSS-only here, but it lands on all seven pages; run the nav/footer hash check.
-4. **CLS history.** Catalog desktop CLS is 0.02 after F141 (was 0.636). The rail above the grid and the deadline move are the two ways to regress it. Gate V5.
+4. **CLS history.** Catalog desktop CLS is 0.02 after F141 (was 0.636). With the deadline move withdrawn (D2), the rail above the grid is the one way this work can regress it. Gate V5.
 5. **Playwright specs (local, gitignored) break on D1.** `selectOption('#filter-variants', …)` and `#filter-publisher` reads in specs 10, 20 and 24 (about 8 call sites) need the panel open first; Playwright waits for visibility and will time out. Add a small `openFilters(page)` helper and update those specs. Sweep with `grep -rn` via Bash (the Grep tool skips the gitignored folder).
 6. **`app.js` carries `merge=ours`.** Any `/promote-prod` of this work must assert the merge RESULT for `app.js` (the driver has dropped it three times). **G-K (the F171 fix, next in the pre-Phase-6 plan) also edits `app.js`** (`TenantContext`, a different region). Land one, promote it, then the other, or promote together; either way, assert `app.js` against staging's copy.
 7. **Unfiled overlapping-load race in `loadCatalog()`** (no out-of-order guard; found in spec 24's V10 work). "See more" is one more trigger. Not fixed here; do not let it be mistaken for a rail defect.
@@ -101,11 +112,11 @@ Much of the design is already built in some form. The plan changes what exists r
 
 - **V1** `node --check app.js`; every inline `<script>` in `catalog.html` extracted and `node --check`ed.
 - **V2** Nav and footer hashes identical across the seven pages (CLAUDE.md § Files That Must Stay in Sync).
-- **V3** Local harness `playwright/catalog-top-picks-verify.mjs` (local-only, password-grant session as in `f149-maintenance-verify.mjs`), against the DEPLOYED staging bytes, confirmed served on the plain URL first: hero renders with title, month subtitle and (with an `order_deadline` set in the future on staging) the notice inside the hero; toggle closed by default, opens the panel, `aria-expanded` flips, state survives a reload; filter badge counts; rail renders N `.pick-card`, no `.pick-card` carries `.comic-card`, every chip text is one of the three D6 values, no reserved id appears, one card per series; arrows: Prev hidden at start, Next hidden at end, three rapid Next clicks land on a snapped multiple of the pitch; card click opens the modal for that id; reserving from it removes the card; "See more" selects `recommended`; Admin ▾ opens unclipped at 641/900/1280; at 390px the rail swipes and arrows are hidden. Each new assertion observed red once (negative control) before trusting green.
+- **V3** Local harness `playwright/catalog-top-picks-verify.mjs` (local-only, password-grant session as in `f149-maintenance-verify.mjs`), against the DEPLOYED staging bytes, confirmed served on the plain URL first: the header and `#deadline-banner` are unchanged (same classes, same position before `#promo-banner`); toggle closed by default, opens the panel, `aria-expanded` flips, state survives a reload; filter badge counts; rail renders N `.pick-card`, no `.pick-card` carries `.comic-card`, no `.pick-card` has a reason chip or a `.btn-reserve`, no reserved id appears, one card per series; arrows: Prev hidden at start, Next hidden at end, three rapid Next clicks land on a snapped multiple of the pitch; card click opens the modal for that id; reserving from it removes the card; "See more" selects `recommended`; Admin ▾ opens unclipped at 641/900/1280; at 390px the rail swipes and arrows are hidden. Each new assertion observed red once (negative control) before trusting green.
 - **V4** Full Playwright suite once, after the push, against the deployed bytes, with specs 10/20/24 updated for D1. Read the log's own `N passed` line.
 - **V5** CLS, catalog, desktop and mobile, with and without a deadline set: no worse than 0.05 (today 0.02 desktop / 0.008 mobile). Lighthouse Performance not lower than today's baseline by more than 2 points; record both.
 - **V6** Inspected screenshots at 1350, 900, 700, 393 and 320px; print preview shows no rail, no art.
-- **V7** If D10 stands: on staging, save a `catalog_filters` config that hides one publisher, choose "Recommended For You", and confirm no title from that publisher appears (red on the current bytes, green after). Restore the config's original value afterwards (the suite's teardown refuses if `updated_at` moved; restore by hand and re-read).
+- **V7** (D10 = yes): on staging, save a `catalog_filters` config that hides one publisher, choose "Recommended For You", and confirm no title from that publisher appears (red on the current bytes, green after). Restore the config's original value afterwards (the suite's teardown refuses if `updated_at` moved; restore by hand and re-read).
 
 ## 6. Pre-existing defect found while planning (proposed F172, not filed)
 
@@ -117,8 +128,8 @@ Per-month hero art; staff picks or any new recommendation backend; the other thr
 
 ## 8. Completion criteria
 
-- [ ] D1-D10 confirmed or overridden by Rick before execution
-- [ ] Hero, search row, panel, rail and nav built on a feature branch, merged `--ff-only` to `staging`, pushed
+- [x] D1-D10 confirmed or overridden by Rick before execution (2026-10-09, § 2; D6's reading to be re-confirmed if in doubt)
+- [ ] Search row, panel, rail and nav built (no hero, D2) on a feature branch, merged `--ff-only` to `staging`, pushed
 - [ ] V1-V6 green (V7 if D10 stands), each with its evidence recorded in this doc
 - [ ] Specs 10, 20, 24 updated for D1 and passing; full suite green post-push
 - [ ] § 6 filed or explicitly declined by Rick
