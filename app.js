@@ -2134,9 +2134,15 @@ const Recommendations = {
       this._getPopularSeries(month),
     ]);
 
-    // Fetch id + series + variant_type for the full catalog month.
+    // Fetch the light columns for the full catalog month.
     // variant_type is included so the caller can filter standard covers BEFORE
     // paginating — filtering after slicing causes short pages and empty grid cells.
+    // publisher, foc_date, order_requirement and price_usd are there for the same
+    // reason: CatalogFilters.hides() reads exactly those fields, and the caller
+    // runs this list through it. Until 2026-10-09 the select stopped at
+    // variant_type, so with "Recommended For You" chosen the tenant's hidden
+    // publishers, past-FOC rule, restricted-ratio rules and zero-price rule were
+    // all silently skipped (cover class was judged from variant_type alone).
     const countRes = await db
       .from('catalog')
       .select('*', { count: 'exact', head: true })
@@ -2152,7 +2158,7 @@ const Recommendations = {
     for (let from = 0; from < total; from += 1000) {
       const { data } = await db
         .from('catalog')
-        .select('id, series_name, distributor, variant_type')
+        .select('id, series_name, distributor, variant_type, publisher, foc_date, order_requirement, price_usd')
         .eq('catalog_month', month)
         .not('series_name', 'is', null)
         .range(from, Math.min(from + 999, total - 1));
@@ -2161,12 +2167,20 @@ const Recommendations = {
       if (data.length < 1000) break;
     }
 
-    // Build series key → [{id, variant_type}] lookup
+    // Build series key → [row] lookup. Each row keeps every column the visibility
+    // rules read (see the select above), not just id + variant_type.
     const byKey = new Map();
     for (const row of seriesRows) {
       const key = `${row.series_name}||${row.distributor}`;
       if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key).push({ id: row.id, variant_type: row.variant_type });
+      byKey.get(key).push({
+        id: row.id,
+        variant_type: row.variant_type,
+        publisher: row.publisher,
+        foc_date: row.foc_date,
+        order_requirement: row.order_requirement,
+        price_usd: row.price_usd,
+      });
     }
 
     const seen         = new Set();
@@ -2189,7 +2203,8 @@ const Recommendations = {
     }
 
     return {
-      items: [...personalItems, ...popularItems], // each: { id, variant_type }
+      // each: { id, variant_type, publisher, foc_date, order_requirement, price_usd }
+      items: [...personalItems, ...popularItems],
       hasPersonal: userSignal.size > 0,
     };
   },
