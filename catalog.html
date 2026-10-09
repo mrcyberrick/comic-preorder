@@ -196,7 +196,7 @@
        come back empty the section is hidden (a deliberate, rare shift: a tenant
        with no reservation history at all). No Reserve button here; a card opens
        the same detail modal the grid uses. Hidden in print. -->
-  <section class="top-picks" id="top-picks" aria-labelledby="top-picks-title">
+  <section class="top-picks" id="top-picks" aria-labelledby="top-picks-title" data-pending>
     <div class="top-picks-head">
       <h2 id="top-picks-title">Top picks for you</h2>
       <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and subscriptions</span>
@@ -694,8 +694,12 @@
   // ── Order deadline banner ─────────────────────────────────────
   // Reads the admin-set order_deadline from settings.
   // Shown only while the deadline has not yet passed — hides itself automatically.
+  // `deadlineReady` is kept (it used to be fire-and-forget) because the Top picks rail
+  // must not be PAINTED until this has settled: the banner appears after an await and
+  // pushes everything below it down. See the reveal just before the first loadCatalog().
+  let deadlineReady = Promise.resolve();
   if (currentMonth) {
-    Settings.getOrderDeadline().then(deadline => {
+    deadlineReady = Settings.getOrderDeadline().then(deadline => {
       if (!deadline) return;
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -716,7 +720,7 @@
         ' <span class="foc-label foc-label--below" data-tooltip="Final Order Cutoff — the date the shop must submit your order to the distributor">What\'s this?</span>' +
         '</span>';
       banner.style.display = 'flex';
-    });
+    }).catch(() => { /* a failed deadline read just means no banner, as before */ });
   }
 
   // ── Subscription promo banner ─────────────────────────────────
@@ -837,6 +841,23 @@
     // Restore pinned publisher now that options exist
     if (pinned?.publisher) pubEl.value = pinned.publisher;
   }
+
+  // ── Paint the Top picks rail now, not before ─────────────
+  // Found by the V5 measurement (2026-10-09): with the rail painted from first
+  // paint, catalog CLS went 0.025 -> 0.064 desktop and 0.018 -> 0.117 mobile, all of
+  // it section#top-picks moving TWICE. The cause is what sits above it: the order
+  // deadline banner (revealed after an await) and the subscription promo banner
+  // (revealed after the subscriptions load) each push the page down when they
+  // arrive. Before the rail existed nothing visible sat below them (the grid was an
+  // empty, unpainted div until its skeletons rendered, after both had landed), so
+  // their arrival shifted nothing.
+  // The section keeps its space from first paint (it is only visibility:hidden, which
+  // takes layout but is not painted, so its position changing is not a shift) and is
+  // revealed here: the deadline banner has settled (bounded at 3s so a stalled read
+  // cannot hold it back) and the promo banner was rendered above. This is the same
+  // moment the grid's own skeletons appear, so the page fills in exactly as it did.
+  await Promise.race([deadlineReady, new Promise(r => setTimeout(r, 3000))]);
+  document.getElementById('top-picks')?.removeAttribute('data-pending');
 
   await loadCatalog();
 

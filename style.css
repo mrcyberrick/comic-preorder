@@ -953,6 +953,10 @@ button { cursor: pointer; font-family: var(--font-body); }
 .top-picks-arrow:hover { background: var(--accent); border-color: var(--accent); }
 .top-picks-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top-picks[hidden] { display: none; }
+/* Space reserved from first paint, painted only once the banners above it have
+   arrived (catalog.html, "Paint the Top picks rail now, not before"). visibility,
+   not display: it keeps the layout, and moving an unpainted element is not a shift. */
+.top-picks[data-pending] { visibility: hidden; }
 @media (max-width: 640px) {
   /* A swipe row on a phone: smaller cards, no arrows. */
   .pick-card { flex-basis: 140px; }
