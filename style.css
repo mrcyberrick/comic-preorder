@@ -722,6 +722,122 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 .filter-select:focus { border-color: var(--border-accent); }
 
+/* ── Catalog search row, filter toggle, filter panel ─────────
+   (docs/catalog-top-picks-redesign.md § 3.2.) catalog.html only: .toolbar-header
+   and .search-block exist nowhere else, so none of this reaches My List or the
+   admin toolbars that share .search-wrap / .search-input.
+
+   One grid holds the search box, the Filters toggle and the results line.
+   Desktop: search | toggle on row 1, the count across row 2. Phone (<=640px): the
+   search box is hidden (the header magnifier proxies #search, see NavSearch), so
+   the count and the toggle share row 1, which is where the toggle sat before
+   the redesign. .toolbar-header and .results-toolbar are display:contents so
+   their children are the grid items; the wrappers stay in the DOM only because
+   the existing `.toolbar-header .search-wrap:has(#search)` hide rule targets them. */
+.search-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.search-block > .toolbar-header,
+.search-block > .results-toolbar { display: contents; }
+.toolbar-header .search-wrap { grid-column: 1; grid-row: 1; min-width: 0; }
+.toolbar-header .search-input {
+  /* A rounded rectangle, not a pill; 16px also stops iOS zooming on focus. */
+  height: 50px;
+  padding: 0 52px 0 24px;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+  font-size: 1rem;
+}
+.toolbar-header .search-wrap svg { left: auto; right: 20px; width: 17px; height: 17px; }
+
+.filter-toggle {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.filter-toggle circle { fill: var(--bg); }
+.filter-toggle:hover { border-color: var(--border-accent); }
+/* Open, or any filter other than the defaults chosen: the accent border. */
+.filter-toggle[aria-expanded="true"],
+.filter-toggle.has-filters { border-color: var(--accent); }
+.filter-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filter-toggle-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9px;
+  line-height: 1.6;
+}
+
+/* The results line. min-height reserves its one line from first paint: it is
+   written by JS after the first fetch, and an empty block collapsing to zero
+   then growing by a line was a small layout shift of its own. */
+.results-toolbar #results-count {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 8px 0 0 4px;
+  min-height: calc(0.75rem * 1.6);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* The panel: hidden until opened, one rule set at every width. Beats .toolbar
+   (display:flex) on specificity because it is an id. Selects keep their wide
+   desktop widths; the phone's full-width column layout is unchanged. */
+#filter-panel {
+  display: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin: -6px 0 22px;
+}
+#filter-panel.open { display: flex; }
+@media (min-width: 641px) {
+  #filter-panel #filter-publisher { min-width: 240px; }
+  #filter-panel #filter-reserved  { min-width: 200px; }
+  #filter-panel #filter-variants  { min-width: 150px; }
+}
+@media (max-width: 640px) {
+  .filter-toggle { width: 44px; height: 44px; }
+  .results-toolbar #results-count { grid-column: 1; grid-row: 1; margin: 0; }
+  #filter-panel {
+    flex-direction: column;
+    gap: 8px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin: 0 0 12px;
+  }
+  #filter-panel .filter-select,
+  #filter-panel #btn-pin-filters { width: 100%; box-sizing: border-box; }
+  #filter-panel #btn-pin-filters { text-align: left; }
+}
+
 /* ── Catalog Grid ──────────────────────────────────────────── */
 .catalog-grid {
   display: grid;

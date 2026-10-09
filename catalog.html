@@ -25,14 +25,9 @@
        larger image and its arrival waited on that whole chain. 11 KB, immutable-cached. -->
   <link rel="preload" as="image" href="assets/banner-v3.webp">
   <style>
-    /* Search + filter toggle row — always visible */
-    .toolbar-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .toolbar-header .search-wrap { flex: 1 1 auto; }
+    /* The search row, filter toggle, filter panel and results line moved to
+       style.css (Catalog search row) when the Top picks redesign made them one
+       rule set for every width. */
 
     /* FOC-locked reserve button — distinct from both reserved (red) and normal (grey) */
     .btn-reserve.foc-locked,
@@ -54,45 +49,6 @@
        Elements kept in the DOM (not deleted) — several JS call sites still
        set their textContent — just hidden everywhere now. */
     #stats-bar { display: none; }
-
-    /* Desktop: filter toggle hidden, panel always shown as normal toolbar */
-    @media (min-width: 641px) {
-      #btn-filter-toggle { display: none !important; }
-      #filter-panel      { display: flex !important; }
-    }
-
-    /* Mobile: toggle shown, panel hidden until opened */
-    @media (max-width: 640px) {
-      #btn-filter-toggle { display: flex !important; }
-      #filter-panel {
-        display: none;
-        flex-direction: column;
-        gap: 8px;
-        background: var(--bg-card, #1a1a1a);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 12px;
-        margin-bottom: 12px;
-      }
-      #filter-panel.open { display: flex; }
-      #filter-panel .filter-select,
-      #filter-panel #btn-pin-filters {
-        width: 100%;
-        box-sizing: border-box;
-      }
-      #filter-panel #btn-pin-filters { text-align: left; }
-    }
-
-    /* Filters button moves in-line with the "Showing N of M items" text
-       (was in .toolbar-header next to search) — desktop is unaffected,
-       since #btn-filter-toggle is already display:none there (line ~35). */
-    .results-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 16px;
-    }
   </style>
 </head>
 <body>
@@ -168,36 +124,35 @@
     </div>
   </div>
 
-  <!-- Toolbar: search always visible -->
-  <div class="toolbar-header">
-    <div class="search-wrap">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-      <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
+  <!-- Search row + results line (Top picks redesign, 2026-10-09). One grid, three
+       items: the search box, the Filters toggle, and the results line. Desktop
+       reads search | toggle with the count on a line of its own beneath; on a
+       phone the search box is hidden (the header magnifier proxies #search, see
+       NavSearch) so the same grid puts the count and the toggle on ONE line, which
+       is where the toggle sat before this redesign. The two inner wrappers are
+       display:contents so their children are the grid items. -->
+  <div class="search-block">
+    <div class="toolbar-header">
+      <div class="search-wrap">
+        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" class="search-input" id="search" placeholder="Search titles, series, writers, UPC, ISBN, item code…">
+      </div>
+      <!-- Collapsed by default at every width (D1); the state is remembered per user.
+           Icon-only with an aria-label; the count badge keeps pinned or chosen
+           filters visible while the panel is shut. -->
+      <button type="button" id="btn-filter-toggle" class="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Filters">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+          <circle cx="15" cy="6" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="14" cy="18" r="2.2"/>
+        </svg>
+        <span id="filter-active-count" class="filter-toggle-badge" style="display:none"></span>
+      </button>
     </div>
-  </div>
-
-  <!-- Results count + mobile Filters toggle, in-line (moved 2026-08-15 —
-       was in .toolbar-header next to search; #btn-filter-toggle is
-       desktop-hidden regardless, see the @media rules above). Placed
-       BEFORE #filter-panel (moved 2026-08-15, second pass) so the button
-       stays fixed in place when tapped — the panel expands below it and
-       pushes the grid down, not the button that opens it. -->
-  <div class="results-toolbar">
-    <div style="font-size:0.8rem; color:var(--text-muted)" id="results-count"></div>
-    <button id="btn-filter-toggle" aria-expanded="false" aria-controls="filter-panel"
-      style="display:none;align-items:center;gap:7px;background:var(--bg-elevated);
-             border:1px solid var(--border);border-radius:var(--radius);padding:8px 13px;
-             color:var(--text-primary);font-size:0.85rem;font-weight:500;cursor:pointer;
-             white-space:nowrap;flex-shrink:0;transition:border-color 0.15s">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
-      </svg>
-      Filters
-      <span id="filter-active-count" style="display:none;background:var(--accent);color:#fff;
-            font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.6"></span>
-    </button>
+    <div class="results-toolbar">
+      <div id="results-count"></div>
+    </div>
   </div>
 
   <div class="toolbar" id="filter-panel">
@@ -415,6 +370,29 @@
   const countEl     = document.getElementById('results-count');
   const paginEl     = document.getElementById('pagination');
   const overlay     = document.getElementById('modal-overlay');
+
+  // ── Filter panel: collapsed by default, remembered per user ────
+  // Declared HERE rather than beside the click handler at the bottom of the
+  // script so the restore below runs before the first awaited fetch. A panel
+  // that opens a second late would push the grid down after first paint, which
+  // is the one kind of movement this page's F141 work removed.
+  // Wrapped in try/catch because storage throws outright in some privacy modes
+  // and a page that cannot remember a convenience must still render.
+  const filterToggleBtn = document.getElementById('btn-filter-toggle');
+  const filterPanel     = document.getElementById('filter-panel');
+  const filterBadge     = document.getElementById('filter-active-count');
+  const FILTERS_OPEN_KEY = `pulllist_filters_open_${user.id}`;
+
+  function setFiltersOpen(open, persist) {
+    filterPanel.classList.toggle('open', open);
+    filterToggleBtn.setAttribute('aria-expanded', String(open));
+    if (persist) {
+      try { localStorage.setItem(FILTERS_OPEN_KEY, open ? '1' : '0'); } catch { /* convenience only */ }
+    }
+  }
+  try {
+    if (localStorage.getItem(FILTERS_OPEN_KEY) === '1') setFiltersOpen(true, false);
+  } catch { /* storage unavailable: stay collapsed */ }
 
   // ── Pinned Filter Persistence ─────────────────────────────
   // Saves/restores distributor, publisher, reserved-view, and variant filters
@@ -1662,11 +1640,9 @@
   resEl.addEventListener('change',     () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
   variantEl.addEventListener('change', () => { maybeResavePin(); syncFilterBadge(); loadCatalog(1); });
 
-  // ── Mobile filter toggle ──────────────────────────────────
-  const filterToggleBtn = document.getElementById('btn-filter-toggle');
-  const filterPanel     = document.getElementById('filter-panel');
-  const filterBadge     = document.getElementById('filter-active-count');
-
+  // ── Filter toggle (every width) ───────────────────────────
+  // Elements and the open/closed restore are declared with the other elements
+  // near the top of this script (setFiltersOpen, FILTERS_OPEN_KEY).
   function syncFilterBadge() {
     const active = [
       distEl.value !== '',
@@ -1676,19 +1652,21 @@
       variantEl.value !== 'standard',
     ].filter(Boolean).length;
 
+    // The accent border for "filters are on" is a class now (.has-filters),
+    // not an inline style: an inline border-color outranks the stylesheet's
+    // open-state rule, so a panel opened with no filters would have kept
+    // whichever colour this function last wrote.
+    filterToggleBtn.classList.toggle('has-filters', active > 0);
     if (active > 0) {
       filterBadge.textContent   = active;
-      filterBadge.style.display = 'inline';
-      filterToggleBtn.style.borderColor = 'var(--accent)';
+      filterBadge.style.display = 'inline-flex';
     } else {
       filterBadge.style.display = 'none';
-      filterToggleBtn.style.borderColor = 'var(--border)';
     }
   }
 
   filterToggleBtn.addEventListener('click', () => {
-    const isOpen = filterPanel.classList.toggle('open');
-    filterToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    setFiltersOpen(!filterPanel.classList.contains('open'), true);
   });
 
   // Reflect any restored pinned state in the badge on load
