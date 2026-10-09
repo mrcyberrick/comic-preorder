@@ -569,11 +569,37 @@
     btn.querySelector('.tpc-label').textContent = picksOpen ? 'Hide' : 'Show top picks';
     if (picksOpen && onPicksExpanded) onPicksExpanded();
   }
+  // What this customer chose by hand, remembered per user, for each of the two situations:
+  //   { active: true|false, inactive: true|false }   (true = open)
+  // "active" = a search or a non-default filter is on; "inactive" = neither. Nothing remembered =
+  // the automatic rule (collapsed while active, open otherwise). Rick, 2026-10-09: a pinned filter
+  // collapses the rail on every visit, and having to click "Show top picks" each time was too much,
+  // so a hand-open under a filter is kept. Desktop only: a phone has no rail and no button, so it
+  // neither reads nor writes this (and a phone's storage stays exactly as it was).
+  // Every access is wrapped: storage throws outright in some privacy modes, and a convenience that
+  // cannot be saved must not stop the page rendering.
+  const PICKS_PREF_KEY = `pulllist_picks_open_${user.id}`;
+  function loadPicksPrefs() {
+    if (!desktopMQ.matches) return {};
+    try {
+      const p = JSON.parse(localStorage.getItem(PICKS_PREF_KEY));
+      return p && typeof p === 'object' ? p : {};
+    } catch { return {}; }
+  }
+  function savePicksPref(situation, open) {
+    if (!desktopMQ.matches) return;
+    try {
+      const p = loadPicksPrefs();
+      p[situation] = open;
+      localStorage.setItem(PICKS_PREF_KEY, JSON.stringify(p));
+    } catch { /* convenience only */ }
+  }
   function syncPicksCollapse() {
     const active = filtersOrSearchActive();
     if (active === picksLastActive) return;   // no transition: leave a manual choice alone
     picksLastActive = active;
-    picksOpen = !active;
+    const remembered = loadPicksPrefs()[active ? 'active' : 'inactive'];
+    picksOpen = typeof remembered === 'boolean' ? remembered : !active;
     applyPicksOpen();
   }
   syncPicksCollapse();                         // pinned filters were restored just above
@@ -1916,11 +1942,13 @@
   // "See more ›" is the Recommended For You view, entered through the SAME path
   // the select's own change handler takes, so the pin, the filter badge and the
   // grid reload all behave exactly as if the customer had chosen it there.
-  // Hide / Show by hand. This only moves picksOpen; the auto rule resumes at the next transition
-  // between "something is active" and "nothing is".
+  // Hide / Show by hand. It moves picksOpen and REMEMBERS the choice for the situation the customer
+  // is in (a search or filter on, or neither): the next time they are in that situation the rail
+  // starts the way they left it. Between transitions the automatic rule leaves a hand choice alone.
   onPicksExpanded = () => requestAnimationFrame(syncPicksArrows);
   document.getElementById('top-picks-collapse').addEventListener('click', () => {
     picksOpen = !picksOpen;
+    savePicksPref(picksLastActive ? 'active' : 'inactive', picksOpen);   // remembered for this situation
     applyPicksOpen();
   });
   picksMore.addEventListener('click', () => {
