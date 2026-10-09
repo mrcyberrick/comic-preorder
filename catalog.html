@@ -503,6 +503,11 @@
       resEl.value     = '';
       variantEl.value = 'standard';
       searchEl.value  = '';
+      // The Filters button's count badge and accent border are driven by the controls, but this reset
+      // wrote the controls directly and never re-ran the sync, so the button went on claiming
+      // "1 filter" after an unpin until the page was reloaded (Rick, 2026-10-09). Every other path
+      // that changes a control calls it; this one did not. It applies at every width.
+      syncFilterBadge();
       loadCatalog(1);
     } else {
       savePinnedFilters();
