@@ -995,11 +995,22 @@ button { cursor: pointer; font-family: var(--font-body); }
 .top-picks-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top-picks-collapse svg { transition: transform 0.15s; }
 .top-picks.is-collapsed .top-picks-collapse svg { transform: rotate(180deg); }
-/* Collapsed: just the header row, with the spacing tightened so it does not leave a gap
-   where the cards were. */
-.top-picks.is-collapsed .top-picks-rail { display: none; }
+/* Collapsed = out of the way. Rick (2026-10-09): "TOP PICKS FOR YOU title is still visible when
+   collapsed". The first collapse kept the whole header row; now the cards, the title, the caption
+   and "See more" all go, and the one thing left is a quiet "Show top picks" control, because under
+   a PINNED filter the rail is collapsed on every visit and this is the only way to open it. */
+.top-picks.is-collapsed .top-picks-rail,
+.top-picks.is-collapsed .top-picks-head > h2,
+.top-picks.is-collapsed .top-picks-caption,
+.top-picks.is-collapsed .top-picks-more { display: none; }
 .top-picks.is-collapsed .top-picks-head { margin-bottom: 0; }
 .top-picks.is-collapsed { margin-bottom: 18px; }
+.top-picks.is-collapsed .top-picks-collapse {
+  padding-left: 0;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+.top-picks.is-collapsed .top-picks-collapse:hover { color: var(--text-primary); }
 .top-picks-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .top-picks-rail { position: relative; }
 .top-picks-track {

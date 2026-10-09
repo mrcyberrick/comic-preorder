@@ -208,9 +208,10 @@
       <h2 id="top-picks-title">Top picks for you</h2>
       <span class="top-picks-caption" id="top-picks-caption">Based on your reservations and the store's most popular reservations</span>
       <button type="button" class="top-picks-more" id="top-picks-more">See more <span aria-hidden="true">&rsaquo;</span></button>
-      <!-- Collapses the rail to this header. It does so by itself while a search is typed or any
-           filter other than the defaults is chosen (a pinned filter included), and the customer can
-           open it again by hand; see syncPicksCollapse() in the script below. -->
+      <!-- Hide / "Show top picks". Collapsing removes the cards AND the title, caption and See more
+           (style.css .is-collapsed), leaving only this control. It collapses by itself while a search
+           is typed or any filter other than the defaults is chosen (a pinned filter included), and
+           the customer can open it again by hand; see syncPicksCollapse() in the script below. -->
       <button type="button" class="top-picks-collapse" id="top-picks-collapse" aria-expanded="true" aria-controls="top-picks-rail">
         <span class="tpc-label">Hide</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"></polyline></svg>
@@ -560,7 +561,7 @@
     if (!section || !btn) return;
     section.classList.toggle('is-collapsed', !picksOpen);
     btn.setAttribute('aria-expanded', String(picksOpen));
-    btn.querySelector('.tpc-label').textContent = picksOpen ? 'Hide' : 'Show';
+    btn.querySelector('.tpc-label').textContent = picksOpen ? 'Hide' : 'Show top picks';
     if (picksOpen && onPicksExpanded) onPicksExpanded();
   }
   function syncPicksCollapse() {
