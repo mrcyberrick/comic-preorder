@@ -145,6 +145,12 @@ being rejected — usually a changed export format. A normalised count of **zero
   nothing; if that customer already holds the newest row (a unique pair), delete the redundant older
   reservation only **after** the `UPDATE`. The report prints on shipment weeks too (a same-month
   refresh), so read it there as well.
+  **Often Run C fixes it with no repoint (seen 2026-10-09).** When the newer month's PRH file is in
+  `..\recheck\`, the weekly recheck lists the title under `STRANDED` and its apply prompt corrects
+  the **old row's date** to the newest listing's. The three Magic: The Gathering Liliana #2 covers
+  that the 2026-10-09 import reported as pinned were fixed that way (42 of 42 corrections confirmed by a fresh read afterwards): their reservations stay on the old
+  row but now show the right date. It works when the date is the only problem, and it depends on the
+  newest month's file being read last (files are read in name order), so do not rename them.
 - `N unreserved title(s) changed in-store date` — date revisions found.
 - `N title(s) are about to be marked fulfilled with nothing showing they arrived` — books the
   customer is about to be told "Order placed" for. Non-blocking by design. Note them; they land

@@ -74,7 +74,7 @@ decision." until G-D ran, and before that "G-B (engine to production) and G-D (F
 **Active sub-deploy:** none.
 **Next scheduled work: soak F165 S2 through Rick's next two real weekly `check-dates.js` runs (no hard
 date; the first records first sightings and can raise nothing, the second is the first that can list a
-candidate), then V5 with Rick, then decide S3.** Plan: `docs/f165-withdrawal-detection-redesign.md` § 4, § 8.
+candidate), then V5 with Rick, then decide S3.** Plan: `docs/f165-withdrawal-detection-redesign.md` § 4, § 8. **RUN 1 OF 2 DONE 2026-10-09 (production, dry run then the real apply, counted as one observation): 29 first sightings recorded, 0 candidates, as designed. The next real run, on a LATER date (next Friday, 2026-10-16), is the first that can list a candidate.**
 *(This paragraph previously read: "Next scheduled work: F165 S2, a weekly report-only withdrawal-candidate
 section in `check-dates.js` (no hard date; it needs two weekly runs to soak before it can raise anything)."
 True until S2 landed.)*
