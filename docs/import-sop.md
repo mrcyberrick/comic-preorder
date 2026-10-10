@@ -270,6 +270,14 @@ files that already loaded is safe. A file that yields no rows is called out by n
   `weekly-pull-feed` only**, put it in `.env` in place of the old value, then run the command above.
   Do this before **Tuesday 22:00 UTC**; the live feed's `pull-feed-generated` stamp is what the
   newsletter's stale guard reads. Write down the expiry date you choose so the next lapse is not a surprise.
+- If the publish fails with `HTTP 403 ... Resource not accessible by personal access token`, the token
+  is alive but **cannot write**: its **Contents** permission is Read-only. A read-only token passes
+  every read check (a repo read, the same `git/ref` call as the publish's first step), so a green
+  check of the token does **not** prove it can publish; only the publish does. Nothing is written when
+  this happens (the failure comes before any commit). Edit the token (Settings → Developer settings →
+  Fine-grained tokens → the token → Edit → Contents: **Read and write** → Update), which keeps the
+  same value, then re-run `node .\build-pull-feed.js --publish`. After a publish, confirm it was **one**
+  new commit on `weekly-pull-feed` and that the live `pull-feed-generated` stamp moved.
 
 ### 5. Restore `.env` (ad-hoc only)
 Uncomment `GITHUB_TOKEN_PULL_FEED`. Do it now, not later — the next weekly run needs it.
