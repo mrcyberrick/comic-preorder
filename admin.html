@@ -184,14 +184,17 @@
 
       /* Order Builder / Mark Ordered modals: full-bleed padding, no fixed max-width squeeze */
       #order-builder-overlay > div,
-      #mark-ordered-overlay > div {
+      #mark-ordered-overlay > div,
+      #move-res-overlay > div {
         padding: 20px 16px !important;
         max-width: 100% !important;
       }
       #order-builder-generate,
       #order-builder-cancel,
       #mark-ordered-save,
-      #mark-ordered-cancel { width: 100%; justify-content: center; }
+      #mark-ordered-cancel,
+      #move-res-save,
+      #move-res-cancel { width: 100%; justify-content: center; }
       #order-builder-summary { flex: 1 1 100%; order: -1; margin-bottom: 4px; }
 
       /* Backorder-risk panel rows: allow title to wrap instead of clipping */
@@ -866,6 +869,57 @@
     </div>
 
     <div id="mark-ordered-result" style="display:none;margin-top:16px;padding:10px 14px;
+         border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
+  </div>
+</div>
+
+<!-- F173: Move reservations to another listing (admin_move_reservations RPC) -->
+<div id="move-res-overlay" style="display:none;position:fixed;inset:0;z-index:210;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:28px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;margin:16px;
+              position:relative;box-sizing:border-box">
+    <button id="move-res-close" aria-label="Close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 4px;font-size:1.1rem">Move reservations to another listing</h2>
+    <p id="move-res-subtitle" style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 14px"></p>
+    <div id="move-res-who" style="font-size:0.84rem;line-height:1.5;margin-bottom:18px"></div>
+
+    <label for="move-res-search" style="display:block;font-size:0.78rem;font-weight:600;
+           color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">FIND THE NEW LISTING</label>
+    <div style="display:flex;gap:8px">
+      <input id="move-res-search" type="search" autocomplete="off"
+        placeholder="Title, product code or UPC"
+        style="flex:1;min-width:0;background:var(--bg-elevated);border:1px solid var(--border);
+               color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+               font-size:0.9rem;box-sizing:border-box">
+      <button class="btn btn-ghost" id="move-res-search-btn" type="button">Search</button>
+    </div>
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">
+      Searches every catalog month, this distributor only. A product code or UPC finds it fastest.
+    </div>
+    <div id="move-res-results" style="margin-top:10px;max-height:220px;overflow-y:auto"></div>
+
+    <div id="move-res-target" style="display:none;margin-top:16px;padding:12px 14px;
+         background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);
+         font-size:0.84rem;line-height:1.55"></div>
+
+    <div id="move-res-order-row" style="display:none;margin-top:14px;font-size:0.82rem;line-height:1.5">
+      <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+        <input type="checkbox" id="move-res-order" style="margin-top:3px">
+        <span id="move-res-order-text"></span>
+      </label>
+    </div>
+    <div id="move-res-order-note" style="display:none;margin-top:14px;font-size:0.78rem;
+         color:var(--text-muted);line-height:1.5"></div>
+
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="move-res-cancel" type="button">Cancel</button>
+      <button class="btn btn-primary" id="move-res-save" type="button" disabled>Move reservations</button>
+    </div>
+
+    <div id="move-res-result" style="display:none;margin-top:16px;padding:10px 14px;
          border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
   </div>
 </div>
@@ -2611,13 +2665,23 @@
                           style="font-size:0.62rem;padding:2px 8px;white-space:nowrap"
                           title="Record that the supplier rejected this order — writes the negative ledger adjustment that nets the code to 0 (F143)"
                           >Rejected by supplier</button>` : '';
+                      // F173 -- move this listing's open reservations to another
+                      // listing (a distributor product-code change). Offered whenever
+                      // at least one reservation is still open; fulfilled ones are
+                      // history and do not move.
+                      const moveBtn = customers.some(x => !x.fulfilled) ? `
+                        <button type="button" class="btn btn-ghost btn-sm move-res-btn"
+                          data-catalog-id="${c.id}"
+                          style="font-size:0.62rem;padding:2px 8px;white-space:nowrap"
+                          title="Move this listing's open reservations to another listing, for example when the distributor changed the product code (F173)"
+                          >Move reservations\u2026</button>` : '';
                       return `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px">
                         <button
                           class="btn btn-sm mark-ordered-btn"
                           data-catalog-id="${c.id}"
                           style="white-space:nowrap;${colour}"
                           ${orderMatched && !correctionOpen ? 'disabled' : ''}
-                          title="${hint}">${label}</button>${rejectBtn}
+                          title="${hint}">${label}</button>${rejectBtn}${moveBtn}
                       </div>`;
                     })()}
                 </td>
@@ -2723,6 +2787,8 @@
         // per-button listeners would not survive it.
         const rejectBtn = e.target.closest('.arrival-reject-btn');
         if (rejectBtn) { recordSupplierRejection(rejectBtn); return; }
+        const moveResBtn = e.target.closest('.move-res-btn');
+        if (moveResBtn) { openMoveResModal(moveResBtn.dataset.catalogId); return; }
         const markOrderedBtn = e.target.closest('.mark-ordered-btn');
         if (markOrderedBtn) openMarkOrderedModal(markOrderedBtn.dataset.catalogId);
       });
@@ -3629,6 +3695,313 @@
         : `Recorded ${qty} ${c.distributor} cop${qty===1?'y':'ies'} on order`;
     toast(toastMsg, 'success');
     closeMarkOrderedModal();
+  });
+
+  // ── Move reservations to another listing (F173) ─────────────
+  // When a distributor replaces a title's product code nothing in the app
+  // links the two listings, and no screen could repoint a reservation (Hyde
+  // Street #14, 2026-10-11, was repaired with hand-written SQL). This dialog
+  // is the manual control Rick asked for ("these are low volume issues").
+  //
+  // The write is ONE rpc, admin_move_reservations(), so the move and the
+  // optional order-record carry-over are a single transaction that either
+  // completes or changes nothing. Everything the dialog checks (same
+  // customer already on the target, withdrawn target, nothing open to move)
+  // is checked AGAIN in the function; the dialog only exists to say so in
+  // words before the click instead of after it.
+  //
+  // It deliberately has no date field. The target's dates are corrected by the
+  // weekly recheck once it holds a reservation (Rick, 2026-10-11: "Hold until
+  // recheck as this is cleaner"), and the dialog says so.
+  //
+  // Looks up the source in allPreordersAllMonths, NOT distributorRows(): the
+  // control must work from a cross-month search result, which is exactly where
+  // an old-code listing is found.
+  const mrOverlay    = document.getElementById('move-res-overlay');
+  const mrSubtitle   = document.getElementById('move-res-subtitle');
+  const mrWho        = document.getElementById('move-res-who');
+  const mrSearch     = document.getElementById('move-res-search');
+  const mrSearchBtn  = document.getElementById('move-res-search-btn');
+  const mrResults    = document.getElementById('move-res-results');
+  const mrTarget     = document.getElementById('move-res-target');
+  const mrOrderRow   = document.getElementById('move-res-order-row');
+  const mrOrder      = document.getElementById('move-res-order');
+  const mrOrderText  = document.getElementById('move-res-order-text');
+  const mrOrderNote  = document.getElementById('move-res-order-note');
+  const mrSave       = document.getElementById('move-res-save');
+  const mrResult     = document.getElementById('move-res-result');
+
+  let mrSource    = null;   // { catalog, open, qty, oldCode, oldNet }
+  let mrTargetRow = null;   // the catalog row currently chosen
+  let mrBlocked   = true;   // the chosen target cannot take the move
+  let mrFound     = new Map();
+  let mrSearchSeq = 0;      // a slower earlier search must not overwrite a later one
+
+  const mrPlural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  function mrSetResult(kind, html) {
+    mrResult.style.display = html ? '' : 'none';
+    mrResult.className = kind === 'error' ? 'alert alert-error' : 'alert';
+    mrResult.innerHTML = html || '';
+  }
+
+  function openMoveResModal(catalogId) {
+    const rows = allPreordersAllMonths.filter(p => p.catalog?.id === catalogId);
+    if (!rows.length) return;
+    const c = rows[0].catalog;
+    const open = rows.filter(p => !p.fulfilled);
+    if (!open.length) {
+      toast('Nothing to move: every reservation on this listing is already fulfilled', 'error');
+      return;
+    }
+    const qty = open.reduce((s, p) => s + (p.quantity || 1), 0);
+    const oldCode = exportCode(c, c.distributor);
+    const oldNet = ledgerMatchesFor(c.distributor, oldCode).reduce((s, m) => s + (m.quantity || 0), 0);
+    mrSource = { catalog: c, open, qty, oldCode, oldNet, fulfilledCount: rows.length - open.length };
+    mrTargetRow = null;
+    mrBlocked = true;
+    mrFound = new Map();
+    mrSearchSeq++;
+
+    mrSubtitle.textContent =
+      `${c.title || ''} — ${c.distributor} ${oldCode || '—'}` +
+      (c.catalog_month ? ` (${c.catalog_month})` : '');
+    mrWho.innerHTML =
+      `<strong>${mrPlural(open.length, 'open reservation', 'open reservations')}</strong> ` +
+      `(${mrPlural(qty, 'copy', 'copies')}) will move: ` +
+      open.map(p => escapeHtml(p.customer_name) + ((p.quantity || 1) > 1 ? ` (x${p.quantity})` : '')).join(', ') + '.' +
+      (mrSource.fulfilledCount
+        ? `<div style="color:var(--text-muted);font-size:0.78rem;margin-top:4px">` +
+          `${mrPlural(mrSource.fulfilledCount, 'fulfilled reservation', 'fulfilled reservations')} stay on this listing as history.</div>`
+        : '');
+
+    mrSearch.value = '';
+    mrResults.innerHTML = '';
+    mrTarget.style.display = 'none';
+    mrTarget.innerHTML = '';
+    mrOrderRow.style.display = 'none';
+    mrOrderNote.style.display = 'none';
+    mrOrder.checked = false;
+    mrSetResult('', '');
+    mrSave.disabled = true;
+    mrSave.textContent = 'Move reservations';
+    mrOverlay.style.display = 'flex';
+    setTimeout(() => mrSearch.focus(), 50);
+    mrSuggest();
+  }
+
+  function closeMoveResModal() {
+    mrOverlay.style.display = 'none';
+    mrSource = null;
+    mrTargetRow = null;
+    mrSearchSeq++;
+  }
+
+  async function mrRunSearch() {
+    if (!mrSource) return;
+    // Commas and brackets are filter syntax inside Catalog.fetch()'s .or()
+    // list; a title like "Batman (2016)" would otherwise break the query.
+    const term = mrSearch.value.replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (term.length < 3) {
+      mrResults.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted)">Type at least 3 characters.</div>`;
+      return;
+    }
+    const seq = ++mrSearchSeq;
+    mrResults.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted)">Searching…</div>`;
+    // No `month` => every catalog month (Catalog.fetch only scopes when given one).
+    const { items, error } = await Catalog.fetch({
+      search: term, distributor: mrSource.catalog.distributor, page: 1, pageSize: 30,
+    });
+    if (seq !== mrSearchSeq || !mrSource) return;
+    if (error) {
+      mrResults.innerHTML = `<div class="alert alert-error">Search failed: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+    const found = items.filter(i => i.id !== mrSource.catalog.id);
+    mrFound = new Map(found.map(i => [i.id, i]));
+    if (!found.length) {
+      mrResults.innerHTML = `<div style="font-size:0.82rem;color:var(--text-muted)">` +
+        `No ${escapeHtml(mrSource.catalog.distributor)} listing matches "${escapeHtml(term)}" in any catalog month. ` +
+        `If the new code has not been imported yet, it cannot be chosen here.</div>`;
+      return;
+    }
+    mrRenderPicks(found, '');
+  }
+
+  // Renders a clickable list of candidate listings: search results, or the
+  // UPC suggestion made when the dialog opens.
+  function mrRenderPicks(found, headingHtml) {
+    mrResults.innerHTML = headingHtml + found.map(i => {
+      const reserved = allPreordersAllMonths.filter(p => p.catalog?.id === i.id).length;
+      return `<button type="button" class="mr-pick" data-id="${escapeHtml(i.id)}"
+        style="display:block;width:100%;text-align:left;background:var(--bg-elevated);
+               border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;
+               margin-bottom:6px;color:var(--text-primary);cursor:pointer;font-size:0.82rem;line-height:1.45">
+        <strong>${escapeHtml(i.title || '')}</strong>${i.variant_type && i.variant_type !== 'Standard'
+          ? ` <span style="color:var(--warning)">${escapeHtml(i.variant_type)}</span>` : ''}
+        <div style="font-size:0.74rem;color:var(--text-muted);font-family:monospace">
+          ${escapeHtml(exportCode(i, i.distributor) || '—')} · ${escapeHtml(i.catalog_month || '?')} ·
+          FOC ${escapeHtml(formatDate(i.foc_date))} · in store ${escapeHtml(formatDate(i.on_sale_date))}${
+          reserved ? ` · ${mrPlural(reserved, 'reservation', 'reservations')}` : ''}${
+          i.withdrawn_at ? ' · WITHDRAWN' : ''}
+        </div></button>`;
+    }).join('');
+  }
+
+  // Suggest the likely replacement: another listing from the SAME distributor
+  // with the SAME UPC (or the ISBN, which a book carries instead) in a
+  // DIFFERENT catalog month. A distributor's recode keeps the UPC and moves the
+  // listing to a later month. Two codes sharing a UPC in the SAME month are
+  // different products (measured on production 2026-10-11: a PAID and a FREE
+  // bundle, an 85-bundle pallet and a bundle of 5), so those are never
+  // suggested. It is a suggestion only: the admin still picks the listing and
+  // reads its dates before anything moves.
+  async function mrSuggest() {
+    const src = mrSource && mrSource.catalog;
+    if (!src) return;
+    const col = (src.upc && String(src.upc).trim()) ? 'upc'
+      : ((src.isbn && String(src.isbn).trim()) ? 'isbn' : null);
+    if (!col) return;
+    const label = col.toUpperCase();
+    const seq = ++mrSearchSeq;
+    mrResults.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted)">Looking for a listing with the same ${label}\u2026</div>`;
+    const { data, error } = await db.from('catalog')
+      .select('*')
+      .eq('tenant_id', TenantContext.current().id)
+      .eq('distributor', src.distributor)
+      .eq(col, String(src[col]).trim())
+      .neq('id', src.id)
+      .neq('catalog_month', src.catalog_month)
+      .is('withdrawn_at', null)
+      .limit(10);
+    if (seq !== mrSearchSeq || !mrSource) return;   // a typed search or a close won
+    if (error || !data || !data.length) {
+      mrResults.innerHTML = error ? '' :
+        `<div style="font-size:0.8rem;color:var(--text-muted)">No listing in a different month shares this ${label}. Search by title or code below.</div>`;
+      return;
+    }
+    mrFound = new Map(data.map(i => [i.id, i]));
+    mrRenderPicks(data,
+      `<div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px">` +
+      `<strong>Same ${label}, different month</strong> \u2014 probably the new code:</div>`);
+  }
+
+  function mrSelect(id) {
+    const t = mrFound.get(id);
+    if (!t || !mrSource) return;
+    mrTargetRow = t;
+    mrSetResult('', '');
+
+    const openUsers = new Set(mrSource.open.map(p => p.user_id));
+    const clash = allPreordersAllMonths.filter(p => p.catalog?.id === t.id && openUsers.has(p.user_id));
+    const newCode = exportCode(t, t.distributor);
+    const sameCode = !!newCode && newCode === mrSource.oldCode;
+    const reasons = [];
+    if (t.withdrawn_at) reasons.push('This listing is marked withdrawn, so it cannot take reservations.');
+    if (clash.length) {
+      reasons.push(`${escapeHtml([...new Set(clash.map(p => p.customer_name))].join(', '))} already ` +
+        `${clash.length === 1 ? 'has a reservation' : 'have reservations'} on this listing. ` +
+        `Remove or settle ${clash.length === 1 ? 'it' : 'those'} first; one customer cannot hold the same listing twice.`);
+    }
+    mrBlocked = reasons.length > 0;
+
+    const notes = [
+      `Its dates are <strong>not changed</strong> by this move. The weekly recheck corrects them once the ` +
+      `listing holds a reservation; until then FOC and in-store may be out of date.` +
+      (t.distributor === 'PRH'
+        ? ' PRH catalogs older than about three months are no longer rechecked, so these dates may stay as listed.' : ''),
+    ];
+    if (sameCode) notes.push('Same product code as the old listing: the order record is shared already.');
+
+    mrTarget.style.display = '';
+    mrTarget.innerHTML =
+      `<div><strong>${escapeHtml(t.title || '')}</strong>${t.variant_type && t.variant_type !== 'Standard'
+        ? ` <span style="color:var(--warning)">${escapeHtml(t.variant_type)}</span>` : ''}</div>` +
+      `<div style="font-family:monospace;font-size:0.78rem;color:var(--text-secondary)">` +
+      `${escapeHtml(t.distributor)} ${escapeHtml(newCode || '—')} · ${escapeHtml(t.catalog_month || '?')} · ` +
+      `FOC ${escapeHtml(formatDate(t.foc_date))} · in store ${escapeHtml(formatDate(t.on_sale_date))}</div>` +
+      reasons.map(r => `<div style="color:#ff8070;margin-top:6px">⛔ ${r}</div>`).join('') +
+      notes.map(n => `<div style="color:var(--text-muted);font-size:0.78rem;margin-top:6px">${n}</div>`).join('');
+
+    // Order record: offered only when the old code really nets above zero and
+    // the codes differ. Unticked by default: it asserts something about the
+    // distributor's side (that the order carried over) which only the admin
+    // can know, and a wrong "yes" leaves the store believing a copy is ordered
+    // that is not.
+    mrOrder.checked = false;
+    mrOrderRow.style.display = 'none';
+    mrOrderNote.style.display = 'none';
+    if (!mrBlocked) {
+      if (sameCode || !newCode) {
+        // nothing to carry; the note above already says why
+      } else if (mrSource.oldNet > 0) {
+        const x = Math.min(mrSource.oldNet, mrSource.qty);
+        mrOrderText.innerHTML =
+          `The order record shows <strong>${mrPlural(mrSource.oldNet, 'copy', 'copies')}</strong> on order under ` +
+          `<span style="font-family:monospace">${escapeHtml(mrSource.oldCode)}</span>. Tick this <strong>only if</strong> ` +
+          `you have confirmed in the ${escapeHtml(t.distributor)} portal that the order carried over to ` +
+          `<span style="font-family:monospace">${escapeHtml(newCode)}</span>. It records −${x} under the old code and ` +
+          `+${x} under the new one. The record is append-only: a mistake is fixed with another adjustment, not an edit.`;
+        mrOrderRow.style.display = '';
+      } else {
+        mrOrderNote.textContent =
+          `Nothing is recorded as ordered under ${mrSource.oldCode}, so there is no order to carry across. ` +
+          `Use Mark Ordered on the new listing if you order it.`;
+        mrOrderNote.style.display = '';
+      }
+    }
+
+    mrSave.disabled = mrBlocked;
+    mrSave.textContent = `Move ${mrPlural(mrSource.open.length, 'reservation', 'reservations')}`;
+  }
+
+  mrResults.addEventListener('click', e => {
+    const pick = e.target.closest('.mr-pick');
+    if (pick) mrSelect(pick.dataset.id);
+  });
+  mrSearchBtn.addEventListener('click', mrRunSearch);
+  mrSearch.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); mrRunSearch(); } });
+  document.getElementById('move-res-close').addEventListener('click', closeMoveResModal);
+  document.getElementById('move-res-cancel').addEventListener('click', closeMoveResModal);
+  mrOverlay.addEventListener('click', e => { if (e.target === mrOverlay) closeMoveResModal(); });
+
+  mrSave.addEventListener('click', async () => {
+    if (!mrSource || !mrTargetRow || mrBlocked) return;
+    const label = mrSave.textContent;
+    mrSave.disabled = true;
+    mrSave.textContent = 'Moving…';
+    const moveOrder = mrOrderRow.style.display !== 'none' && mrOrder.checked;
+
+    const { data, error } = await db.rpc('admin_move_reservations', {
+      p_from_catalog_id: mrSource.catalog.id,
+      p_to_catalog_id:   mrTargetRow.id,
+      p_move_order:      moveOrder,
+    });
+    if (error) {
+      // The function raises readable sentences (nothing was saved); show them.
+      mrSetResult('error', `Nothing was moved: ${escapeHtml(error.message)}`);
+      mrSave.disabled = false;
+      mrSave.textContent = label;
+      return;
+    }
+
+    const res = data || {};
+    const keepView = distributorViewMonth;
+    closeMoveResModal();
+    await loadData();
+    // loadData() resets the cycle selector to the live month. Put the admin
+    // back where they were when that month still has reservations to show.
+    if (keepView && keepView !== distributorViewMonth &&
+        allPreordersAllMonths.some(p => p.catalog?.catalog_month === keepView)) {
+      distributorViewMonth = keepView;
+      renderDistributorMonthSelector();
+      renderByDistributor();
+    }
+    toast(
+      `Moved ${mrPlural(res.moved ?? 0, 'reservation', 'reservations')} to ${res.to_code || 'the new listing'}` +
+      (res.order_moved ? ` and carried ${res.order_moved} on order across` : ''),
+      'success'
+    );
   });
 
   // ── Invite Customer Modal ────────────────────────────────
