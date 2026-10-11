@@ -1,6 +1,6 @@
 # F173 — Move reservations to another listing (admin control for a distributor product-code change)
 
-**STATUS:** BUILT AND VERIFIED ON STAGING 2026-10-11 (staging SQL APPLIED, harness 50/50 on the deployed bytes; see § 5); NOT PROMOTED (the client is staging-only); the SQL is also applied on production as of 2026-10-11, confirmed by an anonymous probe that the function exists and refuses anon, the admin path there untested. Findings: F173 (owner, `docs/technical-reference.md` § 13). No new finding ID consumed.
+**STATUS:** BUILT AND VERIFIED ON STAGING 2026-10-11 (staging SQL APPLIED, harness 50/50 on the deployed bytes; see § 5); **PROMOTED TO PRODUCTION 2026-10-11 (PR #173, merge `093e36e`)**; the SQL was applied there first (confirmed by an anonymous probe that the function exists and refuses anon), the admin path on production untested and no real reservation moved yet. Findings: F173 (owner, `docs/technical-reference.md` § 13). No new finding ID consumed.
 
 Owner doc for the build of the manual control Rick asked for on 2026-10-11 ("A manual way to correct it would also be good since these are low volume issues", then "lets build it"). The problem, the measurements and the options considered are in § 13 F173; this file records what was built and the decisions taken at build time.
 
