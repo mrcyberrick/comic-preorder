@@ -1,6 +1,6 @@
 # F173 — Move reservations to another listing (admin control for a distributor product-code change)
 
-**STATUS:** BUILT AND VERIFIED ON STAGING 2026-10-11 (staging SQL APPLIED, harness 50/50 on the deployed bytes; see § 5); NOT PROMOTED, production SQL `PENDING`. Findings: F173 (owner, `docs/technical-reference.md` § 13). No new finding ID consumed.
+**STATUS:** BUILT AND VERIFIED ON STAGING 2026-10-11 (staging SQL APPLIED, harness 50/50 on the deployed bytes; see § 5); NOT PROMOTED (the client is staging-only); the SQL is also applied on production as of 2026-10-11, confirmed by an anonymous probe that the function exists and refuses anon, the admin path there untested. Findings: F173 (owner, `docs/technical-reference.md` § 13). No new finding ID consumed.
 
 Owner doc for the build of the manual control Rick asked for on 2026-10-11 ("A manual way to correct it would also be good since these are low volume issues", then "lets build it"). The problem, the measurements and the options considered are in § 13 F173; this file records what was built and the decisions taken at build time.
 
@@ -85,7 +85,7 @@ Written as the plan; results go in § 5 when run.
 
 ## 6. Sequencing and promotion
 
-Staging first. **The SQL reaches production BEFORE the client code** (F105): the page calls the function, and a missing function fails only when the button is pressed, which is the worst time to find out. Because the file reads `prod=PENDING`, `/promote-prod` step 0 will refuse every promotion until Rick applies it on production; that is the gate working as designed, and the function is inert until the page calls it, so applying it early costs nothing. Production promotion only on Rick's explicit `/promote-prod`.
+Staging first. **The SQL reaches production BEFORE the client code** (F105): the page calls the function, and a missing function fails only when the button is pressed, which is the worst time to find out. While the file read `prod=PENDING`, `/promote-prod` step 0 refused every promotion; that was the gate working as designed. **It now reads `prod=APPLIED 2026-10-11`** (Rick ran it; confirmed by an anonymous probe: the function exists on production and refuses anon with 42501). The function is inert until the page calls it, so applying it first cost nothing. Production promotion only on Rick's explicit `/promote-prod`.
 
 ## 7. Follow-up wired to this work
 
