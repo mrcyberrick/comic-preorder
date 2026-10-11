@@ -3580,18 +3580,30 @@
   let markOrderedCatalog = null;
 
   function openMarkOrderedModal(catalogId) {
-    // Looks up in the SELECTED cycle, not the current month — recording a
-    // late order against a closed cycle is legitimate and stays enabled
-    // (Rick's call 2026-08-06, the counterpart to locking the export
-    // buttons there). Identical behaviour when the selection is current.
-    const viewRows = distributorRows();
-    const match = viewRows.find(p => p.catalog?.id === catalogId);
-    if (!match) return;
+    // Recording a late order against a closed cycle is legitimate and stays
+    // enabled (Rick's call 2026-08-06, the counterpart to locking the export
+    // buttons there).
+    //
+    // F174: this used to look the row up with distributorRows(), which is the
+    // SELECTED cycle only, while By Distributor's search spans EVERY catalog
+    // month and ignores the selector. A row found by search from any other
+    // month was drawn with a live button, the lookup found nothing, and the
+    // click returned silently. A catalog id belongs to exactly one month, so
+    // looking it up across all months gives the identical rows for every row
+    // the selector path can show, and also covers the search path.
+    const rows = allPreordersAllMonths.filter(p => p.catalog?.id === catalogId);
+    const match = rows[0];
+    if (!match) {
+      // The page's data no longer holds this listing's reservations (they were
+      // removed or moved since the page loaded). Say so: never a silent no-op.
+      toast('That listing has no reservations in the loaded data any more. Reload the page.', 'error');
+      return;
+    }
     markOrderedCatalog = match.catalog;
     const c = markOrderedCatalog;
 
-    const totalQty = viewRows
-      .filter(x => x.catalog?.id === catalogId && !x.fulfilled)
+    const totalQty = rows
+      .filter(x => !x.fulfilled)
       .reduce((s, x) => s + (x.quantity || 1), 0);
 
     // Default qty is the REMAINING amount, not the full reservation total --
