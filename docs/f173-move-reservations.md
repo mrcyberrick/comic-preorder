@@ -40,6 +40,20 @@ File: `docs/sql/2026-10-11-f173-admin-move-reservations.sql` (STATUS `staging=PE
 - **Order record checkbox**, shown only when the old code nets above zero and the codes differ, **unticked by default**, worded as "tick only if you have confirmed in the portal that the order carried over". It asserts something about the distributor's side that only the admin can know, and a wrong "yes" leaves the store believing a copy is ordered that is not.
 - **On success** the page reloads its data, puts the admin back on the cycle they were viewing (when that month still has reservations), and toasts what moved. On failure the function's own sentence is shown and nothing was saved.
 
+### 2.3 UPC is a suggestion, not the key (Rick's question, 2026-10-11)
+
+Rick asked whether the UPC is a better identifier than Lunar's item code. **Measured read-only on production** (founding tenant, 9,641 catalog rows, script `upc-vs-code.js` in the session scratchpad, GET only):
+
+- **Coverage.** Lunar: 5,617 rows, every one has an item code; 4,122 (73.4%) have a UPC (3,991 are the 17-digit form with the 5-digit issue and cover add-on), the other 1,495 carry an ISBN instead, so every Lunar row has a UPC or an ISBN. PRH: 4,024 rows, UPC on 2,536 (63.0%), ISBN on the rest, 0 duplicates.
+- **Direction of the mapping.** No item code carries more than one UPC (code determines UPC), but the reverse fails: **12 Lunar UPCs sit under two codes.**
+- **Six of the 12 are recodes, in different catalog months:** Hyde Street #14 CVR A and CVR B, W0RLDTR33 #22 CVR A, B and C, Big Bundle of Dinosaurs.
+- **The other six are different products in the SAME month**: DC CONNECT #77, #78 and #79 (a PAID bundle at $6.25 and a FREE one at $0 under one UPC), two Batman art boxes (an 85-bundle pallet at $3,431.90 and a bundle of 5 at $42.50), and a resin statue listed under two prefixes. **Of the four shared-UPC pairs that hold reservations, three are these same-month distinct products and one is the Hyde Street recode.** A UPC-only key would merge a free bundle with a paid one.
+- **The weekly invoice already matches by UPC** (1,544 of 1,545 shipment rows carry one, 676 an item code), which is why shipment matching does not break on a recode; the order record and Lunar's own order form use the item code.
+
+**Built:** when the dialog opens it suggests listings from the same distributor with the same UPC (the ISBN when there is no UPC) in a **different** month, not withdrawn. Same-month matches are never suggested. It is a suggestion; the admin still picks and reads the dates. The rule fits all 12 measured cases (6 of 6 recodes found, 6 of 6 look-alikes excluded) but 12 is a small sample.
+
+**Not built, and a decision for Rick:** keying reservations on UPC so a recode needs no move at all. It would touch `preorders`, My List, This Week, auto-fulfil, the order record and both import scripts, and the first two measurements above show UPC alone cannot be the key. A smaller step in the same direction: have the weekly recheck notice "reserved listing whose UPC now appears under a new code in a later month" and report it (or, with a confirm, perform this same move). That is F173 fix direction (a), not built.
+
 ## 3. What this does NOT do
 
 - It does **not** edit the target's dates (decision 2).

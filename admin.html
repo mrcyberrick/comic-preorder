@@ -3787,6 +3787,7 @@
     mrSave.textContent = 'Move reservations';
     mrOverlay.style.display = 'flex';
     setTimeout(() => mrSearch.focus(), 50);
+    mrSuggest();
   }
 
   function closeMoveResModal() {
@@ -3824,7 +3825,13 @@
         `If the new code has not been imported yet, it cannot be chosen here.</div>`;
       return;
     }
-    mrResults.innerHTML = found.map(i => {
+    mrRenderPicks(found, '');
+  }
+
+  // Renders a clickable list of candidate listings: search results, or the
+  // UPC suggestion made when the dialog opens.
+  function mrRenderPicks(found, headingHtml) {
+    mrResults.innerHTML = headingHtml + found.map(i => {
       const reserved = allPreordersAllMonths.filter(p => p.catalog?.id === i.id).length;
       return `<button type="button" class="mr-pick" data-id="${escapeHtml(i.id)}"
         style="display:block;width:100%;text-align:left;background:var(--bg-elevated);
@@ -3839,6 +3846,44 @@
           i.withdrawn_at ? ' · WITHDRAWN' : ''}
         </div></button>`;
     }).join('');
+  }
+
+  // Suggest the likely replacement: another listing from the SAME distributor
+  // with the SAME UPC (or the ISBN, which a book carries instead) in a
+  // DIFFERENT catalog month. A distributor's recode keeps the UPC and moves the
+  // listing to a later month. Two codes sharing a UPC in the SAME month are
+  // different products (measured on production 2026-10-11: a PAID and a FREE
+  // bundle, an 85-bundle pallet and a bundle of 5), so those are never
+  // suggested. It is a suggestion only: the admin still picks the listing and
+  // reads its dates before anything moves.
+  async function mrSuggest() {
+    const src = mrSource && mrSource.catalog;
+    if (!src) return;
+    const col = (src.upc && String(src.upc).trim()) ? 'upc'
+      : ((src.isbn && String(src.isbn).trim()) ? 'isbn' : null);
+    if (!col) return;
+    const label = col.toUpperCase();
+    const seq = ++mrSearchSeq;
+    mrResults.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted)">Looking for a listing with the same ${label}\u2026</div>`;
+    const { data, error } = await db.from('catalog')
+      .select('*')
+      .eq('tenant_id', TenantContext.current().id)
+      .eq('distributor', src.distributor)
+      .eq(col, String(src[col]).trim())
+      .neq('id', src.id)
+      .neq('catalog_month', src.catalog_month)
+      .is('withdrawn_at', null)
+      .limit(10);
+    if (seq !== mrSearchSeq || !mrSource) return;   // a typed search or a close won
+    if (error || !data || !data.length) {
+      mrResults.innerHTML = error ? '' :
+        `<div style="font-size:0.8rem;color:var(--text-muted)">No listing in a different month shares this ${label}. Search by title or code below.</div>`;
+      return;
+    }
+    mrFound = new Map(data.map(i => [i.id, i]));
+    mrRenderPicks(data,
+      `<div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px">` +
+      `<strong>Same ${label}, different month</strong> \u2014 probably the new code:</div>`);
   }
 
   function mrSelect(id) {
