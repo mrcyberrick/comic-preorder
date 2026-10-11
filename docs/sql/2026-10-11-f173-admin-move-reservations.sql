@@ -9,7 +9,9 @@
 --         carried no project name. Independently confirmed the same day by an anonymous probe of
 --         production's REST endpoint: the function exists and anon is refused (42501, HTTP 401).
 --         NOT verified on production: the pre-check and grants verdicts, that the body there is the F173
---         body (only Rick's paste says so), and the admin path (no production account was used).
+--         body (only Rick's paste says so), and the admin path (none was used when this was written;
+--         it was run once on 2026-10-11, a move-and-back read back from the database: see
+--         docs/f173-move-reservations.md § 5).
 --         The admin.html control is NOT on production yet; the SQL went first, as F105 requires.
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
