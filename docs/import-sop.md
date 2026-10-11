@@ -425,7 +425,7 @@ platform operator's part is the weekly recheck, which corrects the new listing's
 reservation. D1 to D4 are fallbacks, and D4 is the only part that needs SQL. Recodes are rare (12 of 6,615
 distinct UPCs in the catalog appear under more than one code, measured 2026-10-11), so a manual routine is enough.
 
-> **Status (2026-10-11): D-MOVE is the normal route and ships with the F173 promotion.** It was exercised on
+> **Status (2026-10-11): D-MOVE is the normal route and has been live on production since 2026-10-11 (PR #173).** It was exercised on
 > staging only (an automated run, then a seeded demo that Rick walked through), **not on a real recode.** Watch
 > the first real use. D1 to D4 are kept for the one case D-MOVE cannot cover: the new code is not in the catalog
 > at all, so it cannot be chosen. An earlier version of this section presented a UI-only repair as the normal
@@ -483,9 +483,9 @@ code may sit in an older month or may not have been imported yet.
    record nets to 0 and nothing arrived.
 3. Still impersonating: **Catalog → the new listing → Reserve** the same quantity. (Or let the customer do it.)
 4. **Ordering → By Distributor → the NEW code's row → Mark Ordered** for the quantity Lunar holds. With several
-   customers, repeat 2 and 3 for each, then do step 4 **once** for the total. **Reach that row with the month
-   selector, not the search box:** Mark Ordered does nothing on a row found by the cross-month search (observed on
-   staging 2026-10-11: the dialog never opens).
+   customers, repeat 2 and 3 for each, then do step 4 **once** for the total. Mark Ordered also works on a row found by
+   the search box (F174, fixed 2026-10-11). Before that fix it did nothing on a row from another month, so if it ever
+   does nothing for you, reach the row with the month selector instead and tell the platform operator.
 
 The new reservation is dated **today**, so the customer's original reservation date is lost. Confirm in the Lunar
 portal that your order carried to the new code before you record it.
