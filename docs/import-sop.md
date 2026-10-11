@@ -428,6 +428,22 @@ in the catalog appear under more than one code, measured 2026-10-11), so a manua
 > first real use. An earlier version of this section presented a UI-only repair as the normal route; it is
 > not, because the customer Catalog page lists only the **current** catalog month (F173).
 
+### D-MOVE. The "Move reservations…" button (STAGING ONLY until F173 is promoted)
+Ordering → By Distributor has a small **Move reservations…** button under each listing that still has an open
+reservation. It moves those reservations to the new listing in one step, so for a recode D2 to D4 are no longer
+needed once it reaches production. **It is on staging only today. On production, use D2 to D4.**
+1. Find the OLD listing (search its title or code; the search reaches every catalog month) and click **Move
+   reservations…**.
+2. The dialog lists listings with the **same UPC in a different month** ("probably the new code"). Pick one, or
+   search by title, code or UPC. It only suggests; read the listing before you pick it.
+3. The move does **not** change dates. The weekly recheck corrects them once the listing holds a reservation (the
+   platform operator runs it; PRH catalogs older than about three months are not rechecked).
+4. Tick **"carry the order record"** only after you have confirmed in the Lunar portal that your order carried
+   over to the new code. Leave it unticked otherwise.
+5. Click **Move**. Fulfilled reservations stay on the old listing as history.
+It refuses, in words, when the customer already holds the new listing, when the new listing is withdrawn, or when
+the two listings are from different distributors. Nothing is saved when it refuses.
+
 ### D0. Is it really a recode?
 Most "missing" codes are not. An incentive variant (1:25, 1:50 …) just stops being offered after its ordering
 window and still ships under the **same** code (F165 § 1.3). Look the title up on **Lunar's retailer site**: the
@@ -452,7 +468,9 @@ code may sit in an older month or may not have been imported yet.
    record nets to 0 and nothing arrived.
 3. Still impersonating: **Catalog → the new listing → Reserve** the same quantity. (Or let the customer do it.)
 4. **Ordering → By Distributor → the NEW code's row → Mark Ordered** for the quantity Lunar holds. With several
-   customers, repeat 2 and 3 for each, then do step 4 **once** for the total.
+   customers, repeat 2 and 3 for each, then do step 4 **once** for the total. **Reach that row with the month
+   selector, not the search box:** Mark Ordered does nothing on a row found by the cross-month search (observed on
+   staging 2026-10-11: the dialog never opens).
 
 The new reservation is dated **today**, so the customer's original reservation date is lost. Confirm in the Lunar
 portal that your order carried to the new code before you record it.

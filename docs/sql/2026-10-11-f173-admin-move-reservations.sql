@@ -1,4 +1,10 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-10-11 | prod=PENDING
+--         STAGING: applied by Rick 2026-10-11. His pasted definition verdict read 'OK - 1 definition,
+--         SECURITY DEFINER, search_path pinned, F173 body present'. The pre-check and grants verdicts
+--         were NOT pasted; the grants were instead verified BEHAVIOURALLY by the harness
+--         playwright/f173-move-verify.mjs (anon refused with 42501, a signed-in non-admin refused, a
+--         signed-in admin allowed), 50/50 on 2026-10-11.
+--         PRODUCTION: not applied. It must run BEFORE the admin.html control reaches production (F105).
 -- (F105) This line is the applied-state record. A gate that lives only in
 -- prose gets missed -- F6 sat unapplied on production for 13 days because
 -- nothing machine-readable said so. Update it the moment you run this file.

@@ -1,6 +1,6 @@
 # F173 — Move reservations to another listing (admin control for a distributor product-code change)
 
-**STATUS:** IN PROGRESS — BUILT on a feature branch 2026-10-11; staging SQL `PENDING` (Rick runs it), staging code not yet deployed or tested; production not started. Findings: F173 (owner, `docs/technical-reference.md` § 13). No new finding ID consumed.
+**STATUS:** BUILT AND VERIFIED ON STAGING 2026-10-11 (staging SQL APPLIED, harness 50/50 on the deployed bytes; see § 5); NOT PROMOTED, production SQL `PENDING`. Findings: F173 (owner, `docs/technical-reference.md` § 13). No new finding ID consumed.
 
 Owner doc for the build of the manual control Rick asked for on 2026-10-11 ("A manual way to correct it would also be good since these are low volume issues", then "lets build it"). The problem, the measurements and the options considered are in § 13 F173; this file records what was built and the decisions taken at build time.
 
@@ -46,11 +46,11 @@ Rick asked whether the UPC is a better identifier than Lunar's item code. **Meas
 
 - **Coverage.** Lunar: 5,617 rows, every one has an item code; 4,122 (73.4%) have a UPC (3,991 are the 17-digit form with the 5-digit issue and cover add-on), the other 1,495 carry an ISBN instead, so every Lunar row has a UPC or an ISBN. PRH: 4,024 rows, UPC on 2,536 (63.0%), ISBN on the rest, 0 duplicates.
 - **Direction of the mapping.** No item code carries more than one UPC (code determines UPC), but the reverse fails: **12 Lunar UPCs sit under two codes.**
-- **Six of the 12 are recodes, in different catalog months:** Hyde Street #14 CVR A and CVR B, W0RLDTR33 #22 CVR A, B and C, Big Bundle of Dinosaurs.
+- **Six of the 12 are the same title under two codes in different catalog months, i.e. recode-shaped:** Hyde Street #14 CVR A and CVR B, W0RLDTR33 #22 CVR A, B and C, Big Bundle of Dinosaurs. **Only Hyde Street CVR A was confirmed as a genuine recode** (it is the one repaired by hand); the other five match on UPC, title and month pattern but were not checked on Lunar's site, so "recode" is the likely reading, not a verified one.
 - **The other six are different products in the SAME month**: DC CONNECT #77, #78 and #79 (a PAID bundle at $6.25 and a FREE one at $0 under one UPC), two Batman art boxes (an 85-bundle pallet at $3,431.90 and a bundle of 5 at $42.50), and a resin statue listed under two prefixes. **Of the four shared-UPC pairs that hold reservations, three are these same-month distinct products and one is the Hyde Street recode.** A UPC-only key would merge a free bundle with a paid one.
 - **The weekly invoice already matches by UPC** (1,544 of 1,545 shipment rows carry one, 676 an item code), which is why shipment matching does not break on a recode; the order record and Lunar's own order form use the item code.
 
-**Built:** when the dialog opens it suggests listings from the same distributor with the same UPC (the ISBN when there is no UPC) in a **different** month, not withdrawn. Same-month matches are never suggested. It is a suggestion; the admin still picks and reads the dates. The rule fits all 12 measured cases (6 of 6 recodes found, 6 of 6 look-alikes excluded) but 12 is a small sample.
+**Built:** when the dialog opens it suggests listings from the same distributor with the same UPC (the ISBN when there is no UPC) in a **different** month, not withdrawn. Same-month matches are never suggested. It is a suggestion; the admin still picks and reads the dates. The rule sorts all 12 measured cases the way the titles and prices suggest (6 recode-shaped pairs suggested, 6 different-product pairs excluded), but 12 is a small sample and only one of the six was confirmed as a recode.
 
 **Not built, and a decision for Rick:** keying reservations on UPC so a recode needs no move at all. It would touch `preorders`, My List, This Week, auto-fulfil, the order record and both import scripts, and the first two measurements above show UPC alone cannot be the key. A smaller step in the same direction: have the weekly recheck notice "reserved listing whose UPC now appears under a new code in a later month" and report it (or, with a confirm, perform this same move). That is F173 fix direction (a), not built.
 
@@ -73,7 +73,15 @@ Written as the plan; results go in § 5 when run.
 
 ## 5. Results
 
-*(Not run yet.)*
+**Harness `playwright/f173-move-verify.mjs` (local-only), 2026-10-11, against the deployed staging bytes and the applied staging function: 50 of 50 checks passed, teardown re-read 0 listings / 0 reservations / 0 ledger rows / 0 profiles / 0 auth users.** (An earlier run died before any check on a harness fault, PostgREST's "All object keys must match" on a bulk insert; fixed in the harness, no product change.)
+
+- **Function, as real signed-in users:** R1 anon refused (401, permission denied), R2 a non-admin refused (403, "Only a signed-in admin"), R3 same listing, R4a/R4b another tenant's listing as target and as source ("not found in this store"), R5 different distributor, R6 withdrawn target, R7 a customer already on the target (whole move refused), R8 every refusal left the data identical.
+- **Effects:** H0 to H9 (two reservations moved, the fulfilled one stayed, `not_arrived` and the admin-clear flag cleared, an audit line appended to `notes`, quantities unchanged, the order record untouched without the box, a second call finds nothing open); O1 to O6 (the order carry-over capped at the quantity moved: net 3, moved 2, so -2 and +2; the same code in two months leaves the record alone; an old code netting to zero carries nothing).
+- **Dialog, in a real browser:** the button appears on a listing found by a cross-month search and not on one with only a fulfilled reservation; the dialog names the customer and quantity; the UPC suggestion appears before anything is typed and a same-UPC listing in the same month is not suggested; a too-short search, a conflicting customer and a withdrawn target are each blocked in words with Move disabled; the order-record box is offered and unticked; a successful Move updates the database, the order record and the table and shows a toast; a server refusal is shown in words with the dialog still usable; no uncaught page errors.
+- **How "negative control" is meant here, stated plainly:** each effect assertion is evaluated on a snapshot taken BEFORE the call (it must be false) and on one taken AFTER (it must be true), and the harness reports a check as vacuous if it was already true before. **No deliberate break of the function or the page was made**, so these are before/after flips, not red runs against broken code.
+- **Observed, not part of this work:** clicking **Mark Ordered** on a row found by the cross-month search does not open the dialog (`openMarkOrderedModal` looks only in the selected cycle). Pre-existing; the SOP now says to reach the row through the month selector.
+- **Not verified:** the full Playwright suite on these bytes (see below), WebKit or a real phone, the dialog on a phone layout, a PRH listing end to end, the ISBN suggestion path, two admins moving at once, the function on production, and a real recode by a real store admin.
+
 
 ## 6. Sequencing and promotion
 
