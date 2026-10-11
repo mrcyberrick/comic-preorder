@@ -420,29 +420,16 @@ a dead date (and can drop out of the customer's My List), the admin panels read 
 arrived", and the weekly import closes it once its stale on-sale date is 14 days past; the customer then sees
 it under "No longer coming" for 180 days.
 
-**Who does what.** D0 to D3 are for a **store admin using only the screens** (no scripts, no SQL). D4 is for
-the **platform operator** and is the only part that needs SQL. Recodes are rare (12 of 6,615 distinct UPCs
-in the catalog appear under more than one code, measured 2026-10-11), so a manual routine is enough.
+**Who does what.** D0 and D-MOVE are for a **store admin using only the screens** (no scripts, no SQL). The
+platform operator's part is the weekly recheck, which corrects the new listing's dates once it holds a
+reservation. D1 to D4 are fallbacks, and D4 is the only part that needs SQL. Recodes are rare (12 of 6,615
+distinct UPCs in the catalog appear under more than one code, measured 2026-10-11), so a manual routine is enough.
 
-> **Status: written from what the screens and code do (2026-10-11); NOT rehearsed end to end.** Watch the
-> first real use. An earlier version of this section presented a UI-only repair as the normal route; it is
-> not, because the customer Catalog page lists only the **current** catalog month (F173).
-
-### D-MOVE. The "Move reservations…" button (STAGING ONLY until F173 is promoted)
-Ordering → By Distributor has a small **Move reservations…** button under each listing that still has an open
-reservation. It moves those reservations to the new listing in one step, so for a recode D2 to D4 are no longer
-needed once it reaches production. **It is on staging only today. On production, use D2 to D4.**
-1. Find the OLD listing (search its title or code; the search reaches every catalog month) and click **Move
-   reservations…**.
-2. The dialog lists listings with the **same UPC in a different month** ("probably the new code"). Pick one, or
-   search by title, code or UPC. It only suggests; read the listing before you pick it.
-3. The move does **not** change dates. The weekly recheck corrects them once the listing holds a reservation (the
-   platform operator runs it; PRH catalogs older than about three months are not rechecked).
-4. Tick **"carry the order record"** only after you have confirmed in the Lunar portal that your order carried
-   over to the new code. Leave it unticked otherwise.
-5. Click **Move**. Fulfilled reservations stay on the old listing as history.
-It refuses, in words, when the customer already holds the new listing, when the new listing is withdrawn, or when
-the two listings are from different distributors. Nothing is saved when it refuses.
+> **Status (2026-10-11): D-MOVE is the normal route and ships with the F173 promotion.** It was exercised on
+> staging only (an automated run, then a seeded demo that Rick walked through), **not on a real recode.** Watch
+> the first real use. D1 to D4 are kept for the one case D-MOVE cannot cover: the new code is not in the catalog
+> at all, so it cannot be chosen. An earlier version of this section presented a UI-only repair as the normal
+> route; it was not, because the customer Catalog page lists only the **current** catalog month (F173).
 
 ### D0. Is it really a recode?
 Most "missing" codes are not. An incentive variant (1:25, 1:50 …) just stops being offered after its ordering
@@ -455,7 +442,35 @@ a different `Code` is a recode.)*
 Select-String -Path "..\recheck\Lunar Available Products*.csv" -Pattern "70985304127601411"
 ```
 
-### D1. Can customers still reserve the new code?
+### D-MOVE. Move the reservations (use this first)
+Ordering → By Distributor has a small **Move reservations…** button under each listing that still has an open
+reservation. It moves those reservations to the new listing in one step, in any catalog month. **For a recode,
+use it; D1 to D4 below are fallbacks.**
+1. Find the OLD listing (search its title or code; the search reaches every catalog month) and click **Move
+   reservations…**.
+2. The dialog lists listings with the **same UPC in a different month** ("probably the new code"). Pick one, or
+   search by title, code or UPC. It only suggests: read the listing it shows (title, code, month, dates) before
+   you pick it. Two listings with the same UPC in the **same** month are different products (a paid and a free
+   bundle, a pallet and a bundle of five) and are never suggested.
+3. The move does **not** change dates. The weekly recheck corrects them once the listing holds a reservation (the
+   platform operator runs it; PRH catalogs older than about three months are not rechecked).
+4. Tick **"carry the order record"** only after you have confirmed in the Lunar portal that your order carried
+   over to the new code. Leave it unticked otherwise. It adds a −N under the old code and a +N under the new
+   one; the record is append-only, so a mistake is fixed with another adjustment, never an edit.
+5. Click **Move**. Fulfilled reservations stay on the old listing as history.
+6. Check: search the new code in By Distributor. The customer should be listed on it, with "Ordered (n)" if you
+   ticked the box.
+
+It refuses, in words, when the customer already holds the new listing, when the new listing is withdrawn, or when
+the two listings are from different distributors. Nothing is saved when it refuses. **To undo a move, open the
+same dialog on the new listing and move the reservation back** (tick the order-record box again if you ticked it
+the first time).
+**If the dialog finds no listing for the new code**, the code is not in any imported catalog month yet, or you
+are searching the wrong distributor. Try the title; if it is still absent, you cannot move yet: use D3 for now
+and tell the platform operator both codes so the new one can be imported, then come back to D-MOVE.
+
+### D1. Fallback: can customers still reserve the new code?
+*Use D1 to D4 only if D-MOVE cannot find the new listing.*
 Search for the new title on the **Catalog** page. The page lists only the **current catalog month**, and the new
 code may sit in an older month or may not have been imported yet.
 - It **appears**, with a future FOC date: use **Pattern 1** (D2).
@@ -479,8 +494,8 @@ portal that your order carried to the new code before you record it.
 This is the usual case so far: both recodes seen landed in an older catalog month. The app cannot move the
 reservation, so close the old one honestly and handle the copy yourself.
 1. **Write it down outside the app:** the title, the old code, the new code, and the customers' names. The app
-   has nowhere to record "the new code is X" (the database has a `notes` column on reservations but no screen
-   writes it; F173).
+   has nowhere to record "the new code is X" (the move in D-MOVE writes a note on the reservation it moves; no
+   other screen records it).
 2. **Ordering → Order Follow-Up → Never Arrived → the old code → Didn't arrive.** The customer then sees
    "Store is handling this" and does not need to call. *(This button is offered on the Never Arrived panel, so
    the old listing must appear there: its on-sale date must have passed with nothing received. If it is not
@@ -489,19 +504,21 @@ reservation, so close the old one honestly and handle the copy yourself.
    record netted to 0: the customer then sees that wording and may remove the card.
 3. **Place or confirm the order under the new code with Lunar and hold the copy for the customer**, and tell the
    customer yourself. The app cannot track the new code until it appears in a catalog month the app can show.
-4. **Tell the platform operator both codes**, so the new code can be brought into the app and, if you want the
-   reservation carried across rather than closed, repaired (D4).
+4. **Tell the platform operator both codes**, so the new code can be brought into the app. Once it is in the
+   catalog, D-MOVE can carry the reservation across instead of leaving it closed.
 
-What this does **not** do: it does not transfer the reservation. The old one is closed by the weekly import and
-sits under "No longer coming"; the order record still shows the old code as ordered.
+What this does **not** do: it does not transfer the reservation (D-MOVE does, once the new listing is in the
+catalog). The old one is closed by the weekly import and sits under "No longer coming"; the order record still
+shows the old code as ordered.
 
-### D4. Operator only: carry the reservation across (SQL)
-Needed when the customer should keep the **same reservation** on the new code and the new listing is not
-reservable in the app (an older catalog month, stale dates, or both), as with Hyde Street #14: its replacement
+### D4. Operator only, fallback: carry the reservation across (SQL)
+**Since D-MOVE exists this is a fallback**, for a case the dialog cannot handle. Needed when the customer should
+keep the **same reservation** on the new code and D-MOVE cannot be used, as with Hyde Street #14 (repaired this
+way on 2026-10-11, before D-MOVE existed): its replacement
 sat in the `2026-07` month and Lunar had re-dated the issue (our row said FOC 10/5 and on-sale 10/28; Lunar:
-FOC 11/23, in-store 12/23). **No screen moves a reservation or edits a listing's dates**, and the Friday
-recheck only corrects a listing that already holds a reservation or sits in the current month. Until a manual
-control exists (F173), this takes one guarded SQL transaction in the Supabase SQL Editor: correct the new
+FOC 11/23, in-store 12/23). D-MOVE now moves the reservation and the order record, and the Friday
+recheck corrects a listing's dates once it holds a reservation or sits in the current month. The SQL route takes
+one guarded SQL transaction in the Supabase SQL Editor: correct the new
 listing's dates, repoint the reservation, and add a −1 and a +1 adjustment to the order record, all inside a
 single `DO` block that rolls back if any guard does not match exactly one row (the F122 repair method,
 `docs/technical-reference.md` § 13 F122, "Repair applied 2026-08-10"). Do not edit or delete order-record
