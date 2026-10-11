@@ -350,9 +350,30 @@ Read these in order. Only the first three groups are written by the apply prompt
 | `N reserved title(s) in the current month … changed date`, `N title(s) changed FOC date only` | Ordinary revisions | Applied by the prompt below |
 | `N UNRESERVED title(s) … changed date` | Only appears with `--include-unreserved` | Applied by the prompt below |
 | `🚨 N FULFILLED reservation(s) with no arrival judgement …` (F158) | Closed within the last 14 days, so customers already see "Order placed", with nothing showing it arrived. Nothing else catches these | **Report only.** Each needs a human decision |
+| `⛔ N reserved title(s) the distributor shows as CANCELLED / no longer sold` | Lunar still lists the title but with a **placeholder** in-store date before 2000 (usually 1/1/1901, FOC 1/1/1900; the title often ends "Cancelled"). The script never writes that as a date | **Report only.** See below |
 | `N reserved code(s) absent from this week's exports`, then `>> N … PAST on-sale with NO shipment evidence` | "Catalog not pulled" is no signal. The `>>` list is the F155 shape: nothing can correct it automatically | **Report only.** Look the listed titles up by hand |
 | `🔎 WITHDRAWAL CANDIDATES (F165 S2, report only)` | Titles absent from their **own** source on two runs, on different dates | **Report only.** See below |
 | `📥 NEXT RUN`, `🧊 FROZEN CATALOG(S)` | Which PRH catalogs to pull next time; catalogs whose file stopped changing | Ignore any month on the frozen list |
+
+**Cancelled titles (Lunar's 1/1/1901 date).** Lunar sometimes keeps a title it no longer sells in
+its export and sets the in-store date to a placeholder: 1/1/1901 mostly, but also 2/1/1901,
+12/31/1900 and others (469 such rows in the 2026-10-09 export). Until scripts commit `8e2dae9`
+(2026-10-11) `check-dates.js` read these as real dates, so a reserved title would have been
+"corrected" to 1901-01-01, dropped off My List and been auto-fulfilled at the next import. It now
+ignores any in-store date before 2000 and lists the reserved ones in the `⛔` section, with our
+in-store date, the copies ordered (`ledger net`) and Lunar's note. Confirm each one on Lunar's
+site, then:
+
+| Where the title stands | What to do |
+|---|---|
+| Our in-store date has passed | Order Follow-Up → **Didn't arrive** (the customer sees "No longer coming" / "Store is handling this") |
+| Ordered (`ledger net` above 0), in-store date not yet passed | **Rejected by supplier** (the customer sees Rejected and can remove it) |
+| Never ordered (`no order recorded`) | Cancel the reservation for the customer through impersonation |
+
+There is no "Withdrawn" mark to set; that is F165 S3 and is not built. A title Lunar drops from
+the export altogether, rather than re-dating it, shows up under withdrawal candidates instead. That
+is how BUFFY THE VAMPIRE SLAYER #2 CVR A (shown as Cancelled, 1/1/1901 on Lunar's site, 2026-10-11)
+appeared, and it was already marked Didn't arrive.
 
 **Withdrawal candidates.** Nothing marks a title withdrawn any more (F165 S1), and this section
 writes nothing. Absence is evidence, not proof: a withdrawn title and one whose allocation merely
