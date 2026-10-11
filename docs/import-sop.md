@@ -11,9 +11,10 @@ narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canoni
 
 ---
 
-## The three runs
+## The three runs (and one procedure for when a product code changes)
 
-There is no single "import." There are three separate operator runs on different clocks.
+There is no single "import." There are three separate operator runs on different clocks, plus
+**Run D**, a procedure you start when the distributor changes a product code.
 **None of them is scheduled — every one is started by a human.**
 
 | # | Run | When | Script | Manual steps |
@@ -21,6 +22,7 @@ There is no single "import." There are three separate operator runs on different
 | A | Monthly catalog refresh | Once a month, when both new CSVs land | `import.js` | **9** |
 | B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (22:00 UTC)** | `import.js` | **5** (7 if ad-hoc) |
 | C | Weekly date re-check | Fri or Sat | `check-dates.js` | **3** |
+| D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | admin UI | **4 per customer** |
 
 **Everything runs from one folder:**
 
@@ -384,6 +386,70 @@ carries revisions for that month any more.
 > from *"the operator re-supplied the same file"*. Re-run a stale file a few weeks running and
 > it will declare a **live** catalog frozen. **Judge by catalog age instead: roughly three
 > months past the catalog date.**
+
+---
+
+## RUN D — A product code changed (Lunar recode)
+
+Sometimes Lunar replaces a title's product code and keeps the comic: **Hyde Street #14 CVR A** went
+from `0526IM0377` to `0726IM0466` (2026-10). Our reservation and your order record stay on the old code,
+which then disappears from Lunar's export, so nothing ever matches again: the customer's date is wrong
+(and can vanish from My List), the admin panels read the title as "released, nothing arrived", and the
+next import would mark it fulfilled.
+
+> **Status of this procedure: the UI path below is built from controls that already exist and from what
+> the code does, but it has NOT been rehearsed end to end.** Watch the first real use, or try it first on
+> staging with a test customer. Recodes are rare: of 6,615 distinct UPCs in the catalog, 12 appear under
+> more than one code (all Lunar), and Hyde Street #14 CVR A is the one confirmed recode that held a live
+> reservation (measured 2026-10-11; two same-month DC Connect pairs also showed reservations and look
+> like different products sharing a UPC, but were not examined).
+
+### D0. Is it really a recode? (do not skip: most absent codes are not)
+An incentive variant (1:25, 1:50 …) simply drops out of Lunar's export once its ordering window
+closes, and it still ships under the **same** code (F165 § 1.3). Look the title up by **UPC** (shown on
+its catalog row) in the latest export, from the scripts folder:
+```powershell
+Select-String -Path "..\recheck\Lunar Available Products*.csv" -Pattern "70985304127601411"
+```
+(That is Hyde Street's UPC; use the title's own.) The **same UPC under a different `Code`** is a recode;
+**no match at all** is a dropout, and this procedure does not apply.
+
+### D1. Three checks before touching anything
+1. **Find the new listing in the admin catalog** (search the title). Its **FOC must be in the future and
+   its dates must match Lunar's.** If the FOC looks passed or the dates are stale, **stop and go to "When
+   the new listing is not reservable" below**: the Reserve button locks on a passed FOC, and as far as the
+   code shows there is no admin exception.
+2. **Confirm in the Lunar portal that your order moved to the new code**, and its quantity.
+3. Note, on **Ordering → By Distributor**, how many customers hold the old code and how many copies.
+
+### D2. The UI path (steps 1 to 3 together, per customer)
+1. **Ordering → By Distributor → the OLD code's row → Rejected by supplier** and confirm. This nets the
+   old code to 0 in the order record. The customer's card reads "Rejected by supplier" until step 2 removes it.
+2. **Customers → impersonate the customer → My List → Remove** the old card. It is allowed now, because the
+   record nets to 0 and nothing arrived.
+3. Still impersonating: **Catalog → the new listing → Reserve** the same quantity.
+4. **Ordering → By Distributor → the NEW code's row → Mark Ordered** for the quantity Lunar holds. With
+   several customers, repeat 2 and 3 for each, then do step 4 **once** for the total.
+
+What it costs: the new reservation is dated **today**, so the customer's original reservation date is lost;
+a cancel and a reserve are logged as usage events. It writes only through the app's own controls, so every
+existing guard applies.
+
+### D3. Check it worked
+- By Distributor: the old code has no reservations; the new code reads "Ordered".
+- The customer's My List shows the title under **Upcoming Arrivals** with the **new** date.
+- The next Friday recheck lists nothing for this title.
+
+### When the new listing is not reservable
+This is what happened with Hyde Street #14: Lunar re-dated the whole issue a second time, so our row for the
+new code still said FOC 10/5 and on-sale 10/28 (Lunar: FOC 11/23, in-store 12/23). **No screen edits a
+listing's dates**, and the Friday recheck only corrects a listing that already holds a reservation or sits in
+the current month, so the new row stays locked and hidden. Until that gap is closed, this case needs one
+guarded SQL transaction, run in the Supabase SQL Editor: correct the new listing's dates, repoint the
+reservation, and add a −1 and a +1 adjustment to the order record, all inside a single `DO` block that
+rolls back if any guard does not match exactly one row (the F122 repair method, `docs/technical-reference.md`
+§ 13 F122, "Repair applied 2026-08-10"). Do not edit or delete order-record rows; they are append-only. The
+2026-10-11 version is the template; ask for it to be drafted for the new ids rather than adapting it by hand.
 
 ---
 
