@@ -71,10 +71,10 @@
 -- technical-reference.md § 4 is older than some columns (arrival_outcome,
 -- unavailable_dismissed_at were added later). Confirm every column this
 -- function names actually exists before creating anything.
--- EXPECTED: verdict = 'OK - all 26 columns present'
+-- EXPECTED: verdict = 'OK - all 29 columns present'
 SELECT
-  CASE WHEN count(*) = 26 THEN 'OK - all 26 columns present'
-       ELSE 'PROBLEM - expected 26 columns, found ' || count(*)
+  CASE WHEN count(*) = 29 THEN 'OK - all 29 columns present'
+       ELSE 'PROBLEM - expected 29 columns, found ' || count(*)
             || '. The schema moved: STOP, do not create the function, re-audit § 4 against live.'
   END AS verdict,
   count(*) AS columns_found
