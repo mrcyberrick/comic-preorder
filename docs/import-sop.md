@@ -11,9 +11,10 @@ narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canoni
 
 ---
 
-## The three runs
+## The three runs (and one procedure for when a product code changes)
 
-There is no single "import." There are three separate operator runs on different clocks.
+There is no single "import." There are three separate operator runs on different clocks, plus
+**Run D**, a procedure you start when the distributor changes a product code.
 **None of them is scheduled — every one is started by a human.**
 
 | # | Run | When | Script | Manual steps |
@@ -21,6 +22,7 @@ There is no single "import." There are three separate operator runs on different
 | A | Monthly catalog refresh | Once a month, when both new CSVs land | `import.js` | **9** |
 | B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (22:00 UTC)** | `import.js` | **5** (7 if ad-hoc) |
 | C | Weekly date re-check | Fri or Sat | `check-dates.js` | **3** |
+| D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | store admin: screens only (D0 to D3); operator: one SQL block to carry the reservation across (D4) | **4 per customer** (UI) |
 
 **Everything runs from one folder:**
 
@@ -145,6 +147,12 @@ being rejected — usually a changed export format. A normalised count of **zero
   nothing; if that customer already holds the newest row (a unique pair), delete the redundant older
   reservation only **after** the `UPDATE`. The report prints on shipment weeks too (a same-month
   refresh), so read it there as well.
+  **Often Run C fixes it with no repoint (seen 2026-10-09).** When the newer month's PRH file is in
+  `..\recheck\`, the weekly recheck lists the title under `STRANDED` and its apply prompt corrects
+  the **old row's date** to the newest listing's. The three Magic: The Gathering Liliana #2 covers
+  that the 2026-10-09 import reported as pinned were fixed that way (42 of 42 corrections confirmed by a fresh read afterwards): their reservations stay on the old
+  row but now show the right date. It works when the date is the only problem, and it depends on the
+  newest month's file being read last (files are read in name order), so do not rename them.
 - `N unreserved title(s) changed in-store date` — date revisions found.
 - `N title(s) are about to be marked fulfilled with nothing showing they arrived` — books the
   customer is about to be told "Order placed" for. Non-blocking by design. Note them; they land
@@ -270,6 +278,14 @@ files that already loaded is safe. A file that yields no rows is called out by n
   `weekly-pull-feed` only**, put it in `.env` in place of the old value, then run the command above.
   Do this before **Tuesday 22:00 UTC**; the live feed's `pull-feed-generated` stamp is what the
   newsletter's stale guard reads. Write down the expiry date you choose so the next lapse is not a surprise.
+- If the publish fails with `HTTP 403 ... Resource not accessible by personal access token`, the token
+  is alive but **cannot write**: its **Contents** permission is Read-only. A read-only token passes
+  every read check (a repo read, the same `git/ref` call as the publish's first step), so a green
+  check of the token does **not** prove it can publish; only the publish does. Nothing is written when
+  this happens (the failure comes before any commit). Edit the token (Settings → Developer settings →
+  Fine-grained tokens → the token → Edit → Contents: **Read and write** → Update), which keeps the
+  same value, then re-run `node .\build-pull-feed.js --publish`. After a publish, confirm it was **one**
+  new commit on `weekly-pull-feed` and that the live `pull-feed-generated` stamp moved.
 
 ### 5. Restore `.env` (ad-hoc only)
 Uncomment `GITHUB_TOKEN_PULL_FEED`. Do it now, not later — the next weekly run needs it.
@@ -334,9 +350,30 @@ Read these in order. Only the first three groups are written by the apply prompt
 | `N reserved title(s) in the current month … changed date`, `N title(s) changed FOC date only` | Ordinary revisions | Applied by the prompt below |
 | `N UNRESERVED title(s) … changed date` | Only appears with `--include-unreserved` | Applied by the prompt below |
 | `🚨 N FULFILLED reservation(s) with no arrival judgement …` (F158) | Closed within the last 14 days, so customers already see "Order placed", with nothing showing it arrived. Nothing else catches these | **Report only.** Each needs a human decision |
+| `⛔ N reserved title(s) the distributor shows as CANCELLED / no longer sold` | Lunar still lists the title but with a **placeholder** in-store date before 2000 (usually 1/1/1901, FOC 1/1/1900; the title often ends "Cancelled"). The script never writes that as a date | **Report only.** See below |
 | `N reserved code(s) absent from this week's exports`, then `>> N … PAST on-sale with NO shipment evidence` | "Catalog not pulled" is no signal. The `>>` list is the F155 shape: nothing can correct it automatically | **Report only.** Look the listed titles up by hand |
 | `🔎 WITHDRAWAL CANDIDATES (F165 S2, report only)` | Titles absent from their **own** source on two runs, on different dates | **Report only.** See below |
 | `📥 NEXT RUN`, `🧊 FROZEN CATALOG(S)` | Which PRH catalogs to pull next time; catalogs whose file stopped changing | Ignore any month on the frozen list |
+
+**Cancelled titles (Lunar's 1/1/1901 date).** Lunar sometimes keeps a title it no longer sells in
+its export and sets the in-store date to a placeholder: 1/1/1901 mostly, but also 2/1/1901,
+12/31/1900 and others (469 such rows in the 2026-10-09 export). Until scripts commit `8e2dae9`
+(2026-10-11) `check-dates.js` read these as real dates, so a reserved title would have been
+"corrected" to 1901-01-01, dropped off My List and been auto-fulfilled at the next import. It now
+ignores any in-store date before 2000 and lists the reserved ones in the `⛔` section, with our
+in-store date, the copies ordered (`ledger net`) and Lunar's note. Confirm each one on Lunar's
+site, then:
+
+| Where the title stands | What to do |
+|---|---|
+| Our in-store date has passed | Order Follow-Up → **Didn't arrive** (the customer sees "No longer coming" / "Store is handling this") |
+| Ordered (`ledger net` above 0), in-store date not yet passed | **Rejected by supplier** (the customer sees Rejected and can remove it) |
+| Never ordered (`no order recorded`) | Cancel the reservation for the customer through impersonation |
+
+There is no "Withdrawn" mark to set; that is F165 S3 and is not built. A title Lunar drops from
+the export altogether, rather than re-dating it, shows up under withdrawal candidates instead. That
+is how BUFFY THE VAMPIRE SLAYER #2 CVR A (shown as Cancelled, 1/1/1901 on Lunar's site, 2026-10-11)
+appeared, and it was already marked Didn't arrive.
 
 **Withdrawal candidates.** Nothing marks a title withdrawn any more (F165 S1), and this section
 writes nothing. Absence is evidence, not proof: a withdrawn title and one whose allocation merely
@@ -370,6 +407,125 @@ carries revisions for that month any more.
 > from *"the operator re-supplied the same file"*. Re-run a stale file a few weeks running and
 > it will declare a **live** catalog frozen. **Judge by catalog age instead: roughly three
 > months past the catalog date.**
+
+---
+
+## RUN D — A product code changed (Lunar recode)
+
+Sometimes Lunar replaces a title's product code and keeps the comic: **Hyde Street #14 CVR A** went from
+`0526IM0377` to `0726IM0466` (2026-10). **Nothing in the app links the two codes.** The weekly recheck
+compares each code on its own, so the old code simply goes missing from Lunar's export and nothing ever
+corrects itself: the reservation does **not** transfer to the new code. Left alone, the old reservation keeps
+a dead date (and can drop out of the customer's My List), the admin panels read it as "released, nothing
+arrived", and the weekly import closes it once its stale on-sale date is 14 days past; the customer then sees
+it under "No longer coming" for 180 days.
+
+**Who does what.** D0 and D-MOVE are for a **store admin using only the screens** (no scripts, no SQL). The
+platform operator's part is the weekly recheck, which corrects the new listing's dates once it holds a
+reservation. D1 to D4 are fallbacks, and D4 is the only part that needs SQL. Recodes are rare (12 of 6,615
+distinct UPCs in the catalog appear under more than one code, measured 2026-10-11), so a manual routine is enough.
+
+> **Status (2026-10-11): D-MOVE is the normal route and ships with the F173 promotion.** It was exercised on
+> staging only (an automated run, then a seeded demo that Rick walked through), **not on a real recode.** Watch
+> the first real use. D1 to D4 are kept for the one case D-MOVE cannot cover: the new code is not in the catalog
+> at all, so it cannot be chosen. An earlier version of this section presented a UI-only repair as the normal
+> route; it was not, because the customer Catalog page lists only the **current** catalog month (F173).
+
+### D0. Is it really a recode?
+Most "missing" codes are not. An incentive variant (1:25, 1:50 …) just stops being offered after its ordering
+window and still ships under the **same** code (F165 § 1.3). Look the title up on **Lunar's retailer site**: the
+**same comic listed under a different product code** is a recode; a title that is simply no longer offered is
+not, and this section does not apply.
+*(Operator shortcut, from the scripts folder: search Lunar's latest export by the title's UPC; the same UPC under
+a different `Code` is a recode.)*
+```powershell
+Select-String -Path "..\recheck\Lunar Available Products*.csv" -Pattern "70985304127601411"
+```
+
+### D-MOVE. Move the reservations (use this first)
+Ordering → By Distributor has a small **Move reservations…** button under each listing that still has an open
+reservation. It moves those reservations to the new listing in one step, in any catalog month. **For a recode,
+use it; D1 to D4 below are fallbacks.**
+1. Find the OLD listing (search its title or code; the search reaches every catalog month) and click **Move
+   reservations…**.
+2. The dialog lists listings with the **same UPC in a different month** ("probably the new code"). Pick one, or
+   search by title, code or UPC. It only suggests: read the listing it shows (title, code, month, dates) before
+   you pick it. Two listings with the same UPC in the **same** month are different products (a paid and a free
+   bundle, a pallet and a bundle of five) and are never suggested.
+3. The move does **not** change dates. The weekly recheck corrects them once the listing holds a reservation (the
+   platform operator runs it; PRH catalogs older than about three months are not rechecked).
+4. Tick **"carry the order record"** only after you have confirmed in the Lunar portal that your order carried
+   over to the new code. Leave it unticked otherwise. It adds a −N under the old code and a +N under the new
+   one; the record is append-only, so a mistake is fixed with another adjustment, never an edit.
+5. Click **Move**. Fulfilled reservations stay on the old listing as history.
+6. Check: search the new code in By Distributor. The customer should be listed on it, with "Ordered (n)" if you
+   ticked the box.
+
+It refuses, in words, when the customer already holds the new listing, when the new listing is withdrawn, or when
+the two listings are from different distributors. Nothing is saved when it refuses. **To undo a move, open the
+same dialog on the new listing and move the reservation back** (tick the order-record box again if you ticked it
+the first time).
+**If the dialog finds no listing for the new code**, the code is not in any imported catalog month yet, or you
+are searching the wrong distributor. Try the title; if it is still absent, you cannot move yet: use D3 for now
+and tell the platform operator both codes so the new one can be imported, then come back to D-MOVE.
+
+### D1. Fallback: can customers still reserve the new code?
+*Use D1 to D4 only if D-MOVE cannot find the new listing.*
+Search for the new title on the **Catalog** page. The page lists only the **current catalog month**, and the new
+code may sit in an older month or may not have been imported yet.
+- It **appears**, with a future FOC date: use **Pattern 1** (D2).
+- It does **not** appear, or its Reserve button is locked: use **Pattern 2** (D3).
+
+### D2. Pattern 1: the customer can re-reserve the new code (a "second opportunity")
+1. **Ordering → By Distributor → the OLD code's row → Rejected by supplier** and confirm. This nets the old
+   code to 0 in the order record. The customer's card reads "Rejected by supplier" until step 2 removes it.
+2. **Customers → impersonate the customer → My List → Remove** the old card. This is allowed now, because the
+   record nets to 0 and nothing arrived.
+3. Still impersonating: **Catalog → the new listing → Reserve** the same quantity. (Or let the customer do it.)
+4. **Ordering → By Distributor → the NEW code's row → Mark Ordered** for the quantity Lunar holds. With several
+   customers, repeat 2 and 3 for each, then do step 4 **once** for the total. **Reach that row with the month
+   selector, not the search box:** Mark Ordered does nothing on a row found by the cross-month search (observed on
+   staging 2026-10-11: the dialog never opens).
+
+The new reservation is dated **today**, so the customer's original reservation date is lost. Confirm in the Lunar
+portal that your order carried to the new code before you record it.
+
+### D3. Pattern 2: the new code cannot be reserved in the app (older month, or not imported)
+This is the usual case so far: both recodes seen landed in an older catalog month. The app cannot move the
+reservation, so close the old one honestly and handle the copy yourself.
+1. **Write it down outside the app:** the title, the old code, the new code, and the customers' names. The app
+   has nowhere to record "the new code is X" (the move in D-MOVE writes a note on the reservation it moves; no
+   other screen records it).
+2. **Ordering → Order Follow-Up → Never Arrived → the old code → Didn't arrive.** The customer then sees
+   "Store is handling this" and does not need to call. *(This button is offered on the Never Arrived panel, so
+   the old listing must appear there: its on-sale date must have passed with nothing received. If it is not
+   listed yet, use **Rejected by supplier** on By Distributor, or wait until it appears.)*
+   Use **Rejected by supplier** instead when Lunar cancelled the old order outright and you want the order
+   record netted to 0: the customer then sees that wording and may remove the card.
+3. **Place or confirm the order under the new code with Lunar and hold the copy for the customer**, and tell the
+   customer yourself. The app cannot track the new code until it appears in a catalog month the app can show.
+4. **Tell the platform operator both codes**, so the new code can be brought into the app. Once it is in the
+   catalog, D-MOVE can carry the reservation across instead of leaving it closed.
+
+What this does **not** do: it does not transfer the reservation (D-MOVE does, once the new listing is in the
+catalog). The old one is closed by the weekly import and sits under "No longer coming"; the order record still
+shows the old code as ordered.
+
+### D4. Operator only, fallback: carry the reservation across (SQL)
+**Since D-MOVE exists this is a fallback**, for a case the dialog cannot handle. Needed when the customer should
+keep the **same reservation** on the new code and D-MOVE cannot be used, as with Hyde Street #14 (repaired this
+way on 2026-10-11, before D-MOVE existed): its replacement
+sat in the `2026-07` month and Lunar had re-dated the issue (our row said FOC 10/5 and on-sale 10/28; Lunar:
+FOC 11/23, in-store 12/23). D-MOVE now moves the reservation and the order record, and the Friday
+recheck corrects a listing's dates once it holds a reservation or sits in the current month. The SQL route takes
+one guarded SQL transaction in the Supabase SQL Editor: correct the new
+listing's dates, repoint the reservation, and add a −1 and a +1 adjustment to the order record, all inside a
+single `DO` block that rolls back if any guard does not match exactly one row (the F122 repair method,
+`docs/technical-reference.md` § 13 F122, "Repair applied 2026-08-10"). Do not edit or delete order-record
+rows; they are append-only. The 2026-10-11 version is the template; have it drafted for the new ids rather than
+adapting it by hand. Afterwards: By Distributor shows the old code with no reservations and the new code
+"Ordered", the customer's My List shows the **new** date under Upcoming Arrivals, and the next Friday recheck
+lists nothing for the title.
 
 ---
 

@@ -301,7 +301,7 @@ S2.**~~
 V5.** The first real (production) run is Rick's next weekly `check-dates.js`: it records first sightings and can
 raise nothing. The second weekly run is the first that can list a candidate. V5 (each candidate checked by hand
 on the distributor's site, the true/false split written into § 13 F165) is reviewed with Rick, and only then is
-S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real run is safe (one observation).
+S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real run is safe (one observation). **Run 1 of 2 DONE 2026-10-09** (dry run, then the real apply, one observation): inputs were the Lunar all-months export plus PRH 2026-08, 09 and 10 (2026-07 was quarantined after coming back byte-identical to the 10-02 pull). Result: 1,133 reserved titles; 1,098 checked against their own source: 1,069 present, **29 absent for the first time, 0 absent on a second run**; 32 not checkable (their source was not supplied); 3 skipped as frozen (PRH 2026-06). **No candidates, as designed.** The 29 sightings are in `check-dates-state.json`. The next real run, on a later date, is the first that can list a candidate. (The same run applied 42 date corrections, all confirmed by a fresh read; that is the F155 half, not this one.)
 
 ---
 
