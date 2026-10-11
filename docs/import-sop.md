@@ -22,7 +22,7 @@ There is no single "import." There are three separate operator runs on different
 | A | Monthly catalog refresh | Once a month, when both new CSVs land | `import.js` | **9** |
 | B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (22:00 UTC)** | `import.js` | **5** (7 if ad-hoc) |
 | C | Weekly date re-check | Fri or Sat | `check-dates.js` | **3** |
-| D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | admin UI | **4 per customer** |
+| D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | admin UI **only if the new code is in the current catalog month**, otherwise one SQL block | **4 per customer** (UI) |
 
 **Everything runs from one folder:**
 
@@ -397,9 +397,17 @@ which then disappears from Lunar's export, so nothing ever matches again: the cu
 (and can vanish from My List), the admin panels read the title as "released, nothing arrived", and the
 next import would mark it fulfilled.
 
-> **Status of this procedure: the UI path below is built from controls that already exist and from what
-> the code does, but it has NOT been rehearsed end to end.** Watch the first real use, or try it first on
-> staging with a test customer. Recodes are rare: of 6,615 distinct UPCs in the catalog, 12 appear under
+> **Read this first (corrected 2026-10-11).** The UI path below works **only when the replacement code is in
+> the CURRENT catalog month**, because the customer Catalog page browses nothing else and the Reserve step
+> needs it. **Both recodes seen so far landed in an older month** (Hyde Street #14 CVR A → a `0726…` code;
+> W0RLDTR33 #22 CVR B and C → `0926…` codes), so expect to use the SQL fallback at the bottom of this
+> section more often than the UI path. *(The first version of this section, committed earlier the same
+> day, presented the UI path as the normal route. It read the Reserve step as always available; the code
+> says otherwise.)*
+>
+> The UI path is built from controls that already exist and from what the code does, but it has **NOT been
+> rehearsed end to end**: watch the first real use, or try it on staging with a test customer first.
+> Recodes are rare: of 6,615 distinct UPCs in the catalog, 12 appear under
 > more than one code (all Lunar), and Hyde Street #14 CVR A is the one confirmed recode that held a live
 > reservation (measured 2026-10-11; two same-month DC Connect pairs also showed reservations and look
 > like different products sharing a UPC, but were not examined).
@@ -415,10 +423,13 @@ Select-String -Path "..\recheck\Lunar Available Products*.csv" -Pattern "7098530
 **no match at all** is a dropout, and this procedure does not apply.
 
 ### D1. Three checks before touching anything
-1. **Find the new listing in the admin catalog** (search the title). Its **FOC must be in the future and
-   its dates must match Lunar's.** If the FOC looks passed or the dates are stale, **stop and go to "When
-   the new listing is not reservable" below**: the Reserve button locks on a passed FOC, and as far as the
-   code shows there is no admin exception.
+1. **Search for the new title on the Catalog page** (as the admin, or impersonating the customer). The
+   UI path needs **all** of these; if any fails, **stop and go to "When the new listing is not reservable"
+   below**:
+   - it **appears** on the page. The page lists only the **current catalog month**, so a replacement code
+     in an older month (`0726…` while the catalog is `2026-10`) will not show up at all;
+   - its **FOC is in the future** and its dates match Lunar's (the Reserve button locks on a passed FOC, and
+     as far as the code shows there is no admin exception).
 2. **Confirm in the Lunar portal that your order moved to the new code**, and its quantity.
 3. Note, on **Ordering → By Distributor**, how many customers hold the old code and how many copies.
 
@@ -440,11 +451,13 @@ existing guard applies.
 - The customer's My List shows the title under **Upcoming Arrivals** with the **new** date.
 - The next Friday recheck lists nothing for this title.
 
-### When the new listing is not reservable
-This is what happened with Hyde Street #14: Lunar re-dated the whole issue a second time, so our row for the
-new code still said FOC 10/5 and on-sale 10/28 (Lunar: FOC 11/23, in-store 12/23). **No screen edits a
-listing's dates**, and the Friday recheck only corrects a listing that already holds a reservation or sits in
-the current month, so the new row stays locked and hidden. Until that gap is closed, this case needs one
+### When the new listing is not reservable (an older catalog month, stale dates, or both)
+**This is the usual case so far, not the exception.** Hyde Street #14 was both: its replacement code sits in
+the `2026-07` catalog month, which the Catalog page never shows, **and** Lunar had re-dated the issue a second
+time, so our row still said FOC 10/5 and on-sale 10/28 (Lunar: FOC 11/23, in-store 12/23). **No screen
+repoints a reservation or edits a listing's dates**, and the Friday recheck only corrects a listing that
+already holds a reservation or sits in the current month, so correcting the dates would not have been enough
+on its own. Until that is changed (F173), this case needs one
 guarded SQL transaction, run in the Supabase SQL Editor: correct the new listing's dates, repoint the
 reservation, and add a −1 and a +1 adjustment to the order record, all inside a single `DO` block that
 rolls back if any guard does not match exactly one row (the F122 repair method, `docs/technical-reference.md`
