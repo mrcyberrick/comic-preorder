@@ -483,9 +483,9 @@ code may sit in an older month or may not have been imported yet.
    record nets to 0 and nothing arrived.
 3. Still impersonating: **Catalog → the new listing → Reserve** the same quantity. (Or let the customer do it.)
 4. **Ordering → By Distributor → the NEW code's row → Mark Ordered** for the quantity Lunar holds. With several
-   customers, repeat 2 and 3 for each, then do step 4 **once** for the total. **Reach that row with the month
-   selector, not the search box:** Mark Ordered does nothing on a row found by the cross-month search (F174; observed on
-   staging 2026-10-11: the dialog never opens).
+   customers, repeat 2 and 3 for each, then do step 4 **once** for the total. Mark Ordered also works on a row found by
+   the search box (F174, fixed 2026-10-11). Before that fix it did nothing on a row from another month, so if it ever
+   does nothing for you, reach the row with the month selector instead and tell the platform operator.
 
 The new reservation is dated **today**, so the customer's original reservation date is lost. Confirm in the Lunar
 portal that your order carried to the new code before you record it.
