@@ -1,6 +1,6 @@
 # F173 (a) — the weekly recheck corrects unreserved Lunar dates and reports recode-shaped pairs
 
-**STATUS:** NOT STARTED · staging: — · prod: — · PR: — (scripts repo, no PR flow) · findings: F173 (direction (a)); F175 proposed (§ 2.5)
+**STATUS:** NOT STARTED · staging: — · prod: — · PR: — (scripts repo, no PR flow) · findings: F173 (direction (a)), F175
 
 Plan written 2026-10-12 (planning session). Owner finding: `docs/technical-reference.md` § 13 F173, fix direction (a). Direction (b), the Move reservations control, is live (`docs/f173-move-reservations.md`). This is the script-side half.
 
@@ -12,7 +12,7 @@ Plan written 2026-10-12 (planning session). Owner finding: `docs/technical-refer
 
 `check-dates.js` builds its write set from **reserved** rows only. `--include-unreserved` is off by default, covers only the newest reserved month, and writes `on_sale_date` only, never `foc_date`. So an unreserved Lunar listing whose FOC we hold as passed, while Lunar still lists it as orderable, is hidden from customers and can never be reserved, and the recheck never corrects it because nobody holds it: a closed loop. Measured read-only on production 2026-10-11 against Lunar's 10-09 export: **468** unreserved Lunar listings disagree with the export, **64** of them hidden though still orderable. Separately, a recode (same UPC, new item code, later month) is never linked to its old listing; today the operator finds it by luck and repairs it with Run D-MOVE.
 
-## 2. Decisions for Rick (one recommendation each)
+## 2. Decisions (Rick approved all five recommendations, 2026-10-12)
 
 | # | Question | Recommendation |
 |---|---|---|
@@ -22,11 +22,11 @@ Plan written 2026-10-12 (planning session). Owner finding: `docs/technical-refer
 | D4 | Per-tenant scope? | **Unchanged: operator-run, one tenant per run** (`IMPORT_TENANT_ID[_PROD]`). You already accepted this (F173 decision 1). A store admin on another tenant still depends on the operator for dates; not addressed here. |
 | D5 | When to build? | **After your real weekly run on Fri 2026-10-16**, so the F165 S2 soak's first candidate-capable run happens on today's code. The execution session starts Sat 2026-10-17 or later; first production use is your Fri 2026-10-23 run, dry run first. |
 
-### 2.5 A defect found while planning: one state file for both environments (proposed F175)
+### 2.5 A defect found while planning: one state file for both environments (FILED F175, 2026-10-12)
 
 `check-dates-state.json` has one path (`check-dates.js:109`) whatever the environment, and every run saves its `absent` map with whatever it saw. **A `--staging` run, `--no-write` included, replaces production's F165 S2 first sightings with staging's.** Today the file holds production's 29 first sightings from 2026-10-09; a staging run before Friday would wipe them, so the 10-16 run would see all 29 as first sightings again and the soak would slip a week. It would also mix the frozen-file hash counters. Nothing has run on staging since the 10-09 production run, so nothing is damaged (backup taken 2026-10-12, sha256 prefix `7aaae13cfda0c110`, in the planning session's scratchpad; temporary, so the executor takes its own).
 
-**Recommendation: file it as F175 and fix it first, in this same work:** state file per environment (`check-dates-state.json` for production, unchanged, so no migration; `check-dates-state.staging.json` for `--staging`). Gate 3 below depends on it. Until it lands: **do not run `check-dates.js --staging` at all.**
+**Rick, 2026-10-12: filed as F175, fixed first, in this same work:** state file per environment (`check-dates-state.json` for production, unchanged, so no migration; `check-dates-state.staging.json` for `--staging`). Gate 3 below depends on it. Until it lands: **do not run `check-dates.js --staging` at all.**
 
 ## 3. Steps (execution session, scripts repo `main`)
 
@@ -52,3 +52,29 @@ Plan written 2026-10-12 (planning session). Owner finding: `docs/technical-refer
 ## 6. Completion
 
 STATUS line updated; tests green with negative controls recorded; staging dry-run counts and the before/after production state hash recorded here; `technical-reference.md` § 13 F173 and the CLAUDE.md F173 row updated in words; F175's entry (if filed) closed or updated.
+
+## 7. Execution handoff (paste into a fresh CLI session on or after Sat 2026-10-17)
+
+```
+SESSION: F173 direction (a) + F175, scripts repo check-dates.js. Plan: docs/f173-recheck-helper.md (APPROVED 2026-10-12).
+
+READ FIRST, from disk: CLAUDE.md (check `git branch --show-current` is staging first), docs/f173-recheck-helper.md in full,
+docs/technical-reference.md § 13 F173 and F175, then check-dates.js and test/ in the scripts repo
+(C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts, branch main).
+
+BEFORE ANY EDIT:
+ - Ask Rick whether his Fri 2026-10-16 weekly check-dates.js run has happened. If not, stop.
+ - Copy check-dates-state.json to the session scratchpad and record its sha256. Never run --staging before S1 lands.
+ - Re-measure the unit baseline (354/354 on 2026-10-12).
+
+DO, in order: S1 (F175 per-environment state file), S2 (unreserved Lunar corrections + hidden-but-orderable list,
+second prompt, own before-state log, fresh re-read), S3 (recode-shaped pairs, report only, display tag in the
+withdrawal section without touching classifyWithdrawalCandidates), S4 (docblock + test/README.md).
+GATES: plan § 4, each with its own evidence. A failed gate is halt-and-report.
+NEVER: production writes, production runs (Rick's Fri 2026-10-23 run is the first, --no-write first),
+app repo code, SQL, import scripts, F165 S3, F172.
+COMMITS: scripts repo main, one per step, messages via heredoc, ending
+"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>". Push and confirm on origin/main.
+Doc updates (plan STATUS, § 13 F173/F175, CLAUDE.md rows) go doc-only to the app repo's staging branch.
+END: /wrap-up.
+```

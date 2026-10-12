@@ -6951,7 +6951,17 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Not verified.** Rick's production check is recorded (2026-10-11): "DC CONNECT #79 BUNDLES OF 25 (PAID) (NET)", a 2026-10 listing, search box filled, month drop-down on June, July and August in turn, the dialog opened each time, which is the discriminating case (the old lookup used the selected month); his account is not stated; a later read-only look found no order-record row for either DC CONNECT #79 code, so he cancelled and did not save; whether anything else resolves a row through `distributorRows()` while a search is active (the delegated handler's other branch, Rejected by supplier, reads data attributes and does not; no wider sweep was done); how often it has been hit or whether anyone reported it.
 - **Related:** **F121** (the cross-month search; the code's own comment on the search/selector conflict says letting one silently win is how F121 happened), **F173** (found while testing it), `docs/import-sop.md` Run D.
 
-Next free finding ID: **F175**.
+#### F175 — `check-dates.js` keeps one state file for both production and staging runs, so a `--staging` run wipes production's F165 S2 first sightings
+
+- **Filed 2026-10-12 (planning F173 direction (a); Rick: "File F175, fix in this work"). Status: OPEN, latent; nothing damaged.** **Severity: Low–Medium.** No customer data is touched; the harm is to the operator's withdrawal-detection soak.
+- **Symptom (by reading the code, not observed).** `STATE_PATH` is `check-dates-state.json` beside the script whatever the environment (`check-dates.js:109`). Every run saves `{ ...state, absent: wd.nextAbsent }` with only the rows it evaluated (`:470`, `--no-write` included, by design, because F165 S2's two-run rule needs the observations), and on completion merges this run's file hashes into `files` (`:522`, `:576`). So **a `node check-dates.js --staging` run replaces production's `absent` map with staging's** and folds staging's file sightings into the frozen-catalog hash counters.
+- **Why it matters now.** On 2026-10-12 the file holds production's **29 first sightings, all dated 2026-10-09** (F165 S2 run 1). A staging run before Rick's Fri 2026-10-16 run would drop them, so 10-16 would record all 29 as first sightings again and could raise no candidate: the F165 S2 soak slips a week. Measured: no staging run has happened since 10-09 (every `since`/`lastRun` is 10-09), so nothing is damaged. A backup (sha256 prefix `7aaae13cfda0c110`) was taken to the planning session's scratchpad, which is temporary.
+- **How it was missed.** F165 S2's V4 replay ran on staging but kept the real state file byte-identical, i.e. it was run against a copy; nothing in the script enforces that.
+- **Fix direction (decided, not built).** A per-environment state file: production keeps `check-dates-state.json` (no migration), `--staging` uses `check-dates-state.staging.json`. Lands first in `docs/f173-recheck-helper.md` S1, with a unit test on the path split and a before/after hash of production's file around the gate-3 staging dry run.
+- **Interim rule, no code: do not run `check-dates.js --staging` until the fix lands.**
+- **Related:** **F165** (S2's streak map is what is lost), **F159** (the frozen-file hash counters), **F173** (found while planning its direction (a)).
+
+Next free finding ID: **F176**.
 
 ---
 
