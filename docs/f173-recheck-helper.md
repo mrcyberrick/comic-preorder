@@ -78,3 +78,7 @@ COMMITS: scripts repo main, one per step, messages via heredoc, ending
 Doc updates (plan STATUS, § 13 F173/F175, CLAUDE.md rows) go doc-only to the app repo's staging branch.
 END: /wrap-up.
 ```
+
+## 8. Execution log
+
+- Gate scheduled (2026-10-12): Rick's Fri 2026-10-16 weekly production run elapses; execution may start Sat 2026-10-17. Reminders: cloud routine `trig_013UudbEgEGgL4FZuFkzyhS7` (one-time, 2026-10-17 12:00 UTC) and Google Calendar event `sk34dbq0u91cuc9vgmf6cl1j8s` (8:00 AM ET, popup + email).
