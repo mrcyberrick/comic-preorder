@@ -1,6 +1,6 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** IN PROGRESS 2026-10-01 — S0, S1 (RPC applied on both environments) and S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) COMPLETE and verified (§ 11.4); S3 = the first unattended cron run, Tue 2026-10-06 21:00Z; S4/S5 after it | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
+**STATUS:** IN PROGRESS 2026-10-13 — S0, S1 (RPC applied on both environments), S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) and S3 (the first unattended cron, Tue 2026-10-06, observed GREEN and SENT, § 11.5) are DONE; S4 (remove the import-time publish) and S5 (one Tuesday without it) are OPEN and continue as W1 of `docs/weekly-newsletter-architecture.md` | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
 **Owner finding:** F135 (`docs/technical-reference.md` § 13). **Target:** two repos — the private
 scripts repo (`catalogs/scripts`, `mrcyberrick/comic-preorder-scripts`) and
 `mrcyberrick/weekly-pull-feed` (public). **No `comic-preorder` app change.** One optional DB object
@@ -617,6 +617,29 @@ ever run with `dry_run=true`**, so a real Brevo send from the new workflow is fi
 send script is byte-unchanged; its last real send was run #29 on 2026-09-22, which succeeded); (3) a first week with
 **new** thumbnails on `main` (this republish had 0 new) exercises the Pages-build → wait ordering for
 real only on Oct 6.
+
+### 11.5 S3 observed — the Oct 6 cron (recorded 2026-10-13)
+
+All three "still unproven" items in § 11.4 were exercised by one run, read from its log on 2026-10-13
+(`gh run view 37551468895 --log`, not from the Actions colour):
+
+| Item | Result |
+|---|---|
+| The `schedule` path (inputs absent) | Run `37551468895`, event `schedule`, `build` and `send` both `success`. It **started 2026-10-07 00:20:44Z, 3 h 20 min after the 21:00Z cron**, i.e. past UTC midnight. The week rule (Mon-Sun containing the **UTC** run date) still resolved correctly because Tue and Wed share a week: `Target week: 2026-10-05 -> 2026-10-11 (the week containing the run date 2026-10-07)`, `72 shipment row(s); on-sale date 2026-10-07 (from 2026-10-06×2, 2026-10-07×70)` |
+| A real, non-dry-run send | `sendNow accepted for campaign 35. Verifying actual status... Campaign 35 confirmed SENT.` (Brevo list 7, 12 subscribers) |
+| New thumbnails on `main` | `Pull feed published: 72 titles` as **one** commit `cd1412bb` by `github-actions[bot]` (`-88 expired thumb(s)`); `round 1: 32/32 served`; `newsletter-email.html is stamped 2026-10-07 - built by this run` |
+
+**Not part of this result, and the reason F135 is still open:** the old path was still live. Commit
+`faf6feaf` (**2026-10-10**, 119 titles, `+119 thumbnail(s)`) was authored by `mrcyberrick`, not the
+Actions bot, so the Fri 2026-10-09 shipment import still published through `import.js`'s publish block
+with the PAT. S4 removes that; S5 reads the first Tuesday without it.
+
+**Measured delay worth knowing:** the workflow header's cron-drift table stops at +2 h 01 min (09-15);
+this run is **+3 h 20 min**. The build and send jobs are adjacent, so only the UTC stamp and week rule
+care. The week rule (Mon-Sun containing the UTC run date) stays correct until Sunday; the limit that
+bites first is `checkWeek`'s "already on sale" guard, which fails the run loudly (it never publishes a
+past issue) if the run starts after the on-sale Wednesday has ended, i.e. from Thu 00:00Z. This run
+started at 00:20Z Wednesday, so the margin was about a day.
 
 ---
 
