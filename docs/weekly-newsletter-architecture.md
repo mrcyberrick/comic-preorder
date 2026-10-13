@@ -1,6 +1,6 @@
 # Weekly newsletter — decoupled, multi-tenant architecture (PLAN)
 
-**STATUS:** NOT STARTED (plan written 2026-10-13) | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
+**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.3 DECIDED (cron left at 21:00Z), W1.2 (Monday preflight) built and tested, push to `weekly-pull-feed` HELD until tonight's live send completes; W1 closing gate = Tue 2026-10-20 cron, reminder scheduled (§ 9); W2-W5 NOT STARTED | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
 **Owner:** Rick. **Planning:** this doc. **Execution:** one session per W-step (§ 5), Sonnet CLI.
 **Repos touched by execution:** `mrcyberrick/weekly-pull-feed` (public, where the newsletter now
 runs), the private scripts repo (`catalogs/scripts`, only to remove the old path), and this repo
@@ -29,6 +29,13 @@ They are stale, because the record of the work never reached `staging`:
 
 So F135 is at **S3 done, S4 not started** in its own runbook's terms. That is the starting point for
 this plan, not a blank page.
+
+*(Updated 2026-10-13, same day, after W0 and W1.1: the cutover record row above is **fixed**, the 9
+commits are on `staging` and the branch is deleted; and the "old path is still live" row is **fixed**
+in the scripts repo (`fc044f9`, pushed): `import.js` and `import-staging.js` publish nothing and the
+scripts-repo `build-pull-feed.js` is deleted. What still has to be observed is the first Tuesday
+**without** an import-time publish (the closing gate, § 9). The table is left as written so the
+before-state stays readable.)*
 
 **Also open, from that branch's own § 11:** the Monday early-warning preflight was never built (Rick
 had not ruled), the cron moves an hour when EST resumes (**Sun 2026-11-01**, the workflow's own
@@ -128,6 +135,17 @@ asks for it and the pull model has been tried.
 
 ---
 
+**Rick's answers, 2026-10-13 (the W0/W1 session):** **D1 yes** (cherry-pick, then delete the branch). **D4
+yes** (build the Monday preflight). **DST: leave the cron at `0 21 * * 2`** (D5's dispatcher remains the
+long-term answer). Measured for that call: the 10-06 cron **started at 00:20Z on 10-07, 3 h 20 min after
+its cron time**, past the 2 h 01 min the workflow header's table stops at, so a winter send starts at
+4 PM ET plus the usual delay (roughly 4:30 to 7:20 PM ET). `send-newsletter.yml` was therefore **not
+touched** in W1. If a winter arrival turns out too early or too late, the one-line edit is `"0 22 * * 2"`;
+make it **after** the Oct 27 send and before Sun 11-01, not earlier, or it also moves the sends before the
+DST change by an hour.
+
+---
+
 ## 5. Runbook
 
 Order is fixed by one rule carried from F135: **a new path is observed working before the old one is
@@ -210,6 +228,35 @@ which waits on F131 and F169.
 
 Newsletter copy and visual design; Brevo list growth; transactional mail (Resend, F99); the import's
 own data correctness (F172 is decided separately); pushing to a tenant's own ESP with their key.
+
+## 9. Execution log
+
+**2026-10-13, W0 + W1 session (Sonnet CLI).**
+
+- **W0 done.** The 9 F135 doc commits were cherry-picked onto `staging` (no conflicts), the F135 row in
+  CLAUDE.md and § 13 brought up to date from the Oct 6 run log (run `37551468895`: 72 titles, commit
+  `cd1412bb`, 32/32 served, `Campaign 35 confirmed SENT`), and `claude/newsletter-feed-decoupling-akur2e`
+  deleted locally and on origin after `git cherry` showed all 9 commits patch-equivalent on
+  `origin/staging` and `git log origin/main..<branch>` showed exactly those 9 were unique to it. Gate
+  read: `docs/sql/2026-10-01-f135-pull-feed-week-rpc.sql` line 1 on `origin/staging` is
+  `-- STATUS: COMPLETE | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135`.
+- **W1.1 done** (scripts repo `fc044f9`, `origin/main`): publish block and `resolveFeedWeek()` out of
+  both import scripts; `build-pull-feed.js`, `test/feed-week.test.mjs` (9) and
+  `test/thumb-retention.test.mjs` (12) deleted, their coverage already in `weekly-pull-feed` (all 12
+  retention test names present there). Unit suite **354 -> 333** (= -21 exactly). The grep gate returns
+  0 lines. A `--no-write` dry run of `import-staging.js` with a Lunar + PRH shipment pair is
+  **line-for-line identical** before and after (108 lines, exit 0). **Not verified:** `import.js`
+  (production) was not dry-run; it was syntax-checked, unit-tested and diffed, and its removed regions
+  mirror staging's. Its first real run is the next production shipment import.
+- **W1.3 decided:** cron left at `0 21 * * 2` (§ 4). **Nothing was changed in `send-newsletter.yml`.**
+- **Gate scheduled (2026-10-13):** the W1 closing gate (= F135 S5/V5, the Tue 2026-10-20 cron, the first
+  Tuesday with no import-time publish) elapses with margin on **Wed 2026-10-21**; reminder: routine
+  `trig_017vViYcKefTkoHgdLjC7ArP` and Google Calendar event `gihlvjlt0aregsctg1rvihtdog`, 8:00 AM ET.
+  The reminder only reminds. Checks it lists: the Mon 10-19 preflight green; Rick's Fri 10-16 import
+  published nothing; the Tuesday run is `schedule`, both jobs green, one `github-actions[bot]` commit for
+  the right week, `N/N served`, `Campaign <id> confirmed SENT`. **F135 stays OPEN until that run is read.**
+- **Rick-only, still owed:** delete `GITHUB_TOKEN_PULL_FEED` from the scripts `.env`; revoke that
+  token on GitHub; delete Brevo draft campaign 34 (a dry-run rehearsal artifact).
 
 ## References
 

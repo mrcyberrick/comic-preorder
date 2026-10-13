@@ -1,6 +1,6 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** IN PROGRESS 2026-10-13 — S0, S1 (RPC applied on both environments), S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) and S3 (the first unattended cron, Tue 2026-10-06, observed GREEN and SENT, § 11.5) are DONE; S4 (remove the import-time publish) and S5 (one Tuesday without it) are OPEN and continue as W1 of `docs/weekly-newsletter-architecture.md` | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
+**STATUS:** IN PROGRESS 2026-10-13 — S0, S1 (RPC applied on both environments), S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) and S3 (the first unattended cron, Tue 2026-10-06, observed GREEN and SENT, § 11.5) are DONE; S4's CODE is DONE (2026-10-13, scripts repo `fc044f9`, § 11.6) and S5 (one Tuesday without an import-time publish: the Tue 2026-10-20 cron) is OPEN; tracked as W1 of `docs/weekly-newsletter-architecture.md` | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
 **Owner finding:** F135 (`docs/technical-reference.md` § 13). **Target:** two repos — the private
 scripts repo (`catalogs/scripts`, `mrcyberrick/comic-preorder-scripts`) and
 `mrcyberrick/weekly-pull-feed` (public). **No `comic-preorder` app change.** One optional DB object
@@ -640,6 +640,34 @@ care. The week rule (Mon-Sun containing the UTC run date) stays correct until Su
 bites first is `checkWeek`'s "already on sale" guard, which fails the run loudly (it never publishes a
 past issue) if the run starts after the on-sale Wednesday has ended, i.e. from Thu 00:00Z. This run
 started at 00:20Z Wednesday, so the margin was about a day.
+
+### 11.6 S4 landed in code (2026-10-13)
+
+Scripts repo `main` **`fc044f9`**, pushed and read back from `origin/main`. Removed from both
+`import.js` and `import-staging.js`: `resolveFeedWeek()` and its export; from `import.js` also the whole
+publish block (the `GITHUB_TOKEN_PULL_FEED` read, the `resolveFeedWeek(allShip)` call, the
+`require('./build-pull-feed.js')` and `publishPullFeed` call), replaced by a 3-line pointer comment.
+Deleted: the scripts-repo `build-pull-feed.js` (the copy in `weekly-pull-feed/scripts/` is canonical),
+`test/feed-week.test.mjs` (9 tests) and `test/thumb-retention.test.mjs` (12 tests, which `require` the
+builder; all 12 names exist in `weekly-pull-feed/test/thumb-retention.test.mjs`). Also touched: the
+README row and `.gitignore` allowlist entry for the builder, and two comment lines in
+`reconcile-shipment.js` that named it.
+
+| Check | Result |
+|---|---|
+| `grep -n "publishPullFeed\|resolveFeedWeek\|GITHUB_TOKEN_PULL_FEED"` over `import.js`, `import-staging.js`, `test/*` | **0 lines**, locally and on `origin/main` |
+| `node --check` | clean on `import.js`, `import-staging.js`, `reconcile-shipment.js`, `check-dates.js` |
+| `npm test` | **333/333** (was 354/354; 354 - 12 - 9 = 333) |
+| `--no-write` dry run of `import-staging.js` with a Lunar + PRH shipment pair (a prompt-answering driver, because piped stdin is consumed by the first readline) | exit 0, ran to `Import complete!`; **output line-for-line identical to the run taken before the edit** (108 lines), no publish line. Staging never had a publish call, so this proves the removal changed nothing else, **not** that the production publish is gone |
+| `origin/main` | `fc044f9`, local `main` 0 ahead / 0 behind |
+
+**What this does not prove, stated plainly:** (1) `import.js` was not dry-run (the established
+convention; its first real run is Rick's Fri 2026-10-16 production import); the removed regions mirror
+staging's and the symbol grep is the evidence that the publish is gone. (2) S5/V5 is unmet: no Tuesday
+has yet run with the import path gone. **The Tue 2026-10-20 cron is that run**; reminder routine
+`trig_017vViYcKefTkoHgdLjC7ArP` and a calendar event, Wed 2026-10-21 8 AM ET. F135 closes there.
+(3) `GITHUB_TOKEN_PULL_FEED` is still in the scripts `.env` and the PAT is still live: Rick deletes the
+line and revokes the token (deliberately not done by the agent).
 
 ---
 
