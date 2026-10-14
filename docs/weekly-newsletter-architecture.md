@@ -1,6 +1,6 @@
 # Weekly newsletter — decoupled, multi-tenant architecture (PLAN)
 
-**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.3 DECIDED (cron left at 21:00Z), W1.2 (Monday preflight) built and tested, push to `weekly-pull-feed` HELD until tonight's live send completes; W1 closing gate = Tue 2026-10-20 cron, reminder scheduled (§ 9); W2-W5 NOT STARTED | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
+**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PENDING: the Tue 2026-10-20 cron, reminder scheduled for Wed 10-21 (§ 9); F135 stays OPEN until it is read**; W2-W5 NOT STARTED | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
 **Owner:** Rick. **Planning:** this doc. **Execution:** one session per W-step (§ 5), Sonnet CLI.
 **Repos touched by execution:** `mrcyberrick/weekly-pull-feed` (public, where the newsletter now
 runs), the private scripts repo (`catalogs/scripts`, only to remove the old path), and this repo
@@ -248,6 +248,31 @@ own data correctness (F172 is decided separately); pushing to a tenant's own ESP
   **line-for-line identical** before and after (108 lines, exit 0). **Not verified:** `import.js`
   (production) was not dry-run; it was syntax-checked, unit-tested and diffed, and its removed regions
   mirror staging's. Its first real run is the next production shipment import.
+- **W1.2 done** (`weekly-pull-feed` `c0a423c`): `scripts/preflight-week.js` +
+  `.github/workflows/preflight-week.yml` ("Newsletter Preflight", Mon `0 13 * * 1` plus a `week` dispatch
+  input) + `test/preflight-week.test.mjs` (14 tests; repo suite 35 -> 49; six mutations of the script each
+  turned the intended tests red). Read-only by construction: `contents: read`, no Brevo reference, its own
+  concurrency group, and the week rule and guards are *required from the builder*
+  (`resolveTargetWeek`, `checkWeek`, `weekRange`, `todayUTC`), which was not edited. **Held until tonight's
+  live send finished** (a push mid-build could have failed the build's ref update, and the build job runs
+  every `test/*.test.mjs`). **Observed on the runner (Node 22), 2026-10-14 00:11Z:** RED, `workflow_dispatch`
+  with `week=2030-01-09`, run `38488707429`: tests passed, then
+  `No shipment rows for the week 2030-01-07 -> 2030-01-13. Run the weekly shipment import before Tuesday
+  21:00 UTC...` and the run failed at that step. GREEN, default week, run `38488756358`:
+  `OK: 119 shipment row(s) for 2026-10-12 -> 2026-10-18 (2026-10-14x119)`. **No commit, no Pages build, no
+  send:** repo tip and the latest Pages build were `c0a423c5` before the first dispatch and after the
+  second; the only runs created in between are the two preflights (the 00:10Z Pages build is the one my own
+  push caused, before the baseline); the green run's steps are checkout, Node, tests and the check, nothing
+  else. **Not verified:** Brevo's campaign list was not read (no Brevo key in this session); the evidence
+  that no campaign was created is structural (no Brevo reference or secret in the workflow). The scheduled
+  Monday 13:00Z trigger itself has not fired yet; its first fire is Mon 2026-10-19, and the gate reminder
+  asks for that run to be checked.
+- **Tonight's live send (Tue 2026-10-13 cron), read from its log:** run `38488388486`, `schedule`, started
+  **2026-10-14 00:08Z, +3 h 08 min**; 119 titles for `2026-10-12 -> 2026-10-18`, one commit `4a56472b` by
+  `github-actions[bot]`, `round 1: 52/52 served`, stamp built by this run, `Campaign 37 confirmed SENT`. A
+  second start at ~3 h late (10-06 was +3 h 20 min). **This is NOT the S5 gate**: the import path was
+  already removed in code, but no import has run since; the gate is the 10-20 cron after Rick's 10-16
+  import.
 - **W1.3 decided:** cron left at `0 21 * * 2` (§ 4). **Nothing was changed in `send-newsletter.yml`.**
 - **Gate scheduled (2026-10-13):** the W1 closing gate (= F135 S5/V5, the Tue 2026-10-20 cron, the first
   Tuesday with no import-time publish) elapses with margin on **Wed 2026-10-21**; reminder: routine
