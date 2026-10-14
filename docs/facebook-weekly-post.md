@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted, **awaiting Rick's sign-off and answers to § 3** | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131 touched, see § 1.3)
+**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted; **image decided (§ 3a): one 4:5 composed image of the week's top 3 covers by copies received**; still awaiting Rick's answers to Q3, Q4, Q5, Q8 and sign-off | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131, F162 touched, see § 1.3)
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -15,6 +15,9 @@ The weekly page this task asked to generate **already exists and is public**: `w
 separate, read-only-on-the-repo workflow that runs after the newsletter, checks that this week's page
 is published, checks the Page has not already been posted to this week, and makes one post that links
 to that page. Dedupe is by **week**, not by RSS GUID, and the "state file" is the Facebook Page itself.
+The post's picture is built fresh each week from the three covers the shop received the most copies
+of (§ 3a), so there are no stock banners to maintain. That needs one new narrow database lookup (SQL
+on staging, then production).
 
 ---
 
@@ -84,10 +87,31 @@ to that page. Dedupe is by **week**, not by RSS GUID, and the "state file" is th
 | Q3 | Meta developer app? Are you an admin of the Ray & Judy's Page? | **Unknown, yours.** You need a Meta developer app and full Page admin (not editor) rights |
 | Q4 | Test Page? | A private group **cannot** be used (Groups API removed). Create a throwaway Page you admin, with no followers. Whether a brand-new or unpublished Page accepts API posts is checked in R1 |
 | Q5 | Post when the feed updates, or a fixed day? | **Recommend a fixed time, Wednesday 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
-| Q6 | Photo post, link post, or both? | **Recommend a photo post** (the rotating banner as the image, the link in the text). Meta ignores a custom image on link posts from the API unless the Page "owns" the linked domain (Graph API v2.9/v2.11 changelog), and `newsletter.html` has **no Open Graph tags**, so a link post would show a generic or scraped preview and the banner rotation cannot work. Trade-off: a link inside photo text is clickable but less prominent than a link card. Confirm in R1 |
+| Q6 | Photo post, link post, or both? | **DECIDED: a photo post** (the composed top-picks image, § 3a; the link in the text). Meta ignores a custom image on link posts from the API unless the Page "owns" the linked domain (Graph API v2.9/v2.11 changelog), and `newsletter.html` has **no Open Graph tags**, so a link post would show a generic or scraped preview and a custom image cannot work. Trade-off: a link inside photo text is clickable but less prominent than a link card. Confirm in R1 |
 | Q7 | Prices and descriptions on the page? | **Recommend no for v1.** It means widening the anon RPC (SQL on staging then production), a page redesign and 119 descriptions on one page. File separately if wanted |
 | Q8 | Post wording | Draft in § 4.4. Approve or edit |
-| Q9 | Banner images | 3 to 5 images, at least 1200 px wide, JPG or PNG under 4 MB. **They go in a public repo** |
+| Q9 | Banner images | ~~3 to 5 images, at least 1200 px wide, JPG or PNG under 4 MB. They go in a public repo~~ **Superseded by § 3a: no stock banners** |
+
+### 3a. Decided 2026-10-14 (Rick, after the mockup)
+
+Mockup: https://claude.ai/artifact/CLTK52kNhiMJZWiWe3tSTb (private; real covers from the Oct 12-18 week,
+hand-picked as examples, not the real top three).
+
+- **Q6 decided: a photo post with ONE composed image** (mockup layout B), not three separate photos
+  (layout A: the feed crops two of three covers to squares).
+- **Size: 1080x1350, 4:5 portrait.** Rick found the first draft (1200x630) "on the small side"; 4:5 is
+  the tallest shape the feed shows uncropped, so it fills most of a phone screen.
+- **The image shows this week's top 3 covers, ranked by copies the shop RECEIVED**
+  (`weekly_shipment.quantity`, summed per title for the week). Not customer reservations.
+- **The image says "Top picks", never "most ordered"**, so the post does not hint at order quantities.
+- **Rules that follow (my design, for review in the runbook):** one cover per series (this week had
+  several AMAZING SPIDER-MAN #1001 covers that could take all three slots), preferring the standard
+  cover; skip rows with no cover; fewer than three usable covers shows what there is (one or two);
+  ties broken by title so the result is stable (F162).
+- **Image source: the distributor's full-size cover, never the newsletter's thumbnail.** Measured
+  2026-10-14: the newsletter's hosted thumbnails are about 198x300 (too soft); full-size PRH covers are
+  1400x2123; this week's Lunar full-size cover (TRANSFORMERS #37) was only 450x692. In a 1080-wide
+  image each cover is about 300 px wide, so even Lunar's small files are sharp enough.
 
 ---
 
@@ -100,9 +124,20 @@ to that page. Dedupe is by **week**, not by RSS GUID, and the "state file" is th
 | `scripts/post-facebook.js` | new | The job. Pure functions plus an injectable `run()`, like `preflight-week.js` |
 | `test/facebook/post-facebook.test.mjs` | new | Unit tests; outside `test/*.test.mjs` so it never gates the newsletter |
 | `.github/workflows/post-facebook.yml` | new | Schedule + dispatch |
-| `images/fb/banner-1.jpg` … `banner-N.jpg` | new | Rick supplies |
+| `scripts/facebook-image.html` | new | The 4:5 image as an HTML template (the mockup's layout B), filled per week and screenshotted |
+| `fonts/` (Anton, Archivo `.woff2`) | new | Open Font License faces, kept in the repo so the screenshot never depends on a font download |
+
+And in **this** repo: `docs/sql/<date>-fb-top-picks-rpc.sql` (the new lookup, § 4.6).
 
 Nothing in `send-newsletter.yml`, `preflight-week.yml`, the builder or the send script changes.
+
+**How the image is made, and why this way:** `weekly-pull-feed` has **no npm dependencies** today
+(thumbnails come from the outside resizer `wsrv.nl`). Rather than add the first one (`sharp`, which also
+draws text badly without system fonts), the job fills an HTML template and has the **Google Chrome
+already installed on GitHub's Ubuntu runners** take a 1080x1350 screenshot in headless mode. Zero new
+dependencies, and the result looks exactly like the template, fonts included. **R0 confirms Chrome is
+present on `ubuntu-latest` and that headless `--screenshot` works**; if not, fall back to `sharp`
+pinned with a lockfile, installed in the Facebook job only.
 
 ### 4.2 What one run does
 
@@ -118,10 +153,14 @@ Nothing in `send-newsletter.yml`, `preflight-week.yml`, the builder or the send 
 5. **Already posted?** `GET /{page-id}/posts?fields=id,message&since=<start>`. If any message carries
    this week's marker (the link's `w=<start>` query value), exit 0 "already posted", no post. This is
    the dedupe and the idempotency check; reruns are safe.
-6. **Image:** files in `images/fb/`, sorted; index = ISO week number mod N. No state.
-7. **Post** (unless dry run): `POST /{page-id}/photos` with `url=<served banner URL>` and
-   `caption=<message>`. **Read back** `GET /{post-id}?fields=id,permalink_url,created_time`; only that
-   makes the run green (F96).
+6. **Image:** call the new lookup (§ 4.6) for the top 3; download each full-size cover into the
+   runner's temp folder (a failed download drops that cover, it does not fail the run unless none
+   remain); fill `facebook-image.html` (date, item count, covers, short titles, shop name and town);
+   headless Chrome screenshots it to `fb-<week>.jpg`, 1080x1350. The image is **attached to the run as
+   an artifact** so every week's picture can be reviewed, and nothing is committed.
+7. **Post** (unless dry run): `POST /{page-id}/photos` as a multipart upload (`source=<the file>`,
+   `caption=<message>`), so the image needs no public hosting. **Read back**
+   `GET /{post-id}?fields=id,permalink_url,created_time`; only that makes the run green (F96).
 8. **Log:** run log plus `$GITHUB_STEP_SUMMARY`: week, on-sale date, items, image, post id, permalink
    or "dry run" / "already posted". No file written to the repo.
 
@@ -179,7 +218,33 @@ Reserve yours online: https://rjbookstop.pulllist.app/?ref=facebook
 The token never enters a chat, a file or a commit; Rick pastes it into GitHub's secret form himself.
 Permissions needed on the token: `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`.
 
-### 4.6 Alerts
+### 4.6 The top-picks lookup (SQL, this repo, staging then production)
+
+`get_pull_feed_week` deliberately returns no quantities, and that stays true. A **new** anon-callable
+function returns the ranking without the numbers:
+
+```
+get_pull_feed_top_picks(p_slug text, p_week_start date, p_limit int DEFAULT 3)
+  RETURNS TABLE (pick_rank int, title text, cover_url text, series_name text)
+```
+
+Same shape as `get_pull_feed_week` (`docs/sql/2026-10-01-f135-pull-feed-week-rpc.sql`): `SECURITY
+DEFINER`, `search_path` pinned, takes the slug, fixed 7-day window, catalog left-joined on the same
+tenant (F164), `REVOKE ... FROM PUBLIC`, `GRANT EXECUTE TO anon, authenticated`, one-row verdict
+query. Logic: sum `quantity` per (title, cover_url) for the week; drop rows with no `cover_url`; keep
+one per series (`coalesce(series_name, title)`), preferring a standard cover (`catalog.variant_type`
+null, `Standard` or `Primary Title`), then the highest quantity, then title; order by quantity desc
+then title; `p_limit` capped at 5. **Returns NEVER: `quantity`, `price_usd`, codes, ids.**
+
+**Exposure, stated plainly:** the order itself tells anyone with the public anon key which titles a
+shop received the most of in a given week. No counts, but relative volume. Low sensitivity (the same
+covers are on the public newsletter), but it is new information, so it is Rick's call at sign-off.
+
+Written with `/sql-check` during execution, run by Rick in the SQL Editor (staging first, then
+production; production is the one the job reads), `STATUS` line kept current so `/promote-prod` step 0
+sees it. **F172:** a free promo row could in principle rank; it is filtered only if F172 decides so.
+
+### 4.7 Alerts
 
 A failed run (no rows, stale page, expired or revoked token, Graph error, read-back failure) exits 1,
 and GitHub emails Rick, as with the newsletter. **One thing to verify (T3):** that GitHub's Actions
@@ -201,7 +266,11 @@ never handles the token.
 2. Confirm F135 is CLOSED (CLAUDE.md row + `weekly-newsletter-architecture.md` § 9 records the Tue
    2026-10-20 run read). **If not, stop.**
 3. `node --test test/*.test.mjs` green (baseline: 49 tests on 2026-10-13).
-4. Read `scripts/build-pull-feed.js` exports line (`module.exports`, ~737) and confirm
+4. A throwaway dispatch-only workflow on a branch (or the first R3 run in dry-run mode) confirms
+   `google-chrome --version` exists on `ubuntu-latest` and that
+   `google-chrome --headless --screenshot=x.jpg --window-size=1080,1350 file://...` writes a 1080x1350
+   image. **If not, switch the image step to `sharp` (§ 4.1) before writing R2.**
+5. Read `scripts/build-pull-feed.js` exports line (`module.exports`, ~737) and confirm
    `weekRange, todayUTC, resolveTargetWeek, dominantOnSaleDate` are exported; `preflight-week.js`
    exports `fetchRawWeek, readConfig`; `check-stamp.js` exports `readStamp`. **Halt on any mismatch.**
 
@@ -223,7 +292,18 @@ never handles the token.
    **Any "no" here stops the session and returns to planning.** Delete the test posts afterwards.
 5. Add `FACEBOOK_PAGE_TOKEN` (secret) and the variables in § 4.5 to `weekly-pull-feed`, with
    `FACEBOOK_PAGE_ID` = the **test** Page and `FACEBOOK_ENABLED` = `false`.
-6. Commit the banner images? No: hand them to the agent session (R2 adds them).
+6. D1 is run with a **multipart upload** (`source=` a local JPEG), the way the job will post, not
+   with an image URL.
+
+### R1b — The top-picks lookup (agent writes, Rick runs)
+
+1. Write `docs/sql/<date>-fb-top-picks-rpc.sql` in this repo per § 4.6, using `/sql-check` and the F135
+   RPC file as the template (pre-flight `name_taken = 0`, one transaction, one-row verdict that FAILs if
+   `quantity` or `price_usd` appears in the projection, if anon cannot execute, or if a series repeats).
+2. Doc-only commit to `staging` with `STATUS: ... staging=PENDING | prod=PENDING`.
+3. Rick runs it on **staging**, pastes the verdict; then on **production**; the agent re-verifies
+   production independently with an anon POST to the function (expect up to 3 rows, no quantity field).
+   Update the `STATUS` line after each.
 
 ### R2 — Script and tests (agent)
 
@@ -238,8 +318,7 @@ const { readStamp } = require('./check-stamp.js');
 
 // Pure ---------------------------------------------------------------
 function weekMarker(start) { return `w=${start}`; }
-function isoWeekNumber(dateStr) { /* ISO-8601 week of the Monday */ }
-function pickBanner(files, start) { const f = [...files].sort(); if (!f.length) throw new Error('no banners in images/fb'); return f[isoWeekNumber(start) % f.length]; }
+function usablePicks(picks) { return picks.filter(p => p && p.cover_url).slice(0, 3); }  // § 3a rules live in the SQL; this only guards
 function stampProblem(stamp, start, end) {
   if (!stamp) return 'newsletter.html has no pull-feed-generated stamp';
   if (stamp < start || stamp > end) return `newsletter.html is stamped ${stamp}, outside ${start}..${end}: Tuesday's build did not publish this week`;
@@ -253,10 +332,10 @@ function buildMessage({ onSale, count, store, pageUrl, appUrl, start }) { /* § 
 async function run({ argv, env, fetchImpl, now, listBanners, log, error, summary }) {
   // 1 week  2 rows (0 -> exit 1)  3 stamp (problem -> exit 1)  4 count
   // 5 GET posts since start (alreadyPosted -> log, exit 0)
-  // 6 banner  7 dry run -> print message+image, exit 0; else POST /photos, then GET /{post_id}
+  // 6 picks -> download covers -> renderImage()  7 dry run -> print message+image, exit 0; else POST /photos, then GET /{post_id}
   //   (no permalink_url -> exit 1)  8 summary
 }
-module.exports = { weekMarker, isoWeekNumber, pickBanner, stampProblem, countItems, alreadyPosted, buildMessage, run };
+module.exports = { weekMarker, usablePicks, stampProblem, countItems, alreadyPosted, buildMessage, run };
 if (require.main === module) run({ /* real deps */ }).then(c => process.exit(c));
 ```
 
@@ -267,12 +346,16 @@ dedupe check covers reruns).
 
 Create `test/facebook/post-facebook.test.mjs` covering at least: stamp in week / before / after /
 missing; zero rows → exit 1; already posted → exit 0 with **no POST call**; dry run → no POST call;
-banner rotation deterministic and wraps; POST ok but read-back fails → exit 1; token absent from all
+zero usable picks -> exit 1; POST ok but read-back fails → exit 1; token absent from all
 logged output (inject a token string and assert it never appears). **Negative controls:** break
 `stampProblem`, `alreadyPosted` and the read-back check one at a time and see the intended tests go red,
 then revert.
 
-Add banners as `images/fb/banner-1.jpg` …
+Also in R2: `scripts/facebook-image.html` (the mockup's layout B at 1080x1350, fonts from `fonts/`,
+placeholders for date, count, three covers, titles, shop) and a `renderImage()` step in the script
+(fill template, call headless Chrome, check the output is 1080x1350 and not blank). Tests add: one, two
+and three covers render; a cover that fails to download is dropped; zero covers fails the run; the
+caption never contains a quantity.
 
 **Verify:** `node --test test/facebook/` green; `node --test test/*.test.mjs` still 49 and unchanged
 (proves the newsletter's gate is not affected); `node --check scripts/post-facebook.js`.
@@ -294,7 +377,7 @@ byte-unchanged (`git diff HEAD~1 -- .github/workflows/send-newsletter.yml` empty
 
 | Step | Action | Expected |
 |---|---|---|
-| T1 | Dispatch, `dry_run=true` | Green; log shows week, on-sale date, count, chosen banner, full message; **no post on the test Page** |
+| T1 | Dispatch, `dry_run=true` | Green; log shows week, on-sale date, count, the three picks, full message; the run's attached `fb-<week>.jpg` is 1080x1350 and Rick approves how it looks; **no post on the test Page** |
 | T2 | Dispatch, `dry_run=false` | Green; one photo post on the test Page; permalink in the summary; Rick checks image, text, link opens the right week |
 | T3 | Dispatch `dry_run=false` again, same week | Green, "already posted", **no second post** |
 | T4 | Dispatch `week=2030-01-09` | Red: no rows. Rick confirms the failure email arrived |
