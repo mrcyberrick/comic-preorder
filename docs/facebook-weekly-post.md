@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging and prod APPLIED 2026-10-14); held until the F135 gate (Tue 10-20 run read); Rick's Meta setup (R1) owed; see § 8 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging and prod APPLIED 2026-10-14); held until the F135 gate (Tue 10-20 run read); Meta setup (R1) DONE 2026-10-14; see § 8 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -513,9 +513,11 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 - **Production SQL APPLIED 2026-10-14 (Rick).** Pre-flight `name_taken 0`, 119 rows, `comicstore, rjbookstop`. Verdict `OK`: `rjbookstop`, the same three picks as staging, equal to the independent top 3. Re-verified as anon over REST: this week HTTP 200 (title/cover_url/series_name only); 3 weeks back HTTP 400 `22023`; `comicstore` HTTP 200 `[]`. (`weekly_shipment` read as anon is HTTP 200 `[]` on production versus 401 on staging: that is the known F150 grant difference, RLS returns no rows; not new.)
 - **First real end-to-end dry run against production, real lookup:** exit 0, no Graph call, spotlight AMAZING SPIDER-MAN #1001 | DNX #3 | STAR WARS: ROGUE ONE - CHIRRUT & BAZE #1, all three PRH covers fetched at full size (`/cover/d/`), 1080x1350 PNG 779 KB, inspected: correct.
 
+- **R1 Meta setup DONE 2026-10-14 (Rick, guided).** App "Weekly Post" (use case "Manage everything on your Page"), left in Development mode, App Review NOT submitted (not needed: Rick admins both the app and the Page). Its permissions: `pages_manage_posts`, `pages_read_engagement`, `pages_show_list` (+ defaults `business_management`, `public_profile`). User token from Graph API Explorer (Permissions tab; the Configurations tab showed "No configurations available" and was not needed), extended in the Access Token Debugger, Page token from `me/accounts`. **The test Page's API id is `1416367771558275`, not the `61595560673871` in its profile link** (newer Pages use two numbers); confirmed by Rick opening `facebook.com/1416367771558275`, which lands on `profile.php?id=61595560673871`, "Book Stop Demo", 0 followers, no posts. In `weekly-pull-feed`, read back by name with `gh`: secret `FACEBOOK_PAGE_TOKEN` (2026-10-14 23:27Z), variables `FACEBOOK_PAGE_ID = 1416367771558275`, `FACEBOOK_ENABLED = false`; the newsletter's secrets and variables untouched. **Not verified by me:** the token's Debugger readout (Type Page / Expires Never) was not reported; T2 is the first real use of the token. Graph API Explorer shows **v26.0** as current, so the script default moved to `v26.0` (branch commit).
+
 **Owed, in order:**
 1. ~~**Rick: run the SQL** on staging, then production.~~ **Done 2026-10-14, both OK.**
-2. **Rick: Meta setup (R1)** for the TEST Page, then add the secret and variables to
+2. ~~**Rick: Meta setup (R1)**~~ **Done 2026-10-14.** For the TEST Page, then add the secret and variables to
    `weekly-pull-feed` (`FACEBOOK_PAGE_TOKEN` secret; `FACEBOOK_PAGE_ID`, `FACEBOOK_ENABLED=false`).
    The other variables are optional; the script's defaults are the § 4.5 values.
 3. **After the F135 gate is read (Wed 10-21):** rebase `facebook-weekly-post` onto `origin/main`,
