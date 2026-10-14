@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging=APPLIED 2026-10-14, prod=PENDING); held until the F135 gate (Tue 10-20 run read); Rick's Meta setup (R1) and SQL runs owed; see § 8 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging and prod APPLIED 2026-10-14); held until the F135 gate (Tue 10-20 run read); Rick's Meta setup (R1) owed; see § 8 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -510,8 +510,11 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 - **Staging SQL APPLIED 2026-10-14 (Rick).** Verdict `OK`: `raysandjudys`, 3 picks from 3 series (AMAZING SPIDER-MAN #1001 | DNX #3 | STAR WARS: ROGUE ONE - CHIRRUT & BAZE #1), equal to the independent top 3; standard covers; title order; 3 weeks back and a non-Monday refused, last week allowed. Re-verified from outside as anon over REST: this week HTTP 200 with only title/cover_url/series_name; 3 weeks back HTTP 400 `22023`; `weekly_shipment` itself still 401 `42501`.
 - **Found from that read-back:** PRH `cover_url` is stored as `.../cover/{id}`, which serves 297x450 (52 KB); `.../cover/d/{id}` serves 1400x2123. The job now asks for `/d/` (branch commit, 24/24 tests, negative control red). The builder's own comment that both forms are "the identical image" is no longer true; harmless there (it always normalises to `/d/`), not changed.
 
+- **Production SQL APPLIED 2026-10-14 (Rick).** Pre-flight `name_taken 0`, 119 rows, `comicstore, rjbookstop`. Verdict `OK`: `rjbookstop`, the same three picks as staging, equal to the independent top 3. Re-verified as anon over REST: this week HTTP 200 (title/cover_url/series_name only); 3 weeks back HTTP 400 `22023`; `comicstore` HTTP 200 `[]`. (`weekly_shipment` read as anon is HTTP 200 `[]` on production versus 401 on staging: that is the known F150 grant difference, RLS returns no rows; not new.)
+- **First real end-to-end dry run against production, real lookup:** exit 0, no Graph call, spotlight AMAZING SPIDER-MAN #1001 | DNX #3 | STAR WARS: ROGUE ONE - CHIRRUT & BAZE #1, all three PRH covers fetched at full size (`/cover/d/`), 1080x1350 PNG 779 KB, inspected: correct.
+
 **Owed, in order:**
-1. **Rick: run the SQL** on staging, then production (§ 5 R1b). Paste each verdict back.
+1. ~~**Rick: run the SQL** on staging, then production.~~ **Done 2026-10-14, both OK.**
 2. **Rick: Meta setup (R1)** for the TEST Page, then add the secret and variables to
    `weekly-pull-feed` (`FACEBOOK_PAGE_TOKEN` secret; `FACEBOOK_PAGE_ID`, `FACEBOOK_ENABLED=false`).
    The other variables are optional; the script's defaults are the § 4.5 values.
