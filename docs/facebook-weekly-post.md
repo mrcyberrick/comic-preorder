@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted; **image decided (§ 3a): one 4:5 composed image of the week's top 3 covers by copies received**; still awaiting Rick's answers to Q3, Q4, Q5, Q8 and sign-off | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131, F162 touched, see § 1.3)
+**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted; **decided (§ 3a, 3b): one 4:5 composed "spotlight" image of the week's top 3 covers by copies received; the link goes to `rjbookstop.com/news/`; Wednesday morning; Rick is the Page admin**; still awaiting Q4 (test Page), Q8 (wording), the § 3b exposure call and sign-off | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131, F162 touched, see § 1.3)
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -14,7 +14,7 @@ The weekly page this task asked to generate **already exists and is public**: `w
 (F135, live since 2026-10-01). So the Facebook job does **not** generate a page. It is a small,
 separate, read-only-on-the-repo workflow that runs after the newsletter, checks that this week's page
 is published, checks the Page has not already been posted to this week, and makes one post that links
-to that page. Dedupe is by **week**, not by RSS GUID, and the "state file" is the Facebook Page itself.
+to that page (**the shop's own `rjbookstop.com/news/`, decided § 3b**, which renders the same feed). Dedupe is by **week**, not by RSS GUID, and the "state file" is the Facebook Page itself.
 The post's picture is built fresh each week from the three covers the shop received the most copies
 of (§ 3a), so there are no stock banners to maintain. That needs one new narrow database lookup (SQL
 on staging, then production).
@@ -74,7 +74,7 @@ on staging, then production).
 |---|---|
 | Where the page is hosted | **Answered by the repo:** the existing GitHub Pages page. 5.1 is done and is about the app, not this page. Moving it is W2-W5 territory, not this job |
 | Public or gated | **Answered:** public. It already is, and D3 (2026-10-14) made the public weekly page the free-tier product. A gated link from Facebook would hit a sign-in wall |
-| URL shape | **Answered:** link the existing root `.../newsletter.html`. W2 adds `/t/<slug>/newsletter.html` and keeps the root as a permanent founding alias, so this link never breaks. Put the URL in a repo variable so W2 can switch it with no code change |
+| URL shape | ~~**Answered:** link the existing root `.../newsletter.html`.~~ **Superseded 2026-10-14 by § 3b: link `https://rjbookstop.com/news/`.** (Old text: W2 adds `/t/<slug>/newsletter.html` and keeps the root as a permanent founding alias, so this link never breaks. Put the URL in a repo variable so W2 can switch it with no code change.) |
 
 ---
 
@@ -84,9 +84,9 @@ on staging, then production).
 |---|---|---|
 | Q1 | RSS URL | `https://mrcyberrick.github.io/weekly-pull-feed/rss.xml`, public. No answer needed |
 | Q2 | Items per week, edits after publishing | Measured: 119 titles this week; earlier publishes 19 to 72. The whole feed is rebuilt each Tuesday; a re-dispatch with `week=` can republish a past week (deliberate). **Not an issue under week-based dedupe** |
-| Q3 | Meta developer app? Are you an admin of the Ray & Judy's Page? | **Unknown, yours.** You need a Meta developer app and full Page admin (not editor) rights |
+| Q3 | Meta developer app? Are you an admin of the Ray & Judy's Page? | **Answered 2026-10-14: Rick is the Page admin.** The Meta developer app is created in R1 (no app yet assumed) |
 | Q4 | Test Page? | A private group **cannot** be used (Groups API removed). Create a throwaway Page you admin, with no followers. Whether a brand-new or unpublished Page accepts API posts is checked in R1 |
-| Q5 | Post when the feed updates, or a fixed day? | **Recommend a fixed time, Wednesday 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
+| Q5 | Post when the feed updates, or a fixed day? | **DECIDED 2026-10-14 (Rick): Wednesday morning, cron 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
 | Q6 | Photo post, link post, or both? | **DECIDED: a photo post** (the composed top-picks image, § 3a; the link in the text). Meta ignores a custom image on link posts from the API unless the Page "owns" the linked domain (Graph API v2.9/v2.11 changelog), and `newsletter.html` has **no Open Graph tags**, so a link post would show a generic or scraped preview and a custom image cannot work. Trade-off: a link inside photo text is clickable but less prominent than a link card. Confirm in R1 |
 | Q7 | Prices and descriptions on the page? | **Recommend no for v1.** It means widening the anon RPC (SQL on staging then production), a page redesign and 119 descriptions on one page. File separately if wanted |
 | Q8 | Post wording | Draft in § 4.4. Approve or edit |
@@ -103,7 +103,7 @@ hand-picked as examples, not the real top three).
   the tallest shape the feed shows uncropped, so it fills most of a phone screen.
 - **The image shows this week's top 3 covers, ranked by copies the shop RECEIVED**
   (`weekly_shipment.quantity`, summed per title for the week). Not customer reservations.
-- **The image says "Top picks", never "most ordered"**, so the post does not hint at order quantities.
+- **The image says "In the spotlight", never "most ordered" or "top picks"** (Rick, 2026-10-14: "Spot Light" or similar), so the post does not suggest how the three were chosen. *(This read "Top picks" until the same day.)*
 - **Rules that follow (my design, for review in the runbook):** one cover per series (this week had
   several AMAZING SPIDER-MAN #1001 covers that could take all three slots), preferring the standard
   cover; skip rows with no cover; fewer than three usable covers shows what there is (one or two);
@@ -112,6 +112,40 @@ hand-picked as examples, not the real top three).
   2026-10-14: the newsletter's hosted thumbnails are about 198x300 (too soft); full-size PRH covers are
   1400x2123; this week's Lunar full-size cover (TRANSFORMERS #37) was only 450x692. In a 1080-wide
   image each cover is about 300 px wide, so even Lunar's small files are sharp enough.
+
+### 3b. Landing page and the ranking risk (decided 2026-10-14)
+
+**The post links to `https://rjbookstop.com/news/`, not the GitHub Pages newsletter.** Rick's
+suggestion; measured the same day, and it is the better landing:
+
+| | `rjbookstop.com/news/` | `.../weekly-pull-feed/newsletter.html` |
+|---|---|---|
+| Domain the customer sees | The shop's own | `mrcyberrick.github.io` |
+| Content | The same feed: its script reads `mrcyberrick.us/weekly-pull-feed/rss.xml` | The feed's own page |
+| Fresh on Wednesday morning? | **Yes:** 2026-10-14 the page's proxy (`rss-feed.rjbookstop.com`) served `lastBuildDate` Wed 14 Oct 00:08 GMT, 119 items, cached 5 minutes | Yes |
+| Sign-up | **Has an email subscribe form** and a link to `rjbookstop.pulllist.app` (the funnel goal, D3) | Links to PULLLIST only |
+| Query string (`?ref=facebook&w=...`) | Harmless (HTTP 200, checked) | Harmless |
+
+**What it adds as a dependency, stated plainly:** the list is drawn in the visitor's browser by the
+site's own script, through a Cloudflare Worker at `rss-feed.rjbookstop.com`, falling back to two outside
+services (`allorigins`, `rss2json`). The site lives in Rick's local `rjbookstop` folder, outside both
+repos' plans. If the Worker and both fallbacks fail, the page shows no titles. So the job's freshness
+check (§ 4.2 step 3) reads the feed **through the Worker**, exactly as the page does, and fails red if
+it is unreachable or stale. A Facebook visitor whose browser blocks the fallback services still depends
+on the Worker; that is the site's existing behaviour, not something this job changes.
+
+**The ranking risk, noted at Rick's request.** The spotlight wording keeps the **post** from
+suggesting how the covers were chosen. It does **not** hide the ranking itself:
+- The new database lookup (§ 4.6) is public by design (anon key, called from a public repo). Anyone who
+  finds it can ask, for any week, which titles this shop received the most copies of, in order. It
+  returns no counts or prices, but relative volume is new information that is not public today.
+- Over many weeks the spotlight covers themselves form a visible pattern of what the shop stocks
+  heavily. That is ordinary retail signalling, much like a shop window.
+- **Mitigations available, none chosen yet:** (a) accept it (lowest effort; the covers are already
+  public in the newsletter); (b) restrict the lookup to the current and previous week, so history cannot
+  be pulled; (c) return the three covers **unordered** (shuffle the order in the image), so even the
+  1-2-3 order is not exposed. **Recommendation: (b) + (c)**, both cheap inside the same SQL. Rick's
+  call at sign-off.
 
 ---
 
@@ -144,11 +178,12 @@ pinned with a lockfile, installed in the Facebook job only.
 1. **Week:** builder's `todayUTC` + `resolveTargetWeek` + `weekRange` (a `--week=` override for tests).
 2. **Data:** preflight's `fetchRawWeek` (same anon RPC, same production guard). Zero rows: fail red
    ("the shipment import has not run"). On-sale date: builder's `dominantOnSaleDate`.
-3. **Page is this week's:** fetch the published `newsletter.html` from Pages and read its
-   `pull-feed-generated` stamp (`check-stamp.js`'s `readStamp`). It must fall inside `start..end`. If
-   not: fail red ("Tuesday's newsletter build did not publish this week"). This stops a post that links
-   to last week's page.
-4. **Count:** the number of `<item>` in the published `rss.xml` (what the reader will see), cross-checked
+3. **Landing page shows this week:** fetch the feed **through the site's Worker**
+   (`FEED_CHECK_URL`, `https://rss-feed.rjbookstop.com/rss.xml`, what `rjbookstop.com/news/` itself
+   renders) and read `<lastBuildDate>`. It must fall inside `start..end`. If not, or the Worker is
+   unreachable: fail red ("the news page does not show this week yet"). This stops a post that links to
+   last week's list. *(This step read the `newsletter.html` stamp until the landing changed, § 3b.)*
+4. **Count:** the number of `<item>` in that same feed (what the reader will see), cross-checked
    against the row count; a mismatch is a warning, not a failure.
 5. **Already posted?** `GET /{page-id}/posts?fields=id,message&since=<start>`. If any message carries
    this week's marker (the link's `w=<start>` query value), exit 0 "already posted", no post. This is
@@ -195,7 +230,7 @@ The schedule does nothing until the repo variable `FACEBOOK_ENABLED` is `true`, 
 ```
 New comics this Wednesday, Oct 14! 119 new arrivals at Ray & Judy's Book Stop.
 
-See every cover: https://mrcyberrick.github.io/weekly-pull-feed/newsletter.html?ref=facebook&w=2026-10-12
+See every new title: https://rjbookstop.com/news/?ref=facebook&w=2026-10-12
 
 Reserve yours online: https://rjbookstop.pulllist.app/?ref=facebook
 ```
@@ -211,7 +246,8 @@ Reserve yours online: https://rjbookstop.pulllist.app/?ref=facebook
 | `FACEBOOK_PAGE_ID` | variable | Test Page id first, the real Page id at go-live |
 | `FACEBOOK_ENABLED` | variable | `false` until go-live |
 | `FACEBOOK_GRAPH_VERSION` | variable | Pinned, e.g. `v25.0` (current per Meta's reference; confirm in R1) |
-| `FEED_PAGE_URL` | variable | `https://mrcyberrick.github.io/weekly-pull-feed/newsletter.html` |
+| `LANDING_URL` | variable | `https://rjbookstop.com/news/` (§ 3b) |
+| `FEED_CHECK_URL` | variable | `https://rss-feed.rjbookstop.com/rss.xml` (the feed as the landing page reads it) |
 | `STORE_NAME`, `STORE_APP_URL` | variable | `Ray & Judy's Book Stop`, `https://rjbookstop.pulllist.app/` |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | variable | Already exist |
 
@@ -238,7 +274,8 @@ then title; `p_limit` capped at 5. **Returns NEVER: `quantity`, `price_usd`, cod
 
 **Exposure, stated plainly:** the order itself tells anyone with the public anon key which titles a
 shop received the most of in a given week. No counts, but relative volume. Low sensitivity (the same
-covers are on the public newsletter), but it is new information, so it is Rick's call at sign-off.
+covers are on the public newsletter), but it is new information, so it is Rick's call at sign-off. **See § 3b for the
+full risk note and two cheap mitigations (recent weeks only; unordered results).**
 
 Written with `/sql-check` during execution, run by Rick in the SQL Editor (staging first, then
 production; production is the one the job reads), `STATUS` line kept current so `/promote-prod` step 0
@@ -381,7 +418,7 @@ byte-unchanged (`git diff HEAD~1 -- .github/workflows/send-newsletter.yml` empty
 | T2 | Dispatch, `dry_run=false` | Green; one photo post on the test Page; permalink in the summary; Rick checks image, text, link opens the right week |
 | T3 | Dispatch `dry_run=false` again, same week | Green, "already posted", **no second post** |
 | T4 | Dispatch `week=2030-01-09` | Red: no rows. Rick confirms the failure email arrived |
-| T5 | Temporarily set `FEED_PAGE_URL` to a page with an old stamp (or dispatch on a week whose page is not published) | Red: stale page; nothing posted. Restore the variable |
+| T5 | Dispatch with `week=` set to NEXT week (whose feed is not built yet) | Red: the news page does not show that week; nothing posted |
 | T6 | Set `FACEBOOK_ENABLED=true` with the **test** Page id | Two or three real Wednesday runs post to the test Page; Rick reviews each |
 
 ### R5 — Go-live (Rick, after T6 is reviewed)
@@ -411,7 +448,9 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 
 | Risk | Mitigation |
 |---|---|
-| Posts last week's page | Stamp-in-week check (step 3) fails red |
+| Posts while the news page shows last week | `lastBuildDate`-in-week check through the Worker (step 3) fails red |
+| The news page's Worker breaks (outside these repos) | Step 3 fails red, so no post points at an empty page; fixing the site is separate work |
+| The spotlight lookup reveals what the shop stocks most | No counts returned; § 3b mitigations (b) recent weeks only, (c) unordered, Rick's call |
 | Double post | Week marker read from the Page before posting; no POST retries |
 | Token leak in a public repo's logs | Secret masking plus explicit redaction plus a unit test asserting the token never appears |
 | Token silently invalidated (password change, admin removed) | Run goes red and emails Rick |
