@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted; **decided (§ 3a, 3b): one 4:5 composed "spotlight" image of the week's top 3 covers by copies received; the link goes to `rjbookstop.com/news/`; Wednesday morning; Rick is the Page admin**; still awaiting Q4 (test Page), Q8 (wording), the § 3b exposure call and sign-off | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131, F162 touched, see § 1.3)
+**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted; **decided (§ 3a, 3b): one 4:5 composed "spotlight" image of the week's top 3 covers by copies received; the link goes to `rjbookstop.com/news/`; Wednesday morning; Rick is the Page admin**; still awaiting Q4 (test Page), Q8 (wording), and sign-off (the § 3b exposure call is DECIDED: (b) + (c)) | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131, F162 touched, see § 1.3)
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -107,7 +107,7 @@ hand-picked as examples, not the real top three).
 - **Rules that follow (my design, for review in the runbook):** one cover per series (this week had
   several AMAZING SPIDER-MAN #1001 covers that could take all three slots), preferring the standard
   cover; skip rows with no cover; fewer than three usable covers shows what there is (one or two);
-  ties broken by title so the result is stable (F162).
+  ties broken by title so the result is stable (F162). The three are then shown in title order (§ 3b).
 - **Image source: the distributor's full-size cover, never the newsletter's thumbnail.** Measured
   2026-10-14: the newsletter's hosted thumbnails are about 198x300 (too soft); full-size PRH covers are
   1400x2123; this week's Lunar full-size cover (TRANSFORMERS #37) was only 450x692. In a 1080-wide
@@ -141,11 +141,18 @@ suggesting how the covers were chosen. It does **not** hide the ranking itself:
   returns no counts or prices, but relative volume is new information that is not public today.
 - Over many weeks the spotlight covers themselves form a visible pattern of what the shop stocks
   heavily. That is ordinary retail signalling, much like a shop window.
-- **Mitigations available, none chosen yet:** (a) accept it (lowest effort; the covers are already
-  public in the newsletter); (b) restrict the lookup to the current and previous week, so history cannot
-  be pulled; (c) return the three covers **unordered** (shuffle the order in the image), so even the
-  1-2-3 order is not exposed. **Recommendation: (b) + (c)**, both cheap inside the same SQL. Rick's
-  call at sign-off.
+- **DECIDED 2026-10-14 (Rick: "close the gap and go with b&c"): mitigations (b) + (c).** *(This line
+  listed (a) accept, (b) recent weeks only, (c) unordered, with (b) + (c) recommended, until Rick chose.)*
+  - **(b) Recent weeks only.** The lookup answers only for the week containing today (UTC) and the
+    week before; any other week raises an error naming the allowed range. History cannot be pulled.
+  - **(c) No order.** It returns the three spotlight covers **sorted by title**, never by quantity, with
+    no rank column. Sorting by title (not a random shuffle) keeps the result stable from run to run
+    (F162) while saying nothing about volume. The image lays the covers out in that order.
+  - **(c) needed one more change, found while recording it:** the draft took a `p_limit` argument, and a
+    call with `p_limit = 1` (or 1 then 2) would reveal the #1 title anyway. **The count is now fixed at
+    3, with no limit parameter.**
+- **What remains exposed, accepted:** for the current or previous week, anyone can learn which three
+  titles were spotlighted, which is exactly what the public post shows anyway. Nothing else.
 
 ---
 
@@ -260,8 +267,8 @@ Permissions needed on the token: `pages_manage_posts`, `pages_read_engagement`, 
 function returns the ranking without the numbers:
 
 ```
-get_pull_feed_top_picks(p_slug text, p_week_start date, p_limit int DEFAULT 3)
-  RETURNS TABLE (pick_rank int, title text, cover_url text, series_name text)
+get_pull_feed_spotlight(p_slug text, p_week_start date)
+  RETURNS TABLE (title text, cover_url text, series_name text)   -- at most 3 rows, sorted by title
 ```
 
 Same shape as `get_pull_feed_week` (`docs/sql/2026-10-01-f135-pull-feed-week-rpc.sql`): `SECURITY
@@ -269,8 +276,12 @@ DEFINER`, `search_path` pinned, takes the slug, fixed 7-day window, catalog left
 tenant (F164), `REVOKE ... FROM PUBLIC`, `GRANT EXECUTE TO anon, authenticated`, one-row verdict
 query. Logic: sum `quantity` per (title, cover_url) for the week; drop rows with no `cover_url`; keep
 one per series (`coalesce(series_name, title)`), preferring a standard cover (`catalog.variant_type`
-null, `Standard` or `Primary Title`), then the highest quantity, then title; order by quantity desc
-then title; `p_limit` capped at 5. **Returns NEVER: `quantity`, `price_usd`, codes, ids.**
+null, `Standard` or `Primary Title`), then the highest quantity, then title; take the top **3**
+(fixed; no limit argument, § 3b); **return them ORDER BY title** (§ 3b (c)). Refuse (raise) unless
+`p_week_start` falls in the week containing `CURRENT_DATE` or the week before (§ 3b (b)), using the
+same Monday-to-Sunday rule as `get_pull_feed_week`. **Returns NEVER: `quantity`, `price_usd`, a
+rank, codes, ids.** *(Renamed from `get_pull_feed_top_picks`, which had a rank column and `p_limit`,
+before anything was written.)*
 
 **Exposure, stated plainly:** the order itself tells anyone with the public anon key which titles a
 shop received the most of in a given week. No counts, but relative volume. Low sensitivity (the same
@@ -336,7 +347,10 @@ never handles the token.
 
 1. Write `docs/sql/<date>-fb-top-picks-rpc.sql` in this repo per § 4.6, using `/sql-check` and the F135
    RPC file as the template (pre-flight `name_taken = 0`, one transaction, one-row verdict that FAILs if
-   `quantity` or `price_usd` appears in the projection, if anon cannot execute, or if a series repeats).
+   the projection is not exactly `title, cover_url, series_name`, if the function has more than two
+   arguments, if anon cannot execute, if a series repeats, if more than 3 rows return, or if the rows
+   are not in title order). **Negative checks in the verdict too:** a call for a week three weeks back
+   must raise, not return rows (b).
 2. Doc-only commit to `staging` with `STATUS: ... staging=PENDING | prod=PENDING`.
 3. Rick runs it on **staging**, pastes the verdict; then on **production**; the agent re-verifies
    production independently with an anon POST to the function (expect up to 3 rows, no quantity field).
@@ -450,7 +464,7 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 |---|---|
 | Posts while the news page shows last week | `lastBuildDate`-in-week check through the Worker (step 3) fails red |
 | The news page's Worker breaks (outside these repos) | Step 3 fails red, so no post points at an empty page; fixing the site is separate work |
-| The spotlight lookup reveals what the shop stocks most | No counts returned; § 3b mitigations (b) recent weeks only, (c) unordered, Rick's call |
+| The spotlight lookup reveals what the shop stocks most | No counts, no rank, fixed 3, title order, current and previous week only (§ 3b, decided) |
 | Double post | Week marker read from the Page before posting; no POST retries |
 | Token leak in a public repo's logs | Secret masking plus explicit redaction plus a unit test asserting the token never appears |
 | Token silently invalidated (password change, admin removed) | Run goes red and emails Rick |
