@@ -1,6 +1,6 @@
 # Weekly newsletter — decoupled, multi-tenant architecture (PLAN)
 
-**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PENDING: the Tue 2026-10-20 cron, reminder scheduled for Wed 10-21 (§ 9); F135 stays OPEN until it is read**; W2-W5 NOT STARTED | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
+**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PENDING: the Tue 2026-10-20 cron, reminder scheduled for Wed 10-21 (§ 9); F135 stays OPEN until it is read**; W2-W5 NOT STARTED; **product direction decided 2026-10-14 (§ 4: D3 tiers, D7 invoice content, D8 two hidden providers, D9 self-service shipment upload first)** | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
 **Owner:** Rick. **Planning:** this doc. **Execution:** one session per W-step (§ 5), Sonnet CLI.
 **Repos touched by execution:** `mrcyberrick/weekly-pull-feed` (public, where the newsletter now
 runs), the private scripts repo (`catalogs/scripts`, only to remove the old path), and this repo
@@ -103,8 +103,13 @@ limit of about 10 builds an hour. Build every due tenant, then publish once.
 
 **Brevo, platform account (the default).** One Brevo account (Rick's, as today), one **list per
 tenant**, campaign named `weekly-pull-feed <slug> <date>`. Sender: the tenant's name as display name.
-Sender address: one authenticated `pulllist.app` address (or the tenant's `<slug>.pulllist.app`,
-which Brevo already authenticates for `rjbookstop`). `BREVO_API_KEY` stays one repo secret. The
+Sender address: **one flat address on a dedicated marketing subdomain, e.g. `news.pulllist.app`,
+authenticated in Brevo ONCE** (decided 2026-10-14, § 4 D8), with `replyTo` set to the shop's own
+email. *(This read "one authenticated `pulllist.app` address (or the tenant's `<slug>.pulllist.app`,
+which Brevo already authenticates for `rjbookstop`)". Per-tenant subdomains would mean per-tenant DNS
+at every onboarding, and bare `pulllist.app` would share domain reputation with Resend's
+transactional mail.)* `rjbookstop.pulllist.app` keeps working until the founding tenant is moved
+over in W3. `BREVO_API_KEY` stays one repo secret. The
 existing send script already does the hard part (pre-send zero-recipient abort, post-send status
 poll, F96/F106); it gains a `slug` and reads list id and sender from `tenants.json`.
 
@@ -128,7 +133,7 @@ asks for it and the pull model has been tried.
 |---|---|---|
 | **D1** | Reconcile the F135 records now (§ 5 W0)? | **Yes.** Cherry-pick the branch's 9 doc commits onto `staging` (it was cut from `main`, so a merge would drag `main`'s history in), then delete the branch. Doc-only |
 | **D2** | Where does tenant identity live? | **Bootstrap in `weekly-pull-feed/tenants.json` (W2), move to the database when a second tenant exists (W4).** The file is public, which is fine: everything in it is already printed in every email. The DB home is `app_settings` key `newsletter`, edited on `settings.html`, read through an anon RPC returning only public fields. Delivery routing (list id, adapter) stays in the repo file either way: it is platform operations, not tenant identity |
-| **D3** | Is the newsletter a paid-tier feature? | **Yes, as a paid add-on** (F72's `Tier` direction): a free tenant would carry its own name and address in mail sent from the platform's Brevo account, which is the "branded" thing the paid tier sells. Pull-model feeds could be free. Your call |
+| **D3** | Is the newsletter a paid-tier feature? | **Yes, as a paid add-on** (F72's `Tier` direction): a free tenant would carry its own name and address in mail sent from the platform's Brevo account, which is the "branded" thing the paid tier sells. Pull-model feeds could be free. **DECIDED 2026-10-14 (Rick): the managed email is the paid product; the public page and RSS feed are free. See the block below the table** |
 | **D4** | Monday early-warning preflight (F135 § 4.5)? | **Build it in W1.** A read-only Monday run that fails if this week has no shipment rows turns a Tuesday-night miss into a Monday to-do; it costs one small workflow |
 | **D5** | Per-tenant send time, or one Tuesday cron? | **A dispatcher**: an hourly Tuesday cron that sends each tenant whose local send time has arrived, from `schedule` + `timezone` in its profile. It also ends the twice-a-year DST edit. Until then (W1), move the cron for EST by 2026-11-01 |
 | **D6** | F172: drop `(FREE)` 100%-discount promo rows from the feed? | Decide F172 first; if they belong out of the feed only, filter in the RPC, not the import |
@@ -143,6 +148,46 @@ its cron time**, past the 2 h 01 min the workflow header's table stops at, so a 
 touched** in W1. If a winter arrival turns out too early or too late, the one-line edit is `"0 22 * * 2"`;
 make it **after** the Oct 27 send and before Sun 11-01, not earlier, or it also moves the sends before the
 DST change by an hour.
+
+**Product direction, Rick, 2026-10-14 (a planning conversation; no code).** The newsletter is a
+**funnel**: it shows customers what arrived and gets new people to sign up. The target owner is a
+simple, non-technical shop, so the paid feature is a finished result, not a part to assemble.
+
+- **D3 decided: tiers.** **Free:** a public "new this week at [shop]" page and its RSS feed, with a
+  "Powered by PULLLIST" line (a third-party ESP can read the feed, supported by a how-to, not by
+  engineering). **Paid:** the managed weekly email, sent in the shop's name to the shop's own
+  subscribers, with nothing to configure beyond on/off, send day and time, an optional short store
+  note and a preview. Its selling number is the sign-ups and reservations it brought in (the cover
+  links already carry `ref=newsletter`). **Not built:** a template editor, segments, or a tenant's own
+  ESP API key.
+- **D7 decided: content comes from the shop's own shipment invoice, not the release schedule.** A
+  release-schedule newsletter was considered as a default so a shop could start with no data, and
+  **rejected by Rick**: it promotes books the shop does not have on hand, and it needs a full release
+  catalog (both distributors, plus titles nobody reserved) that PULLLIST does not hold. The invoice is
+  what makes the email worth sending.
+- **D8 decided: two email providers, both invisible to the shop owner.** Resend stays the account-mail
+  provider (no link rewriting, which a password reset needs; Brevo was rejected for that job on
+  2026-09-02) and Brevo stays the newsletter provider (unsubscribe, bounce and click handling). The
+  split also keeps newsletter complaints away from account-mail delivery. The friction to remove is
+  per-shop setup, not the second provider: one sender on a dedicated subdomain (§ 3), sign-ups
+  collected inside PULLLIST (opt-in at registration, an embeddable form, a counter QR code) and added
+  to the shop's Brevo list behind the scenes. The owner never logs into either provider. Moving the
+  newsletter to Resend's marketing product is possible but **untested** and would need an F99-style
+  trial first; worth doing only if two accounts become a real burden.
+- **D9 decided: self-service shipment upload is what the multi-shop newsletter waits on.** If the
+  invoice is the content, the blocker is getting invoices in without Rick: a signed-in upload of the
+  week's invoice files that feeds the bagging list, This Week, the reconciliation **and** the newsletter
+  from one weekly step. Rick confirmed (2026-10-14) he is moving toward a self-service import process
+  later, so this is aligned rather than new work. **Shipment upload is the light first slice of F131**:
+  a weekly invoice is roughly 60 to 120 rows, against ~11,700 catalog rows for a monthly import, so
+  F131's volume concern does not apply to it. POS integration is a later, automatic way to supply the
+  same data.
+
+**Open, not decided:** who owns a shop's subscriber list if it leaves, and how consent is recorded;
+Brevo's free-plan daily send cap (300 a day when last checked, shared by every shop on the account)
+and the paid plan the price must cover, **re-check current pricing**; whether an "expected this week"
+fallback built from the order record is usable (not verified whether that record covers a shop's whole
+order or only reserved titles and shelf-copy suggestions).
 
 ---
 
@@ -205,9 +250,12 @@ The newsletter is downstream of shipment rows, and **only Rick can load shipment
   that list if a tenant leaves, and how signups reach the right list, is a product decision before
   W4.
 
+- **Self-service shipment upload (D9, added 2026-10-14)** — the shop uploads its own weekly invoice.
+  This is the concrete form of the F131 gate for the newsletter, and the first slice of F131 to build.
+
 So: **W0 and W1 are worth doing now** (they close F135 and remove a live dual-publish path). **W2 is
 cheap and safe now** (its gate is byte-identical output). **W3-W5 wait for a real second tenant**,
-which waits on F131 and F169.
+which waits on F131 (starting with self-service shipment upload, D9) and F169.
 
 ---
 
