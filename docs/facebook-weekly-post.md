@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** NOT STARTED 2026-10-14 — plan and runbook drafted; **decided (§ 3a, 3b): one 4:5 composed "spotlight" image of the week's top 3 covers by copies received; the link goes to `rjbookstop.com/news/`; Wednesday morning; Rick is the Page admin**; still awaiting Q4 (test Page), Q8 (wording), and sign-off (the § 3b exposure call is DECIDED: (b) + (c)) | staging=— | prod=— | findings=none consumed (F135, F96, F98, F100, F106, F172, F131, F162 touched, see § 1.3)
+**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging=PENDING prod=PENDING); held until the F135 gate (Tue 10-20 run read); Rick's Meta setup (R1) and SQL runs owed; see § 8 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -471,6 +471,50 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 | Meta API changes (version sunset) | Pinned version variable; a red run on sunset |
 | Facebook code blocks the newsletter | Separate workflow, separate test folder; newsletter files byte-unchanged (R3 verify) |
 | F135 not yet closed | R0 step 2 halts |
+
+## 8. Execution log
+
+**2026-10-14, first session (Rick: "go"; test Page given; wording approved).**
+
+- **Inputs from Rick:** test Page `https://www.facebook.com/profile.php?id=61595560673871` (its Graph
+  Page id is read from `/me/accounts` in R1, expected to be `61595560673871`); post wording § 4.4
+  approved; § 3b exposure decided (b) + (c).
+- **R0:** `weekly-pull-feed` pulled to `c0a423c5`; newsletter suite 49/49; builder, preflight and
+  stamp exports as expected. **F135 is NOT closed yet**, so nothing is pushed to `weekly-pull-feed`
+  until the Tue 2026-10-20 run is read (a non-bot commit there would muddy that gate's check).
+- **R1b (SQL), written, NOT run:** `docs/sql/2026-10-14-fb-spotlight-rpc.sql` (`staging` `00acb3d`).
+  `get_pull_feed_spotlight(p_slug, p_week_start)`: top 3 series by copies received, standard cover
+  preferred, returned in title order, this week or last only, no limit argument. **Dry-run on PGlite**
+  (Postgres in WASM, scratch only) against a 12-row fixture: verdict `OK`; spotlight exactly as
+  predicted (Spider-Man shown by its regular cover though variants had more copies; Transformers CVR A
+  over CVR B; Batman 4th and excluded; the coverless, last-week and other-shop rows never appear);
+  as `anon` the function works and the table read is refused. **Six negative controls**, each red
+  with its own message: no week limit, rank order, no series dedupe, a limit argument, variant
+  preferred over standard (this one first passed the verdict; a check was added). Not exercised:
+  Supabase itself (PGlite is Postgres 17 without Supabase's roles and default grants).
+- **R2/R3 (`weekly-pull-feed`, local branch `facebook-weekly-post`, `2e1a1d1b`, not pushed):**
+  `scripts/post-facebook.js`, `scripts/facebook-image.html`, `fonts/` (Anton, Archivo, OFL licenses),
+  `test/facebook/post-facebook.test.mjs` (22 tests), `.github/workflows/post-facebook.yml`. **22/22
+  green; five negative controls** (no token redaction, no freshness check, no dedupe, no read-back,
+  dry run not the default) each turned their intended test red, script restored byte-identical.
+  Newsletter suite still 49/49 and its five files byte-unchanged. Workflow YAML parsed.
+- **Local end-to-end dry run against LIVE production data:** real `get_pull_feed_week` (119 rows), the
+  real news-page feed through `rss-feed.rjbookstop.com` (this week, 119 items), real full-size covers;
+  only the not-yet-applied spotlight lookup was stood in by three hand-picked covers. Exit 0, no Graph
+  call made, a 1080x1350 PNG (~950 KB) produced and inspected. One layout fix from the inspection
+  (covers top-aligned so a two-line caption does not lift one cover; covers enlarged to 312x468).
+- **Found and fixed during the build:** the template's own comment spelled a placeholder, which the
+  leftover-placeholder guard correctly refused; a hand-built `file://` URL replaced with
+  `pathToFileURL`; `node --test` needs a file glob, not a folder (the workflow uses the glob).
+
+**Owed, in order:**
+1. **Rick: run the SQL** on staging, then production (§ 5 R1b). Paste each verdict back.
+2. **Rick: Meta setup (R1)** for the TEST Page, then add the secret and variables to
+   `weekly-pull-feed` (`FACEBOOK_PAGE_TOKEN` secret; `FACEBOOK_PAGE_ID`, `FACEBOOK_ENABLED=false`).
+   The other variables are optional; the script's defaults are the § 4.5 values.
+3. **After the F135 gate is read (Wed 10-21):** rebase `facebook-weekly-post` onto `origin/main`,
+   fast-forward and push (not on a Tuesday evening), then T1-T6 (§ 5 R4) on the test Page.
+4. R5 go-live after T6 is reviewed.
 
 ## References
 
