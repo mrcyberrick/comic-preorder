@@ -1,4 +1,4 @@
--- STATUS: NOT STARTED | staging=PENDING | prod=PENDING | findings=none (docs/facebook-weekly-post.md § 3b, § 4.6)
+-- STATUS: IN PROGRESS | staging=APPLIED 2026-10-14 | prod=PENDING | findings=none (docs/facebook-weekly-post.md § 3b, § 4.6)
 -- Weekly Facebook post: the three "spotlight" covers for a shop's week, for the
 -- composed image the post-facebook job builds in mrcyberrick/weekly-pull-feed.
 --

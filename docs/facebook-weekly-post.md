@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging=PENDING prod=PENDING); held until the F135 gate (Tue 10-20 run read); Rick's Meta setup (R1) and SQL runs owed; see § 8 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging=APPLIED 2026-10-14, prod=PENDING); held until the F135 gate (Tue 10-20 run read); Rick's Meta setup (R1) and SQL runs owed; see § 8 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -506,6 +506,9 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 - **Found and fixed during the build:** the template's own comment spelled a placeholder, which the
   leftover-placeholder guard correctly refused; a hand-built `file://` URL replaced with
   `pathToFileURL`; `node --test` needs a file glob, not a folder (the workflow uses the glob).
+
+- **Staging SQL APPLIED 2026-10-14 (Rick).** Verdict `OK`: `raysandjudys`, 3 picks from 3 series (AMAZING SPIDER-MAN #1001 | DNX #3 | STAR WARS: ROGUE ONE - CHIRRUT & BAZE #1), equal to the independent top 3; standard covers; title order; 3 weeks back and a non-Monday refused, last week allowed. Re-verified from outside as anon over REST: this week HTTP 200 with only title/cover_url/series_name; 3 weeks back HTTP 400 `22023`; `weekly_shipment` itself still 401 `42501`.
+- **Found from that read-back:** PRH `cover_url` is stored as `.../cover/{id}`, which serves 297x450 (52 KB); `.../cover/d/{id}` serves 1400x2123. The job now asks for `/d/` (branch commit, 24/24 tests, negative control red). The builder's own comment that both forms are "the identical image" is no longer true; harmless there (it always normalises to `/d/`), not changed.
 
 **Owed, in order:**
 1. **Rick: run the SQL** on staging, then production (§ 5 R1b). Paste each verdict back.
