@@ -72,6 +72,7 @@ unknown `<slug>.pulllist.app` falls back to the FOUNDING tenant (`app.js:142-145
 scripts half, which waits for the November import; G-E (F165 soak) is time-gated.", which missed G-C.)* *(This line read "Next in that plan: G-D (F164 trace) needs no Phase 6
 decision." until G-D ran, and before that "G-B (engine to production) and G-D (F164 trace) need no Phase 6 decision.")*
 **Active sub-deploy:** none.
+**✅ MAILERLITE RETIRED END TO END 2026-10-15 (Rick-run external steps; docs only on this side; no code, no schema, no deploy).** The app side was already done (webhook path 2026-08-30, `register-tenant` 2026-10-06); this closes the outside. (1) **DNS, `mrcyberrick.us` (GoDaddy zone):** the `litesrv._domainkey` CNAME, both `mailerlite-domain-verification=` apex TXTs and `include:_spf.mlsend.com` in two `dc-…._spfm` records are removed, **re-read through public DNS afterwards** (no `mlsend` anywhere in the SPF tree; PrivateEmail MX, `spf.privateemail.com`, the `mail.` CNAME, DMARC `p=none` and the `pulllist.app` Resend records unchanged). **The docs had attributed all three `dc-…._spfm` hashes to MailerSend; two chained MailerLite's SPF (corrected in `technical-reference.md` § 13 F99).** (2) **Secrets:** `MAILERLITE_WEBHOOK_SECRET` and `MAILERSEND_API_KEY` unset on both Supabase projects (Rick's report; the lists were not re-read; no code in `supabase/` reads either). Removing `MAILERSEND_API_KEY` also ended the optional MailerSend rollback (F99 M8). (3) **MailerLite account deleted** (Rick's report), subscriber list exported and decided first. (4) **End-to-end proof:** a production Forgot-password send delivered to the Inbox with SPF, DKIM (`pulllist.app` and `amazonses.com`) and DMARC all passing, nothing from either old provider in the headers. **Caveats:** the Inbox result is partly the sender being on Rick's own safe-sender list (F152 stays "monitor"); the paste carried a live reset link (ask for headers only). **Still open, unscheduled:** the DMARC aggregate-report watch (one to two weeks, in progress, Rick) to confirm `mlsend.com` stops appearing, then the separate decision whether to tighten `mrcyberrick.us` (it is the sending domain for Rick's PrivateEmail mailbox, and MailerSend's orphaned DNS still sits in that zone). **Finding-ID disposition, in words: no finding ID consumed (decommissioning of a vendor Rick chose to leave, not a defect); F176 remains the next free ID.**
 **Next scheduled work: soak F165 S2 through Rick's next two real weekly `check-dates.js` runs (no hard
 date; the first records first sightings and can raise nothing, the second is the first that can list a
 candidate), then V5 with Rick, then decide S3.** Plan: `docs/f165-withdrawal-detection-redesign.md` § 4, § 8. **RUN 1 OF 2 DONE 2026-10-09 (production, dry run then the real apply, counted as one observation): 29 first sightings recorded, 0 candidates, as designed. The next real run, on a LATER date (next Friday, 2026-10-16), is the first that can list a candidate.**
@@ -3156,8 +3157,10 @@ C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\
 - **Backend:** Supabase (PostgreSQL + Auth + Edge Functions + RLS)
 - **Hosting:** Cloudflare Pages (static files only; migrated from GitHub Pages in 5.1)
 - **Email:** Resend, both environments (F99 migration M1–M7, 2026-09-02 — see § Current Migration
-  Phase), via Supabase Edge Functions. MailerSend's credentials remain set on both projects, dormant,
-  as an undeleted rollback path (M8, optional, not scoped)
+  Phase), via Supabase Edge Functions. MailerSend and MailerLite are fully retired (2026-10-15):
+  the dormant MailerSend key and the dead MailerLite webhook secret are unset on both projects, the
+  MailerLite DNS is gone from `mrcyberrick.us`, and the MailerLite account is deleted. The weekly
+  newsletter sends through Brevo (`mrcyberrick/weekly-pull-feed`)
 - **Import:** Node.js script run locally each month
 
 Cloudflare Pages serves static files only — no SSR. All dynamic behavior is client-side

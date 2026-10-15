@@ -22,7 +22,9 @@ Three things converged that were not all true when F99 was filed on 2026-07-25:
 
 1. **F99's blocker cleared.** `p=quarantine` was held pending MailerLite retirement; that trigger
    **fired 2026-08-30** when the webhook path was removed platform-wide (native-signup § S5). F99 is
-   unblocked and unscheduled.
+   unblocked and unscheduled. *(2026-10-15 update: the DNS half of that retirement is also done --
+   `litesrv._domainkey` and the `_spf.mlsend.com` includes are removed from `mrcyberrick.us`, verified by
+   public DNS query, and the MailerLite account is deleted. See `technical-reference.md` § 13 F99.)*
 2. **A second tenant is being scoped**, and transactional email is one of its two hard blockers (the
    other is F131's import path). Every customer-facing email currently hardcodes
    `noreply@mrcyberrick.us` with the founding tenant's name, street address and phone.
@@ -374,7 +376,7 @@ verification is near-instant when the slot frees.
 > |---|---|---|
 > | DKIM CNAMEs | `<selector>._domainkey.<domain>` → `<selector>._domainkey.mailersend.net` — generic target, same for every domain | **Yes** |
 > | Return-Path | `mta.<domain>` → `mailersend.net` — same generic target | **Yes** |
-> | SPF include | `dc-<hash>._spfm.<domain>` — the domain name AND a unique hash are baked into the *hostname*, one hash per domain (`mrcyberrick.us` carries three) | **No** — cannot be known until MailerSend actually issues one for `pulllist.app`, which cannot happen before S3 removes `mrcyberrick.us` and frees the slot |
+> | SPF include | `dc-<hash>._spfm.<domain>` — the domain name AND a unique hash are baked into the *hostname*, one hash per domain (`mrcyberrick.us` carries three) | **No** — cannot be known until MailerSend actually issues one for `pulllist.app`, which cannot happen before S3 removes `mrcyberrick.us` and frees the slot. *(Correction 2026-10-15: not all three of `mrcyberrick.us`'s hashes are MailerSend's; two chained MailerLite's `_spf.mlsend.com` and were cleaned up that day. See `technical-reference.md` § 13 F99.)* |
 >
 > (Also confirmed in passing: `ms1`/`ms2._domainkey.mrcyberrick.us` are genuine NXDOMAIN — S-1 really
 > was skipped, exactly as recorded above; only the legacy `mlsend2` CNAME is live there.)

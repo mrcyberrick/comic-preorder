@@ -128,7 +128,7 @@ mechanism diverges from the others.
 | Database | Supabase Postgres (15.x, with `pgcrypto`, `uuid-ossp`, `pg_stat_statements`, `supabase_vault`) |
 | Auth | Supabase Auth (email/password, invite tokens, magic links, recovery tokens) |
 | Edge Functions | Deno runtime on Supabase, hand-written TypeScript |
-| Email | MailerSend (transactional) and MailerLite (subscriber webhooks) |
+| Email | Resend (transactional, via Edge Functions) and Brevo (weekly newsletter). MailerSend and MailerLite are fully retired (2026-10-15) |
 | Import | Node.js, run from local scripts folder, never committed |
 | Hosting | Cloudflare Pages — prod: `https://pulllist.app/`; staging: `https://staging.pulllist.pages.dev/` (legacy GH Pages still warm as a rollback target, not tied to a phase gate — Rick's call 2026-07-15) |
 
@@ -889,7 +889,7 @@ said "by convention but is not enforced by FK" — see the FKs block below and
 
 **Notes:**
 - `status` drives the invite/approval state machine. `register-customer`
-  (called by MailerLite webhook) creates rows with `status = 'pending'`;
+  (called by the app's native "Create account" form; the MailerLite webhook that used to call it was removed 2026-08-30) creates rows with `status = 'pending'`;
   `approve-customer` flips them to `'active'`; admin Suspend flips to
   `'suspended'`.
 - `is_paper = true` marks placeholder profiles for walk-in customers who
@@ -1575,7 +1575,7 @@ environments — confirmed 2026-08-10 in each project's PostgREST `/rpc/` list.
 
 - **Grants:** `REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO anon, authenticated`.
 - **`tenants.settings` is never returned** — it may carry non-public config
-  (including each tenant's `mailerlite_webhook_secret`). The projection is
+  (it once carried a per-tenant `mailerlite_webhook_secret`: dead config, removed from every row and from `register-tenant` 2026-10-06, F151). The projection is
   `id, slug, display_name, branding` and nothing else. `branding` *is*
   deliberately public: name, colours and logo are exactly what an anon
   visitor's landing page must render.
@@ -2308,12 +2308,12 @@ Set in Supabase → Edge Functions → Secrets:
 | `SUPABASE_URL` | all |
 | `SUPABASE_ANON_KEY` | all |
 | `SUPABASE_SERVICE_ROLE_KEY` | all |
-| `MAILERSEND_API_KEY` | **dormant on both environments** as of 2026-09-02 — set, but no deployed code reads it since the F99 Resend migration cut all six functions over. Kept as an undeleted rollback path (plan's optional M8), not yet cleaned up |
+| ~~`MAILERSEND_API_KEY`~~ | **REMOVED from both projects 2026-10-15** (Rick's report; the secrets lists were not re-read by the agent). It had been dormant since 2026-09-02: no deployed code reads it (repo-wide grep of `supabase/` for `MAILERSEND` returns nothing), so removing it also ended the optional MailerSend rollback path (F99 plan M8). A real production `reset-password` send afterwards delivered via Resend with SPF, DKIM and DMARC all passing (see § 13 F99, 2026-10-15). MailerSend's leftover DNS on `mrcyberrick.us` (`mlsend2._domainkey`, `mta`, the `_spf.mailersend.net` include) is orphaned and can be deleted at leisure |
 | `RESEND_API_KEY` | **both environments** as of 2026-09-02 (F99 migration M1/M6) — the same six functions, now calling `api.resend.com/emails`. Staging: fresh dedicated key (Rick's call at M1). Production: **the same key reused**, not a fresh one — a deliberate, different choice at M6 |
 | `MAIL_FROM_EMAIL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password, send-my-list (F99 S1, added 2026-08-31 — `??` fallback to `noreply@mrcyberrick.us`; **both environments' value changed 2026-09-02 to `noreply@pulllist.app`** per the Resend migration's flat-addressing decision, confirmed via changed `supabase secrets list` digests on both projects) |
 | `MAIL_FROM_NAME` | same six functions as `MAIL_FROM_EMAIL` (F99 S1 — `??` fallback to `"Ray & Judy's Book Stop"`; **set on both environments** to that same value — unchanged by the Resend migration, since the brand name doesn't depend on provider) |
 | `APP_BASE_URL` | approve-customer, invite-customer, notify-customers, register-customer, reset-password (pre-existing, not new to F99 S1 — `??` fallback to `https://pulllist.app`; was missing from this table until 2026-08-31. **Confirmed present in staging's secret store** via `supabase secrets list`; actual value not readable from the CLI (digest only) and not independently verified here — production status unchecked) |
-| ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. Safe to unset in both projects' Edge Function secrets; harmless if left |
+| ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. **UNSET on both projects 2026-10-15** (Rick's report; the secrets lists were not re-read by the agent). |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
 | `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
 
@@ -2707,7 +2707,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   and `docs/tenant-onboarding-runbook.md`: those notes described
   pre-2026-05-10 behavior and were stale by the time 5.5 S3 ran; they are
   corrected in the same commit as this entry.
-- `register-customer` (webhook, no admin context) resolves `tenant_id`
+- *(Historical: superseded 2026-08-30. The webhook path and this lookup are removed; `register-customer` now takes `tenant_id` from the posted `slug`.)* `register-customer` (webhook, no admin context) resolves `tenant_id`
   from the per-tenant `tenants.settings->>'mailerlite_webhook_secret'`
   (5.4 S2) — see contract note below. `FOUNDING_TENANT_ID` is retained
   only as the last-resort fallback in `invite-customer`/
@@ -2716,7 +2716,7 @@ production-staging URL bug unrelated to multi-tenancy (F35).
   `supabase/functions/create-paper-customer/index.ts`,
   `supabase/functions/register-customer/index.ts`.
 - **Prod resolution 2026-05-31 (Phase 4.6):** `FOUNDING_TENANT_ID` secret set on prod project (§ 1); all 8 EFs redeployed from staging SHA `cab5dca` (§ 2). F34 fully resolved on production.
-- **`register-customer` per-tenant-secret contract (5.4 S1, 2026-06-16):** the residual founding pin (un-pinned in S2) is replaced by a **per-tenant webhook secret** stored at `tenants.settings->>'mailerlite_webhook_secret'` (jsonb; `settings` is service-role-only, never returned by `resolve_tenant_by_slug`). Lookup: `GET /rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.<secret>&select=id,slug,display_name` via service-role. Empty/absent `?secret=` → `401`; no matching tenant → `401`; exactly one matching tenant → that tenant's id is used for the `user_profiles` insert. **Founding migrated 2026-06-16 (staging):** `tenants.settings->>'mailerlite_webhook_secret' = 'pulllist-staging-2026'` for `72e29f67-…`; lookup verified to return exactly one row (founding). Prod migration is 5.4 S6.
+- **`register-customer` per-tenant-secret contract (5.4 S1, 2026-06-16) -- HISTORICAL, REMOVED 2026-08-30 (the key is gone from every `tenants.settings` row as of 2026-10-06; the secret is unset on both projects as of 2026-10-15):** the residual founding pin (un-pinned in S2) is replaced by a **per-tenant webhook secret** stored at `tenants.settings->>'mailerlite_webhook_secret'` (jsonb; `settings` is service-role-only, never returned by `resolve_tenant_by_slug`). Lookup: `GET /rest/v1/tenants?settings->>mailerlite_webhook_secret=eq.<secret>&select=id,slug,display_name` via service-role. Empty/absent `?secret=` → `401`; no matching tenant → `401`; exactly one matching tenant → that tenant's id is used for the `user_profiles` insert. **Founding migrated 2026-06-16 (staging):** `tenants.settings->>'mailerlite_webhook_secret' = 'pulllist-staging-2026'` for `72e29f67-…`; lookup verified to return exactly one row (founding). Prod migration is 5.4 S6.
 
 ### Medium
 
@@ -3780,6 +3780,8 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
   - **Volume reality, recorded so a future session does not wait for a sample that will never arrive:** ~8 messages/day on `pulllist.app`, ~4 on `mrcyberrick.us`. Four more weeks would add hundreds, not thousands. The bar was always going to be qualitative — *every sender known and aligned* — and that bar is now met.
   - **⚠️ TRIGGER FIRED 2026-08-30 — the app-side half of MailerLite retirement is DONE.** `register-customer`'s `?secret=` webhook path was removed entirely (native-signup § S5), platform-wide. **F99 is now unblocked but UNSCHEDULED — it is no longer gated, and § 13 should not be read as saying it is.** *(Scheduling is a separate matter: Rick's 2026-08-29 direction is “small features for now,” so the Founding Partner / email-identity track is deliberately not next.)*
   - **What fired is the APP half, not the DNS half — do not conflate them before tightening DMARC.** PULLLIST no longer *receives* MailerLite webhooks, but that says nothing about whether MailerLite still *sends* as `mrcyberrick.us`. The condition this decision actually waits on is **`litesrv._domainkey` being removed from the `mrcyberrick.us` zone and MailerSend confirmed as its sole sender.** **Verify that in the zone before publishing `p=quarantine`** — tightening while a live DKIM-only sender remains is precisely the failure this entry was written to prevent. *(Separately measured 2026-08-30 on the other domain: `_dmarc.pulllist.app` is `p=none`, and the apex SPF authorizes only Namecheap's forwarder — `include:spf.efwd.registrar-servers.com` — **not** MailerSend. Any move to send transactional mail from `@pulllist.app` needs that SPF extended first.)*
+  - **✅ DNS HALF DONE 2026-10-15 — MailerLite is gone from the `mrcyberrick.us` zone and from its SPF chain; the MailerLite account is deleted.** Rick removed, in the GoDaddy zone (nameservers `ns77`/`ns78.domaincontrol.com`): the `litesrv._domainkey` CNAME (to `litesrv._domainkey.mlsend.com`), both `mailerlite-domain-verification=` apex TXT records, and `include:_spf.mlsend.com` from two of the three `dc-…._spfm` records. **Re-queried through public DNS (dns.google) afterwards, not taken on report:** the CNAME is gone; the apex TXT is the SPF record alone; `dc-b48c5c7534._spfm` reads `v=spf1 a mx ~all` and `dc-db9e4b7a04._spfm` reads `v=spf1 a include:spf.privateemail.com mx ~all`; no `mlsend` text anywhere in the SPF tree; the PrivateEmail MX, the `mail.` CNAME, `_dmarc.mrcyberrick.us` (`p=none`) and the Resend records on `pulllist.app` are unchanged. **A correction to the 2026-08-30 and 2026-09-01 notes above:** the three `dc-<hash>._spfm` records are NOT all MailerSend's. Read live on 2026-10-15 (before the edit), `dc-3cb1d11d42` held `include:_spf.mailersend.net` and chained the other two, and **both of those carried `include:_spf.mlsend.com` (MailerLite)**; one also carried `spf.privateemail.com`, the shop's mailbox hosting, which must stay. The `dc-…._spfm` naming matches what Domain Connect one-click DNS setups create (an inference, not confirmed), which would explain why the apex record never changed while the chain behind it did. Subscriber-list export and decision, and the idle check, were done by Rick beforehand; the account deletion is Rick's report (not verifiable from here). **The condition this entry set for `p=quarantine` — `litesrv._domainkey` removed — is now met.** What remains before tightening is separate and unscheduled: watch one to two weeks of DMARC aggregate reports (in progress, Rick) to confirm `mlsend.com` stops appearing as a source, and check what else sends as `mrcyberrick.us` (Rick's PrivateEmail mailbox does, and MailerSend's orphaned records still sit in that zone). `MAILERSEND_API_KEY` and `MAILERLITE_WEBHOOK_SECRET` were both unset on both projects the same day (see § 11.2).
+  - **End-to-end check after removing both dead secrets, 2026-10-15:** Rick triggered Forgot password on production to an Outlook address. Headers read (the body was not needed): `spf=pass` (`send.pulllist.app`, an Amazon SES address), `dkim=pass` for `pulllist.app` (selector `resend`) and for `amazonses.com`, `dmarc=pass`, `compauth=pass reason=100`, delivered to the Inbox in about 2.4 s, `From: Ray & Judy's Book Stop <noreply@pulllist.app>`, no MailerSend or MailerLite anywhere in the path, no tracking pixel (Outlook's own Safelinks wrapper only). **Caveat for F152:** the headers carry `wl:1` and `TrustedSenderList`, which suggests the sender is on Rick's own safe-sender list, so the Inbox result does not show that reputation has recovered for ordinary customers; F152 stays "monitor". The paste also contained a live one-hour recovery link; when asking for a smoke test, ask for headers only.
   - **Consequence for F99's own design:** consolidation is not merely rewriting six Edge Function `from:` addresses. There is an independent sender on the transactional domain whose content PULLLIST does not control and which is already scheduled to leave. **F99 should sequence with or after MailerLite retirement**, not design around a sender that is being removed.
 - **Provider selection RESOLVED 2026-09-02 — Resend, GREEN discovery.** The § "REASSESS 2026-09-02"
   note above flagged the per-tenant-subdomain recommendation as void pending a live probe; that probe

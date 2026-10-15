@@ -22,7 +22,7 @@ Multi-tenant under the hood (Phases 1–5 migration program) — one founding te
   subscriptions, top series, pending approvals, paper orders
 - Paper customers — admin-managed accounts for walk-in/phone customers, with
   claim/merge into real accounts
-- Customer invite + self-registration (MailerLite webhook) with admin approval
+- Customer invite + native self-registration (Turnstile-gated) with admin approval
 - Per-tenant branding and slug-based tenant resolution
 - Maintenance mode for catalog refresh downtime
 - Print/PDF export for order sheets, bagging lists, and pull lists
@@ -37,7 +37,7 @@ Multi-tenant under the hood (Phases 1–5 migration program) — one founding te
 | Frontend | Vanilla HTML, CSS, JavaScript (no build step) |
 | Backend | Supabase (PostgreSQL, Auth, RLS, Edge Functions) |
 | Hosting | Cloudflare Pages (static; auto-deploys `main` → prod, `staging` → preview) |
-| Email | MailerSend via Supabase Edge Functions; MailerLite signup webhook |
+| Email | Resend via Supabase Edge Functions (transactional); Brevo (weekly newsletter) |
 | Import | Node.js script (runs locally, not in this repo) |
 
 ---

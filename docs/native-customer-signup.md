@@ -283,6 +283,9 @@ F72). Founding-first sidesteps it.
       are both **dead config**: nothing reads either, so the "rotate the exposed secret" half is
       satisfied by the value no longer being live anywhere. Unsetting them in both projects is
       optional tidying. (rjbookstop.com's Brevo funnel is Rick's separate track — untouched.)
+      **Tidying DONE 2026-10-15 (Rick's report): `MAILERLITE_WEBHOOK_SECRET` unset on both projects,
+      the `mrcyberrick.us` DNS records removed (re-verified by public DNS query), and the MailerLite
+      account deleted -- MailerLite is fully retired, outside the code as well. Detail: `technical-reference.md` § 13 F99.**
 - [x] **Docs updated 2026-08-30:** `register-customer` contract rewritten in `technical-reference.md`
       § 11 (inventory row, secrets table, and the prose contract), `CLAUDE.md` § Edge Functions,
       `docs/tenant-onboarding-runbook.md` **Step 4 tombstoned** + its Step 7 checklist line + the
