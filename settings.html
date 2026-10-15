@@ -194,7 +194,11 @@
     .set-count { font-size: 0.74rem; color: var(--text-secondary); text-align: right; margin-top: 4px; }
     .set-count.is-over { color: var(--warning); font-weight: 600; }
     .set-field-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 4px; }
-    .set-row input[type="checkbox"].set-check { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
+    /* A row whose control is a button, not a label-wrapped input: not clickable as a whole, and it wraps so the
+       button drops under the text on a phone instead of squeezing it. */
+    .set-row.set-row-static { cursor: default; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
+    .set-row-static .set-row-text { flex: 1 1 260px; }
+    .set-row-static .btn { flex-shrink: 0; }
     @media (max-width: 560px) { .set-field-pair { grid-template-columns: minmax(0, 1fr); } }
 
     /* Mobile: rail becomes a plain list above the content, panels stay full width */
@@ -612,13 +616,13 @@
           </div>
         </div>
 
-        <label class="set-row">
-          <input type="checkbox" id="pb-again" class="set-check">
+        <div class="set-row set-row-static">
           <span class="set-row-text">
-            <span class="set-row-title">Show it again to customers who closed it</span>
-            <span class="set-row-note">Applied when you save. Leave it unticked for a small edit such as a typo fix, so nobody sees the banner twice.</span>
+            <span class="set-row-title">Customers closed it? Bring it back</span>
+            <span class="set-row-note">Starts a new campaign, so everyone who closed the banner sees it again, you included. It saves at once, together with any edits above. For a small fix such as a typo, just use Save banner instead, so nobody sees it twice.</span>
           </span>
-        </label>
+          <button class="btn btn-secondary btn-sm" id="pb-again-btn" type="button">Show it again to everyone</button>
+        </div>
 
         <div class="set-banner-actions">
           <span class="set-banner-status" id="pb-status">Loading…</span>
@@ -1256,7 +1260,7 @@
     link_target: el('pb-target').value,
   });
   const pbFields = c => JSON.stringify([!!c.enabled, c.text || '', c.link_text || '', c.link_target || '']);
-  const pbDirty = () => pbFields(pbCurrent()) !== pbFields(pbBaseline()) || el('pb-again').checked;
+  const pbDirty = () => pbFields(pbCurrent()) !== pbFields(pbBaseline());
 
   // Writes a config into the controls. A stored link_target of '' (a legacy value
   // whose href was not one of the four pages, or a hand-written row) has no entry in
@@ -1290,6 +1294,11 @@
     if (dirty) return 'Unsaved changes';
     if (!pbSaved) return 'Never saved — customers see no banner';
     const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // A banner that is switched Off has no LIVE campaign, whatever its id says. Reporting
+    // "Live campaign started ..." for it (the old wording) hid the real reason nobody saw it.
+    if (pbSaved.enabled === false) {
+      return 'Switched off — customers see nothing' + ((pbSource === 'row' && pbSavedAt) ? ' · last saved ' + fmt(new Date(pbSavedAt)) : '');
+    }
     const started = PromoBanner.startedAt(pbSaved.id);
     const campaign = started ? 'Live campaign started ' + fmt(started) : 'Original campaign';
     const saved = (pbSource === 'row' && pbSavedAt)
@@ -1324,12 +1333,13 @@
 
     const dirty = pbDirty();
     el('pb-save').disabled = pbReadFailed || !dirty;
+    el('pb-again-btn').disabled = pbReadFailed;   // never gated on "dirty": bringing it back needs no edit
     el('pb-discard').disabled = !dirty;
     el('pb-status').textContent = pbStatusText(dirty);
   }
 
   if (pbReadFailed) {
-    ['pb-enabled', 'pb-text', 'pb-label', 'pb-target', 'pb-again', 'pb-restore'].forEach(id => { el(id).disabled = true; });
+    ['pb-enabled', 'pb-text', 'pb-label', 'pb-target', 'pb-again-btn', 'pb-restore'].forEach(id => { el(id).disabled = true; });
     toast('Could not read the current Subscribe banner — reload before editing it.', 'error');
   }
 
@@ -1337,12 +1347,19 @@
   el('pb-text').addEventListener('input', pbRender);
   el('pb-label').addEventListener('input', pbRender);
   el('pb-target').addEventListener('change', pbRender);
-  el('pb-again').addEventListener('change', pbRender);
 
   // Restore default text: the shipped wording, link label and target into the
-  // controls. It does NOT save, and it leaves On/Off and the campaign alone.
+  // controls. It does NOT save, and it leaves On/Off and the campaign alone. It says
+  // so when there is nothing to restore, because a click that visibly does nothing
+  // reads as broken (and this is the button people reach for to "bring it back": that
+  // is "Show it again to everyone" below, which is a different thing).
   el('pb-restore').addEventListener('click', () => {
     const D = PromoBanner.DEFAULTS;
+    const cur = pbCurrent();
+    if (cur.text === D.text && cur.link_text === D.link_text && cur.link_target === D.link_target) {
+      toast('The wording is already the default. To show a closed banner again, use "Show it again to everyone".');
+      return;
+    }
     el('pb-text').value = D.text;
     el('pb-label').value = D.link_text;
     el('pb-target').value = D.link_target;
@@ -1351,24 +1368,29 @@
 
   el('pb-discard').addEventListener('click', () => {
     pbApply(pbBaseline());
-    el('pb-again').checked = false;
     pbRender();
     toast('Changes discarded');
   });
 
-  el('pb-save').addEventListener('click', async () => {
-    const btn = el('pb-save');
+  // One save path for both buttons.
+  //   again = false  "Save banner": an edit keeps the live campaign id, so fixing a typo
+  //                  does not bring the banner back for anyone who closed it.
+  //   again = true   "Show it again to everyone": the campaign id changes, which is what
+  //                  re-shows the banner to everyone who closed it (dismissal is keyed on
+  //                  the id). It saves the controls as they stand, so unsaved edits go
+  //                  with it. A store with no id yet (nothing stored anywhere) gets a
+  //                  fresh one either way.
+  async function pbSave(again, btn) {
     const orig = btn.textContent;
     const cur = pbCurrent();
     const problem = pbProblem(cur);
     if (problem) { toast(problem, 'error'); return; }
-
-    // "Show it again" is the campaign id changing, which is what re-shows the banner
-    // to everyone who closed it (dismissal is keyed on the id). Unticked, an edit
-    // keeps the live id, so fixing a typo does not bring it back for anyone. A store
-    // that has no id yet (nothing stored anywhere) gets a fresh one regardless.
-    const again = el('pb-again').checked;
-    if (again && !confirm('Show this banner again to every customer who has already closed it?')) return;
+    if (again && !cur.enabled) {
+      // Off means nobody sees it, so there is nothing to bring back; say why instead of doing nothing.
+      toast('The banner is switched off, so nobody sees it. Switch it on first, then show it again.', 'error');
+      return;
+    }
+    if (again && !confirm('Show this banner again to every customer who has already closed it? Any edits you have not saved are saved with it.')) return;
     const baseId = pbBaseline().id;
     const cfg = {
       v: 1,
@@ -1379,23 +1401,25 @@
       link_target: cur.link_target,
     };
 
-    btn.disabled = true;
+    el('pb-save').disabled = true;
+    el('pb-again-btn').disabled = true;
     btn.textContent = 'Saving…';
     const { error } = await Settings.set(PromoBanner.KEY, JSON.stringify(cfg));
     btn.textContent = orig;
     if (error) {
       console.error('promo_banner save failed', error);
       toast('Could not save — ' + (error.message || 'unknown error'), 'error');
-      btn.disabled = false;
+      pbRender();   // puts both buttons back to what the state says
       return;
     }
     pbSaved = { ...cfg };
     pbSource = 'row';
     pbSavedAt = new Date().toISOString();
-    el('pb-again').checked = false;
     pbRender();
-    toast('Subscribe banner saved');
-  });
+    toast(again ? 'Saved. Customers who closed the banner will see it again.' : 'Subscribe banner saved');
+  }
+  el('pb-save').addEventListener('click', () => pbSave(false, el('pb-save')));
+  el('pb-again-btn').addEventListener('click', () => pbSave(true, el('pb-again-btn')));
 
   pbApply(pbBaseline());
   pbRender();
