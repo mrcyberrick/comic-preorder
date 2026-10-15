@@ -831,7 +831,18 @@ session) takes a meaningful action.
 **Notes:**
 - Event types currently emitted by `UsageEvents`: `reserve`, `cancel`,
   `subscribe`, `unsubscribe`, `catalog_view`, `page_view`, `login`,
-  `logout`, `visit`.
+  `logout`, `visit`, `promo_banner_shown`, `promo_banner_dismissed`.
+- `promo_banner_shown` / `promo_banner_dismissed` (added 2026-10-15, staging;
+  `docs/promo-banner-settings-analytics.md`): the Catalog's subscribe banner.
+  `metadata` is `{ banner_id }`, the campaign id from
+  `app_settings.promo_banner`. `shown` is logged once per customer per campaign
+  per browser (a `localStorage` guard written before the event, so unavailable
+  storage logs nothing); `dismissed` on the close click. Neither is logged while
+  impersonating. `analytics.html` splits both types out of `state.events` at load
+  so no existing activity metric (active customers, cohorts, sessions, Last Seen)
+  counts an impression as activity; only its "Subscribe Banner" card reads them.
+  No rows exist before the feature reaches an environment. `event_type` has no
+  CHECK, so no schema change.
 - `visit` (added 2026-09-30, PR #163): one per browsing session, logged by
   `initNav()` on the first signed-in page load after 30 min of inactivity
   (per-user `localStorage` timestamp). `login` fires only on email+password
