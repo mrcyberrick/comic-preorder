@@ -238,6 +238,10 @@
     .win-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
     .win-actions .hint { font-size: 0.72rem; color: var(--text-muted); }
 
+    /* ── Subscribe banner card (reuses .kpi-label / .kpi-value / .kpi-note) ── */
+    .promo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 18px 24px; }
+    .promo-recent-h { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin: 22px 0 6px; }
+
     .no-data { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 24px; }
     .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; }
 
@@ -373,6 +377,14 @@
         <div style="margin-top:auto;padding-top:18px">
           <button class="btn btn-secondary btn-sm" data-goto-tab="intelligence">View win-back list →</button>
         </div>
+      </div>
+    </div>
+
+    <div class="grid wide">
+      <div class="card" id="promo-card">
+        <h3>Subscribe Banner</h3>
+        <p class="sub" id="promo-sub">The closable message at the top of the Catalog</p>
+        <div id="promo-body"><p class="loading-row">Loading…</p></div>
       </div>
     </div>
   </section>
@@ -518,6 +530,16 @@
         averages in Subscription Opportunity come from live preorders for the current catalog month
         instead.
         <span class="src">Source: usage_events (price_usd on reserve events) + preorders × catalog.price_usd.</span></dd>
+      <dt>Subscribe banner</dt>
+      <dd>For the live campaign only (the banner's current campaign id; saving with "Show it again"
+        in Settings starts a new one). <em>Saw it</em> = distinct customers with a banner impression,
+        logged once per customer per campaign per browser. <em>Closed it</em> = distinct customers
+        who closed it; the rate is the share of those who saw it who also closed it.
+        <em>Subscribed after seeing it</em> = customers whose first subscribe is later than their
+        first impression, an approximation (clicks on "Learn more" are not tracked). Customers who
+        already subscribe are never shown the banner. These two event types are kept out of every
+        other metric on this page, so they never count as customer activity.
+        <span class="src">Source: usage_events (promo_banner_shown / promo_banner_dismissed) + subscribe.</span></dd>
       <dt>Publisher Demand</dt>
       <dd>Share of reserve events by publisher over the last 90 days. The trend note compares each
         publisher's share in the most recent 45 days to the prior 45 days (a full 90-day-vs-prior-90
@@ -582,7 +604,9 @@
   const state = {
     profiles: new Map(),
     adminIds: new Set(),
-    events: [],           // trailing 90 days, unfiltered
+    events: [],           // trailing 90 days, unfiltered by admin; the two promo-banner types are NOT in here (see PROMO_TYPES)
+    promoEvents: [],      // promo_banner_shown / promo_banner_dismissed, trailing 90 days. Read ONLY by renderPromoCard()
+    promoCfg: null,       // the live Subscribe banner config (PromoBanner.load), or null
     preorderRows: [],      // current catalog month, {user_id, catalog:{price_usd}}
     subscriberIds: new Set(),
     currentMonth: null,
@@ -594,6 +618,14 @@
   };
   let NOW = Date.now();
   let winbackRows = [];
+
+  // The Subscribe banner's two event types. They are split out of state.events at
+  // load, so EVERY existing metric (weekly/monthly active customers, cohorts,
+  // sessions, Last Seen, win-back, the event breakdowns) sees exactly the data it saw
+  // before the banner was tracked. Several of those count events of any type per
+  // customer, and an impression is not customer activity: this is one exclusion in
+  // one place rather than a patch inside each metric that could be missed.
+  const PROMO_TYPES = new Set(['promo_banner_shown', 'promo_banner_dismissed']);
 
   // ── Ranged fetch helper (count-first; F82 pattern) ─────────────
   async function countRows(table, applyFilters) {
@@ -654,12 +686,13 @@
     // applied here. Low risk today for a single-shop customer count, but the
     // same helpers already exist in this file, so routed through them.
     const profilesSelect = 'id, full_name, email, is_admin, is_paper, status, created_at';
-    const [profilesTotal, ueTotal, orderDeadline, cycleStart, prevStart] = await Promise.all([
+    const [profilesTotal, ueTotal, orderDeadline, cycleStart, prevStart, promoCfg] = await Promise.all([
       countRows('user_profiles'),
       countRows('usage_events', ueFilter),
       Settings.getOrderDeadline().catch(() => null),
       fetchCycleStart(currentMonth),
       fetchCycleStart(prevMonth),
+      PromoBanner.load(TenantContext.current()),   // never rejects; null = no banner configured anywhere
     ]);
     const profiles = await fetchRanged('user_profiles', profilesSelect, null, profilesTotal);
 
@@ -670,9 +703,12 @@
       if (p.is_admin) state.adminIds.add(p.id);
     });
 
-    state.events = await fetchRanged(
+    const allEvents = await fetchRanged(
       'usage_events', 'event_type, user_id, catalog_id, metadata, created_at', ueFilter, ueTotal
     );
+    state.events = allEvents.filter(e => !PROMO_TYPES.has(e.event_type));
+    state.promoEvents = allEvents.filter(e => PROMO_TYPES.has(e.event_type));
+    state.promoCfg = promoCfg;
 
     state.currentMonth = currentMonth;
     state.orderDeadline = orderDeadline;
@@ -1408,6 +1444,86 @@
     </div>`;
   }
 
+  // ── EXECUTIVE: Subscribe banner (docs/promo-banner-settings-analytics.md § 2.5) ──
+  // The LIVE campaign only: banner_id = the current config's id. Counts DISTINCT
+  // customers, honouring the page's staff toggle like every other panel (default:
+  // customers only). Reads state.promoEvents, which is deliberately not part of
+  // state.events (see PROMO_TYPES), plus state.events for 'subscribe'.
+  function renderPromoCard() {
+    const body = document.getElementById('promo-body');
+    const sub = document.getElementById('promo-sub');
+    const cfg = state.promoCfg;
+    sub.textContent = 'The closable message at the top of the Catalog';
+    if (!cfg || !cfg.enabled || !cfg.id) {
+      body.innerHTML = '<p class="no-data">The banner is off (Settings → Branding → Subscribe banner).</p>';
+      return;
+    }
+    const fmtDay = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const started = PromoBanner.startedAt(cfg.id);
+    sub.textContent = started ? `Live campaign, started ${fmtDay(started)}` : 'Live campaign (the original one)';
+
+    const keep = e => !state.hideAdmin || !state.adminIds.has(e.user_id);
+    const mine = state.promoEvents.filter(e => keep(e) && e.metadata && e.metadata.banner_id === cfg.id);
+
+    const firstShown = new Map();      // customer -> earliest impression (ms)
+    const closedUsers = new Set();
+    const closes = [];
+    mine.forEach(e => {
+      const t = new Date(e.created_at).getTime();
+      if (e.event_type === 'promo_banner_shown') {
+        if (!firstShown.has(e.user_id) || t < firstShown.get(e.user_id)) firstShown.set(e.user_id, t);
+      } else if (e.event_type === 'promo_banner_dismissed') {
+        closedUsers.add(e.user_id);
+        closes.push({ uid: e.user_id, t });
+      }
+    });
+
+    if (!firstShown.size && !closedUsers.size) {
+      body.innerHTML = '<p class="no-data">No customer has seen this campaign yet. Counts begin when customers load the Catalog after the banner tracking went live; earlier closes were not recorded.</p>';
+      return;
+    }
+
+    const saw = firstShown.size;
+    // The rate's numerator is customers who both saw it and closed it, so it can
+    // never exceed 100% (a close with no recorded impression, e.g. where browser
+    // storage is unavailable and nothing is logged on load, still shows under
+    // "Closed it" but cannot inflate the rate).
+    const closedOfSaw = [...closedUsers].filter(u => firstShown.has(u)).length;
+    const rate = saw ? `${closedOfSaw} of ${saw} · ${Math.round(closedOfSaw / saw * 100)}%` : '—';
+
+    // "Subscribed after seeing it": the customer's first subscribe event in the
+    // window is later than their first impression of THIS campaign. Approximate by
+    // design (no click attribution; docs/promo-banner-settings-analytics.md D6).
+    const firstSub = new Map();
+    filteredEvents().forEach(e => {
+      if (e.event_type !== 'subscribe') return;
+      const t = new Date(e.created_at).getTime();
+      if (!firstSub.has(e.user_id) || t < firstSub.get(e.user_id)) firstSub.set(e.user_id, t);
+    });
+    let subscribed = 0;
+    firstShown.forEach((t, uid) => { if (firstSub.has(uid) && firstSub.get(uid) > t) subscribed++; });
+
+    closes.sort((a, b) => b.t - a.t);
+    const fmtWhen = t => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const recent = closes.slice(0, 10);
+    const recentHtml = recent.length
+      ? `<div class="promo-recent-h">Recent closes</div>
+         <div class="tbl-wrap"><table class="tbl" id="promo-recent">
+           <thead><tr><th>Customer</th><th>Closed</th></tr></thead>
+           <tbody>${recent.map(c => `<tr><td class="name">${escapeHtml(profileName(c.uid))}</td><td class="dim">${escapeHtml(fmtWhen(c.t))}</td></tr>`).join('')}</tbody>
+         </table></div>`
+      : '<div class="promo-recent-h">Recent closes</div><p class="kpi-note" style="margin-top:0">Nobody has closed it yet.</p>';
+
+    body.innerHTML = `
+      <div class="promo-stats">
+        <div class="promo-stat"><div class="kpi-label">Saw it</div><div class="kpi-value" id="promo-saw">${saw}</div><div class="kpi-note">customers</div></div>
+        <div class="promo-stat"><div class="kpi-label">Closed it</div><div class="kpi-value" id="promo-closed">${closedUsers.size}</div><div class="kpi-note" id="promo-rate">${escapeHtml(rate)}</div></div>
+        <div class="promo-stat"><div class="kpi-label">Subscribed after seeing it</div><div class="kpi-value" id="promo-subbed">${subscribed}</div><div class="kpi-note">of those who saw it</div></div>
+      </div>
+      ${recentHtml}
+      <p class="note">Counted per browser: one customer on two devices counts once but may see the banner twice. Only customers with no subscription are shown it. Last 90 days.</p>`;
+  }
+
   // ── OPERATIONS: FOC deadline banner ────────────────────────────
   function renderFocBanner() {
     const el = document.getElementById('foc-banner');
@@ -1821,6 +1937,7 @@
     renderWhatChanged(m);
     renderSubOpportunity();
     renderAttention();
+    renderPromoCard();
 
     renderFocBanner();
     renderOpsKpis();
