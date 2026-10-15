@@ -1,6 +1,6 @@
 # Subscribe promo banner: editable in Settings, tracked in Analytics
 
-**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
+**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
 
 Plan written 2026-10-15 (planning session, Rick's request). Builds on `docs/subscription-promotion.md`
 (the banner itself, live on both environments since 2026-07-17), whose § 3 OUT list deferred exactly
@@ -372,7 +372,32 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
 - **Evidence.** Harness **90 / 90 on the unpushed tree and 90 / 90 on the deployed bytes** (served `settings.html` equal to the committed file on 4 consecutive samples first), with Rick's pre-existing staging row snapshotted and restored exactly each time. **Negative controls, each seen RED on its own check:** `nonewid` (V5), `againneedsedit` (V5, "available with no edits": the gate that made the old control unusable), `silentrestore` (V4), and `livewhileoff` (V3, the status read "Live campaign started Oct 15, 2026" for an Off banner, the exact misleading text). Two of my own test errors were caught and fixed on the way: a patch script that ate the backslashes in a regex (the check could never match), and a control stopped one section too early so the check it targeted never ran (it passed, which proved nothing; rerun correctly it went red). Screenshots inspected at 1350 and 390 px.
 - **Not verified.** Rick has not retried it. **No committed spec loads `settings.html`**, so the full suite was not rerun (it would exercise nothing this change touches); the nav and footer blocks are unchanged. **The staging banner is currently OFF with Rick's placeholder wording**, because that is the row his attempt saved and the harness restores it exactly; to see it again on staging, switch it On and Save (or press the new button with it On).
 
-### 8.5 Promotion (a separate, explicitly requested step)
+### 8.5 Follow-up 2, same day: a "No link" option (Rick: "I would also like to have no link option and simply go with a message")
+
+**On staging `e2b73d5` and `99d98f9` (`settings.html` only, +25 / -19 and +3); production untouched.**
+
+- A message-only banner was already possible (clear the link label), but nothing said so, and a "No link" entry appeared in
+  the target list only in one odd legacy case. **"No link (message only)" is now always the last entry in "Link goes
+  to"** (value `''`, which `PromoBanner` already renders as no link, so `catalog.html`, `analytics.html` and `app.js` are
+  untouched). § 2.4 item 4 above listed four pages; it is superseded by this.
+- Choosing it **greys out the link label** (what was typed stays in the box, so switching back to a page loses nothing) and
+  the hint reads "No link: customers see the message only." **With no link no label is stored**, and a label left in the
+  box neither makes a saved no-link banner look "changed" nor blocks Save when it is over the 40-character limit.
+- **Evidence.** Harness **100 / 100, all 13 sections, on the unpushed tree and on the deployed bytes** (served
+  `settings.html` equal to the committed file on 4 consecutive samples each time; Rick's pre-existing staging row
+  snapshotted and restored exactly). Negative controls each seen RED on its own check: `nolinkoption` (the choice
+  missing, two checks), `keeplabel` (the saved row kept a stray "Learn more", `{"t":"","l":"Learn more"}`), `nogrey`
+  (the label measured opacity 1, cursor default). Screenshot of the deployed render inspected.
+- **Two errors of mine, both caught, stated plainly.** (1) **I said the label "greys out" and it did not**: a disabled
+  input had no style on this page, so it looked fully editable. Found by looking at the screenshot of the DEPLOYED bytes
+  (not by an assertion), fixed in `99d98f9` with `.set-input:disabled { opacity: .5; cursor: not-allowed }`, and the
+  harness now MEASURES the computed opacity and cursor rather than trusting the `disabled` attribute. (2) **A logic
+  error in my own test crashed the normal run** (a step returned the form to exactly what was saved, so Save was
+  correctly disabled and the click timed out); I first blamed the deliberate break in a control run for that crash, which
+  was wrong (the log said Save was disabled, not enabled). The controls' red results came before that step and stand.
+- **Not verified.** Rick has not tried it; Chromium only; no committed spec asserts any of it; production never run.
+
+### 8.6 Promotion (a separate, explicitly requested step)
 
 `/promote-prod`: no SQL; `app.js` carries `merge=ours`, so assert its merge RESULT equals staging's copy. Production keeps
 showing the legacy branding value until someone saves from Settings on production. A write-smoke (reserve then cancel) is
