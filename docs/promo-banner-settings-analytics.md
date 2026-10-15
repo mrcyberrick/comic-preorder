@@ -1,6 +1,6 @@
 # Subscribe promo banner: editable in Settings, tracked in Analytics
 
-**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
+**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
 
 Plan written 2026-10-15 (planning session, Rick's request). Builds on `docs/subscription-promotion.md`
 (the banner itself, live on both environments since 2026-07-17), whose § 3 OUT list deferred exactly
@@ -343,11 +343,15 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
    was not one of the four pages). Otherwise the select would silently show Subscriptions while customers see no link.
 9. Every `localStorage` access in the catalog's banner code is now try/catch (a throwing `getItem` used to abort the
    catalog's init).
+10. **A deviation from a DECISION, not just from the plan's text, and one I did not flag at the time (corrected in § 8.4).**
+    D1 said "Reset = two buttons"; § 2.4 item 7 described the second as a tick-box applied on Save, and the first build
+    followed § 2.4. It is now a button, as D1 said. (§ 2.4 item 7 above still reads "a checkbox"; it is superseded by
+    this item and left in place, per the project's convention of marking rather than deleting.)
 
 ### 8.3 Not verified, stated plainly
 
-- **Chromium only**: no WebKit, no real phone. A human has NOT yet looked at the Settings panel or the Analytics card
-  (Rick's visual pass on staging is still owed).
+- **Chromium only**: no WebKit, no real phone. Rick has used the Settings panel on staging (and found the restore
+  problem in § 8.4, which is fixed but not yet retried by him); **his visual pass on the Analytics card is still owed.**
 - **Nothing was run against production data.** The Analytics card has only seen throwaway users' events; production has
   no `promo_banner_*` events until the feature ships there, and its numbers on real traffic are unseen.
 - **No committed spec asserts any of it** (the harness is local-only and the Playwright folder is gitignored). The full
@@ -357,7 +361,18 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
 - "Subscribed after seeing it" is the approximation D6 describes (no click attribution), and counts per browser.
 - The write path from Settings was exercised on staging only. **A production save has never been run.**
 
-### 8.4 Promotion (a separate, explicitly requested step)
+### 8.4 Follow-up, same day: "Cannot restore a closed message from the admin settings screen" (Rick)
+
+**Fixed on staging `47946d9` (`settings.html` only, +49 / -25); production untouched.** What happened, in order:
+
+- **A plan conflict I did not flag.** D1 (Rick's decision) said **"Reset = two buttons"**: "Restore default text" and **"Show it again to everyone"**. § 2.4 item 7 described the second as a **checkbox applied on Save**, and I built § 2.4 without noting that it contradicted D1. A tick-box that needs a second click on Save, in the last row, is a poor stand-in for a button, and it was not what Rick had decided.
+- **My first reproduction passed, and that was a gap in my testing, not evidence of "works".** With real clicks as an admin on the deployed bytes, ticking the box and saving brought the banner back, but only with the banner **switched On**. My harness had the same blind spot (it only exercised the box with the banner On).
+- **The root cause was in the data Rick's attempt left behind.** The staging row read `enabled:false` with a **new-format campaign id** and his own placeholder wording. A new id is only assigned when "Show it again" is ticked, so he pressed it while the banner was **Off**. The old code accepted that, saved a new campaign and showed nothing, **and the status line then read "Live campaign started ..." for a banner nobody could see.** That, plus a no-op "Restore default text" (a click that visibly did nothing when the wording was already the default), is what "cannot restore" looked like.
+- **Fix.** "Show it again to everyone" is now a **button** (available with no edits; confirms; saves the controls as they stand, so unsaved edits go with it; with the banner Off it says why and saves nothing). A banner that is switched Off is reported as **"Switched off - customers see nothing"**, never as a live campaign. "Restore default text" says so, and points at the right button, when there is nothing to restore. One shared `pbSave(again, btn)` serves both buttons; the id-assignment line is unchanged.
+- **Evidence.** Harness **90 / 90 on the unpushed tree and 90 / 90 on the deployed bytes** (served `settings.html` equal to the committed file on 4 consecutive samples first), with Rick's pre-existing staging row snapshotted and restored exactly each time. **Negative controls, each seen RED on its own check:** `nonewid` (V5), `againneedsedit` (V5, "available with no edits": the gate that made the old control unusable), `silentrestore` (V4), and `livewhileoff` (V3, the status read "Live campaign started Oct 15, 2026" for an Off banner, the exact misleading text). Two of my own test errors were caught and fixed on the way: a patch script that ate the backslashes in a regex (the check could never match), and a control stopped one section too early so the check it targeted never ran (it passed, which proved nothing; rerun correctly it went red). Screenshots inspected at 1350 and 390 px.
+- **Not verified.** Rick has not retried it. **No committed spec loads `settings.html`**, so the full suite was not rerun (it would exercise nothing this change touches); the nav and footer blocks are unchanged. **The staging banner is currently OFF with Rick's placeholder wording**, because that is the row his attempt saved and the harness restores it exactly; to see it again on staging, switch it On and Save (or press the new button with it On).
+
+### 8.5 Promotion (a separate, explicitly requested step)
 
 `/promote-prod`: no SQL; `app.js` carries `merge=ours`, so assert its merge RESULT equals staging's copy. Production keeps
 showing the legacy branding value until someone saves from Settings on production. A write-smoke (reserve then cancel) is
