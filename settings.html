@@ -157,6 +157,9 @@
       font-family: var(--font-body); font-size: 0.82rem; padding: 0 10px;
       min-height: 40px; outline: none;
     }
+    /* A disabled field must LOOK disabled. Until the Subscribe banner's link label could be greyed
+       out (no link chosen), nothing on this page disabled a .set-input, so it had no such style. */
+    .set-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* Branding ▸ Page banner. The preview frame reuses the REAL header
        classes (.page-header--banner + .brand-banner from style.css), so what is
