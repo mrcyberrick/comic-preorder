@@ -1,6 +1,6 @@
 # Subscribe promo banner: editable in Settings, tracked in Analytics
 
-**STATUS:** NOT STARTED · staging: — · prod: — · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
+**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
 
 Plan written 2026-10-15 (planning session, Rick's request). Builds on `docs/subscription-promotion.md`
 (the banner itself, live on both environments since 2026-07-17), whose § 3 OUT list deferred exactly
@@ -267,3 +267,98 @@ at teardown**; never leave a row on the founding tenant, and delete every throwa
 Filed as **F176** (2026-10-15, security-sensitive, details held locally; see § 13). This plan never
 writes `tenants`, so it does not depend on F176's outcome. Do not touch `tenants` RLS or grants in
 this work.
+
+---
+
+## 8. Build record (2026-10-15, STAGING ONLY, production untouched)
+
+Built in one session on `feature/promo-banner-settings`, merged `--ff-only` to `staging` and pushed
+(`3c54071`). **No SQL, no schema, no RLS, no Edge Function, no `config.js`, no nav or footer change.**
+Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings.html` +264,
+`analytics.html` +120 / -3.
+
+| Step | Commit | What |
+|---|---|---|
+| S1 | `b464471` | `PromoBanner` (beside `PageBanner`) and `UsageEvents.promoBannerShown` / `promoBannerDismissed`. `_log()` untouched. |
+| S2 | `7bd1a5d` | `catalog.html` reads through `PromoBanner.load()`, started before the serial `getMyIds` -> `loadCurrentMonthQty` -> `Subscriptions.getAll` chain and awaited only at the render call; renders via `mount()`; logs shown / dismissed. |
+| S3 | `daed27d` | Settings > Branding > **Subscribe banner** panel (toggle, message with a 200-character counter, link label, link target, live preview, Restore default text, Show it again, own Save / Discard). |
+| S4 | `5b9bba0` | Analytics **Subscribe Banner** card (Saw it, Closed it with rate, Subscribed after seeing it, Recent closes) and a definitions entry. |
+
+### 8.1 Evidence, and how it was obtained
+
+- **Harness `promo-banner-settings-verify.mjs`** (local-only, the `page-banner-verify.mjs` convention; password
+  grant + `addInitScript`): **86 / 86 against the unpushed working tree, and 86 / 86 against the DEPLOYED staging
+  bytes** (served `app.js`, `catalog.html`, `settings.html`, `analytics.html` equal to the committed files on 5 of 5
+  consecutive samples first). Covers V1-V9 and: the stalled-read fallback (the catalog's rail revealed after 5.6 s with
+  the read held for 12 s), a read that FAILS disabling the Settings controls and Save, the free tier (`demoshop`) editing
+  and saving, tenant isolation of rows AND events, the shown-guard when storage throws, a hostile stored
+  `link_target` (`javascript:alert(1)`, `constructor`) rendering no link, and the 200 / 201 and 40 / 41 character
+  boundaries. Teardown re-read: both tenants' `promo_banner` rows restored exactly (founding was absent), 0 throwaway
+  profiles, 0 stray events, all 16 auth users 404.
+- **Negative controls, all seen RED** (the local server applies one deliberate fault to the response only, so the
+  working tree is never touched): `nofallback` -> V1 red (3 checks); `noshownguard` -> V6 red, a reload logs a second
+  `promo_banner_shown`; `nonewid` -> V5 red (id stays `sub-promo-1`, status stays "Original campaign", the customer who
+  closed it does NOT see it again); `innerhtml` -> V8 red, **the injected `onerror` actually ran** (flag 1, an `img`
+  element in both the preview and the catalog); `nosplit` -> V7 red, **Customer Engagement Score moved 90 -> 88**, two
+  extra rows appeared in Customer Activity and the segment counts changed.
+- **Spec 09 unchanged (file untouched since 2026-07-17) and green, 5 / 5**, against the deployed bytes; it exercises
+  the legacy-fallback path through the new code on its synthetic tenant.
+- **V9 layout.** Lighthouse, authenticated `/catalog`, deployed staging, before (the previous bytes) vs after, two runs:
+  desktop **100 / CLS 0.011** before and in both runs after; mobile **86** (CLS 0.019, TBT 290 ms) before, **91** and
+  **88** (CLS 0.016 and 0.018, TBT 180 and 260 ms) after; FCP and LCP identical. No regression; the mobile spread is the
+  probe's TBT noise floor. Settings, Analytics and the catalog banner at 390 px: no horizontal scroll; screenshots inspected.
+- **Unit suite 333 / 333** (unchanged: no import-script code).
+- **Full Playwright suite, once post-push, against the deployed bytes: 161 passed, 0 failed, 0 flaky, exit 0, 27.8 min**
+  (the log's own summary line; `globalTeardown` restored `catalog_filters` and deleted its synthetic tenant). **It took two
+  runs, and that is stated rather than smoothed over:** the first was **160 passed, 1 failed** (28.9 min). The failure was
+  spec 15 V4's fixtures getting **HTTP 504 Gateway Timeout from Supabase on three different endpoints** (auth admin
+  `createUser`, a REST insert, a REST delete), so it never reached an assertion, and `cleanupTestRows()` then threw on the
+  504 body. Spec 15 alone then passed **36 / 36** (6.8 min) on the same bytes, and the full suite was run again clean.
+  **The failed fixtures leaked two `pw-ordexp-*` users** (auth + profile, created 18:11-18:12Z inside the run, 0 dependent
+  rows); after classifying them by prefix and time window they were deleted (re-read: auth 404, 0 profiles). That is F170's
+  mechanism (a fixture that fails leaks its user), already filed, so nothing new was filed. Left alone on purpose: the
+  `pw-pending-*` auth rows (an intended survivor, F64 item 5) and one `TEST_PW_` catalog row dated 2026-08-12.
+
+### 8.2 Deviations from §§ 2-3, each deliberate
+
+1. **The shown key includes the user id** (`pulllist_promo_shown_<slug>_<id>_<userId>`, not the plan's per-browser
+   `..._<slug>_<id>`), so two customers on one browser each log their own impression. The dismissed key is unchanged.
+2. **The shown guard is written BEFORE the event is logged**, not after. The plan's own rule is "if storage throws, do not
+   log"; writing first is what makes that true (a throwing `setItem` then logs nothing, where log-then-set would have
+   logged on every load).
+3. **Analytics excludes the two types once, at load** (they are split out of `state.events` into `state.promoEvents`),
+   not metric by metric. The pre-check found metrics that count events of ANY type per customer (active customers,
+   cohorts, session clustering, Last Seen, win-back, the event breakdowns) and two raw `state.events` reads outside
+   `filteredEvents()`, so a per-metric patch could have missed one. `nosplit` shows the cost of missing it.
+4. **The card honours the page's staff toggle** (default: customers only) instead of hard-excluding admins, like every
+   other panel on the page.
+5. **`fromLegacy()` maps all four app-page hrefs**, not only `subscriptions.html`, so a legacy link to any of the four
+   keeps working ("nothing changes on deploy"). Anything else becomes "no link" (D4), as planned.
+6. **The catalog read has a 4 s bound** (falls back to the legacy value), and `loadWithMeta()` reports a FAILED read
+   separately from an absent row so Settings can refuse to save over a row it could not read. The plan did not ask for
+   either; both are in the render path or the write path.
+7. **The empty-state wording has no "<deploy date>"**: the card says "Counts begin when customers load the Catalog after
+   the banner tracking went live", because that date differs per environment and nothing records it.
+8. **A "No link" option appears in the target list only when the stored `link_target` is empty** (a legacy value whose href
+   was not one of the four pages). Otherwise the select would silently show Subscriptions while customers see no link.
+9. Every `localStorage` access in the catalog's banner code is now try/catch (a throwing `getItem` used to abort the
+   catalog's init).
+
+### 8.3 Not verified, stated plainly
+
+- **Chromium only**: no WebKit, no real phone. A human has NOT yet looked at the Settings panel or the Analytics card
+  (Rick's visual pass on staging is still owed).
+- **Nothing was run against production data.** The Analytics card has only seen throwaway users' events; production has
+  no `promo_banner_*` events until the feature ships there, and its numbers on real traffic are unseen.
+- **No committed spec asserts any of it** (the harness is local-only and the Playwright folder is gitignored). The full
+  suite says nothing else broke; the evidence for the feature itself is the harness.
+- Lighthouse was measured on the catalog only (a customer page, throwaway account with no subscriptions, so the banner
+  was shown in both readings); the Settings and Analytics pages were checked for horizontal scroll, not scored.
+- "Subscribed after seeing it" is the approximation D6 describes (no click attribution), and counts per browser.
+- The write path from Settings was exercised on staging only. **A production save has never been run.**
+
+### 8.4 Promotion (a separate, explicitly requested step)
+
+`/promote-prod`: no SQL; `app.js` carries `merge=ours`, so assert its merge RESULT equals staging's copy. Production keeps
+showing the legacy branding value until someone saves from Settings on production. A write-smoke (reserve then cancel) is
+warranted because `catalog.html` and `app.js` are on the reserve path. The branding key is the rollback and stays in place.

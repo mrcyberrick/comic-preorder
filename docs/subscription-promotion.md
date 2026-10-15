@@ -116,9 +116,16 @@ Drift Prevention).
 
 - The perk itself (pricing/policy — Rick's decision; plan is copy-agnostic).
 - Admin UI for editing banner content (v1 is SQL-only via `branding` update).
+  *(Built 2026-10-15, on STAGING only: `docs/promo-banner-settings-analytics.md`. The
+  banner is now edited in Settings > Branding > Subscribe banner and stored in
+  `app_settings.promo_banner`; `tenants.branding.promo_banner` stays as a read
+  fallback. On production it is still SQL-only until that is promoted.)*
 - Email/notification-based promotion (F72 email-branding territory).
 - Banner/prompt **impression** logging (would add new event_types; measure v1
   via the `source` field + subscription counts; revisit if data is needed).
+  *(The banner half was built 2026-10-15, on STAGING only, same plan:
+  `promo_banner_shown` / `promo_banner_dismissed`, read by an Analytics card. The
+  post-reserve prompt still logs only through the `source` field.)*
 - Subscribe buttons on catalog cards (rejected — § 1).
 - Any schema change, Edge Function change, or tenant-2 (`comicstore`)
   enablement.
