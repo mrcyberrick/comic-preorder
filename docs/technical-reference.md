@@ -6964,7 +6964,11 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Interim rule, no code: do not run `check-dates.js --staging` until the fix lands.**
 - **Related:** **F165** (S2's streak map is what is lost), **F159** (the frozen-file hash counters), **F173** (found while planning its direction (a)).
 
-Next free finding ID: **F176**.
+#### F176 — Reserved: security-sensitive, details held locally
+- **Status:** filed 2026-10-15, OPEN, not yet verified against live. Details are in the operator's local-only security notes, not in this public repo (the F75 pattern). A sanitized past-tense entry replaces this placeholder once both environments are fixed.
+- **Scope:** an authorization question on a tenant-scoped table; no cross-tenant read or write is involved. Found while planning `docs/promo-banner-settings-analytics.md`, which does not depend on it.
+
+Next free finding ID: **F177**.
 
 ---
 

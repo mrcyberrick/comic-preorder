@@ -262,10 +262,8 @@ at teardown**; never leave a row on the founding tenant, and delete every throwa
 - Any change to `UsageEvents._log()` or the 90-day purge (F90).
 - Any `tenants` RLS change (see the observation in § 7).
 
-## 7. Observed during planning, not filed (Rick's call)
+## 7. Observed during planning
 
-The `tenants` UPDATE policy as documented (`admins update own tenant`,
-`docs/technical-reference.md:~1730`) is row-level: `id = current_tenant_id() AND
-current_user_is_admin()`. If no column-level GRANT narrows it, a store admin could PATCH their own
-`tenants.plan` to `'pro'` through the API and get the paid tier. **Not verified** (no column grants
-read, no probe run). This plan avoids writing `tenants` at all, so it does not depend on the answer.
+Filed as **F176** (2026-10-15, security-sensitive, details held locally; see § 13). This plan never
+writes `tenants`, so it does not depend on F176's outcome. Do not touch `tenants` RLS or grants in
+this work.
