@@ -23,7 +23,7 @@ Three things converged that were not all true when F99 was filed on 2026-07-25:
 1. **F99's blocker cleared.** `p=quarantine` was held pending MailerLite retirement; that trigger
    **fired 2026-08-30** when the webhook path was removed platform-wide (native-signup § S5). F99 is
    unblocked and unscheduled. *(2026-10-15 update: the DNS half of that retirement is also done --
-   `litesrv._domainkey` and the `_spf.mlsend.com` includes are removed from `mrcyberrick.us`, verified by
+   `litesrv._domainkey`, the `book-stop` return-path records and the `_spf.mlsend.com` includes are removed from `mrcyberrick.us`, verified against the authoritative nameservers by
    public DNS query, and the MailerLite account is deleted. See `technical-reference.md` § 13 F99.)*
 2. **A second tenant is being scoped**, and transactional email is one of its two hard blockers (the
    other is F131's import path). Every customer-facing email currently hardcodes
