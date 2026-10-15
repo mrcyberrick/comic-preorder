@@ -1251,6 +1251,11 @@
       o.value = k; o.textContent = PromoBanner.TARGET_LABELS[k];
       sel.appendChild(o);
     });
+    // "No link" is a first-class choice, always listed: a banner can simply be a message.
+    // Its value is '' (no target), which PromoBanner already treats as "render no link".
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = 'No link (message only)';
+    sel.appendChild(none);
   }
 
   const pbCurrent = () => ({
@@ -1259,32 +1264,28 @@
     link_text: el('pb-label').value.trim(),
     link_target: el('pb-target').value,
   });
-  const pbFields = c => JSON.stringify([!!c.enabled, c.text || '', c.link_text || '', c.link_target || '']);
+  // With no link the label means nothing, so it is ignored when comparing (a label left in
+  // the box must not make a saved no-link banner look "changed") and is never stored.
+  const pbFields = c => JSON.stringify([!!c.enabled, c.text || '', c.link_target ? (c.link_text || '') : '', c.link_target || '']);
   const pbDirty = () => pbFields(pbCurrent()) !== pbFields(pbBaseline());
 
-  // Writes a config into the controls. A stored link_target of '' (a legacy value
-  // whose href was not one of the four pages, or a hand-written row) has no entry in
-  // the list; a "No link" option is added so that state can be shown rather than
-  // silently replaced by the first page, which would make the preview disagree with
-  // what customers actually see. It only appears when it is needed.
+  // Writes a config into the controls. A stored link_target of '' means "no link" (chosen
+  // here, or a legacy value whose href was not one of the four pages, or a hand-written
+  // row), and the always-present "No link (message only)" option shows exactly that, so
+  // the preview can never disagree with what customers actually see.
   function pbApply(cfg) {
     el('pb-enabled').checked = !!cfg.enabled;
     el('pb-text').value = cfg.text || '';
     el('pb-label').value = cfg.link_text || '';
-    const sel = el('pb-target');
-    if (!cfg.link_target && !sel.querySelector('option[value=""]')) {
-      const o = document.createElement('option');
-      o.value = ''; o.textContent = 'No link';
-      sel.appendChild(o);
-    }
-    sel.value = cfg.link_target || '';
+    el('pb-target').value = cfg.link_target || '';
   }
 
   // The reason Save would refuse, or null. Refuses rather than truncates: silently
   // cutting someone's wording would be worse than telling them.
   function pbProblem(cur) {
     if (cur.text.length > PromoBanner.TEXT_MAX) return `The message is ${cur.text.length} characters; the limit is ${PromoBanner.TEXT_MAX}.`;
-    if (cur.link_text.length > PromoBanner.LABEL_MAX) return `The link label is ${cur.link_text.length} characters; the limit is ${PromoBanner.LABEL_MAX}.`;
+    // the label only matters when there is a link to put it on
+    if (cur.link_target && cur.link_text.length > PromoBanner.LABEL_MAX) return `The link label is ${cur.link_text.length} characters; the limit is ${PromoBanner.LABEL_MAX}.`;
     if (cur.enabled && !cur.text) return 'Enter the message customers will see, or switch the banner off.';
     return null;
   }
@@ -1313,10 +1314,15 @@
     const count = el('pb-count');
     count.textContent = `${cur.text.length} / ${PromoBanner.TEXT_MAX}`;
     count.classList.toggle('is-over', over);
-    el('pb-label-hint').textContent = cur.link_text.length > PromoBanner.LABEL_MAX
-      ? `Over the ${PromoBanner.LABEL_MAX}-character limit.`
-      : (cur.link_text ? '' : 'Leave empty for no link.');
-    el('pb-label-hint').classList.toggle('is-bad', cur.link_text.length > PromoBanner.LABEL_MAX);
+    const noLink = !cur.link_target;
+    const labelOver = !noLink && cur.link_text.length > PromoBanner.LABEL_MAX;
+    // No link: the label is greyed out (and kept in the box, so switching back to a page
+    // does not lose what was typed), and the hint says why.
+    el('pb-label').disabled = pbReadFailed || noLink;
+    el('pb-label-hint').textContent = noLink
+      ? 'No link: customers see the message only.'
+      : (labelOver ? `Over the ${PromoBanner.LABEL_MAX}-character limit.` : (cur.link_text ? '' : 'Leave empty for no link.'));
+    el('pb-label-hint').classList.toggle('is-bad', labelOver);
 
     // The live preview: the real banner, with the close button and link inert.
     const host = el('pb-preview'), off = el('pb-preview-off');
@@ -1397,7 +1403,7 @@
       enabled: cur.enabled,
       id: (again || !baseId) ? PromoBanner.newCampaignId() : baseId,
       text: cur.text,
-      link_text: cur.link_text,
+      link_text: cur.link_target ? cur.link_text : '',   // no link, no label: nothing meaningless is stored
       link_target: cur.link_target,
     };
 
