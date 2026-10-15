@@ -3061,7 +3061,7 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
 
 **Git remotes:**
 - `origin` → production repo (`github.com/mrcyberrick/comic-preorder`)
-- `staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`) — **no longer a deploy target as of 5.1**; kept warm as rollback past the original "until 5.5 closes" gate — Rick's call 2026-07-15 at 5.5 S6 was to keep it warm and revisit retirement in a future session
+- ~~`staging` → staging repo (`github.com/mrcyberrick/comic-preorder-staging`)~~ **RETIRED 2026-10-15** (Rick): GitHub Pages unpublished (old URL `mrcyberrick.us/comic-preorder-staging/` measured 404), the repo archived, and the `staging` remote removed from this clone (`origin` is the only remote). The links were never shared. Undo = unarchive + re-enable Pages. *(Was: "no longer a deploy target as of 5.1; kept warm as rollback ... revisit retirement in a future session" (Rick, 2026-07-15).)*
 
 ### ⚠️ `main` is NOT simply "staging + prod config.js" (F125)
 
@@ -3503,6 +3503,8 @@ branch, and in fuller, more current form in the docs this table points to.)*
 ## Known Issues & Gotchas
 
 - **`staging` is BOTH a local branch and a git remote name, so the bare refname is ambiguous**
+  *(Resolved in this clone 2026-10-15: the `staging` remote was removed when the old staging repo was
+  retired, so `staging` now means only the branch. A clone that still has the remote keeps the trap.)*
   (`warning: refname 'staging' is ambiguous`, seen 2026-09-29). `git checkout -B <new> staging`
   warned and did NOT switch; `git checkout refs/heads/staging` **detaches HEAD**, so a following
   `git merge --ff-only` moves HEAD and not the `staging` branch (nothing is lost, the commit stays on
