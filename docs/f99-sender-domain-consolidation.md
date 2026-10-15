@@ -25,6 +25,10 @@ Three things converged that were not all true when F99 was filed on 2026-07-25:
    unblocked and unscheduled. *(2026-10-15 update: the DNS half of that retirement is also done --
    `litesrv._domainkey`, the `book-stop` return-path records and the `_spf.mlsend.com` includes are removed from `mrcyberrick.us`, verified against the authoritative nameservers by
    public DNS query, and the MailerLite account is deleted. See `technical-reference.md` § 13 F99.)*
+   *(Gate scheduled 2026-10-15: the DMARC-tightening decision for `mrcyberrick.us` is due Thu 2026-10-29,
+   8:00 AM ET, after two weeks of aggregate reports; reminder: cloud routine
+   `trig_01SwSakp3uft7RE7khDPgYbo` and Google Calendar event `ni7srpe773f1kguv42o9oo5c9s`. The reminder
+   only reminds; the decision stays Rick-in-the-loop.)*
 2. **A second tenant is being scoped**, and transactional email is one of its two hard blockers (the
    other is F131's import path). Every customer-facing email currently hardcodes
    `noreply@mrcyberrick.us` with the founding tenant's name, street address and phone.
