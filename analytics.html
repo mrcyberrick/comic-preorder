@@ -242,6 +242,18 @@
     .promo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 18px 24px; }
     .promo-recent-h { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin: 22px 0 6px; }
 
+    /* First-load layout-shift guard. Every panel fills in at once when the data lands, which is a very large shift
+       (measured on the deployed page: CLS 0.85 desktop, 0.29 mobile, the culprits the page container and the "This
+       Cycle vs Last" card). Until the first render completes the panels are laid out but NOT painted (a hidden
+       element that moves is not a layout shift, the same trick as the catalog's Top picks rail), and the page holds a
+       viewport of height so the footer starts below the fold instead of jumping down from the middle of the screen.
+       Must be in static CSS and on the first-paint markup: a class added by script would arrive after the first paint. */
+    .container.an-loading { min-height: 100vh; }
+    /* the "Metric definitions" block sits right after the panels, so it would jump down when they fill in */
+    .an-loading .tab-panel, .an-loading .defs { visibility: hidden; }
+    .an-loading-note { display: none; }
+    .an-loading .an-loading-note { display: block; }
+
     .no-data { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 24px; }
     .loading-row { color: var(--text-muted); font-size: 0.82rem; font-style: italic; padding: 20px 8px; }
 
@@ -299,7 +311,7 @@
   </div>
 </nav>
 
-<div class="container">
+<div class="container an-loading" id="an-root">
   <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
     <div>
       <h1>Analytics</h1>
@@ -326,6 +338,9 @@
     <button class="tab-btn" data-tab="operations">Operations</button>
     <button class="tab-btn" data-tab="intelligence">Customer Intelligence</button>
   </div>
+
+  <!-- Shown only while the page is loading (.an-loading on #an-root), in place of the panels below. -->
+  <p class="loading-row an-loading-note">Loading…</p>
 
   <!-- ═══════════════ TAB 1 — EXECUTIVE ═══════════════ -->
   <section class="tab-panel" data-tab="executive" hidden>
@@ -640,17 +655,32 @@
     // range() pagination is only stable with a deterministic ORDER BY
     // (same fix as F82) — otherwise rows inserted between paginated
     // calls shift offsets and cause silent gaps/duplicates.
-    const out = [];
-    for (let from = 0; from < total; from += 1000) {
-      let q = db.from(table).select(selectStr);
-      if (applyFilters) q = applyFilters(q);
-      q = q.order('created_at', { ascending: true }).order('id', { ascending: true });
-      q = q.range(from, Math.min(from + 999, total - 1));
-      const { data, error } = await q;
-      if (error) { console.error(`${table} range fetch failed`, error); break; }
-      if (!data || data.length === 0) break;
-      out.push(...data);
+    //
+    // The pages are fetched a few at a time, not one after another. Once `total` is known the pages are independent:
+    // every caller bounds its filter (and the count) at the same instant and the order is created_at, id, so a page
+    // boundary cannot move between requests. The old loop paid one round trip PLUS a CORS preflight (every page URL
+    // differs, so none is cached) per 1,000 rows in series: 23 of them on a 21,000-row staging window, about 14 s.
+    const starts = [];
+    for (let from = 0; from < total; from += 1000) starts.push(from);
+    const pages = new Array(starts.length);
+    let next = 0, failed = false;
+    async function worker() {
+      while (!failed) {
+        const i = next++;
+        if (i >= starts.length) return;
+        let q = db.from(table).select(selectStr);
+        if (applyFilters) q = applyFilters(q);
+        q = q.order('created_at', { ascending: true }).order('id', { ascending: true });
+        q = q.range(starts[i], Math.min(starts[i] + 999, total - 1));
+        const { data, error } = await q;
+        if (error) { console.error(`${table} range fetch failed`, error); failed = true; return; }
+        pages[i] = data || [];
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(6, starts.length) }, worker));
+    // Same result shape as before: the rows in order, up to the first page that did not arrive.
+    const out = [];
+    for (const p of pages) { if (p === undefined) break; out.push(...p); }
     return out;
   }
 
@@ -706,6 +736,10 @@
     const allEvents = await fetchRanged(
       'usage_events', 'event_type, user_id, catalog_id, metadata, created_at', ueFilter, ueTotal
     );
+    // Parse each event's timestamp ONCE. The metrics below used to run `new Date(e.created_at).getTime()` per event on
+    // every pass (and inside nested scans: per cancel, per cohort customer), which a CPU profile showed was about 40% of
+    // the page's main-thread time on a 21,000-event window. Date.parse(s) is exactly new Date(s).getTime().
+    allEvents.forEach(e => { e._t = Date.parse(e.created_at); });
     state.events = allEvents.filter(e => !PROMO_TYPES.has(e.event_type));
     state.promoEvents = allEvents.filter(e => PROMO_TYPES.has(e.event_type));
     state.promoCfg = promoCfg;
@@ -754,7 +788,7 @@
   function filteredEvents() {
     return state.hideAdmin ? state.events.filter(e => !state.adminIds.has(e.user_id)) : state.events;
   }
-  function ageDaysOf(e) { return (NOW - new Date(e.created_at).getTime()) / 86400000; }
+  function ageDaysOf(e) { return (NOW - e._t) / 86400000; }
   function eventsInAge(events, fromDays, toDays) {
     return events.filter(e => { const a = ageDaysOf(e); return a >= fromDays && a < toDays; });
   }
@@ -816,7 +850,7 @@
   // Events with created_at in [fromTs, toTs) — toTs null means no upper bound.
   function eventsInInstantWindow(events, fromTs, toTs) {
     return events.filter(e => {
-      const t = new Date(e.created_at).getTime();
+      const t = e._t;
       return t >= fromTs && (toTs == null || t < toTs);
     });
   }
@@ -837,10 +871,10 @@
     });
     const sessions = [];
     byUser.forEach((evs, userId) => {
-      evs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      evs.sort((a, b) => a._t - b._t);
       let current = null, lastTs = null;
       evs.forEach(e => {
-        const t = new Date(e.created_at).getTime();
+        const t = e._t;
         if (!current || (t - lastTs) > 30 * 60000) {
           current = { user_id: userId, events: [] };
           sessions.push(current);
@@ -1120,8 +1154,11 @@
   // with ≥1 event that day. Index 0 = day 1 = the local day cycleStart falls on.
   function overlayDayCounts(events, startLocal, days) {
     const byDay = new Array(days).fill(null).map(() => new Set());
+    const dayIdx = new Map();   // local date string -> day-of-cycle index: there are at most ~90 distinct days, not one per event
     events.forEach(e => {
-      const idx = daysBetween(startLocal, localDateFromIso(e.created_at));
+      const ld = e._ld || (e._ld = localDateFromIso(e.created_at));   // same value as before, computed once per event
+      let idx = dayIdx.get(ld);
+      if (idx === undefined) { idx = daysBetween(startLocal, ld); dayIdx.set(ld, idx); }
       if (idx >= 0 && idx < days) byDay[idx].add(e.user_id);
     });
     return byDay.map(s => s.size);
@@ -1469,7 +1506,7 @@
     const closedUsers = new Set();
     const closes = [];
     mine.forEach(e => {
-      const t = new Date(e.created_at).getTime();
+      const t = e._t;
       if (e.event_type === 'promo_banner_shown') {
         if (!firstShown.has(e.user_id) || t < firstShown.get(e.user_id)) firstShown.set(e.user_id, t);
       } else if (e.event_type === 'promo_banner_dismissed') {
@@ -1497,7 +1534,7 @@
     const firstSub = new Map();
     filteredEvents().forEach(e => {
       if (e.event_type !== 'subscribe') return;
-      const t = new Date(e.created_at).getTime();
+      const t = e._t;
       if (!firstSub.has(e.user_id) || t < firstSub.get(e.user_id)) firstSub.set(e.user_id, t);
     });
     let subscribed = 0;
@@ -1625,17 +1662,28 @@
     const f = filteredEvents();
     const cancels = eventsInAge(f, 0, WIN).filter(e => e.event_type === 'cancel');
     if (!cancels.length) return '';
+    // Index the reserves ONCE (customer -> title -> their timestamps). This used to scan every event for every cancel
+    // (cancels x events comparisons: about 880 ms of a 4x-throttled load on a 21,000-event window). Same answer: the
+    // latest reserve of that title by that customer at or before the cancel. Reserves without a title never matched
+    // (a cancel with no title is skipped, and `undefined !== title` is always true), so they are not indexed.
+    const reserves = new Map();
+    f.forEach(e => {
+      if (e.event_type !== 'reserve') return;
+      const t = e.metadata?.title;
+      if (!t) return;
+      let byTitle = reserves.get(e.user_id);
+      if (!byTitle) { byTitle = new Map(); reserves.set(e.user_id, byTitle); }
+      const arr = byTitle.get(t);
+      if (arr) arr.push(e._t); else byTitle.set(t, [e._t]);
+    });
     let quick = 0, matched = 0;
     cancels.forEach(c => {
-      const ct = new Date(c.created_at).getTime();
+      const ct = c._t;
       const title = c.metadata?.title;
       if (!title) return;
       let best = null;
-      f.forEach(e => {
-        if (e.event_type !== 'reserve' || e.user_id !== c.user_id || e.metadata?.title !== title) return;
-        const rt = new Date(e.created_at).getTime();
-        if (rt <= ct && (best === null || rt > best)) best = rt;
-      });
+      const times = reserves.get(c.user_id)?.get(title);
+      if (times) for (const rt of times) { if (rt <= ct && (best === null || rt > best)) best = rt; }
       if (best !== null) { matched++; if (ct - best <= 24 * 3600000) quick++; }
     });
     if (!matched) return `${cancels.length} cancel${cancels.length === 1 ? '' : 's'} in the last 30 days.`;
@@ -1820,12 +1868,12 @@
     const rows = weeks.map(w => {
       const startTs = new Date(w.start + 'T00:00:00').getTime();
       const endTs = new Date(w.end + 'T23:59:59.999').getTime();
-      const cohort = new Set(f.filter(e => { const t = new Date(e.created_at).getTime(); return t >= startTs && t <= endTs; }).map(e => e.user_id));
+      const cohort = new Set(f.filter(e => { const t = e._t; return t >= startTs && t <= endTs; }).map(e => e.user_id));
       const followEndTs = endTs + 30 * 86400000;
       const isOpen = followEndTs > NOW;
       let returned = 0;
       cohort.forEach(uid => {
-        if (f.some(e => e.user_id === uid && new Date(e.created_at).getTime() > endTs && new Date(e.created_at).getTime() <= followEndTs)) returned++;
+        if (f.some(e => e.user_id === uid && e._t > endTs && e._t <= followEndTs)) returned++;
       });
       const rate = cohort.size ? returned / cohort.size * 100 : 0;
       return { start: w.start, rate, isOpen, size: cohort.size };
@@ -1846,7 +1894,7 @@
     // Last-seen + value + reserve/cancel counts from the full cache.
     const lastSeen = new Map(), value = new Map(), rc = new Map(), cc = new Map();
     state.events.forEach(e => {
-      const t = new Date(e.created_at).getTime();
+      const t = e._t;
       if (!lastSeen.has(e.user_id) || t > lastSeen.get(e.user_id)) lastSeen.set(e.user_id, t);
       if (e.event_type === 'reserve') { value.set(e.user_id, (value.get(e.user_id) || 0) + (e.metadata?.price_usd || 0)); rc.set(e.user_id, (rc.get(e.user_id) || 0) + 1); }
       if (e.event_type === 'cancel') cc.set(e.user_id, (cc.get(e.user_id) || 0) + 1);
@@ -1959,6 +2007,9 @@
       console.error('Analytics load failed', err);
       document.querySelector('.container').insertAdjacentHTML('afterbegin',
         '<div class="alert alert-error">Failed to load analytics data. Try refreshing.</div>');
+    } finally {
+      // success or failure, the page is no longer "loading": reveal the panels (see .an-loading)
+      document.getElementById('an-root').classList.remove('an-loading');
     }
   }
 
