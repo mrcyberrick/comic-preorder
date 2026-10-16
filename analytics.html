@@ -1499,7 +1499,10 @@
     const started = PromoBanner.startedAt(cfg.id);
     sub.textContent = started ? `Live campaign, started ${fmtDay(started)}` : 'Live campaign (the original one)';
 
-    const keep = e => !state.hideAdmin || !state.adminIds.has(e.user_id);
+    // An event whose user_id is NULL belongs to an account that was deleted afterwards (usage_events.user_id is ON DELETE
+    // SET NULL). It cannot be attributed to a customer, and counting it would add one phantom "customer" to Saw it and
+    // Closed it (and an "Unknown" row to Recent closes), so it is left out of this card.
+    const keep = e => e.user_id != null && (!state.hideAdmin || !state.adminIds.has(e.user_id));
     const mine = state.promoEvents.filter(e => keep(e) && e.metadata && e.metadata.banner_id === cfg.id);
 
     const firstShown = new Map();      // customer -> earliest impression (ms)
