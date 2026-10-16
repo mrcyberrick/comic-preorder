@@ -757,6 +757,10 @@ button { cursor: pointer; font-family: var(--font-body); }
   transition: var(--transition);
 }
 .filter-select:focus { border-color: var(--border-accent); }
+/* Catalog: a drop-down set to anything other than its default wears the accent border, the same
+   colour the Filters button takes while a filter is on (catalog.html syncFilterBadge() adds and
+   removes .is-set). Kept after :focus so the border stays accent while the control has focus. */
+.filter-select.is-set { border-color: var(--accent); }
 
 /* ── Catalog search row, filter toggle, filter panel ─────────
    catalog.html only: .toolbar-header, .results-toolbar, .search-block and
