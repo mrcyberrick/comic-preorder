@@ -1,6 +1,6 @@
 # Subscribe promo banner: editable in Settings, tracked in Analytics
 
-**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
+**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; Analytics performance `8224ab0` and the deleted-account fix `30d144f`, § 8.6; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
 
 Plan written 2026-10-15 (planning session, Rick's request). Builds on `docs/subscription-promotion.md`
 (the banner itself, live on both environments since 2026-07-17), whose § 3 OUT list deferred exactly
@@ -402,7 +402,85 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
   parts he exercised. His report, not an observation made here.
 - **Not verified.** Chromium only; no committed spec asserts any of it; production never run.
 
-### 8.6 Promotion (a separate, explicitly requested step)
+### 8.6 Follow-up 3, same day: "the Analytics page seems slow to load" (Rick: "Lighthouse performance score of 35 on mobile and 75 on desktop")
+
+**On staging `8224ab0` (`analytics.html` only, +78 / -27) and `30d144f` (+4 / -1, a bug in MY card found on the way); production
+untouched.** Reproduced first on the live staging page with the project's authenticated admin Lighthouse script:
+**mobile 39, desktop 67** (Rick's 35 and 75), so the numbers are real and the measurements below are comparable.
+
+**It was not the Subscribe banner card.** An interleaved A/B of the pre-feature `analytics.html` (`67f86ad`) against the then-current
+one, same data and machine, showed identical time-to-content (19.8 s vs 19.9 s mobile, 16.6 s vs 16.1 s desktop) and identical
+mobile CLS (0.473). The card's real, small cost was about **+0.018 desktop CLS** (the footer shifts a little more because the
+page is taller); the fix below removes that too. The slowness is older. **Three separate causes, each measured:**
+
+1. **Data download.** `loadData()` read every `usage_events` row of the last 90 days one 1,000-row page at a time, in series
+   (23 requests, each with its own CORS preflight, because every page URL differs: about 14 s on staging). Staging holds
+   **21,619 events in that window, 21,071 of them (97%) from DELETED test accounts** (their events survive with a NULL user);
+   only 548 are real. **Production's window is 3,055 events, 10 from deleted accounts**, i.e. 4 pages, so production is
+   structurally much lighter than staging and was never in the same state.
+2. **Main-thread work.** A CPU profile put about 40% of the time in `new Date(e.created_at).getTime()` repeated per event on
+   every pass and inside two nested scans (per cancel, per cohort customer), plus a per-event local-day computation in the
+   overlay chart.
+3. **Layout shift.** Every panel filled in at once when the data landed (CLS 0.848 desktop, 0.291 mobile; culprits the page
+   container and the "This Cycle vs Last" card). **An earlier F141 attempt on this page (per-panel height reservations) made it
+   worse and was reverted; that is NOT what worked.**
+
+**Fix.** (a) `fetchRanged()` fetches the pages six at a time (the total is known, every read is bounded at the same instant and
+ordered by created_at, id, so a page boundary cannot move). (b) Each event's timestamp is parsed once at load (`e._t`;
+`Date.parse(s)` is exactly `new Date(s).getTime()`), the overlay computes each event's local day once and memoises the day
+offset, and `cancelTimingNote()` indexes the reserves once instead of scanning every event per cancel. (c) The page container
+carries `.an-loading` in its first-paint markup: the panels and the definitions block are `visibility: hidden` (laid out, not
+painted, so their moving is not counted as a shift, the same trick as the catalog's Top picks rail) and the container holds
+`min-height: 100vh` so the footer starts below the fold; `loadAll()` removes the class in a `finally`. A "Loading..." note
+shows meanwhile.
+
+**Evidence.**
+
+| | before | after |
+|---|---|---|
+| **live Lighthouse, mobile** | 39 (TBT 1,470 ms, CLS 0.291, LCP 5.7 s) | **79 and 79** (TBT 30 / 10 ms, CLS 0.003, LCP 5.7 / 5.6 s) |
+| **live Lighthouse, desktop** | 67 (CLS 0.848, TBT 160 ms) | **98 and 99** (CLS 0.004 / 0.002, TBT 0 ms) |
+| in-browser A/B, CLS mobile / desktop | 0.473 / 0.242 | **0.001 / 0.002** |
+| in-browser A/B, time until content renders | 19.9 s mobile, 16.6 s desktop | **9.4 s, 7.9 s** |
+| `renderAll()` as one synchronous block (4x CPU throttle), before the cancel index | 3,286 ms | **1,446 ms** |
+
+The **rendered text of every panel is identical before and after (6 of 6 comparisons, both form factors, 3 rounds)**, including the
+cancel-timing note ("131 of 131 cancels happened within 24 hours"), so the changed calculation was compared on real data. The
+cancel index was also checked with a randomised equivalence test against the old algorithm: **4,000 trials, 0 mismatches**
+(null customers, missing or empty titles, equal timestamps). Two runs of the live Lighthouse script are shown above; the
+mobile score is now limited by LCP (about 5.6 s), which is the data download itself.
+
+**Errors of mine along the way, stated plainly.** (1) My first long-task proxy for TBT said "no change" while direct timing showed
+`renderAll()` had fallen by more than half; I only found that by timing the block directly, and I had briefly told Rick the
+opposite. (2) Lighthouse stalled against localhost, so the comparison used in-browser measurements instead and the final
+confirmation used the standard script on the live page. (3) My first deploy did NOT happen: another session had pushed a
+catalog commit to `staging` after I branched, the fast-forward was refused, and my own marker check (not the hash) caught it; I
+rebased my one commit and pushed. A later "hash mismatch" was my check stripping a trailing newline, not the page. (4) Inline
+patch scripts mangled backslashes three more times; every product edit after that went through the Edit tool, and every
+patched regex was re-read.
+
+**A bug in my card, found by this work and fixed (`30d144f`).** `usage_events.user_id` is ON DELETE SET NULL, so the card counted
+a deleted account's events as one phantom customer: staging's live campaign had 55 events, 53 from deleted accounts. The card now
+leaves NULL-user events out. Harness V7 seeds such events and asserts the card does not move (saw 2, closed 1, no "Unknown");
+**the control with the guard removed goes red on three checks** (saw 3, closed 2, "Unknown" present); full harness **101 / 101**
+across all 13 sections on the tree.
+
+**Observed, NOT changed.** The page's OTHER metrics (weekly and monthly active customers, cohorts) also treat a NULL user as one
+customer, so any window containing a deleted account's events reads one high. That is older than this work. On production
+the effect is one customer (10 such events); on staging the 97% residue makes staging's engagement numbers unrepresentative.
+
+**Rick's calls, not taken.** (1) Whether to clean staging's residue (the 21,071 NULL-user events): a destructive delete, so not
+done; it would also make staging load like production. (2) Whether to promote this to production: the performance work is
+`analytics.html` only and can go on its own, but production's window is 3,055 events, so its gain there is smaller (the layout
+shift and the series of requests still apply). (3) Whether the NULL-user handling in the other metrics should be fixed.
+
+**Not verified.** Production was not measured (the Lighthouse script refuses production by design). Chromium only, no real phone.
+Rick has not rerun his own Lighthouse. No committed spec asserts any of it: spec 18 loads the page for nav assertions only (it
+passed 13 / 13 against the deployed bytes), and the harness, whose V7 and V9 exercise the Analytics page, passed **101 / 101 on the
+deployed bytes** with the served `analytics.html` equal to the commit (`ad36f46e`, 4 consecutive samples, plus a marker that
+exists only in the new code).
+
+### 8.7 Promotion (a separate, explicitly requested step)
 
 `/promote-prod`: no SQL; `app.js` carries `merge=ours`, so assert its merge RESULT equals staging's copy. Production keeps
 showing the legacy branding value until someone saves from Settings on production. A write-smoke (reserve then cancel) is
