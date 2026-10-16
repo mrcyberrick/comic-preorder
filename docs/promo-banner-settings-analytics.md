@@ -473,7 +473,9 @@ the effect is one customer (10 such events); on staging the 97% residue makes st
 user_id IS NULL` on staging only (the script refused any other project): **21,682 events deleted** (raysandjudys 21,564, demoshop
 25, two leftover synthetic test tenants 47 + 46; dated 2026-07-15 onward), **real-account events untouched (687 before, 687
 after)**, none left with a null user, the one-off script removed. **Live Lighthouse afterwards, mobile: Analytics 92 (LCP 3.2 s,
-TBT 0 ms, CLS 0.002), Settings 100; desktop 100 on both.** It is a one-time clean: every suite run and Lighthouse probe deletes
+TBT 0 ms, CLS 0.002), Settings 100; desktop 100 on both.** The other customer mobile pages on live staging the same day (My List
+seeded with 30 reservations, Subscriptions with 20 subscriptions): Catalog 93, My List 96, Subscriptions 98, This Week 97. **Production
+was not measured** (the script refuses it) and does NOT have any of the Analytics fixes. It is a one-time clean: every suite run and Lighthouse probe deletes
 its users and leaves their events behind (`user_id` ON DELETE SET NULL), so staging will fill up again until the test
 infrastructure deletes them too (not done). (2) Whether to promote this to production: not asked for. The performance work is
 `analytics.html` only and can go on its own, but production's window is 3,055 events, so its gain there is smaller (the layout
