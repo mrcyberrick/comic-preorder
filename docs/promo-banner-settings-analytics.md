@@ -351,7 +351,7 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
 ### 8.3 Not verified, stated plainly
 
 - **Chromium only**: no WebKit, no real phone. Rick has used the Settings panel on staging (and found the restore
-  problem in § 8.4, which is fixed but not yet retried by him); **his visual pass on the Analytics card is still owed.**
+  problem in § 8.4, then reported the fixes working, see § 8.4 and § 8.5); **his visual pass on the Analytics card is still owed.**
 - **Nothing was run against production data.** The Analytics card has only seen throwaway users' events; production has
   no `promo_banner_*` events until the feature ships there, and its numbers on real traffic are unseen.
 - **No committed spec asserts any of it** (the harness is local-only and the Playwright folder is gitignored). The full
@@ -370,7 +370,10 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
 - **The root cause was in the data Rick's attempt left behind.** The staging row read `enabled:false` with a **new-format campaign id** and his own placeholder wording. A new id is only assigned when "Show it again" is ticked, so he pressed it while the banner was **Off**. The old code accepted that, saved a new campaign and showed nothing, **and the status line then read "Live campaign started ..." for a banner nobody could see.** That, plus a no-op "Restore default text" (a click that visibly did nothing when the wording was already the default), is what "cannot restore" looked like.
 - **Fix.** "Show it again to everyone" is now a **button** (available with no edits; confirms; saves the controls as they stand, so unsaved edits go with it; with the banner Off it says why and saves nothing). A banner that is switched Off is reported as **"Switched off - customers see nothing"**, never as a live campaign. "Restore default text" says so, and points at the right button, when there is nothing to restore. One shared `pbSave(again, btn)` serves both buttons; the id-assignment line is unchanged.
 - **Evidence.** Harness **90 / 90 on the unpushed tree and 90 / 90 on the deployed bytes** (served `settings.html` equal to the committed file on 4 consecutive samples first), with Rick's pre-existing staging row snapshotted and restored exactly each time. **Negative controls, each seen RED on its own check:** `nonewid` (V5), `againneedsedit` (V5, "available with no edits": the gate that made the old control unusable), `silentrestore` (V4), and `livewhileoff` (V3, the status read "Live campaign started Oct 15, 2026" for an Off banner, the exact misleading text). Two of my own test errors were caught and fixed on the way: a patch script that ate the backslashes in a regex (the check could never match), and a control stopped one section too early so the check it targeted never ran (it passed, which proved nothing; rerun correctly it went red). Screenshots inspected at 1350 and 390 px.
-- **Not verified.** Rick has not retried it. **No committed spec loads `settings.html`**, so the full suite was not rerun (it would exercise nothing this change touches); the nav and footer blocks are unchanged. **The staging banner is currently OFF with Rick's placeholder wording**, because that is the row his attempt saved and the harness restores it exactly; to see it again on staging, switch it On and Save (or press the new button with it On).
+- **Rick's report (2026-10-15, after § 8.5 was also on staging): "This is working as expected."** That is HIS report, not
+  something observed here, and his words do not say which controls he used (the restore button, the Off case, No link) or on
+  which account. Before it, this fix had not been retried by him.
+- **Not verified.** **No committed spec loads `settings.html`**, so the full suite was not rerun (it would exercise nothing this change touches); the nav and footer blocks are unchanged. **The staging banner is currently OFF with Rick's placeholder wording**, because that is the row his attempt saved and the harness restores it exactly; to see it again on staging, switch it On and Save (or press the new button with it On).
 
 ### 8.5 Follow-up 2, same day: a "No link" option (Rick: "I would also like to have no link option and simply go with a message")
 
@@ -395,7 +398,9 @@ Four code files: `app.js` +197 / -0 (purely additive), `catalog.html`, `settings
   error in my own test crashed the normal run** (a step returned the form to exactly what was saved, so Save was
   correctly disabled and the click timed out); I first blamed the deliberate break in a control run for that crash, which
   was wrong (the log said Save was disabled, not enabled). The controls' red results came before that step and stand.
-- **Not verified.** Rick has not tried it; Chromium only; no committed spec asserts any of it; production never run.
+- **Rick's report (2026-10-15): "This is working as expected."** One reply covering both follow-ups; it does not say which
+  parts he exercised. His report, not an observation made here.
+- **Not verified.** Chromium only; no committed spec asserts any of it; production never run.
 
 ### 8.6 Promotion (a separate, explicitly requested step)
 
