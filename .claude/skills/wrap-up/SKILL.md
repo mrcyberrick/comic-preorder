@@ -27,6 +27,29 @@ session record (git log/diff, commands run) — not from memory of intentions.
 - If a sub-deploy state changed: update the parent-plan status cell and the
   CLAUDE.md § Current Migration Phase pointer (doc-only commit to staging).
 
+## Project board (do this whenever a task's state changed)
+
+Rick tracks work on the PULLLIST project board:
+**https://claude.ai/artifact/Bcgf3TjSVg6Fa1qDq7ZSt9**. If this session finished,
+started, reopened or re-scoped anything the board tracks, update its card before
+closing. Add a card only if Rick asks. Change only what this session's evidence
+supports (commits, served bytes, Rick's report); never mark a card Done on intent.
+
+How (it is a dashboard Artifact; the cards are one attached JSON file, not page text):
+1. `Artifact` `read` the URL, then `ArtifactData` `get` collection `datasets`, doc
+   `tasks` and note its `version` and `source.url` (`/_blob/<id>`).
+2. `Artifact` `read` with `path` = that blob id to download the rows (`{rows: [...]}`;
+   fields `id, task, status` (`Todo`/`Doing`/`Done`), `area, phase, note, kind, gate,
+   unblocks, order`).
+3. Edit the affected rows in a scratchpad copy (dated, one-line `note`).
+4. `Artifact` publish with `url`, `asset: true`, `file_path` = the edited JSON.
+5. `ArtifactData` `update` `datasets/tasks` with `if_version` = the version from step 1:
+   `source: {kind: "file", name: "pulllist-tasks.json", url: <new blob url>}` and
+   `updated: {at: <ISO time>, by: "Claude for Rick"}`. Don't edit the page itself.
+
+In the status update, name which cards moved, and list any cards you saw were stale but
+did not touch. If nothing the board tracks changed, write "Board: no change".
+
 ## Drift check
 
 Before printing the update, run `git status` — flag any uncommitted planning docs

@@ -105,7 +105,9 @@
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
   <div id="deadline-banner" class="deadline-banner" style="display:none" role="status" aria-live="polite"></div>
 
-  <!-- Subscription promo banner — driven by tenants.branding.promo_banner (jsonb).
+  <!-- Subscription promo banner — edited in Settings ▸ Branding ▸ Subscribe banner
+       (app_settings.promo_banner), read through PromoBanner in app.js; falls back to the
+       legacy tenants.branding.promo_banner when no row exists.
        Absent config or enabled:false ⇒ nothing renders (ships dark). -->
   <div id="promo-banner" class="promo-banner" style="display:none" role="status" aria-live="polite"></div>
 
@@ -832,50 +834,51 @@
   }
 
   // ── Subscription promo banner ─────────────────────────────────
-  // Driven by tenants.branding.promo_banner (jsonb, public by design — see
-  // technical-reference.md § slug→id RPC). Absent key or enabled:false ⇒
-  // nothing renders. Called after mySubscriptions loads so the
+  // Edited in Settings ▸ Branding ▸ Subscribe banner (app_settings.promo_banner);
+  // PromoBanner (app.js) owns the shape, the read and the render, and falls back to
+  // the legacy tenants.branding.promo_banner when no row exists. Absent config or
+  // enabled:false ⇒ nothing renders. Called after mySubscriptions loads so the
   // hide-if-subscribed rule applies on first render, not reactively.
-  function renderPromoBanner() {
+  //
+  // `cfg` is the already-resolved config (see the call site, which starts the read
+  // early so it runs alongside the reservation and subscription reads).
+  //
+  // Events (docs/promo-banner-settings-analytics.md § 2.3):
+  //   shown     once per customer per campaign per browser, guarded by a
+  //             localStorage key that is written BEFORE the event is logged. If
+  //             storage is unavailable nothing is logged at all: an under-count is
+  //             safer than logging on every page load (the UsageEvents.visit() rule).
+  //   dismissed on the close click.
+  // Impersonation returns before either (and UsageEvents._log() skips it too).
+  function renderPromoBanner(cfg) {
     if (AdminContext.isActive()) return;
     const tenant = TenantContext.current();
-    const cfg = tenant?.branding?.promo_banner;
     if (!cfg || !cfg.enabled || !cfg.id || !cfg.text) return;
     if (mySubscriptions.size > 0) return;
 
-    const dismissKey = `pulllist_promo_dismissed_${tenant.slug || 'default'}_${cfg.id}`;
-    if (localStorage.getItem(dismissKey)) return;
+    const slug = tenant.slug || 'default';
+    const dismissKey = PromoBanner.dismissKey(slug, cfg.id);
+    // Storage unreadable (some private modes throw outright): show the banner
+    // rather than crash the catalog's init; a close just will not persist.
+    try { if (localStorage.getItem(dismissKey)) return; } catch (_) { /* show it */ }
 
     const banner = document.getElementById('promo-banner');
     if (!banner) return;
-    banner.innerHTML = '';
 
-    const content = document.createElement('div');
-    content.className = 'promo-banner-content';
-    const textSpan = document.createElement('span');
-    textSpan.textContent = cfg.text;
-    content.appendChild(textSpan);
-    if (cfg.link_href && cfg.link_text) {
-      const link = document.createElement('a');
-      link.href = cfg.link_href;
-      link.className = 'promo-banner-link';
-      link.textContent = cfg.link_text;
-      content.appendChild(link);
-    }
-    banner.appendChild(content);
-
-    const dismissBtn = document.createElement('button');
-    dismissBtn.type = 'button';
-    dismissBtn.className = 'promo-banner-dismiss';
-    dismissBtn.setAttribute('aria-label', 'Dismiss');
-    dismissBtn.textContent = '×';
-    dismissBtn.addEventListener('click', () => {
-      localStorage.setItem(dismissKey, '1');
-      banner.style.display = 'none';
+    PromoBanner.mount(banner, cfg, {
+      onDismiss() {
+        try { localStorage.setItem(dismissKey, '1'); } catch (_) { /* hidden for this page view only */ }
+        UsageEvents.promoBannerDismissed(user.id, cfg.id);
+      },
     });
-    banner.appendChild(dismissBtn);
 
-    banner.style.display = 'flex';
+    const shownKey = PromoBanner.shownKey(slug, cfg.id, user.id);
+    try {
+      if (!localStorage.getItem(shownKey)) {
+        localStorage.setItem(shownKey, '1');   // before logging: if this throws, nothing is logged
+        UsageEvents.promoBannerShown(user.id, cfg.id);
+      }
+    } catch (_) { /* storage unavailable: under-count, never log per page load */ }
   }
 
   // ── Admin user switcher ───────────────────────────────────
@@ -917,6 +920,13 @@
     });
   }
 
+  // Start the promo-banner config read NOW, so it runs in parallel with the three
+  // serial reads below and costs no extra round trip before the Top picks rail is
+  // revealed (the rail waits for this banner to settle; see the reveal note further
+  // down). It never rejects. The 4 s bound means a stalled request falls back to the
+  // legacy value instead of holding the whole catalog's init.
+  const promoCfgPromise = PromoBanner.load(TenantContext.current(), { timeoutMs: 4000 });
+
   reservedIds = await Preorders.getMyIds(AdminContext.resolveUserId(user.id));
   currentMonthQty = await loadCurrentMonthQty(AdminContext.resolveUserId(user.id));
   document.getElementById('stat-reserved').textContent = currentMonthQty;
@@ -925,7 +935,7 @@
   const { items: subItems } = await Subscriptions.getAll(user.id);
   mySubscriptions = new Set(subItems.map(s => `${s.series_name}||${s.distributor}`));
 
-  renderPromoBanner();
+  renderPromoBanner(await promoCfgPromise);
 
   // Load publishers for filter
   if (currentMonth) {

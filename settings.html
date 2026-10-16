@@ -157,6 +157,9 @@
       font-family: var(--font-body); font-size: 0.82rem; padding: 0 10px;
       min-height: 40px; outline: none;
     }
+    /* A disabled field must LOOK disabled. Until the Subscribe banner's link label could be greyed
+       out (no link chosen), nothing on this page disabled a .set-input, so it had no such style. */
+    .set-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* Branding ▸ Page banner. The preview frame reuses the REAL header
        classes (.page-header--banner + .brand-banner from style.css), so what is
@@ -175,6 +178,31 @@
     .set-url-hint { font-size: 0.74rem; margin-top: 6px; color: var(--text-secondary); min-height: 1.1em; }
     .set-url-hint.is-bad { color: var(--warning); }
     .set-url-hint.is-ok { color: var(--success); }
+
+    /* Branding ▸ Subscribe banner. The preview mounts the REAL banner through
+       PromoBanner.mount() into a .promo-banner element (style.css), so it is the
+       same markup and CSS a customer gets, with the close button and link inert. */
+    .set-promo-stage { padding: 14px 18px 12px; }
+    .set-promo-stage .promo-banner { margin-bottom: 0; }
+    .set-promo-off {
+      border: 1px dashed var(--border); border-radius: var(--radius); padding: 11px 16px;
+      font-size: 0.82rem; color: var(--text-secondary); background: var(--bg);
+    }
+    .set-field { padding: 0 18px 14px; min-width: 0; }
+    .set-field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+    .set-field label.set-field-label { display: block; font-size: 0.8rem; font-weight: 600; }
+    .set-field .set-input { width: 100%; box-sizing: border-box; }
+    .set-textarea { padding: 9px 10px; min-height: 76px; resize: vertical; line-height: 1.45; display: block; }
+    select.set-input { cursor: pointer; }
+    .set-count { font-size: 0.74rem; color: var(--text-secondary); text-align: right; margin-top: 4px; }
+    .set-count.is-over { color: var(--warning); font-weight: 600; }
+    .set-field-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 4px; }
+    /* A row whose control is a button, not a label-wrapped input: not clickable as a whole, and it wraps so the
+       button drops under the text on a phone instead of squeezing it. */
+    .set-row.set-row-static { cursor: default; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
+    .set-row-static .set-row-text { flex: 1 1 260px; }
+    .set-row-static .btn { flex-shrink: 0; }
+    @media (max-width: 560px) { .set-field-pair { grid-template-columns: minmax(0, 1fr); } }
 
     /* Mobile: rail becomes a plain list above the content, panels stay full width */
     @media (max-width: 860px) {
@@ -544,6 +572,65 @@
           <span class="set-banner-status" id="bn-status">Never saved</span>
           <button class="btn btn-secondary btn-sm" id="bn-discard" type="button">Discard</button>
           <button class="btn btn-primary btn-sm" id="bn-save" type="button">Save banner</button>
+        </div>
+      </section>
+
+      <!-- ── Subscribe banner ────────────────────────────────────
+           A third, separate setting (app_settings.promo_banner) with its own Save.
+           docs/promo-banner-settings-analytics.md. The shape, the read, the render and
+           the campaign id all come from PromoBanner in app.js. -->
+      <section class="set-panel" id="promo-panel">
+        <div class="set-panel-head">
+          <h3>Subscribe banner</h3>
+          <p>The closable message at the top of the Catalog. Customers who already subscribe to a series never see it.</p>
+        </div>
+
+        <div class="set-promo-stage">
+          <div class="promo-banner" id="pb-preview" style="display:none"></div>
+          <div class="set-promo-off" id="pb-preview-off" style="display:none"></div>
+        </div>
+
+        <label class="set-row">
+          <span class="toggle-switch"><input type="checkbox" id="pb-enabled"><span class="toggle-slider"></span></span>
+          <span class="set-row-text">
+            <span class="set-row-title">Show the banner</span>
+            <span class="set-row-note">Off hides it from every customer.</span>
+          </span>
+        </label>
+
+        <div class="set-field" style="padding-top:14px">
+          <div class="set-field-head">
+            <label class="set-field-label" for="pb-text">Message</label>
+            <button class="btn btn-secondary btn-sm" id="pb-restore" type="button">Restore default text</button>
+          </div>
+          <textarea id="pb-text" class="set-input set-textarea" rows="3" autocomplete="off"></textarea>
+          <div class="set-count" id="pb-count" aria-live="polite">0 / 200</div>
+        </div>
+
+        <div class="set-field-pair">
+          <div class="set-field">
+            <label class="set-field-label" for="pb-label" style="margin-bottom:6px">Link label</label>
+            <input type="text" id="pb-label" class="set-input" autocomplete="off" spellcheck="false">
+            <div class="set-url-hint" id="pb-label-hint">Leave empty for no link.</div>
+          </div>
+          <div class="set-field">
+            <label class="set-field-label" for="pb-target" style="margin-bottom:6px">Link goes to</label>
+            <select id="pb-target" class="set-input"></select>
+          </div>
+        </div>
+
+        <div class="set-row set-row-static">
+          <span class="set-row-text">
+            <span class="set-row-title">Customers closed it? Bring it back</span>
+            <span class="set-row-note">Starts a new campaign, so everyone who closed the banner sees it again, you included. It saves at once, together with any edits above. For a small fix such as a typo, just use Save banner instead, so nobody sees it twice.</span>
+          </span>
+          <button class="btn btn-secondary btn-sm" id="pb-again-btn" type="button">Show it again to everyone</button>
+        </div>
+
+        <div class="set-banner-actions">
+          <span class="set-banner-status" id="pb-status">Loading…</span>
+          <button class="btn btn-secondary btn-sm" id="pb-discard" type="button">Discard</button>
+          <button class="btn btn-primary btn-sm" id="pb-save" type="button">Save banner</button>
         </div>
       </section>
 
@@ -1135,6 +1222,216 @@
 
   el('bn-url').value = bnDraft.imageUrl || '';
   bnRender();
+
+  // ══ Branding ▸ Subscribe banner ════════════════════════════
+  // A third, separate setting (app_settings.promo_banner) with its own Save, so
+  // it can never write the page banner or the catalog filters, nor they it.
+  // docs/promo-banner-settings-analytics.md. The shape, the read, the render and
+  // the campaign id all come from PromoBanner in app.js; this page holds no second
+  // copy of any of them (the reader, catalog.html, and this writer disagreeing
+  // about "default" is exactly the CatalogFilters bug).
+  //
+  // What the controls ARE the source of truth for: there is no separate draft
+  // object, pbCurrent() reads the controls, so the preview, the counter, the dirty
+  // check and Save can never see different values.
+  //
+  // Baseline = the stored row; else the legacy tenants.branding value (the
+  // banner already live before anyone saves here); else defaults-but-Off with no
+  // id (a store that never had one, e.g. comicstore).
+  const pbMeta = await PromoBanner.loadWithMeta(TenantContext.current());   // no timeout: a failed read must be REPORTED, not guessed around
+  let pbSaved   = pbMeta.cfg ? { ...pbMeta.cfg } : null;   // last stored config; null = nothing stored anywhere
+  let pbSource  = pbMeta.source;                            // 'row' | 'legacy' | 'none'
+  let pbSavedAt = pbMeta.updatedAt;
+  // A read that FAILED (as opposed to a row that is merely absent) leaves nothing
+  // trustworthy to edit from, and a save would overwrite a row we could not read.
+  const pbReadFailed = !!pbMeta.error;
+  const pbBaseline = () => pbSaved || { ...PromoBanner.defaults(), enabled: false, id: '' };
+
+  { // the select is built from the module's own list, so it can never drift from it
+    const sel = el('pb-target');
+    Object.keys(PromoBanner.TARGETS).forEach(k => {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = PromoBanner.TARGET_LABELS[k];
+      sel.appendChild(o);
+    });
+    // "No link" is a first-class choice, always listed: a banner can simply be a message.
+    // Its value is '' (no target), which PromoBanner already treats as "render no link".
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = 'No link (message only)';
+    sel.appendChild(none);
+  }
+
+  const pbCurrent = () => ({
+    enabled: el('pb-enabled').checked,
+    text: el('pb-text').value.trim(),
+    link_text: el('pb-label').value.trim(),
+    link_target: el('pb-target').value,
+  });
+  // With no link the label means nothing, so it is ignored when comparing (a label left in
+  // the box must not make a saved no-link banner look "changed") and is never stored.
+  const pbFields = c => JSON.stringify([!!c.enabled, c.text || '', c.link_target ? (c.link_text || '') : '', c.link_target || '']);
+  const pbDirty = () => pbFields(pbCurrent()) !== pbFields(pbBaseline());
+
+  // Writes a config into the controls. A stored link_target of '' means "no link" (chosen
+  // here, or a legacy value whose href was not one of the four pages, or a hand-written
+  // row), and the always-present "No link (message only)" option shows exactly that, so
+  // the preview can never disagree with what customers actually see.
+  function pbApply(cfg) {
+    el('pb-enabled').checked = !!cfg.enabled;
+    el('pb-text').value = cfg.text || '';
+    el('pb-label').value = cfg.link_text || '';
+    el('pb-target').value = cfg.link_target || '';
+  }
+
+  // The reason Save would refuse, or null. Refuses rather than truncates: silently
+  // cutting someone's wording would be worse than telling them.
+  function pbProblem(cur) {
+    if (cur.text.length > PromoBanner.TEXT_MAX) return `The message is ${cur.text.length} characters; the limit is ${PromoBanner.TEXT_MAX}.`;
+    // the label only matters when there is a link to put it on
+    if (cur.link_target && cur.link_text.length > PromoBanner.LABEL_MAX) return `The link label is ${cur.link_text.length} characters; the limit is ${PromoBanner.LABEL_MAX}.`;
+    if (cur.enabled && !cur.text) return 'Enter the message customers will see, or switch the banner off.';
+    return null;
+  }
+
+  function pbStatusText(dirty) {
+    if (pbReadFailed) return 'Could not read the current banner — reload this page before editing.';
+    if (dirty) return 'Unsaved changes';
+    if (!pbSaved) return 'Never saved — customers see no banner';
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // A banner that is switched Off has no LIVE campaign, whatever its id says. Reporting
+    // "Live campaign started ..." for it (the old wording) hid the real reason nobody saw it.
+    if (pbSaved.enabled === false) {
+      return 'Switched off — customers see nothing' + ((pbSource === 'row' && pbSavedAt) ? ' · last saved ' + fmt(new Date(pbSavedAt)) : '');
+    }
+    const started = PromoBanner.startedAt(pbSaved.id);
+    const campaign = started ? 'Live campaign started ' + fmt(started) : 'Original campaign';
+    const saved = (pbSource === 'row' && pbSavedAt)
+      ? ' · last saved ' + fmt(new Date(pbSavedAt))
+      : ' · not saved from Settings yet';
+    return campaign + saved;
+  }
+
+  function pbRender() {
+    const cur = pbCurrent();
+    const over = cur.text.length > PromoBanner.TEXT_MAX;
+    const count = el('pb-count');
+    count.textContent = `${cur.text.length} / ${PromoBanner.TEXT_MAX}`;
+    count.classList.toggle('is-over', over);
+    const noLink = !cur.link_target;
+    const labelOver = !noLink && cur.link_text.length > PromoBanner.LABEL_MAX;
+    // No link: the label is greyed out (and kept in the box, so switching back to a page
+    // does not lose what was typed), and the hint says why.
+    el('pb-label').disabled = pbReadFailed || noLink;
+    el('pb-label-hint').textContent = noLink
+      ? 'No link: customers see the message only.'
+      : (labelOver ? `Over the ${PromoBanner.LABEL_MAX}-character limit.` : (cur.link_text ? '' : 'Leave empty for no link.'));
+    el('pb-label-hint').classList.toggle('is-bad', labelOver);
+
+    // The live preview: the real banner, with the close button and link inert.
+    const host = el('pb-preview'), off = el('pb-preview-off');
+    if (!cur.enabled || !cur.text) {
+      host.style.display = 'none';
+      off.style.display = 'block';
+      off.textContent = cur.enabled
+        ? 'Type a message to preview it.'
+        : 'The banner is off — customers will not see it.';
+    } else {
+      off.style.display = 'none';
+      PromoBanner.mount(host, cur, { preview: true });
+    }
+
+    const dirty = pbDirty();
+    el('pb-save').disabled = pbReadFailed || !dirty;
+    el('pb-again-btn').disabled = pbReadFailed;   // never gated on "dirty": bringing it back needs no edit
+    el('pb-discard').disabled = !dirty;
+    el('pb-status').textContent = pbStatusText(dirty);
+  }
+
+  if (pbReadFailed) {
+    ['pb-enabled', 'pb-text', 'pb-label', 'pb-target', 'pb-again-btn', 'pb-restore'].forEach(id => { el(id).disabled = true; });
+    toast('Could not read the current Subscribe banner — reload before editing it.', 'error');
+  }
+
+  el('pb-enabled').addEventListener('change', pbRender);
+  el('pb-text').addEventListener('input', pbRender);
+  el('pb-label').addEventListener('input', pbRender);
+  el('pb-target').addEventListener('change', pbRender);
+
+  // Restore default text: the shipped wording, link label and target into the
+  // controls. It does NOT save, and it leaves On/Off and the campaign alone. It says
+  // so when there is nothing to restore, because a click that visibly does nothing
+  // reads as broken (and this is the button people reach for to "bring it back": that
+  // is "Show it again to everyone" below, which is a different thing).
+  el('pb-restore').addEventListener('click', () => {
+    const D = PromoBanner.DEFAULTS;
+    const cur = pbCurrent();
+    if (cur.text === D.text && cur.link_text === D.link_text && cur.link_target === D.link_target) {
+      toast('The wording is already the default. To show a closed banner again, use "Show it again to everyone".');
+      return;
+    }
+    el('pb-text').value = D.text;
+    el('pb-label').value = D.link_text;
+    el('pb-target').value = D.link_target;
+    pbRender();
+  });
+
+  el('pb-discard').addEventListener('click', () => {
+    pbApply(pbBaseline());
+    pbRender();
+    toast('Changes discarded');
+  });
+
+  // One save path for both buttons.
+  //   again = false  "Save banner": an edit keeps the live campaign id, so fixing a typo
+  //                  does not bring the banner back for anyone who closed it.
+  //   again = true   "Show it again to everyone": the campaign id changes, which is what
+  //                  re-shows the banner to everyone who closed it (dismissal is keyed on
+  //                  the id). It saves the controls as they stand, so unsaved edits go
+  //                  with it. A store with no id yet (nothing stored anywhere) gets a
+  //                  fresh one either way.
+  async function pbSave(again, btn) {
+    const orig = btn.textContent;
+    const cur = pbCurrent();
+    const problem = pbProblem(cur);
+    if (problem) { toast(problem, 'error'); return; }
+    if (again && !cur.enabled) {
+      // Off means nobody sees it, so there is nothing to bring back; say why instead of doing nothing.
+      toast('The banner is switched off, so nobody sees it. Switch it on first, then show it again.', 'error');
+      return;
+    }
+    if (again && !confirm('Show this banner again to every customer who has already closed it? Any edits you have not saved are saved with it.')) return;
+    const baseId = pbBaseline().id;
+    const cfg = {
+      v: 1,
+      enabled: cur.enabled,
+      id: (again || !baseId) ? PromoBanner.newCampaignId() : baseId,
+      text: cur.text,
+      link_text: cur.link_target ? cur.link_text : '',   // no link, no label: nothing meaningless is stored
+      link_target: cur.link_target,
+    };
+
+    el('pb-save').disabled = true;
+    el('pb-again-btn').disabled = true;
+    btn.textContent = 'Saving…';
+    const { error } = await Settings.set(PromoBanner.KEY, JSON.stringify(cfg));
+    btn.textContent = orig;
+    if (error) {
+      console.error('promo_banner save failed', error);
+      toast('Could not save — ' + (error.message || 'unknown error'), 'error');
+      pbRender();   // puts both buttons back to what the state says
+      return;
+    }
+    pbSaved = { ...cfg };
+    pbSource = 'row';
+    pbSavedAt = new Date().toISOString();
+    pbRender();
+    toast(again ? 'Saved. Customers who closed the banner will see it again.' : 'Subscribe banner saved');
+  }
+  el('pb-save').addEventListener('click', () => pbSave(false, el('pb-save')));
+  el('pb-again-btn').addEventListener('click', () => pbSave(true, el('pb-again-btn')));
+
+  pbApply(pbBaseline());
+  pbRender();
 
   // ── Reveal ───────────────────────────────────────────────────
   el('load-state').style.display = 'none';
