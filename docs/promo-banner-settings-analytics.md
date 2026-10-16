@@ -469,10 +469,16 @@ across all 13 sections on the tree.
 customer, so any window containing a deleted account's events reads one high. That is older than this work. On production
 the effect is one customer (10 such events); on staging the 97% residue makes staging's engagement numbers unrepresentative.
 
-**Rick's calls, not taken.** (1) Whether to clean staging's residue (the 21,071 NULL-user events): a destructive delete, so not
-done; it would also make staging load like production. (2) Whether to promote this to production: the performance work is
+**Rick's calls.** (1) **Staging cleanup: DONE 2026-10-16 (Rick: "proceed").** A dry run first, then `DELETE FROM usage_events WHERE
+user_id IS NULL` on staging only (the script refused any other project): **21,682 events deleted** (raysandjudys 21,564, demoshop
+25, two leftover synthetic test tenants 47 + 46; dated 2026-07-15 onward), **real-account events untouched (687 before, 687
+after)**, none left with a null user, the one-off script removed. **Live Lighthouse afterwards, mobile: Analytics 92 (LCP 3.2 s,
+TBT 0 ms, CLS 0.002), Settings 100; desktop 100 on both.** It is a one-time clean: every suite run and Lighthouse probe deletes
+its users and leaves their events behind (`user_id` ON DELETE SET NULL), so staging will fill up again until the test
+infrastructure deletes them too (not done). (2) Whether to promote this to production: not asked for. The performance work is
 `analytics.html` only and can go on its own, but production's window is 3,055 events, so its gain there is smaller (the layout
-shift and the series of requests still apply). (3) Whether the NULL-user handling in the other metrics should be fixed.
+shift and the series of requests still apply). (3) The NULL-user counting in the other metrics: **Rick, 2026-10-16: "No need to
+file over-count", so it is deliberately not filed.**
 
 **Not verified.** Production was not measured (the Lighthouse script refuses production by design). Chromium only, no real phone.
 Rick has not rerun his own Lighthouse. No committed spec asserts any of it: spec 18 loads the page for nav assertions only (it
