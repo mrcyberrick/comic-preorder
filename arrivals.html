@@ -110,17 +110,31 @@
                      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .ps-cta-alt { color: #555; font-weight: 400; font-size: 11px; }
 
-      /* § 3 Arrivals list — one distributor group per column */
+      /* Page wrapper: the thead (title, week, store) repeats on every
+         printed page; the CTA and the list sit in the tbody. */
+      .ps-page { width: 100%; border-collapse: collapse; }
+      .ps-page > thead > tr > td,
+      .ps-page > tbody > tr > td { padding: 0; vertical-align: top; }
+      .ps-page > thead { display: table-header-group; }
+
+      /* § 3 Arrivals list — the titles FLOW through both columns (Lunar
+         runs on into column 2, PRH follows it), so the sheet fills before
+         anything spills to a second page. Previously each distributor group
+         was break-inside: avoid, which pinned a long Lunar list to column 1
+         and left column 2 half empty (Rick, 2026-10-16). A group heading
+         still never sits alone at the foot of a column. */
       .ps-cols { columns: 2; column-gap: 32px; }
-      .ps-group { break-inside: avoid; margin-bottom: 18px; }
+      .ps-group { margin-bottom: 18px; }
       .ps-group:last-child { margin-bottom: 0; }
-      .ps-group-head { font-size: 13px; font-weight: 800; text-transform: uppercase;
+      .ps-group-head { break-after: avoid; page-break-after: avoid;
+                       font-size: 13px; font-weight: 800; text-transform: uppercase;
                        letter-spacing: 0.03em; color: #1a1a1a;
                        border-bottom: 1.5px solid #1a1a1a;
                        padding-bottom: 4px; margin: 0 0 8px 0; }
       .ps-list { list-style: none; margin: 0; padding: 0;
                  font-size: 13px; line-height: 1.4; color: #222; }
-      .ps-list li { padding-left: 0.9em; text-indent: -0.9em; margin-bottom: 7px; }
+      .ps-list li { padding-left: 0.9em; text-indent: -0.9em; margin-bottom: 7px;
+                    break-inside: avoid; }
       .ps-list li:last-child { margin-bottom: 0; }
     }
 
@@ -535,7 +549,10 @@
        project "Pull List CTA redesign" (Pull List Print - Style Spec.md).
        Shown in print via body.print-store. -->
   <div class="print-store-wrap" id="print-store-wrap">
-
+   <!-- A table so the header (thead) repeats on every printed page when the
+        list runs past one sheet; browsers repeat a thead, nothing else. -->
+   <table class="ps-page">
+    <thead><tr><td>
     <div class="ps-header">
       <div>
         <h1 class="ps-title">THIS WEEK'S ARRIVALS</h1>
@@ -548,6 +565,8 @@
         <div class="ps-printed" id="ps-printed" style="display:none"></div>
       </div>
     </div>
+    </td></tr></thead>
+    <tbody><tr><td>
 
     <div class="ps-cta">
       <div class="ps-cta-top">
@@ -580,6 +599,8 @@
 
     <div class="ps-cols" id="print-store-body"></div>
 
+    </td></tr></tbody>
+   </table>
   </div>
 
 </div>
