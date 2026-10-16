@@ -1185,6 +1185,19 @@ const UsageEvents = {
     this._log(userId, 'unsubscribe', { series_name: seriesName, distributor });
   },
 
+  // Subscribe-banner impressions and closes (docs/promo-banner-settings-analytics.md).
+  // banner_id is the campaign id, so Analytics can read one campaign at a time.
+  // catalog.html owns the once-per-customer-per-campaign guard for 'shown'.
+  // analytics.html keeps both types OUT of its general activity metrics (they are
+  // not customer activity), so adding them changes none of its existing numbers.
+  promoBannerShown(userId, bannerId) {
+    this._log(userId, 'promo_banner_shown', { banner_id: bannerId });
+  },
+
+  promoBannerDismissed(userId, bannerId) {
+    this._log(userId, 'promo_banner_dismissed', { banner_id: bannerId });
+  },
+
   catalogView(userId, { catalogMonth, page, search, publisher, distributor } = {}) {
     this._log(userId, 'catalog_view', {
       catalog_month: catalogMonth || null,
@@ -1607,6 +1620,190 @@ const PageBanner = {
   },
 };
 window.PageBanner = PageBanner;
+
+// ── Subscribe promo banner (docs/promo-banner-settings-analytics.md) ─────
+// The closable "Subscribe to a series…" message at the top of the Catalog. Built
+// on PageBanner's pattern: ONE module owns the stored shape, the read, the
+// render and the campaign id, so catalog.html (reader), settings.html (writer
+// + live preview) and analytics.html (which needs the live campaign id) cannot
+// disagree about any of it.
+//
+// Stored in app_settings.promo_banner as JSON text:
+//   { v:1, enabled, id, text, link_text, link_target }
+// Resolution order: that row -> else the legacy tenants.branding.promo_banner
+// (the original SQL-only home, still live on both environments) -> else nothing.
+// The legacy value is a READ FALLBACK ONLY: nothing here writes or deletes it, so
+// on deploy nothing changes for a store that has never saved from Settings, and
+// it stays in place as the rollback.
+//
+// The link target is a fixed list of app pages, not a free URL (D4): an
+// admin-editable href would need URL validation, and a javascript: link is the
+// obvious hazard. text and link_text only ever reach the page through
+// textContent, never innerHTML.
+//
+// The campaign `id` is what "show it again to everyone" changes: dismissal is a
+// per-browser localStorage key that includes the id, so a new id re-shows it.
+const PromoBanner = {
+  KEY: 'promo_banner',
+  TEXT_MAX: 200,
+  LABEL_MAX: 40,
+  TARGETS: {
+    subscriptions: 'subscriptions.html',
+    catalog:       'catalog.html',
+    mylist:        'mylist.html',
+    arrivals:      'arrivals.html',
+  },
+  TARGET_LABELS: {
+    subscriptions: 'Subscriptions',
+    catalog:       'Catalog',
+    mylist:        'My List',
+    arrivals:      'This Week',
+  },
+  // The shipped wording. "Restore default text" copies text / link_text / link_target
+  // from here; it never touches enabled or the campaign id.
+  DEFAULTS: {
+    v: 1,
+    enabled: true,
+    id: 'sub-promo-1',
+    text: 'Subscribe to a series and never miss an issue — auto-reserved every month.',
+    link_text: 'Learn more',
+    link_target: 'subscriptions',
+  },
+
+  defaults() { return { ...this.DEFAULTS }; },
+
+  // own-property check, not `in` / bare lookup: a stored link_target of
+  // "constructor" must not resolve to Object's function.
+  hasTarget(t) { return typeof t === 'string' && Object.prototype.hasOwnProperty.call(this.TARGETS, t); },
+  hrefFor(target) { return this.hasTarget(target) ? this.TARGETS[target] : ''; },
+
+  // Tolerant: bad JSON / a non-object -> null. Trims and CAPS text and link_text,
+  // so an over-long stored value can never render absurdly. (The Settings panel
+  // refuses over-long input at save time; this is the read-side backstop.)
+  parse(raw) {
+    let p = raw;
+    if (typeof raw === 'string') { try { p = JSON.parse(raw); } catch { return null; } }
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    return {
+      v: 1,
+      enabled: p.enabled === true,
+      id: str(p.id, 80),
+      text: str(p.text, this.TEXT_MAX),
+      link_text: str(p.link_text, this.LABEL_MAX),
+      link_target: this.hasTarget(p.link_target) ? p.link_target : '',
+    };
+  },
+
+  // The old shape carries link_href; map it onto the fixed list. A href that is
+  // not one of the four app pages becomes "no link" (D4).
+  targetOfHref(href) {
+    const h = typeof href === 'string' ? href.trim() : '';
+    return Object.keys(this.TARGETS).find(k => this.TARGETS[k] === h) || '';
+  },
+  fromLegacy(branding) {
+    const p = branding && branding.promo_banner;
+    if (!p || typeof p !== 'object') return null;
+    return this.parse({ ...p, link_target: this.targetOfHref(p.link_href) });
+  },
+
+  // maybeSingle(), not Settings.get(): get() uses .single(), which answers HTTP 406
+  // for a missing row, and "no row yet" is the NORMAL case for every store
+  // (PageBanner.load() makes the same choice). Never throws. Returns
+  // { cfg, source: 'row'|'legacy'|'none', updatedAt, error }; `error` is set when
+  // the READ failed (as opposed to the row simply being absent), so settings.html
+  // can refuse to save over a row it could not read.
+  // timeoutMs: the catalog awaits this inside its init chain, so a stalled request
+  // must not hold the page; it falls back to the legacy value after that long.
+  // The Settings panel passes none.
+  async loadWithMeta(tenant, { timeoutMs = 0 } = {}) {
+    const legacy = (error = null) => {
+      const cfg = this.fromLegacy(tenant && tenant.branding);
+      return { cfg, source: cfg ? 'legacy' : 'none', updatedAt: null, error };
+    };
+    const read = (async () => {
+      try {
+        const { data, error } = await db.from('app_settings')
+          .select('value, updated_at').eq('key', this.KEY).maybeSingle();
+        if (error) { console.warn('promo_banner read failed', error); return legacy(error); }
+        const cfg = data && data.value ? this.parse(data.value) : null;
+        if (cfg) return { cfg, source: 'row', updatedAt: data.updated_at || null, error: null };
+        return legacy();
+      } catch (err) {
+        console.warn('promo_banner unreadable', err);
+        return legacy(err);
+      }
+    })();
+    if (!timeoutMs) return read;
+    let t;
+    const timer = new Promise(r => { t = setTimeout(() => r(legacy(new Error('promo_banner read timed out'))), timeoutMs); });
+    return Promise.race([read, timer]).finally(() => clearTimeout(t));
+  },
+  async load(tenant, opts) { return (await this.loadWithMeta(tenant, opts)).cfg; },
+
+  // localStorage keys. Dismissal is per browser and keeps its original name (a
+  // dismissal made before this module existed still holds). The shown key also
+  // carries the user id, so two customers on one browser each log their own
+  // impression.
+  dismissKey(slug, id) { return `pulllist_promo_dismissed_${slug || 'default'}_${id}`; },
+  shownKey(slug, id, userId) { return `pulllist_promo_shown_${slug || 'default'}_${id}_${userId}`; },
+
+  // New campaign id: sub-promo-yyyymmdd-hhmmss in LOCAL time. startedAt() reads
+  // the date back out for the status lines in Settings and Analytics; the original
+  // 'sub-promo-1' (and any hand-set id) has none, which reads as "original campaign".
+  newCampaignId(d = new Date()) {
+    const p = n => String(n).padStart(2, '0');
+    return `sub-promo-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  },
+  startedAt(id) {
+    const m = /^sub-promo-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/.exec(id || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
+  },
+
+  // Builds the banner into `host`. Same classes and the same textContent rule the
+  // catalog always used, so the Settings preview is the real thing, not a drawing.
+  // Safe to call repeatedly. `preview` makes the close button and the link inert.
+  // On a real close the host hides FIRST and onDismiss runs after, inside a
+  // try/catch, so a storage or logging failure can never leave a closed banner open.
+  mount(host, cfg, { onDismiss, preview = false } = {}) {
+    if (!host) return;
+    host.textContent = '';
+    const content = document.createElement('div');
+    content.className = 'promo-banner-content';
+    const textSpan = document.createElement('span');
+    textSpan.textContent = cfg.text;
+    content.appendChild(textSpan);
+    const href = this.hrefFor(cfg.link_target);
+    if (href && cfg.link_text) {
+      const link = document.createElement('a');
+      link.href = href;
+      link.className = 'promo-banner-link';
+      link.textContent = cfg.link_text;
+      if (preview) link.addEventListener('click', e => e.preventDefault());
+      content.appendChild(link);
+    }
+    host.appendChild(content);
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.className = 'promo-banner-dismiss';
+    dismissBtn.setAttribute('aria-label', 'Dismiss');
+    dismissBtn.textContent = '×';
+    if (preview) {
+      dismissBtn.tabIndex = -1;
+      dismissBtn.setAttribute('aria-disabled', 'true');
+    } else {
+      dismissBtn.addEventListener('click', () => {
+        host.style.display = 'none';
+        try { if (onDismiss) onDismiss(); }
+        catch (err) { console.warn('promo banner onDismiss failed', err); }
+      });
+    }
+    host.appendChild(dismissBtn);
+    host.style.display = 'flex';
+  },
+};
+window.PromoBanner = PromoBanner;
 
 // ── Pre-order API ─────────────────────────────────────────────
 const Preorders = {
