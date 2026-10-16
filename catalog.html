@@ -1986,13 +1986,18 @@
   // Elements and the open/closed restore are declared with the other elements
   // near the top of this script (setFiltersOpen, FILTERS_OPEN_KEY).
   function syncFilterBadge() {
-    const active = [
-      distEl.value !== '',
-      pubEl.value  !== '',
-      // foc-this-month counts as an active filter just like reserved/unreserved
-      resEl.value  !== '',
-      variantEl.value !== 'standard',
-    ].filter(Boolean).length;
+    // Each drop-down against its own default. foc-this-month counts as an active filter just like
+    // reserved/unreserved. A drop-down that is off its default also gets .is-set (the accent
+    // border in style.css), so a glance at the open panel shows which ones are doing something,
+    // the same colour the Filters button wears. Read from the controls themselves, so a pinned
+    // value restored on load, an unpin reset and "See more" all land here with no extra wiring.
+    const defaults = [[distEl, ''], [pubEl, ''], [resEl, ''], [variantEl, 'standard']];
+    let active = 0;
+    defaults.forEach(([el, def]) => {
+      const set = el.value !== def;
+      el.classList.toggle('is-set', set);
+      if (set) active++;
+    });
 
     // "Filters are on" is a class now (.has-filters): it gives the button its accent border and
     // shows the count badge, both in the stylesheet. They used to be inline styles, and an inline
