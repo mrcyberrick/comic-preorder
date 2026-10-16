@@ -1,6 +1,6 @@
 # Subscribe promo banner: editable in Settings, tracked in Analytics
 
-**STATUS:** IN PROGRESS · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; Analytics performance `8224ab0` and the deleted-account fix `30d144f`, § 8.6; built and verified, § 8) · prod: — (NOT promoted; needs Rick's explicit `/promote-prod`) · PR: — · findings: — (feature build, not a defect; no finding ID consumed)
+**STATUS:** COMPLETE · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; Analytics performance `8224ab0` and the deleted-account fix `30d144f`, § 8.6; built and verified, § 8) · prod: 2026-10-16 (PR #176, merge `eb52f12`; served bytes verified on both hostnames; the production write-smoke is Rick's and is NOT yet reported, § 8.7) · PR: #176 · findings: — (feature build, not a defect; no finding ID consumed)
 
 Plan written 2026-10-15 (planning session, Rick's request). Builds on `docs/subscription-promotion.md`
 (the banner itself, live on both environments since 2026-07-17), whose § 3 OUT list deferred exactly
@@ -493,3 +493,20 @@ exists only in the new code).
 `/promote-prod`: no SQL; `app.js` carries `merge=ours`, so assert its merge RESULT equals staging's copy. Production keeps
 showing the legacy branding value until someone saves from Settings on production. A write-smoke (reserve then cancel) is
 warranted because `catalog.html` and `app.js` are on the reserve path. The branding key is the rollback and stays in place.
+
+**Done 2026-10-16: PR #176, merge `eb52f12`, merged 17:22:48Z by Rick** (parents `fad4cc0` main + `c676bbc` staging tip; promotion
+commit `d74d59e`). The `app.js` merge result was asserted equal to staging's copy (the driver discarded nothing); 21 files, no
+`config.js`, nothing under `supabase/`. **Verified post-deploy:** `app.js`, `catalog.html`, `settings.html`, `analytics.html`,
+`config.js` and five other served files are byte-identical to `origin/main` on both `pulllist.app` and `rjbookstop.pulllist.app`
+(`analytics.html` `ad36f46ed58cc892`, the same bytes the harness ran against on staging); the markers named in the CLAUDE.md
+entry are present and `new Date(e.created_at).getTime()` fell from 7 live calls to 1 (the new comment).
+
+**What production showed afterwards (read-only service-role counts at 23:28Z, no user ids).** A production
+`app_settings.promo_banner` row on `rjbookstop` already exists, saved 2026-10-16T18:44:02Z (`enabled: true`, a new-format campaign
+id, link target `subscriptions`, the legacy branding value untouched): the first production save from Settings, by a person the
+row does not name. Three `visit` events since the merge, **no `reserve` or `cancel` event since it (so the write-smoke is
+unobserved), and zero `promo_banner_shown` / `promo_banner_dismissed` events ever**, although a catalog page was viewed at
+23:09:49Z after the save. `renderPromoBanner()` returns for a customer with any subscription, while impersonating, and for a
+browser that closed that campaign, which would explain zero with no defect; **which one applied to that viewer was not
+established**. Open: the Analytics "Subscribe Banner" card has not seen a real customer's event, and the reserve write-smoke is
+still Rick's (reserve one title, confirm the row and its `tenant_id`, cancel it).
