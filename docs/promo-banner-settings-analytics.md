@@ -558,5 +558,5 @@ PR #178, merge `90a975e`, merged 18:11:00Z by Rick after "Smoke = green /promote
 this doc); merge result of the pages == staging; `config.js` == `origin/main`; migrations 2. **Verified:** the three pages, `app.js`,
 `config.js`, `style.css` and `mylist.html` served on both production hostnames are byte-identical to `origin/main` and to what staging
 served under test; markers as in the CLAUDE.md entry. After the merge production logged 1 shown and 1 dismissed on campaign
-`sub-promo-20261019-113756`. **Rick reported "PR merged on Prod and tested"; no reserve or cancel event appears since the merge, so
-the reserve write-smoke is his report, not observed.** No finding ID consumed.
+`sub-promo-20261019-113756`. **Write-smoke green (Rick, "smoke completed = green"), observed: `reserve` 18:32:00Z and `cancel` 18:32:13Z
+on JESSICA JONES: ALIAS #1 COVER A, both `tenant_id` = `rjbookstop`.** (An earlier read, before he ran it, showed none.) No finding ID consumed.
