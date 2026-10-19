@@ -397,7 +397,7 @@
 
     <div class="grid wide">
       <div class="card" id="promo-card">
-        <h3>Subscribe Banner</h3>
+        <h3>Catalog Banner</h3>
         <p class="sub" id="promo-sub">The closable message at the top of the Catalog</p>
         <div id="promo-body"><p class="loading-row">Loading…</p></div>
       </div>
@@ -545,7 +545,7 @@
         averages in Subscription Opportunity come from live preorders for the current catalog month
         instead.
         <span class="src">Source: usage_events (price_usd on reserve events) + preorders × catalog.price_usd.</span></dd>
-      <dt>Subscribe banner</dt>
+      <dt>Catalog banner</dt>
       <dd>For the live campaign only (the banner's current campaign id; saving with "Show it again"
         in Settings starts a new one). <em>Saw it</em> = distinct customers with a banner impression,
         logged once per customer per campaign per browser. <em>Closed it</em> = distinct customers
@@ -1492,7 +1492,7 @@
     const cfg = state.promoCfg;
     sub.textContent = 'The closable message at the top of the Catalog';
     if (!cfg || !cfg.enabled || !cfg.id) {
-      body.innerHTML = '<p class="no-data">The banner is off (Settings → Branding → Subscribe banner).</p>';
+      body.innerHTML = '<p class="no-data">The banner is off (Settings → Branding → Catalog banner).</p>';
       return;
     }
     const fmtDay = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

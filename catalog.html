@@ -105,7 +105,7 @@
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
   <div id="deadline-banner" class="deadline-banner" style="display:none" role="status" aria-live="polite"></div>
 
-  <!-- Subscription promo banner — edited in Settings ▸ Branding ▸ Subscribe banner
+  <!-- Subscription promo banner — edited in Settings ▸ Branding ▸ Catalog banner
        (app_settings.promo_banner), read through PromoBanner in app.js; falls back to the
        legacy tenants.branding.promo_banner when no row exists.
        Absent config or enabled:false ⇒ nothing renders (ships dark). -->
@@ -834,7 +834,7 @@
   }
 
   // ── Subscription promo banner ─────────────────────────────────
-  // Edited in Settings ▸ Branding ▸ Subscribe banner (app_settings.promo_banner);
+  // Edited in Settings ▸ Branding ▸ Catalog banner (app_settings.promo_banner);
   // PromoBanner (app.js) owns the shape, the read and the render, and falls back to
   // the legacy tenants.branding.promo_banner when no row exists. Absent config or
   // enabled:false ⇒ nothing renders. (It used to be called after mySubscriptions
