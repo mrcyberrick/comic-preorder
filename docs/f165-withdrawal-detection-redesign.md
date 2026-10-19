@@ -343,6 +343,10 @@ S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real 
   netted 0, so 4 adjustments: Daredevil #8 both covers -1 each, Amazing Spider-Man #1002 standard
   -2, Black Panther/Namor #2 standard -1), and correct `0826DC0093` to 2026-11-04. Script
   `f165-v5-actions.js` (guarded, dry run clean 2026-10-19), run by Rick against production.
+  **APPLIED 2026-10-19 21:50Z by Rick, independently re-read:** exactly 4 `adjustment` rows dated
+  2026-10-19 (the four codes above, -1/-1/-2/-1), all 17 codes now net 0, and `0826DC0093` reads
+  in-store 2026-11-04. Before-state saved to `f165-v5-before.json` in the scripts folder (local).
+  Customers on the four titles now see the rejected badge (F120). No withdrawal mark was written.
 
 ---
 
