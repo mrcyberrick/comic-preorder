@@ -105,7 +105,7 @@
   <!-- Order Deadline Banner — populated and shown by JS after FOC date is fetched -->
   <div id="deadline-banner" class="deadline-banner" style="display:none" role="status" aria-live="polite"></div>
 
-  <!-- Subscription promo banner — edited in Settings ▸ Branding ▸ Subscribe banner
+  <!-- Subscription promo banner — edited in Settings ▸ Branding ▸ Catalog banner
        (app_settings.promo_banner), read through PromoBanner in app.js; falls back to the
        legacy tenants.branding.promo_banner when no row exists.
        Absent config or enabled:false ⇒ nothing renders (ships dark). -->
@@ -834,11 +834,12 @@
   }
 
   // ── Subscription promo banner ─────────────────────────────────
-  // Edited in Settings ▸ Branding ▸ Subscribe banner (app_settings.promo_banner);
+  // Edited in Settings ▸ Branding ▸ Catalog banner (app_settings.promo_banner);
   // PromoBanner (app.js) owns the shape, the read and the render, and falls back to
   // the legacy tenants.branding.promo_banner when no row exists. Absent config or
-  // enabled:false ⇒ nothing renders. Called after mySubscriptions loads so the
-  // hide-if-subscribed rule applies on first render, not reactively.
+  // enabled:false ⇒ nothing renders. (It used to be called after mySubscriptions
+  // loaded so a hide-if-subscribed rule applied on first render; that rule was removed
+  // 2026-10-19, the call site is unchanged.)
   //
   // `cfg` is the already-resolved config (see the call site, which starts the read
   // early so it runs alongside the reservation and subscription reads).
@@ -849,29 +850,42 @@
   //             storage is unavailable nothing is logged at all: an under-count is
   //             safer than logging on every page load (the UsageEvents.visit() rule).
   //   dismissed on the close click.
-  // Impersonation returns before either (and UsageEvents._log() skips it too).
+  // Impersonation shows the banner but logs neither event and remembers no close
+  // (and UsageEvents._log() skips impersonation too).
   function renderPromoBanner(cfg) {
-    if (AdminContext.isActive()) return;
     const tenant = TenantContext.current();
     if (!cfg || !cfg.enabled || !cfg.id || !cfg.text) return;
-    if (mySubscriptions.size > 0) return;
+    // Rick, 2026-10-19: the banner is the store's general message to customers (any topic or
+    // promotion, not only subscriptions), so nothing hides it except the customer closing this
+    // campaign. It used to be hidden from anyone with a subscription and while an admin was
+    // impersonating; both rules are gone. "Show it again to everyone" (a new campaign id) brings
+    // it back for every customer who closed it.
+    const impersonating = AdminContext.isActive();
 
     const slug = tenant.slug || 'default';
     const dismissKey = PromoBanner.dismissKey(slug, cfg.id);
     // Storage unreadable (some private modes throw outright): show the banner
     // rather than crash the catalog's init; a close just will not persist.
-    try { if (localStorage.getItem(dismissKey)) return; } catch (_) { /* show it */ }
+    // While impersonating, the admin's own earlier close does not hide it: the admin is looking
+    // at what the customer sees.
+    if (!impersonating) {
+      try { if (localStorage.getItem(dismissKey)) return; } catch (_) { /* show it */ }
+    }
 
     const banner = document.getElementById('promo-banner');
     if (!banner) return;
 
     PromoBanner.mount(banner, cfg, {
       onDismiss() {
+        // An admin closing it while viewing as a customer hides it for this page view only:
+        // remembering that close would hide it from the admin's own catalog later.
+        if (impersonating) return;
         try { localStorage.setItem(dismissKey, '1'); } catch (_) { /* hidden for this page view only */ }
         UsageEvents.promoBannerDismissed(user.id, cfg.id);
       },
     });
 
+    if (impersonating) return;   // no impression is logged for an admin viewing as a customer
     const shownKey = PromoBanner.shownKey(slug, cfg.id, user.id);
     try {
       if (!localStorage.getItem(shownKey)) {

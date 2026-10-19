@@ -397,7 +397,7 @@
 
     <div class="grid wide">
       <div class="card" id="promo-card">
-        <h3>Subscribe Banner</h3>
+        <h3>Catalog Banner</h3>
         <p class="sub" id="promo-sub">The closable message at the top of the Catalog</p>
         <div id="promo-body"><p class="loading-row">Loading…</p></div>
       </div>
@@ -545,14 +545,14 @@
         averages in Subscription Opportunity come from live preorders for the current catalog month
         instead.
         <span class="src">Source: usage_events (price_usd on reserve events) + preorders × catalog.price_usd.</span></dd>
-      <dt>Subscribe banner</dt>
+      <dt>Catalog banner</dt>
       <dd>For the live campaign only (the banner's current campaign id; saving with "Show it again"
         in Settings starts a new one). <em>Saw it</em> = distinct customers with a banner impression,
         logged once per customer per campaign per browser. <em>Closed it</em> = distinct customers
         who closed it; the rate is the share of those who saw it who also closed it.
         <em>Subscribed after seeing it</em> = customers whose first subscribe is later than their
-        first impression, an approximation (clicks on "Learn more" are not tracked). Customers who
-        already subscribe are never shown the banner. These two event types are kept out of every
+        first impression, an approximation (clicks on "Learn more" are not tracked). Every customer
+        is shown the banner, subscribers included (since 2026-10-19). These two event types are kept out of every
         other metric on this page, so they never count as customer activity.
         <span class="src">Source: usage_events (promo_banner_shown / promo_banner_dismissed) + subscribe.</span></dd>
       <dt>Publisher Demand</dt>
@@ -1492,7 +1492,7 @@
     const cfg = state.promoCfg;
     sub.textContent = 'The closable message at the top of the Catalog';
     if (!cfg || !cfg.enabled || !cfg.id) {
-      body.innerHTML = '<p class="no-data">The banner is off (Settings → Branding → Subscribe banner).</p>';
+      body.innerHTML = '<p class="no-data">The banner is off (Settings → Branding → Catalog banner).</p>';
       return;
     }
     const fmtDay = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1561,7 +1561,7 @@
         <div class="promo-stat"><div class="kpi-label">Subscribed after seeing it</div><div class="kpi-value" id="promo-subbed">${subscribed}</div><div class="kpi-note">of those who saw it</div></div>
       </div>
       ${recentHtml}
-      <p class="note">Counted per browser: one customer on two devices counts once but may see the banner twice. Only customers with no subscription are shown it. Last 90 days.</p>`;
+      <p class="note">Counted per browser: one customer on two devices counts once but may see the banner twice. Every customer is shown it, subscribers included. Last 90 days.</p>`;
   }
 
   // ── OPERATIONS: FOC deadline banner ────────────────────────────

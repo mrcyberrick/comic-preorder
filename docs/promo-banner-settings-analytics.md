@@ -510,3 +510,44 @@ unobserved), and zero `promo_banner_shown` / `promo_banner_dismissed` events eve
 browser that closed that campaign, which would explain zero with no defect; **which one applied to that viewer was not
 established**. Open: the Analytics "Subscribe Banner" card has not seen a real customer's event, and the reserve write-smoke is
 still Rick's (reserve one title, confirm the row and its `tenant_id`, cancel it).
+
+### 8.8 Follow-up, 2026-10-19: the banner shows to every customer (Rick); STAGING ONLY, not promoted
+
+**What Rick reported.** On production he pressed "Show it again to everyone" and did not see the banner come back. A read-only
+service-role read showed **the save had landed**: `rjbookstop`'s row carries campaign id `sub-promo-20261019-113756`, saved
+2026-10-19T15:37:56Z (it replaced `sub-promo-20261016-144402`). The banner stayed out of sight because `renderPromoBanner()`
+returned for any customer with a subscription and while an admin was impersonating. The console line he pasted
+(`static.cloudflareinsights.com/beacon.min.js ... ERR_BLOCKED_BY_CLIENT`) is an ad blocker refusing Cloudflare's analytics beacon,
+unrelated.
+
+**Rick's decisions, 2026-10-19.** (1) The banner is the store's general message channel ("any number of topics or promotions"),
+not only a subscribe prompt, so **nothing hides it** except the customer closing the current campaign. (2) **A close lasts until
+the admin presses "Show it again to everyone"** (asked and answered: a Save that edits the wording does NOT re-show it; this is
+unchanged from § 2.4 / § 8.4).
+
+**What changed (`0e202da`, `catalog.html` +20/-6, `settings.html` 1 line, `analytics.html` 2 lines).** The
+`mySubscriptions.size > 0` return is gone, so subscribers see the banner. An admin viewing as a customer now sees it too, but a
+close there hides it for that page view only (no dismiss key is written, so the admin's own catalog is unaffected) and no event is
+logged (an admin's own earlier close also does not hide it while impersonating). Settings' help text and the Analytics card's two
+notes now say every customer sees it. Save logic, campaign ids, the dismiss key and the events are unchanged.
+
+**Evidence.** Inline scripts of all three pages syntax-checked. Harness `promo-banner-settings-verify.mjs`: V6's impersonation and
+subscriber checks were flipped and a new one added (a close while impersonating is not remembered); **103 checks green on the
+unpushed tree, and the three new checks seen RED against the old deployed bytes** (impersonating admin saw no banner, so nothing
+to close; a subscriber saw nothing and logged 0). On the deployed staging bytes (all three files equal to the commit's blobs):
+**harness ALL CHECKS PASSED, spec 09 5/5** (its two tests now assert the banner is SHOWN to a subscriber and while impersonating,
+with the impersonation close not remembered). **Full suite on the deployed bytes: 161 passed, 0 failed, exit 0, 26.3 min** (the log's own summary line).
+
+**Not verified.** Production (not promoted); Chromium only. **The "Subscribe banner" name is now narrower than what it is**
+(Settings heading, Analytics card title, "Subscribed after seeing it"); not renamed, Rick's call.
+
+### 8.9 Rename, 2026-10-19: "Subscribe banner" is now "Catalog banner" (Rick); STAGING ONLY, not promoted
+
+Rick checked § 8.8 on staging ("This looks correct on Staging ... when 'Show it again to everyone' pressed it appears. Smoke -
+green") and asked for the rename. `d66392a`: visible text only, in Settings (heading, the read-failure toast, the save toast),
+Analytics (card title, definition entry, the "banner is off" note) and two catalog.html comments that name the Settings path. **The
+stored key `app_settings.promo_banner`, `PromoBanner`, the events and the dismiss/shown keys are unchanged**, so nothing saved is
+lost and no customer's close is reset. The harness's V7 definition check now looks for "Catalog banner". **Evidence on the deployed
+bytes (served files equal to the commit on 3 consecutive samples):** harness ALL CHECKS PASSED on the second run (the first crashed
+at V7 when a throwaway user's password sign-in was refused, test setup, teardown clean), specs 09 + 18 18/18. The full suite was not
+re-run for this text-only change; it passed 161/0 on `0e202da` two commits earlier. "Smoke - green" is Rick's report on § 8.8.
