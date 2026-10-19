@@ -575,14 +575,14 @@
         </div>
       </section>
 
-      <!-- ── Subscribe banner ────────────────────────────────────
+      <!-- ── Catalog banner (was "Subscribe banner" until 2026-10-19) ────────────────────────────────────
            A third, separate setting (app_settings.promo_banner) with its own Save.
            docs/promo-banner-settings-analytics.md. The shape, the read, the render and
            the campaign id all come from PromoBanner in app.js. -->
       <section class="set-panel" id="promo-panel">
         <div class="set-panel-head">
-          <h3>Subscribe banner</h3>
-          <p>The closable message at the top of the Catalog. Customers who already subscribe to a series never see it.</p>
+          <h3>Catalog banner</h3>
+          <p>The closable message at the top of the Catalog, for any announcement or promotion. Every customer sees it until they close it; "Show it again to everyone" brings it back for those who did.</p>
         </div>
 
         <div class="set-promo-stage">
@@ -1223,7 +1223,7 @@
   el('bn-url').value = bnDraft.imageUrl || '';
   bnRender();
 
-  // ══ Branding ▸ Subscribe banner ════════════════════════════
+  // ══ Branding ▸ Catalog banner ════════════════════════════
   // A third, separate setting (app_settings.promo_banner) with its own Save, so
   // it can never write the page banner or the catalog filters, nor they it.
   // docs/promo-banner-settings-analytics.md. The shape, the read, the render and
@@ -1349,7 +1349,7 @@
 
   if (pbReadFailed) {
     ['pb-enabled', 'pb-text', 'pb-label', 'pb-target', 'pb-again-btn', 'pb-restore'].forEach(id => { el(id).disabled = true; });
-    toast('Could not read the current Subscribe banner — reload before editing it.', 'error');
+    toast('Could not read the current Catalog banner — reload before editing it.', 'error');
   }
 
   el('pb-enabled').addEventListener('change', pbRender);
@@ -1425,7 +1425,7 @@
     pbSource = 'row';
     pbSavedAt = new Date().toISOString();
     pbRender();
-    toast(again ? 'Saved. Customers who closed the banner will see it again.' : 'Subscribe banner saved');
+    toast(again ? 'Saved. Customers who closed the banner will see it again.' : 'Catalog banner saved');
   }
   el('pb-save').addEventListener('click', () => pbSave(false, el('pb-save')));
   el('pb-again-btn').addEventListener('click', () => pbSave(true, el('pb-again-btn')));
