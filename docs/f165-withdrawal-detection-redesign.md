@@ -1,6 +1,6 @@
 # F165 — Withdrawal detection redesign
 
-**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAK DONE (real runs 10-09, 10-16) · V5 DONE 2026-10-19: 8 true, 7 false (§ 8) · S3 NOT DECIDED, S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
+**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAK DONE (real runs 10-09, 10-16) · V5 DONE 2026-10-19: 8 true, 7 false (§ 8) · S3 APPROVED 2026-10-19 (§ 9 Q5), not built, S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
 
 Owner doc for F165. The finding itself lives in `docs/technical-reference.md` § 13 F165; this doc
 is the execution plan. Planned 2026-09-29, the day the finding was filed.
@@ -328,6 +328,21 @@ S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real 
   its own month's file (F146's procedure) or by SQL. Revisit if that is ever needed in anger.
 - **Q4 — DECIDED: the two-consecutive-runs rule stands**, accepting a one-week delay on a real
   mark (§ 1.4).
+- **Q5 — DECIDED 2026-10-19 (after V5): S3 is APPROVED.** Build it as § 5 says, and in the same
+  session fix the two false-positive causes V5 found (§ 8): a PRH code counts as present when ANY
+  supplied PRH file lists it; Lunar ratio/incentive variants are never candidates and go to a
+  separate "date not verifiable" list instead (see Q6). Replay the 10-16 inputs: the expected
+  candidates are exactly the 8 true ones (now rejected, so check whether they still list).
+- **Q6 — Lunar incentives drop out of Available Products, so their dates go stale silently.** Found
+  at V5: `0826DC0093` read 2026-10-28 while Lunar's site said 11/4, and the weekly recheck could not
+  correct it because the code is not in the export. Proposed for the S3 session: a short report of
+  reserved, unfulfilled Lunar codes absent from the export whose in-store date is within the next
+  ~5 weeks, so Rick checks each date by hand on Lunar's site. Report only.
+- **Actions taken on the V5 result (Rick, 2026-10-19):** record "Rejected by supplier" for all
+  Color Block Black variants (the 8 confirmed plus the 8 codes past in-store; 13 of the 17 already
+  netted 0, so 4 adjustments: Daredevil #8 both covers -1 each, Amazing Spider-Man #1002 standard
+  -2, Black Panther/Namor #2 standard -1), and correct `0826DC0093` to 2026-11-04. Script
+  `f165-v5-actions.js` (guarded, dry run clean 2026-10-19), run by Rick against production.
 
 ---
 
