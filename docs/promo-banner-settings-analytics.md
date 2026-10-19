@@ -540,3 +540,14 @@ with the impersonation close not remembered). **Full suite on the deployed bytes
 
 **Not verified.** Production (not promoted); Chromium only. **The "Subscribe banner" name is now narrower than what it is**
 (Settings heading, Analytics card title, "Subscribed after seeing it"); not renamed, Rick's call.
+
+### 8.9 Rename, 2026-10-19: "Subscribe banner" is now "Catalog banner" (Rick); STAGING ONLY, not promoted
+
+Rick checked § 8.8 on staging ("This looks correct on Staging ... when 'Show it again to everyone' pressed it appears. Smoke -
+green") and asked for the rename. `d66392a`: visible text only, in Settings (heading, the read-failure toast, the save toast),
+Analytics (card title, definition entry, the "banner is off" note) and two catalog.html comments that name the Settings path. **The
+stored key `app_settings.promo_banner`, `PromoBanner`, the events and the dismiss/shown keys are unchanged**, so nothing saved is
+lost and no customer's close is reset. The harness's V7 definition check now looks for "Catalog banner". **Evidence on the deployed
+bytes (served files equal to the commit on 3 consecutive samples):** harness ALL CHECKS PASSED on the second run (the first crashed
+at V7 when a throwaway user's password sign-in was refused, test setup, teardown clean), specs 09 + 18 18/18. The full suite was not
+re-run for this text-only change; it passed 161/0 on `0e202da` two commits earlier. "Smoke - green" is Rick's report on § 8.8.
