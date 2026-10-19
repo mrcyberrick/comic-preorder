@@ -6979,7 +6979,7 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Related:** **F165** (S2's streak map is what is lost), **F159** (the frozen-file hash counters), **F173** (found while planning its direction (a)).
 
 #### F176 — Reserved: security-sensitive, details held locally
-- **Status:** filed 2026-10-15, OPEN, not yet verified against live. Details are in the operator's local-only security notes, not in this public repo (the F75 pattern). A sanitized past-tense entry replaces this placeholder once both environments are fixed.
+- **Status:** filed 2026-10-15, OPEN. **CONFIRMED on both environments 2026-10-19** (read-only catalog check, Rick-run; no write probe); still own-tenant only, no cross-tenant read or write. Fix drafted locally, not applied. Details are in the operator's local-only security notes, not in this public repo (the F75 pattern). A sanitized past-tense entry replaces this placeholder once both environments are fixed.
 - **Scope:** an authorization question on a tenant-scoped table; no cross-tenant read or write is involved. Found while planning `docs/promo-banner-settings-analytics.md`, which does not depend on it.
 
 Next free finding ID: **F177**.
