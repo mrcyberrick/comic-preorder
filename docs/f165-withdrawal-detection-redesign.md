@@ -1,6 +1,6 @@
 # F165 — Withdrawal detection redesign
 
-**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAKING (needs two real weekly runs), S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
+**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAK DONE (real runs 10-09, 10-16) · V5 DONE 2026-10-19: 8 true, 7 false (§ 8) · S3 NOT DECIDED, S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
 
 Owner doc for F165. The finding itself lives in `docs/technical-reference.md` § 13 F165; this doc
 is the execution plan. Planned 2026-09-29, the day the finding was filed.
@@ -303,6 +303,20 @@ raise nothing. The second weekly run is the first that can list a candidate. V5 
 on the distributor's site, the true/false split written into § 13 F165) is reviewed with Rick, and only then is
 S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real run is safe (one observation). **Run 1 of 2 DONE 2026-10-09** (dry run, then the real apply, one observation): inputs were the Lunar all-months export plus PRH 2026-08, 09 and 10 (2026-07 was quarantined after coming back byte-identical to the 10-02 pull). Result: 1,133 reserved titles; 1,098 checked against their own source: 1,069 present, **29 absent for the first time, 0 absent on a second run**; 32 not checkable (their source was not supplied); 3 skipped as frozen (PRH 2026-06). **No candidates, as designed.** The 29 sightings are in `check-dates-state.json`. The next real run, on a later date, is the first that can list a candidate. (The same run applied 42 date corrections, all confirmed by a fresh read; that is the F155 half, not this one.)
 
+**Run 2 of 2 DONE 2026-10-16** (production, real run, 23:18Z; `check-dates-log-2026-10-16.json` holds 20 date corrections). Inputs: Lunar Available Products 10-16 plus PRH 2026-08, 09 and 10 (re-pulled 10-16). The state file then held 33 absent titles: **28 absent on both dates** and 5 Lunar absent for the first time. The candidate list went to the console only (the log does not keep it), so it was **rebuilt 2026-10-19 from production with read-only queries** applying the same rules (open reservation, in-store on or after 10-16, no shipment evidence): **15 candidates** (2 Lunar, 13 PRH); the other 13 were past in-store, and none was excluded by shipment evidence.
+
+**V5 RESULT (2026-10-19; Rick checked each candidate on the distributor's site): 8 TRUE, 7 FALSE.**
+
+| Result | Codes | Why |
+|---|---|---|
+| **True (8), missing from PRH's catalog** | `75960620917003716`, `…3721` (Uncanny X-Men #37), `75960621462400316`, `…0321` (Miles Morales: Spider-Man #3), `75960621496900921` (Moon Knight #9), `75960621282800816`, `…0831` (Daredevil #8), `75960623001300216`, `…0231` (Amazing Spider-Man #1002) | All eight are Marvel "David Nakayama Color Block Black" variants (four are 1:50 virgin covers): one variant program dropped by PRH. No recheck file lists any of them |
+| **False (5), PRH** | `75960621579900411` (Spider-Man: Long Way Home #4, in-store 11/11), `76156801633800211`, `…0221`, `…0231` (MTG Untold Stories: Liliana #2 A/B/C, in-store 1/6/2027) | **PRH moved the title to a different catalog month's file.** Long Way Home #4 is `catalog_month` 2026-09 in our database but is listed in PRH's 2026-08 file (CatalogDate 08/01/2026). Liliana #2 was in the earlier 2026-09 pull (now in `_frozen-do-not-use`), is gone from the 10-16 2026-09 pull, and is listed in the 2026-10 file (CatalogDate 10/01/2026). S2's rule 1 checks only the file for the row's own `catalog_month`, so a re-catalogued title reads as absent |
+| **False (2), Lunar** | `0826DC0098` (Absolute Green Arrow #6 CVR E 1:25, in-store 10/21), `0826DC0093` (Absolute Catwoman #4 CVR E 1:25, in-store **11/4**) | Both are 1:25 incentive covers absent from Lunar's Available Products export but still on Lunar's site. The report already prints its allocation-variant warning for these; the export appears to drop an incentive once its allocation closes (inferred, not confirmed with Lunar). **Side effect:** our in-store date for `0826DC0093` is 2026-10-28 and Lunar's is 11/4; the weekly recheck cannot correct it because the code is not in the export |
+
+**What V5 says about the signal.** Precision 8 of 15 as built. Both false-positive groups have a clear mechanical cause, and with the two changes below this sample would have listed exactly the 8 real withdrawals: (1) **PRH: count a code as present if ANY supplied PRH file lists it**, not only its own month's file; (2) **Lunar: do not list ratio/incentive variants** (or list them separately as "allocation closed?", never as candidates). Both are untested ideas until built and replayed on these files. **S3 is NOT decided** (Rick's call, § 10).
+
+**Not verified:** whether PRH cancelled the eight or only stopped listing them (no PRH cancellation notice was read); the six further Nakayama variants that were absent twice but past in-store (X-Men #39, Black Panther/Namor #2, Black Cat #15, Amazing Spider-Man #1001, two covers each) were not checked and have no shipment record; nothing was written to production (no withdrawal mark, no rejection, no date correction).
+
 ---
 
 ## 9. Decisions (Rick, 2026-09-29)
@@ -323,11 +337,8 @@ S3 decided. Run it as usual; a `--no-write` dry run on the same day as the real 
       *(Not ticked: S1 is merged and V1/V2 are green as of 2026-10-04, scripts repo `5919130`, but the
       last clause is only checkable after Rick's November import, which should print the "marking is
       retired" line and no `Checking for withdrawn titles` header. Tick it then.)*
-- [ ] S2 merged; V3, V4 green; two weekly runs soaked
-      *(Not ticked: S2 is merged and V3/V4 are green as of 2026-10-04, scripts repo `3ef4b89`, but the soak
-      clause is only checkable after two REAL weekly runs; the first records first sightings and can raise
-      nothing, the second can. Tick it after the second.)*
-- [ ] V5 recorded in § 13 F165 with the true/false split
+- [x] S2 merged; V3, V4 green; two weekly runs soaked *(ticked 2026-10-19: real runs 2026-10-09 and 2026-10-16, § 8)*
+- [x] V5 recorded in § 13 F165 with the true/false split *(2026-10-19: 8 true, 7 false, § 8)*
 - [ ] S3 decided (built and V6 green, or declined with the reason recorded)
 - [x] S4 decided — declined for now, 2026-09-29 (§ 9 Q3); V7 therefore not needed
 - [ ] `monthly-catalog-refresh.md` no longer describes withdrawal marking as an import step;
