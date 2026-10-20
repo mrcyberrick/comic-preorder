@@ -884,6 +884,12 @@ tenant-subdomain hostname, are `?t=` and `sessionStorage` ignored [yes: the host
 and on an RPC **failure**, show a "can't reach this store right now" page with a Retry button rather than any
 branding [yes]. Record the answers in this section before writing code.
 
+**✅ ANSWERED 2026-10-19 (Rick, all three as recommended):** (1) **(A)** the neutral "no store at this
+address" page: PULLLIST wordmark, one line, a link to `https://pulllist.app`, no tenant name, colour, logo or
+sign-in form; (2) **yes**, on a tenant-subdomain hostname `?t=` and `sessionStorage` are ignored and the
+hostname is authoritative; (3) **yes**, an RPC failure shows a "can't reach this store right now" page with a
+Retry button and no branding. Step 2 may proceed.
+
 #### Step 2 — the code change (feature branch)
 
 1. `lookupTenantBySlug(slug)` returns `{ tenant, failed }`: `failed: true` on an RPC error or throw;
