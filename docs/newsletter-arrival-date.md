@@ -1,6 +1,6 @@
 # Weekly newsletter: show the on-sale date beside "This Week's Releases"
 
-**STATUS:** NOT STARTED · staging n/a · prod n/a · PR none · findings none (feature, no ID)
+**STATUS:** NOT STARTED · decisions D1-D5 ACCEPTED 2026-10-20 · execution GATED on F135 close-out · target issue Tue 2026-10-27 · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID)
 
 Planned 2026-10-20. Rick's request: wherever a reader sees "This Week's Releases"
 (the newsletter web page, the RSS feed that drives `rjbookstop.com/news`, and
@@ -63,7 +63,12 @@ headroom; check it in the run log.
 
 ## 3. Decisions for Rick
 
-| # | Question | Recommendation |
+**All five ACCEPTED as recommended, Rick, 2026-10-20** ("Accepted"): D1 email
+included, D2 "On sale / in store", D3 RSS item date = on-sale date at noon
+Eastern, D4 website header deferred (not in this work), D5 email subject uses the
+on-sale date. Confirmed the same day that none of them blocks other project work.
+
+| # | Question | Recommendation (accepted) |
 |---|---|---|
 | D1 | Include the email too, or only the web page and RSS? | **Include it.** Same function shape, same release, and the web page is the email's "view online" twin; changing one leaves them disagreeing |
 | D2 | Wording | `On sale / in store Wednesday, October 21, 2026` (your example). Alternative: `In store Wednesday, October 21, 2026` |
@@ -91,24 +96,150 @@ headroom; check it in the run log.
 - **Risk if wrong:** a wrong or missing date in one week's issue. The email cannot
   be recalled once sent, which is why section 5 builds it locally first.
 
-## 5. How to build and verify (execution session, after F135 closes)
+## 5. Execution runbook (new CLI session, after F135 closes)
 
-1. Read the Tue 10-20 run (F135 S5) and close F135 first. If it failed, this waits.
-2. Unit test `formatOnSale()`: `2026-10-21` gives `Wednesday, October 21, 2026`;
-   a Thursday date gives Thursday; and run it under `TZ=America/Los_Angeles` and
-   `TZ=UTC` to prove no day shift. Watch it fail before the helper exists.
-3. Local build, nothing published:
-   `node scripts/build-pull-feed.js --local --week=2026-10-21` (needs
-   `SUPABASE_URL` and `SUPABASE_ANON_KEY` set; the anon key is public by design)
-   writes to `scripts/pull-feed-out/`. Open both HTML files at desktop and phone
-   width and read `rss.xml`. Check the date line, the preheader and the
-   description wording.
-4. Point a copy of `rjbookstop.com/news/index.html` at the local `rss.xml` and
-   confirm the cards read "Oct 21, 2026" (D3), in a browser set to Eastern time.
-5. Commit to `weekly-pull-feed` `main` before Tue 10-27; the 21:00Z cron
-   publishes and sends it. Optional rehearsal first: `--publish --branch=scratch`
-   (the builder's own documented rehearsal), which commits to a scratch branch
-   that Pages never serves and sends nothing.
-6. After the 10-27 send: read the delivered email, the live web page,
-   `rjbookstop.com/news` and Flipboard's view (D3's open question), and record
-   the result in this doc's STATUS line.
+All work is in the **`weekly-pull-feed`** repo
+(`C:\Users\richa\OneDrive\Documents\(Work)\BookStop\weekly-pull-feed`). Its `main`
+is what the Tuesday cron builds and sends, so there is no staging step: the
+local build (E5) and the scratch-branch rehearsal (E6) are the staging
+equivalent. **Any failed check is a halt-and-report, not an improvise.** Line
+numbers below were read 2026-10-20; re-read the file and locate each spot by its
+anchor text before editing.
+
+### E0. Gate: F135 is closed
+
+Read the Tue 2026-10-20 `Send Weekly Newsletter` run log. It must show a
+`github-actions[bot]` commit for the 2026-10-21 week, `N/N served` and
+`Campaign <id> confirmed SENT`. Then close F135 S5 in
+`docs/f135-decouple-feed-publish.md`, `docs/technical-reference.md` § 13 F135 and
+`CLAUDE.md` (doc-only commit to `comic-preorder` `staging`). **If that run failed,
+stop here:** F135 is not closed and this work waits.
+
+Also: `git -C weekly-pull-feed pull`, confirm a clean tree, and run
+`node --test test/*.test.mjs` once to record the starting count.
+
+### E1. The date helper (in `build-pull-feed.js`, beside `dominantOnSaleDate()`)
+
+- `formatOnSale(iso)` → `'Wednesday, October 21, 2026'`; `formatOnSaleShort(iso)`
+  → `'Wed, Oct 21'`. Build the date from split parts
+  (`new Date(+y, +m - 1, +d)`, the masthead's existing pattern, F28); weekday
+  from the date; `null`/empty input → `null`.
+- `onSaleNoonEasternRfc822(iso)` → the RFC-822 string for 12:00 noon
+  America/New_York on that date (`Wed, 21 Oct 2026 16:00:00 GMT` in EDT,
+  `17:00:00 GMT` in EST). Compute the offset for that date; do not hardcode -4.
+- Export all three in the existing `module.exports` list.
+
+### E2. Unit tests: write them first and watch them fail
+
+New `test/on-sale-date.test.mjs` (the workflow and the Monday preflight run
+`test/*.test.mjs`, so it guards every later build):
+- `2026-10-21` → Wednesday, October 21, 2026; `2026-10-22` → Thursday;
+  `2026-12-31` → Thursday, December 31, 2026 (year edge).
+- The same results when run under `TZ=UTC` and `TZ=America/Los_Angeles`
+  (spawn `node --test` with each, or assert inside via `process.env.TZ` and a
+  child process). No day shift either way.
+- Noon Eastern: `2026-10-21` → `16:00:00 GMT`; `2026-11-04` (after the DST
+  change, 2026-11-01) → `17:00:00 GMT`; and `new Date(result)` read back in
+  `America/New_York` is the same calendar date.
+- `null` input → `null`, never a throw.
+Run before E1 exists (red), then green after.
+
+### E3. Web page and email (`buildNewsletterHtml()` and `buildEmailHtml()`)
+
+Under the "This Week&rsquo;s Releases" label (anchors `:1316` page, `:1726`
+email), add one line ABOVE the existing "One cover per series" line, same
+styling as that line:
+`On sale / in store ${formatOnSale(onSaleDate)}`. Omit the line entirely if the
+helper returns null.
+
+Email only:
+- Preheader (`:1499`): `${shipmentCount} new titles on sale ${formatOnSaleShort(onSaleDate)}`
+  followed by the existing "&mdash; stop in before your favorites are gone".
+  Fall back to the current "on sale Wednesday" text if the date is null.
+- Add a machine-readable stamp next to the existing one (`:1491`):
+  `<!-- pull-feed-onsale: ${onSaleDate} -->` (only when the date exists). E7
+  reads it.
+
+Leave the masthead, the promo copy ("know what's coming Wednesday") and every
+other line alone.
+
+### E4. RSS (`buildRssXml()`)
+
+1. Signature `buildRssXml(rows, thumbMap, meta = {})`; pass `{ onSaleDate }` at
+   both call sites (`publishPullFeed()` and `buildLocal()`).
+2. Channel `<description>`:
+   `This week's releases, on sale / in store ${formatOnSale(onSaleDate)}. Weekly pull list with thumbnails and links to full-size cover images.`
+3. Item description text: replace the "now available ... ready for pickup or
+   delivery" sentences with
+   `${safeTitle} is part of this week's pull list at Ray &amp; Judy's Book Stop, on sale / in store ${formatOnSale(onSaleDate)}. `
+   plus the existing "Click the cover image ..." sentence, and keep the whole
+   text over 300 characters (Flipboard). Assert the length in the test.
+4. Item `<pubDate>` = `onSaleNoonEasternRfc822(onSaleDate)`. Channel
+   `<pubDate>` and `<lastBuildDate>` stay the real build time.
+5. If the date is null, keep today's behaviour for all four (unreachable in a
+   publish, because `checkWeek()` fails first, but the local build can hit it).
+
+### E5. Local build and inspection (nothing published)
+
+```bash
+cd "/c/Users/richa/OneDrive/Documents/(Work)/BookStop/weekly-pull-feed"
+SUPABASE_URL=https://plgegklqtdjxeglvyjte.supabase.co SUPABASE_ANON_KEY=<prod anon key from comic-preorder origin/main:config.js> \
+  node scripts/build-pull-feed.js --local --week=2026-10-21
+```
+(The anon key is public by design. Use the 10-21 week: it has real rows.)
+Check in `scripts/pull-feed-out/`:
+- Both HTML files at 1350 px and 390 px in a real browser (screenshots
+  inspected, not inferred): the date line is under the label and reads
+  "On sale / in store Wednesday, October 21, 2026"; no horizontal scroll.
+- The email preheader text and the `pull-feed-onsale: 2026-10-21` stamp.
+- `rss.xml`: parses as XML; every item's `<pubDate>` is
+  `Wed, 21 Oct 2026 16:00:00 GMT`; descriptions carry the new sentence;
+  `lastBuildDate` is now.
+- Email size below the 95 KB warning (record it).
+- **rjbookstop.com/news check:** copy `rjbookstop/news/index.html` to the
+  scratchpad, point its `FEED_URL` at the local `rss.xml` (serve the folder
+  with a local static server so `fetch` works), open it in a browser with the
+  timezone set to America/New_York, and confirm every card reads
+  "Oct 21, 2026". Do not edit the real site (D4).
+- Diff against the published `newsletter.html` / `newsletter-email.html` /
+  `rss.xml` on `main`: the only differences should be this change plus the
+  week's content and timestamps.
+
+### E6. Rehearsal on a scratch branch (optional, recommended)
+
+`node scripts/build-pull-feed.js --publish --branch=scratch --week=2026-10-21`
+(needs a `GITHUB_TOKEN` with repo write; Pages never serves `scratch` and
+nothing is sent). Read the commit's tree, then delete the `scratch` branch.
+
+### E7. Email subject (`send-brevo-campaign.js`, D5)
+
+In the subject block (`:119-133`): read `pull-feed-onsale` from the HTML with the
+same regex style as `check-stamp.js`'s `readStamp()`. When present, the subject is
+`${title} - on sale ${formatOnSaleShort-style 'Wednesday, October 21'}` (e.g.
+"Weekly Previews - on sale Wednesday, October 21"); when absent, keep today's
+send-date subject exactly. Format from split parts, not `new Date(iso)`. Touch
+nothing else in this script (the F96 send verification stays as it is). Verify
+with a dry run that creates the Brevo draft without sending (the script's
+dry-run mode; read how it is invoked locally before using it) and read the
+subject it prints.
+
+### E8. Commit and ship
+
+- Full `node --test test/*.test.mjs` green; count = E0's count + the new tests.
+- One commit to `weekly-pull-feed` `main` (message via `-F`/heredoc, not
+  PowerShell `-m`), push, confirm on origin. **Land it by Mon 2026-10-26** so the
+  Monday preflight (which runs the tests) proves it a day before the send.
+- **Do not dispatch a send.** The Tue 10-27 21:00Z cron builds and sends it.
+
+### E9. After the Tue 10-27 send (same or a later session)
+
+Read the run log (green, `Campaign <id> confirmed SENT`), then check, and record
+what was actually observed, separately from anything reported:
+the delivered email (subject, preheader, date line; headers only if Rick pastes
+it); the live `newsletter.html`; `rss.xml` item dates; `rjbookstop.com/news`
+cards reading the on-sale date; and Flipboard's view of a future-dated item
+(D3's open question). Then set this doc's STATUS to COMPLETE and add a dated
+line to `CLAUDE.md` § Current Migration Phase.
+
+**Rollback:** `git revert` the E8 commit on `weekly-pull-feed` `main` before the
+next Tuesday. A sent email cannot be recalled, which is why E5 comes first.
