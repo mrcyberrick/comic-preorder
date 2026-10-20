@@ -1,6 +1,6 @@
 # F165 — Withdrawal detection redesign
 
-**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAK DONE (real runs 10-09, 10-16) · V5 DONE 2026-10-19: 8 true, 7 false (§ 8) · S3 APPROVED 2026-10-19 (§ 9 Q5), not built, S3 not started · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
+**STATUS:** IN PROGRESS · staging=S1, S2 2026-10-04 · prod=S1, S2 2026-10-04 (scripts repo `main` `5919130` / `3ef4b89`; no deploy step, each takes effect at the next run of its script) · S2 SOAK DONE (real runs 10-09, 10-16) · V5 DONE 2026-10-19: 8 true, 7 false (§ 8) · S3 APPROVED 2026-10-19 (§ 9 Q5) and BUILT the same day (scripts repo `main` merge `ef3c90b`, feature `83a7c52`; gate-3 staging dry run ran it end to end, no writes; V6 NOT run; production first exercise = Rick's Fri 10-23 run) · NOTE: § 8's V5 labels (8 true / 5 false PRH) disagree with its code lists (9 / 4; Amazing Spider-Man #1002 listed twice) · PR=— · findings: F165 (corrects F147; supersedes F110 § 3.3's mark half)
 
 Owner doc for F165. The finding itself lives in `docs/technical-reference.md` § 13 F165; this doc
 is the execution plan. Planned 2026-09-29, the day the finding was filed.

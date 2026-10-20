@@ -1,6 +1,6 @@
 # F173 (a) — the weekly recheck corrects unreserved Lunar dates and reports recode-shaped pairs
 
-**STATUS:** NOT STARTED · staging: — · prod: — · PR: — (scripts repo, no PR flow) · findings: F173 (direction (a)), F175
+**STATUS:** BUILT 2026-10-19 (scripts repo `main` merge `ef3c90b`: S1 = F175 `3e53afa`, S2-S4 `fe995ec`, F159 hand-fix guard `0a295d3` + `95b571b`; F177 `e7c35cf`) · gate 3 GREEN 2026-10-19 · gate 4 (production dry run) = Rick, Fri 2026-10-23 · staging: gate-3 dry run only (no writes) · prod: — · PR: — (scripts repo, no PR flow) · findings: F173 (direction (a)), F175
 
 Plan written 2026-10-12 (planning session). Owner finding: `docs/technical-reference.md` § 13 F173, fix direction (a). Direction (b), the Move reservations control, is live (`docs/f173-move-reservations.md`). This is the script-side half.
 
