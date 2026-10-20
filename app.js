@@ -50,23 +50,84 @@ function tenantSlugFromHostname() {
   } catch (_) { return null; }
 }
 
+// F171: returns { tenant, failed }. A clean empty result is { tenant: null,
+// failed: false } ("no such store"); an RPC error or throw is { tenant: null,
+// failed: true } ("could not ask"). The two used to be the same null, so a
+// network blip on <slug>.pulllist.app was indistinguishable from an unclaimed
+// name, and both fell through to the founding tenant.
 async function lookupTenantBySlug(slug) {
   try {
     const { data, error } = await db.rpc('resolve_tenant_by_slug', { p_slug: slug });
-    if (error) { console.warn('resolve_tenant_by_slug failed', error); return null; }
-    return (data && data[0]) || null;
+    if (error) {
+      console.warn('resolve_tenant_by_slug failed', error);
+      return { tenant: null, failed: true };
+    }
+    return { tenant: (data && data[0]) || null, failed: false };
   } catch (err) {
     console.warn('resolve_tenant_by_slug threw', err);
-    return null;
+    return { tenant: null, failed: true };
   }
+}
+
+// F171: halt page init on a tenant-subdomain hostname that resolved to no
+// store ('unknown-subdomain') or whose lookup failed ('lookup-failed').
+// Modelled on checkMaintenanceMode(): replace the body, then throw so the
+// caller's init stops. Neutral by design (Rick, 2026-10-19, G-K Step 1):
+// the PULLLIST wordmark only, no tenant name, colour, logo or sign-in form.
+// The hostname is attacker-chosen, so every string is set with textContent,
+// never innerHTML.
+function haltTenantPage(kind, hostname) {
+  const notFound = kind === 'unknown-subdomain';
+  const el = (tag, style, text) => {
+    const n = document.createElement(tag);
+    if (style) n.style.cssText = style;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  try { document.title = notFound ? 'No store at this address — PULLLIST' : 'Store unavailable — PULLLIST'; } catch (_) {}
+
+  const wrap = el('div', 'min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+    'background:var(--bg);font-family:var(--font-body);');
+  wrap.id = 'tenant-halt';
+  wrap.dataset.haltKind = kind;
+  const card = el('div', 'text-align:center;padding:40px;max-width:440px');
+  const mark = el('div', 'font-family:var(--font-display);font-size:3rem;letter-spacing:0.05em;margin-bottom:8px', 'PULL');
+  mark.appendChild(el('span', 'color:#e8321c', 'LIST'));   // platform mark, not var(--accent)
+  card.appendChild(mark);
+  card.appendChild(el('div', 'font-size:1.5rem;font-weight:600;margin:24px 0 12px;color:var(--text-primary)',
+    notFound ? 'No store at this address' : "Can't reach this store right now"));
+  const line = el('p', 'color:var(--text-secondary);line-height:1.7;margin-bottom:28px;overflow-wrap:anywhere');
+  line.id = 'tenant-halt-message';
+  line.textContent = notFound
+    ? 'There is no PULLLIST store at ' + hostname + '. Check the address, or visit pulllist.app.'
+    : 'We could not load the store at ' + hostname + '. Please try again in a moment.';
+  card.appendChild(line);
+  if (notFound) {
+    const a = el('a', 'color:var(--text-primary);text-decoration:underline', 'Go to pulllist.app');
+    a.href = 'https://pulllist.app';
+    a.id = 'tenant-halt-link';
+    card.appendChild(a);
+  } else {
+    const b = el('button', 'cursor:pointer', 'Retry');
+    b.type = 'button';
+    b.className = 'btn btn-primary';
+    b.id = 'tenant-halt-retry';
+    b.addEventListener('click', () => window.location.reload());
+    card.appendChild(b);
+  }
+  wrap.appendChild(card);
+  document.body.replaceChildren(wrap);
+  throw new Error('tenant-halt:' + kind);   // stop page init
 }
 
 const TenantContext = {
   _current: null,
   _source: null,
+  _halt: null,     // F171: set once a tenant-subdomain halt has rendered
 
   async resolve() {
     if (this._current) return this._current;
+    if (this._halt) throw new Error('tenant-halt:' + this._halt);
 
     // 1. Check for an authenticated session and try the profile route first
     try {
@@ -96,26 +157,34 @@ const TenantContext = {
       console.warn('TenantContext: profile lookup failed, falling back', err);
     }
 
-    // 1.5 Subdomain (e.g. <slug>.pulllist.app) — anon canonical signal post-5.1
-    try {
-      const subSlug = tenantSlugFromHostname();
-      if (subSlug) {
-        const tenant = await lookupTenantBySlug(subSlug);
-        if (tenant) {
-          sessionStorage.setItem('pulllist.tenant_slug', subSlug);
-          this._current = tenant; this._source = 'subdomain';
-          return this._current;
-        }
-        console.warn('TenantContext: unknown tenant subdomain', subSlug);
+    // 1.5 Subdomain (e.g. <slug>.pulllist.app) — anon canonical signal post-5.1.
+    // F171: on a tenant-subdomain hostname the hostname is authoritative. A
+    // miss or a failed lookup halts with a neutral page; it NEVER falls
+    // through to ?t=, sessionStorage or FOUNDING_TENANT (steps 2-4 are
+    // skipped). Non-tenant hostnames (apex, *.pages.dev, localhost) return
+    // null here and keep steps 2-4 exactly as before.
+    let subSlug = null;
+    try { subSlug = tenantSlugFromHostname(); } catch (_) { subSlug = null; }
+    if (subSlug) {
+      const { tenant, failed } = await lookupTenantBySlug(subSlug);
+      if (tenant) {
+        try { sessionStorage.setItem('pulllist.tenant_slug', subSlug); } catch (_) {}
+        this._current = tenant; this._source = 'subdomain';
+        return this._current;
       }
-    } catch (err) { console.warn('TenantContext: subdomain lookup failed', err); }
+      const kind = failed ? 'lookup-failed' : 'unknown-subdomain';
+      console.warn('TenantContext: ' + kind, subSlug);
+      this._source = kind;
+      this._halt = kind;
+      haltTenantPage(kind, window.location.hostname);   // throws
+    }
 
     // 2. Check ?t= query parameter (and persist to sessionStorage)
     try {
       const params = new URLSearchParams(window.location.search);
       const fromQuery = params.get('t');
       if (fromQuery) {
-        const tenant = await lookupTenantBySlug(fromQuery);
+        const { tenant } = await lookupTenantBySlug(fromQuery);
         if (tenant) {
           sessionStorage.setItem('pulllist.tenant_slug', fromQuery);
           this._current = tenant;
@@ -129,7 +198,7 @@ const TenantContext = {
       // 3. Check sessionStorage (carries query-resolved tenant across nav)
       const fromStorage = sessionStorage.getItem('pulllist.tenant_slug');
       if (fromStorage) {
-        const tenant = await lookupTenantBySlug(fromStorage);
+        const { tenant } = await lookupTenantBySlug(fromStorage);
         if (tenant) {
           this._current = tenant;
           this._source = 'session';
