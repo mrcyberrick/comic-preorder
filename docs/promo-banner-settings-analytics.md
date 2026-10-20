@@ -1,6 +1,6 @@
 # Subscribe promo banner: editable in Settings, tracked in Analytics
 
-**STATUS:** COMPLETE · staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; Analytics performance `8224ab0` and the deleted-account fix `30d144f`, § 8.6; built and verified, § 8) · prod: 2026-10-16 (PR #176, merge `eb52f12`; served bytes verified on both hostnames; the production write-smoke is Rick's and is NOT yet reported, § 8.7) · PR: #176 · findings: — (feature build, not a defect; no finding ID consumed)
+**STATUS:** COMPLETE · (2026-10-19 follow-ups §§ 8.8-8.9 promoted, PR #178 merge `90a975e`, § 8.10) staging: 2026-10-15 (code `b464471` S1, `7bd1a5d` S2, `daed27d` S3, `5b9bba0` S4; docs `3c54071`; follow-up fix `47946d9` after Rick's report, § 8.4; "No link" option `e2b73d5` and `99d98f9`, § 8.5; Analytics performance `8224ab0` and the deleted-account fix `30d144f`, § 8.6; built and verified, § 8) · prod: 2026-10-16 (PR #176, merge `eb52f12`; served bytes verified on both hostnames; the production write-smoke is Rick's and is NOT yet reported, § 8.7) · PR: #176 · findings: — (feature build, not a defect; no finding ID consumed)
 
 Plan written 2026-10-15 (planning session, Rick's request). Builds on `docs/subscription-promotion.md`
 (the banner itself, live on both environments since 2026-07-17), whose § 3 OUT list deferred exactly
@@ -511,7 +511,7 @@ browser that closed that campaign, which would explain zero with no defect; **wh
 established**. Open: the Analytics "Subscribe Banner" card has not seen a real customer's event, and the reserve write-smoke is
 still Rick's (reserve one title, confirm the row and its `tenant_id`, cancel it).
 
-### 8.8 Follow-up, 2026-10-19: the banner shows to every customer (Rick); STAGING ONLY, not promoted
+### 8.8 Follow-up, 2026-10-19: the banner shows to every customer (Rick); promoted the same day (§ 8.10)
 
 **What Rick reported.** On production he pressed "Show it again to everyone" and did not see the banner come back. A read-only
 service-role read showed **the save had landed**: `rjbookstop`'s row carries campaign id `sub-promo-20261019-113756`, saved
@@ -541,7 +541,7 @@ with the impersonation close not remembered). **Full suite on the deployed bytes
 **Not verified.** Production (not promoted); Chromium only. **The "Subscribe banner" name is now narrower than what it is**
 (Settings heading, Analytics card title, "Subscribed after seeing it"); not renamed, Rick's call.
 
-### 8.9 Rename, 2026-10-19: "Subscribe banner" is now "Catalog banner" (Rick); STAGING ONLY, not promoted
+### 8.9 Rename, 2026-10-19: "Subscribe banner" is now "Catalog banner" (Rick); promoted the same day (§ 8.10)
 
 Rick checked § 8.8 on staging ("This looks correct on Staging ... when 'Show it again to everyone' pressed it appears. Smoke -
 green") and asked for the rename. `d66392a`: visible text only, in Settings (heading, the read-failure toast, the save toast),
@@ -551,3 +551,12 @@ lost and no customer's close is reset. The harness's V7 definition check now loo
 bytes (served files equal to the commit on 3 consecutive samples):** harness ALL CHECKS PASSED on the second run (the first crashed
 at V7 when a throwaway user's password sign-in was refused, test setup, teardown clean), specs 09 + 18 18/18. The full suite was not
 re-run for this text-only change; it passed 161/0 on `0e202da` two commits earlier. "Smoke - green" is Rick's report on § 8.8.
+
+### 8.10 Promotion of §§ 8.8-8.9, 2026-10-19
+
+PR #178, merge `90a975e`, merged 18:11:00Z by Rick after "Smoke = green /promote-prod". Five files (the three pages, `CLAUDE.md`,
+this doc); merge result of the pages == staging; `config.js` == `origin/main`; migrations 2. **Verified:** the three pages, `app.js`,
+`config.js`, `style.css` and `mylist.html` served on both production hostnames are byte-identical to `origin/main` and to what staging
+served under test; markers as in the CLAUDE.md entry. After the merge production logged 1 shown and 1 dismissed on campaign
+`sub-promo-20261019-113756`. **Write-smoke green (Rick, "smoke completed = green"), observed: `reserve` 18:32:00Z and `cancel` 18:32:13Z
+on JESSICA JONES: ALIAS #1 COVER A, both `tenant_id` = `rjbookstop`.** (An earlier read, before he ran it, showed none.) No finding ID consumed.
