@@ -1,6 +1,6 @@
 # F135 — decouple the pull-feed publish from shipment import
 
-**STATUS:** IN PROGRESS 2026-10-13 — S0, S1 (RPC applied on both environments), S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) and S3 (the first unattended cron, Tue 2026-10-06, observed GREEN and SENT, § 11.5) are DONE; S4's CODE is DONE (2026-10-13, scripts repo `fc044f9`, § 11.6) and S5 (one Tuesday without an import-time publish: the Tue 2026-10-20 cron) is OPEN; tracked as W1 of `docs/weekly-newsletter-architecture.md` | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
+**STATUS:** COMPLETE 2026-10-21 — S5 observed: the Tue 2026-10-20 cron (run `39516136199`, `schedule`, one bot commit `17eaf1f2` for 2026-10-19..25, 55/55 served, `Campaign 38 confirmed SENT`) ran with no import-time publish, § 11.7; F135 RESOLVED. *(Was: IN PROGRESS 2026-10-13 — S0, S1 (RPC applied on both environments), S2 (build-then-send workflow LIVE on `weekly-pull-feed` `main`) and S3 (the first unattended cron, Tue 2026-10-06, observed GREEN and SENT, § 11.5) are DONE; S4's CODE is DONE (2026-10-13, scripts repo `fc044f9`, § 11.6) and S5 (one Tuesday without an import-time publish: the Tue 2026-10-20 cron) is OPEN; tracked as W1 of `docs/weekly-newsletter-architecture.md`.)* | staging=APPLIED 2026-10-01 | prod=APPLIED 2026-10-01 | findings=F135,F134
 **Owner finding:** F135 (`docs/technical-reference.md` § 13). **Target:** two repos — the private
 scripts repo (`catalogs/scripts`, `mrcyberrick/comic-preorder-scripts`) and
 `mrcyberrick/weekly-pull-feed` (public). **No `comic-preorder` app change.** One optional DB object
@@ -668,6 +668,29 @@ has yet run with the import path gone. **The Tue 2026-10-20 cron is that run**; 
 `trig_017vViYcKefTkoHgdLjC7ArP` and a calendar event, Wed 2026-10-21 8 AM ET. F135 closes there.
 (3) `GITHUB_TOKEN_PULL_FEED` is still in the scripts `.env` and the PAT is still live: Rick deletes the
 line and revokes the token (deliberately not done by the agent).
+
+### 11.7 S5 observed: the Tue 2026-10-20 cron, F135 CLOSED (recorded 2026-10-21)
+
+Read from the run logs and the repo's commit list with `gh`, not from the Actions summary (F96).
+
+| Check | Evidence | Result |
+|---|---|---|
+| (1) Mon 2026-10-19 preflight | "Newsletter Preflight" run `39306709863`, `event=schedule`, job `preflight` success (started 18:56Z, about +5 h 56 min after its 13:00Z cron); 49/49 tests, then `OK: 133 shipment row(s) for 2026-10-19 -> 2026-10-25 (2026-10-21x133). Tuesday's build has what it needs.` | PASS |
+| (2) the Fri 2026-10-16 import published nothing | Every `weekly-pull-feed` commit since 2026-10-15T00:00Z: exactly one, `17eaf1f2`, by `github-actions[bot]` at 2026-10-20T23:40:38Z. None by `mrcyberrick`. Evidence that an import did run: the last bot commit before it was the 10-13 send (119 titles, week 10-12..18), and on 10-19 the preflight read 133 rows for the NEXT week, so those rows were imported between 10-13 and 10-19 with no publish | PASS |
+| (3) Tue 2026-10-20 send | "Send Weekly Newsletter" run `39516136199`, `event=schedule`, created 23:36:35Z (+2 h 36 min); jobs `build` success (23:36-23:41Z) and `send` success (23:41-23:41:51Z). Log: `Target week: 2026-10-19 → 2026-10-25`, `133 unique titles from weekly_shipment`, `Pull feed published: 133 titles → mrcyberrick/weekly-pull-feed@main in ONE commit 17eaf1f2`, `55/55 served`, `newsletter-email.html is stamped 2026-10-20 - built by this run`, `Campaign created with ID 38`, **`Campaign 38 confirmed SENT.`** Pages build `39516571869` for `17eaf1f2` succeeded | PASS |
+
+**F135 is RESOLVED.** The newsletter is built by its own Tuesday workflow from the database; a shipment
+import publishes nothing, so an ad-hoc import can no longer republish a past week.
+
+**Not verified:** the Friday import's own console output (it leaves no log file; the evidence it ran is
+the row count moving between the two preflights, and which day those rows landed was not read from the
+database); Brevo's own campaign page (the `confirmed SENT` line is the send job's read of Brevo's status,
+which is the F96 check); inbox delivery.
+
+**Rick-only clean-up, still owed as of 2026-10-21:** the `GITHUB_TOKEN_PULL_FEED` line is still in the
+scripts `.env` (checked: 1 match); delete it, revoke that token on GitHub, and delete Brevo draft
+campaign 34 (a dry-run rehearsal artifact). Nothing reads the token any more, so this is hygiene, not a
+gate.
 
 ---
 

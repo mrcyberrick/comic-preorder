@@ -1,6 +1,6 @@
 # Weekly newsletter — decoupled, multi-tenant architecture (PLAN)
 
-**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PENDING: the Tue 2026-10-20 cron, reminder scheduled for Wed 10-21 (§ 9); F135 stays OPEN until it is read**; W2-W5 NOT STARTED; **product direction decided 2026-10-14 (§ 4: D3 tiers, D7 invoice content, D8 two hidden providers, D9 self-service shipment upload first)** | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
+**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PASSED 2026-10-21: the Tue 2026-10-20 cron read from its log (§ 9), so W1 is DONE and F135 is RESOLVED**; W2-W5 NOT STARTED; **product direction decided 2026-10-14 (§ 4: D3 tiers, D7 invoice content, D8 two hidden providers, D9 self-service shipment upload first)** | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
 **Owner:** Rick. **Planning:** this doc. **Execution:** one session per W-step (§ 5), Sonnet CLI.
 **Repos touched by execution:** `mrcyberrick/weekly-pull-feed` (public, where the newsletter now
 runs), the private scripts repo (`catalogs/scripts`, only to remove the old path), and this repo
@@ -330,6 +330,20 @@ own data correctness (F172 is decided separately); pushing to a tenant's own ESP
   the right week, `N/N served`, `Campaign <id> confirmed SENT`. **F135 stays OPEN until that run is read.**
 - **Rick-only, still owed:** delete `GITHUB_TOKEN_PULL_FEED` from the scripts `.env`; revoke that
   token on GitHub; delete Brevo draft campaign 34 (a dry-run rehearsal artifact).
+
+**2026-10-21, W1 gate read (logs and commit list via `gh`, not the green tick).** All three checks pass;
+full table in `docs/f135-decouple-feed-publish.md` § 11.7.
+
+- **Mon 10-19 preflight:** run `39306709863`, `schedule`, green; started 18:56Z (the 13:00Z cron fired
+  about +5 h 56 min late); `OK: 133 shipment row(s) for 2026-10-19 -> 2026-10-25`.
+- **Fri 10-16 import published nothing:** the only `weekly-pull-feed` commit since 10-15 is `17eaf1f2`
+  by `github-actions[bot]`; none by `mrcyberrick`.
+- **Tue 10-20 send:** run `39516136199`, `schedule`, created 23:36Z (+2 h 36 min), `build` and `send`
+  green; week `2026-10-19 → 2026-10-25`, 133 titles, ONE commit `17eaf1f2`, `55/55 served`,
+  `Campaign 38 confirmed SENT.`
+- **W1 DONE, F135 RESOLVED.** No send was dispatched by this session.
+- **Rick-only, still owed:** the `GITHUB_TOKEN_PULL_FEED` line is still in the scripts `.env` (checked);
+  delete it, revoke the token, delete Brevo draft campaign 34. Hygiene, not a gate.
 
 ## References
 
