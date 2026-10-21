@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule INERT** (`FACEBOOK_ENABLED=false`); **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule ON for the TEST Page since 2026-10-21 15:57Z (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -588,6 +588,18 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
   the right pages; GitHub emailed "Run failed: Post to Facebook - main (6c69f3c)" for each of the two red
   runs (failed in 7 s and 10 s, 10:54 AM ET), each delivered to his Inbox and his REG MAIL folder. So the
   alert path works.
+
+- **T6 STARTED 2026-10-21 15:57Z (Rick: "Switch it on"):** `FACEBOOK_ENABLED=true`, `FACEBOOK_PAGE_ID`
+  still the TEST Page (`1416367771558275`). This week is already recorded, so the first post the
+  schedule makes is Wed 2026-10-28.
+- **Stale-content guards, as built (Rick asked):** (a) no shipment rows for this week: red, nothing
+  posted (T4); (b) the news page's feed, read through the site's Worker, must have a `lastBuildDate`
+  inside this Mon-Sun week, else red (T5); (c) the scheduled run always targets the week containing
+  its own run date, and the spotlight lookup refuses any week but this one or last; (d) one post per
+  Page per week (T3). **Gap:** (b) tests WHEN the feed was built, not WHICH week it holds, so a
+  deliberate manual re-publish of a past week during the current week would pass it. The newsletter
+  now dates each RSS item on its on-sale day (`a74692a8`), so a check on the items' dates would close
+  this; not built (Rick's call).
 
 **Owed now:** ~~(1) Rick looks at the post; (2) Rick confirms the failure emails~~ *(done, above)*; (3) T6: set
 `FACEBOOK_ENABLED=true` with the TEST Page id and read the first scheduled runs (Wed 2026-10-28,
