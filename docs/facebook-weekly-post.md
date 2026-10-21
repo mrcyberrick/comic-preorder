@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule INERT** (`FACEBOOK_ENABLED=false`); **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); owed: Rick's look at the post and the two failure emails, then T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule INERT** (`FACEBOOK_ENABLED=false`); **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -584,8 +584,12 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
   than next week as § 5 R4 suggested: next week's rows may not exist yet, so it would have failed on the
   rows check and never reached the freshness check.)*
 
-**Owed now:** (1) Rick looks at the post on Book Stop Demo (image, text, both links); (2) Rick confirms
-GitHub emailed him about the two red runs (T4/T5), which is the alert path; (3) T6: set
+- **Rick's checks, 2026-10-21 (his report):** the post is confirmed on Book Stop Demo and both links load
+  the right pages; GitHub emailed "Run failed: Post to Facebook - main (6c69f3c)" for each of the two red
+  runs (failed in 7 s and 10 s, 10:54 AM ET), each delivered to his Inbox and his REG MAIL folder. So the
+  alert path works.
+
+**Owed now:** ~~(1) Rick looks at the post; (2) Rick confirms the failure emails~~ *(done, above)*; (3) T6: set
 `FACEBOOK_ENABLED=true` with the TEST Page id and read the first scheduled runs (Wed 2026-10-28,
 11-04); (4) R5 go-live (a token for the real Page, its id, a dry run, then on). Not verified: how the
 post looks to a follower's feed (the Page has none), and a phone view.
