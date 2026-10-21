@@ -1,6 +1,6 @@
 # Weekly newsletter: show the on-sale date beside "This Week's Releases"
 
-**STATUS:** NOT STARTED · decisions D1-D5 ACCEPTED 2026-10-20 · execution GATED on F135 close-out · target issue Tue 2026-10-27 · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID)
+**STATUS:** IN PROGRESS · BUILT and pushed 2026-10-21 (`weekly-pull-feed` `main` `800f460d`, E0-E8 done), awaiting its first real send, the Tue 2026-10-27 cron (E9 open) · decisions D1-D5 ACCEPTED 2026-10-20 · F135 gate passed (E0) · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID) · **one design call open for Rick: see § 6.3 (the date line is faint)**
 
 Planned 2026-10-20. Rick's request: wherever a reader sees "This Week's Releases"
 (the newsletter web page, the RSS feed that drives `rjbookstop.com/news`, and
@@ -21,7 +21,7 @@ built every Tuesday by the `Send Weekly Newsletter` workflow.
 | Surface | Where the reader sees it | Date shown today | Problem |
 |---|---|---|---|
 | `newsletter.html` (web page) | `mrcyberrick.us/weekly-pull-feed/newsletter.html` | Masthead only: "Ray & Judy's Book Stop · October 21, 2026" (`:972`) | The section label "This Week's Releases" (`:1316`) has no date; the masthead has no weekday and no "on sale" |
-| `newsletter-email.html` (Brevo email) | inbox | Same masthead (`:1556`); preheader says "on sale Wednesday" with no date (`:1499`) | Section label (`:1726`) has no date. **The subject uses the SEND date** (`send-brevo-campaign.js:122-133`), so tonight's reads "Weekly Previews - October 20, 2026" over a masthead reading October 21 |
+| `newsletter-email.html` (Brevo email) | inbox | Same masthead (`:1556`); preheader says "on sale Wednesday" with no date (`:1499`) | Section label (`:1726`) has no date. **The subject uses the SEND date** (`send-brevo-campaign.js:122-133`), so tonight's reads "Weekly Previews - October 20, 2026" over a masthead reading October 21 ***(Corrected 2026-10-21: the email HTML has no `<title>`, so the send script has always used its fallback prefix, and the 10-20 subject read "This Week's Comic Previews - October 20, 2026", read from run `39516136199`. The two-dates mismatch is real; the "Weekly Previews" prefix quoted here was not.)*** |
 | `rss.xml` | `rjbookstop.com/news` (the "Weekly Pull Feed" column), Flipboard, any RSS reader | Each item's `<pubDate>` = **the build time** (`:1825`). The live feed reads `Wed, 14 Oct 2026 00:08:16 GMT` | `rjbookstop.com/news` prints that date on **every card** (`news/index.html:1004`) and as "Updated Tue, Oct 13, 2026" in the header (`:918`). So last week's cards said **Oct 13**, the day before the books arrived. `buildRssXml()` is never given the on-sale date at all |
 
 Also in the RSS: every item's description says the title "is now available ... and
@@ -243,3 +243,46 @@ line to `CLAUDE.md` § Current Migration Phase.
 
 **Rollback:** `git revert` the E8 commit on `weekly-pull-feed` `main` before the
 next Tuesday. A sent email cannot be recalled, which is why E5 comes first.
+
+---
+
+## 6. Execution record (2026-10-21, E0-E8)
+
+Written from the commands' own output, in the order they ran. **E9 is still open.**
+
+### 6.1 What ran
+
+| Step | Result | Evidence |
+|---|---|---|
+| E0 gate | PASS | Run `39516136199` (`schedule`): bot commit `17eaf1f2` for 2026-10-19..25, `55/55 served`, `Campaign 38 confirmed SENT`. The F135 close-out was already recorded (`f135-decouple-feed-publish.md` § 11.7, `technical-reference.md` § 13, CLAUDE.md; commits `d7d13b9`, `fe2fa1d`), so there was no new E0 doc commit. Start state: clean tree, `main` `17eaf1f2`, **49/49** tests |
+| E2 red | PASS | 18 of 21 new tests failed before the helpers existed. The 3 that passed are the "no date = unchanged" guards, i.e. today's behaviour pinned as the baseline. The three builders were exported first with no behaviour change, so the builder tests failed on assertions (date line absent, 0 bytes added, wrong `pubDate`), not on "not a function" |
+| E1, E3, E4 | PASS | Helpers, page, email and RSS built; format and offset tests run in child processes under five time zones (UTC, Los Angeles, New York, Honolulu, Auckland). **Negative controls:** three injected breakages (format via `new Date(iso)`, a hardcoded -4 offset, item `pubDate` = build time) each went red on the intended tests (8, 7 and 1 failures); file restored by hash each time |
+| E5 local build | PASS | Week 2026-10-21, 133 rows (`2026-10-21x133`). Against the published files: the page differs by the one new line (4 added lines), the email by the new stamp, preheader and date block, and the RSS by **exactly 269 lines** (133 item `<p>`, 134 `<pubDate>`, `lastBuildDate`, channel `<description>`). `rss.xml` parses (Python `ElementTree`): 133 items, every item `Wed, 21 Oct 2026 16:00:00 GMT`, channel dates = build time, item text 364-462 characters. **Sizes:** email 74,964 B (73.2 KB, under the 95 KB warning; published blob 74,639), page 80,826 B (80,597), `rss.xml` 268,829 B (256,007, +5%) |
+| E5 browser | PASS 24/24 | Chromium. Page and email at 1350 and 390 px: label, then date, then count line; same style as the count line; no horizontal scroll; no page errors. Scratch copy of `rjbookstop/news/index.html` with its **worker URL** repointed (it tries a Cloudflare Worker before `FEED_URL`, so changing `FEED_URL` alone would still have shown the live feed): all 133 cards read "Oct 21, 2026" in New York, Los Angeles and Honolulu. **Control:** the same harness on the published feed reads "Oct 20, 2026" on all 133. Screenshots inspected |
+| E6 rehearsal | PASS | `scratch` created from `main`, `--publish --branch=scratch --week=2026-10-21`: one commit `a920b350`, 4 artifacts, 0 thumbnails uploaded, 326 files verified. Page and email **byte-identical** to the local build; `rss.xml` differs only in the channel's build-time seconds. `main` unchanged, `scratch` deleted (0 left). This is the only step that exercised `publishPullFeed()`'s `buildRssXml(...)` call site |
+| E7 subject | PASS, with a limit | The real script driven against a **stub of Brevo's API** (no Brevo key exists outside the repo's GitHub secrets, so no real draft was created). Built email: `This Week's Comic Previews - on sale Wednesday, October 21`, identical under four time zones. With a `<title>Weekly Previews</title>`: `Weekly Previews - on sale Wednesday, October 21` (the plan's example). Stamp 2026-12-31: `... on sale Thursday, December 31`. **No stamp, and an impossible stamp (2026-02-31): identical to the pre-change script run on the same file.** Recorded POST: campaign name `weekly-pull-feed 2026-10-21`, 74,964 B body |
+| E8 ship | PASS | **70/70** (49 + 21). Commit `800f460d` pushed to `weekly-pull-feed` `main`, local = `origin/main` = `ls-remote`. **No send dispatched.** Extra: the read-only `Newsletter Preflight` dispatched once (run `39607704459`, `workflow_dispatch`) at that commit: success on `ubuntu-latest` with Node 22, every new test `ok`, `OK: 133 shipment row(s) ... Tuesday's build has what it needs`. It holds no Brevo credentials and publishes nothing; it is the only way to run the tests on the platform that runs them on Tuesday |
+
+### 6.2 Deviations from the plan
+
+1. **Item text length.** The plan's replacement (the new sentence plus "Click the cover image ...") is about 220 characters, not over 300. The new test caught a 298-character worst case (a one-letter title). Added two neutral sentences about the newsletter itself ("This release is featured in the Weekly Previews, the shop's weekly look at the new comics and books arriving that week. Check back every week to see what is coming in."); shortest item on real data is now 364. No pickup or delivery claim.
+2. **Subject prefix kept as it is** (see the correction in § 1). With no `<title>` in the email, the Tue 10-27 subject will read **"This Week's Comic Previews - on sale Wednesday, October 28"**, not "Weekly Previews - on sale ...". If Rick wants the latter, it is the fallback string in the subject block of `send-brevo-campaign.js`, one line, to land before Mon 10-26.
+3. **E7 used a stub**, not a real Brevo draft (above).
+4. `buildNewsletterHtml`, `buildEmailHtml` and `buildRssXml` are now exported, for the tests; no behaviour change.
+5. The XML comment inside each RSS `<item>` was left as it was (it ships 133 times, so reword it only in the JS comment).
+
+### 6.3 Open for Rick: the date line is faint
+
+Built to the plan ("same styling as that line"): 10px `#5a5755` on `#222222`, about **2.2:1** contrast, the same grey as the count line under it. In the screenshots at both widths it is in the right place and correct, and hard to read: the one line that carries the point of this feature is the faintest thing in the section. A legible alternative was rendered (scratch files only): `font-size:12px; color:#9a9390` (about **5.3:1**, a colour the cover titles already use), still one line at 390 px, no horizontal scroll. It is a two-spot edit (the new date `<div>` in `buildNewsletterHtml()` and in `buildEmailHtml()`, each carrying `font-size:10px;color:#5a5755`), no test change. **Default if Rick does not decide: it ships as built.** The change can land any time before the Tue 10-27 cron; before Mon 10-26 lets the preflight cover it.
+
+### 6.4 Not verified
+
+- Flipboard's handling of an item dated about 20 hours after it is built (D3's open question) and the delivered email (subject, preheader, rendering, Gmail clip headroom): both are E9.
+- `rjbookstop.com/news` on the live site: only a scratch copy was run. A reader far enough east (UTC+8 and beyond) would see the next calendar day on a card, since 16:00 GMT is already midnight there: inferred from the arithmetic, not tested; the shop's readers are in New Jersey.
+- The first real cron with this code (Tue 10-27, on sale Wed 10-28); anything outside Chromium (no Outlook, Apple Mail or real phone).
+
+### 6.5 Observed, not changed
+
+`send-newsletter.yml` still carries a note to move the cron to 22:00 UTC when EST resumes; the cron stays 21:00Z (Rick's DST decision, 2026-10-13). Workflow YAML was out of scope.
+
+**E9 remains:** after the Tue 10-27 send, read the run log and check the items listed in E9, record what was observed separately from anything reported, set STATUS to COMPLETE and add the dated line to CLAUDE.md.
