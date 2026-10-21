@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging and prod APPLIED 2026-10-14); held until the F135 gate (Tue 10-20 run read); Meta setup (R1) DONE 2026-10-14; see § 8 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule INERT** (`FACEBOOK_ENABLED=false`); T1 dry run GREEN on the runner 2026-10-21; T2 (first real post, test Page) awaiting Rick's go; dedupe moved to an Actions cache entry because Facebook refuses this app a read of the Page's posts (§ 8, 2026-10-21) | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -523,6 +523,54 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 3. **After the F135 gate is read (Wed 10-21):** rebase `facebook-weekly-post` onto `origin/main`,
    fast-forward and push (not on a Tuesday evening), then T1-T6 (§ 5 R4) on the test Page.
 4. R5 go-live after T6 is reviewed.
+
+**2026-10-21, second session (the F135 gate closed today, so the hold is lifted).**
+
+- **Pushed:** the branch was rebased onto `weekly-pull-feed` `main` (which had gained the newsletter's
+  on-sale-date work, `800f460d` / `a74692a8`; the four builder exports the script uses were still
+  there), both suites green (newsletter 76/76, Facebook 24/24), the newsletter's files byte-identical
+  to `main`, then fast-forwarded to `main` (`ca8bf02d`) on a Wednesday. GitHub registered "Post to
+  Facebook"; its schedule stays inert (`FACEBOOK_ENABLED=false`).
+- **Local dry run against live production, real spotlight lookup:** week 2026-10-19, 133 titles,
+  spotlight AMAZING SPIDER-MAN: HALLOWEEN SPECIAL #1 | CATWOMAN #92 | WONDER WOMAN #38; picture
+  inspected.
+- **T1 failed red twice, correctly, and found a real limit.** `GET /{page}/posts` returned **code 100 /
+  subcode 33** ("does not exist, cannot be loaded due to missing permissions"). Isolated in steps:
+  (1) the `Authorization: Bearer` header is read (a fake token gets 190 by header and by query, 104
+  with none), so the script sends the token correctly; (2) the first secret was a token without
+  access; Rick regenerated it with Book Stop Demo ticked, and the Debugger then read **Type Page,
+  Page ID `1416367771558275` Book Stop Demo, Expires Never, Data Access Expires 1800367967 (about
+  2027-01-19), scopes `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `public_profile`,
+  granular "applies to all objects"**; secret updated 2026-10-21 14:27Z; (3) still 100/33 from
+  GitHub, and **the same in Graph API Explorer with that token**: `me` returns Book Stop Demo, but
+  `/{page}/posts` and `/{page}/feed` both return 100/33. **So Facebook refuses this app (Development
+  mode) a read of the Page's posts even with a correct Page token.** Cause not established (the
+  developer forums report the same message with the permission granted). **Posting uses a different
+  permission and is untested until T2.**
+- **Dedupe redesigned (`da3dc00b`):** the record of "posted for week X on Page Y" is now a **GitHub
+  Actions cache entry** (`fb-posted-<page id>-<monday>`), restored with `lookup-only` before the post
+  step and saved after it. The script writes `posted-<monday>.txt` the moment Facebook returns a post
+  id, **before** reading the post back, and the save step runs even if the run is red, so a run that
+  posted cannot be followed by a second post. Still never commits. Tests 24 to 27 (the fake now
+  refuses posts/feed reads as Facebook does); two negative controls (a cache hit ignored; the record
+  not written) each red, script restored byte-identical. **Known limits of the cache:** an entry not
+  read for 7 days is evicted (harmless: the key is per week), and it is not visible in the UI as a
+  "posted" log (the run summary is).
+- **A second error of mine, caught by the T1 rerun:** the output folder was moved to `.fb-out` so
+  `hashFiles()` could see it (it only searches the workspace), and `upload-artifact` skips dot folders,
+  so the picture was silently not attached (`if-no-files-found: ignore` hid it). Renamed to `fb-out`
+  and the setting is now `warn` (`6c69f3cb`).
+- **T1 GREEN on the runner** (run `39619669616`): tests, Chrome present, week 2026-10-19, cache miss,
+  picture built and attached (887 KB, identical to the local render, fonts included), message built,
+  nothing posted, record step skipped.
+- **Token upkeep, new:** the token never expires, but **data access ends about 2027-01-19** (90 days
+  after Rick last authorised the app). After that the job fails red until the generate / extend /
+  `me/accounts` steps are repeated and the secret updated (about 5 minutes). Set a reminder a week
+  before, once the real Page is live.
+- **Screenshot hygiene:** the Access Token Debugger puts the token in the address bar; one screenshot
+  showed its first characters (truncated, not usable). Crop or blur the address bar too.
+
+**Owed now:** T2 (one real post to Book Stop Demo, Rick's go) then T3-T6 and R5 as in § 5 R4/R5.
 
 ## References
 
