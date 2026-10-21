@@ -286,3 +286,5 @@ Built to the plan ("same styling as that line"): 10px `#5a5755` on `#222222`, ab
 `send-newsletter.yml` still carries a note to move the cron to 22:00 UTC when EST resumes; the cron stays 21:00Z (Rick's DST decision, 2026-10-13). Workflow YAML was out of scope.
 
 **E9 remains:** after the Tue 10-27 send, read the run log and check the items listed in E9, record what was observed separately from anything reported, set STATUS to COMPLETE and add the dated line to CLAUDE.md.
+
+Gate scheduled (2026-10-21): E9 cannot be read before the Tue 2026-10-27 21:00Z cron has sent (observed start delays +2 to +3 h, so the send lands late evening ET); earliest valid read is the next morning, Wed 2026-10-28 (day of week checked from the system). Reminder: cloud routine `trig_01Kpb3eVPBVbRg1AmgMsiAUs` (one-shot, reminds only) and Google Calendar event `li1lk2igq27mp398m4hjgot1ns`, both Wed 2026-10-28 8:00 AM ET. **No reminder was set for § 6.3** (the faint date line / subject prefix): it is a decision with a safe default (ships as built), not a gate, so Rick's own deadline for changing it is Mon 2026-10-26.
