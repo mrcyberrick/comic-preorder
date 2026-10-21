@@ -1,6 +1,6 @@
 # Weekly newsletter: show the on-sale date beside "This Week's Releases"
 
-**STATUS:** IN PROGRESS · BUILT and pushed 2026-10-21 (`weekly-pull-feed` `main` `800f460d`, E0-E8 done), awaiting its first real send, the Tue 2026-10-27 cron (E9 open) · decisions D1-D5 ACCEPTED 2026-10-20 · F135 gate passed (E0) · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID) · **one design call open for Rick: see § 6.3 (the date line is faint)**
+**STATUS:** IN PROGRESS · BUILT and pushed 2026-10-21 (`weekly-pull-feed` `main` `800f460d`, E0-E8 done; **wording changed to "In store ..." the same day, `a74692a8`, § 6.6**), awaiting its first real send, the Tue 2026-10-27 cron (E9 open) · decisions D1-D5 ACCEPTED 2026-10-20 · F135 gate passed (E0) · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID) · **one design call open for Rick: see § 6.3 (the date line is faint)**
 
 Planned 2026-10-20. Rick's request: wherever a reader sees "This Week's Releases"
 (the newsletter web page, the RSS feed that drives `rjbookstop.com/news`, and
@@ -71,7 +71,7 @@ on-sale date. Confirmed the same day that none of them blocks other project work
 | # | Question | Recommendation (accepted) |
 |---|---|---|
 | D1 | Include the email too, or only the web page and RSS? | **Include it.** Same function shape, same release, and the web page is the email's "view online" twin; changing one leaves them disagreeing |
-| D2 | Wording | `On sale / in store Wednesday, October 21, 2026` (your example). Alternative: `In store Wednesday, October 21, 2026` |
+| D2 | Wording | `On sale / in store Wednesday, October 21, 2026` (your example). Alternative: `In store Wednesday, October 21, 2026` ***(Superseded 2026-10-21 by Rick, after the build: "Stick with In store Wednesday ... and drop the 'on sale' in all places visible to customer". The alternative won, and "on sale" is gone from the page, email, preheader, subject and RSS; see § 6.6. The rest of this document still quotes the original wording where it describes what was first built.)*** |
 | D3 | RSS item `<pubDate>`: keep the build time, or use the on-sale date (noon Eastern)? | **Use the on-sale date.** Every card on `rjbookstop.com/news` would then read "Oct 21, 2026" with no website change. Noon, not midnight: midnight UTC renders as the previous day in New Jersey. Cost: for about 20 hours the date is in the future. That is allowed by RSS; whether Flipboard hides future-dated items is **not verified** (check its view after the first issue). The channel `<lastBuildDate>` stays the real build time |
 | D4 | Change the `rjbookstop.com/news` column header ("Updated Tue, Oct 13") to read the on-sale date? | **Later, optional.** It needs a website change, and that site is **not in git** (only `site.zip` beside it), so a change there has no history or rollback. D3 already puts the date on every card |
 | D5 | Email subject: send date (Oct 20) or on-sale date (Oct 21)? | **On-sale date**, worded as "Weekly Previews - on sale Wednesday, October 21". A small edit in `send-brevo-campaign.js`; it fixes the existing two-dates mismatch. Skip if you prefer to keep the send script untouched |
@@ -266,7 +266,7 @@ Written from the commands' own output, in the order they ran. **E9 is still open
 ### 6.2 Deviations from the plan
 
 1. **Item text length.** The plan's replacement (the new sentence plus "Click the cover image ...") is about 220 characters, not over 300. The new test caught a 298-character worst case (a one-letter title). Added two neutral sentences about the newsletter itself ("This release is featured in the Weekly Previews, the shop's weekly look at the new comics and books arriving that week. Check back every week to see what is coming in."); shortest item on real data is now 364. No pickup or delivery claim.
-2. **Subject prefix kept as it is** (see the correction in § 1). With no `<title>` in the email, the Tue 10-27 subject will read **"This Week's Comic Previews - on sale Wednesday, October 28"**, not "Weekly Previews - on sale ...". If Rick wants the latter, it is the fallback string in the subject block of `send-brevo-campaign.js`, one line, to land before Mon 10-26.
+2. **Subject prefix kept as it is** (see the correction in § 1). With no `<title>` in the email, the Tue 10-27 subject will read **"This Week's Comic Previews - on sale Wednesday, October 28"** ***(now "... - in store Wednesday, October 28", § 6.6)***, not "Weekly Previews - on sale ...". If Rick wants the latter, it is the fallback string in the subject block of `send-brevo-campaign.js`, one line, to land before Mon 10-26.
 3. **E7 used a stub**, not a real Brevo draft (above).
 4. `buildNewsletterHtml`, `buildEmailHtml` and `buildRssXml` are now exported, for the tests; no behaviour change.
 5. The XML comment inside each RSS `<item>` was left as it was (it ships 133 times, so reword it only in the JS comment).
@@ -288,3 +288,21 @@ Built to the plan ("same styling as that line"): 10px `#5a5755` on `#222222`, ab
 **E9 remains:** after the Tue 10-27 send, read the run log and check the items listed in E9, record what was observed separately from anything reported, set STATUS to COMPLETE and add the dated line to CLAUDE.md.
 
 Gate scheduled (2026-10-21): E9 cannot be read before the Tue 2026-10-27 21:00Z cron has sent (observed start delays +2 to +3 h, so the send lands late evening ET); earliest valid read is the next morning, Wed 2026-10-28 (day of week checked from the system). Reminder: cloud routine `trig_01Kpb3eVPBVbRg1AmgMsiAUs` (one-shot, reminds only) and Google Calendar event `li1lk2igq27mp398m4hjgot1ns`, both Wed 2026-10-28 8:00 AM ET. **No reminder was set for § 6.3** (the faint date line / subject prefix): it is a decision with a safe default (ships as built), not a gate, so Rick's own deadline for changing it is Mon 2026-10-26.
+
+### 6.6 Wording change, same day (Rick: "Stick with In store Wednesday... and drop the 'on sale' in all places visible to customer")
+
+Commit `a74692a8` on `weekly-pull-feed` `main` (after `800f460d`; the whole feature can still be reverted with `800f460d`, this one alone with `a74692a8`). D2's alternative won.
+
+| Where a customer sees it | Was (`800f460d`) | Now |
+|---|---|---|
+| Web page and email date line | `On sale / in store Wednesday, October 21, 2026` | `In store Wednesday, October 21, 2026` |
+| Email preheader | `133 new titles on sale Wed, Oct 21 ...` (fallback with no date: `on sale Wednesday`, which pre-dated this work) | `133 new titles in store Wed, Oct 21 ...` (fallback: `in store Wednesday`) |
+| Email subject | `<title> - on sale Wednesday, October 21` | `<title> - in store Wednesday, October 21` |
+| RSS channel description | `This week's releases, on sale / in store Wednesday, ...` | `This week's releases, in store Wednesday, ...` |
+| RSS item text | `... Book Stop, on sale / in store Wednesday, ...` | `... Book Stop. In store Wednesday, ...` |
+
+**Deliberately unchanged:** the machine-readable `pull-feed-onsale` stamp (an HTML comment a mail client does not display, so it is not customer-visible; renaming it would only add risk to the send script), every code comment, console log and operator error message, and every fallback when a week has no date. The date's *meaning* is unchanged: it is still the week's on-sale date, and item `<pubDate>` is still that day at noon Eastern.
+
+**Evidence.** The wording tests were changed first and went red (9 failures on the old builder, including the email *without* a date, which catches the old preheader fallback); a new guard asserts the words "on sale" never appear in the page, email or RSS, with or without a date. Suite **76/76** (49 + 27). Rebuilt the 2026-10-21 week (133 rows) against production data: **0 occurrences** of "on sale" or "on-sale" in the three artifacts (the published email had one), and the diff against the published files is only the intended lines; `rss.xml` parses, 133 items all `Wed, 21 Oct 2026 16:00:00 GMT`, item text 354-452 characters (min was 364 before; still over 300), email 74,955 B. Browser harness 24/24 again (control unchanged: the published feed reads Oct 20), screenshot inspected. The send script against the Brevo stub: `This Week's Comic Previews - in store Wednesday, October 21` under three time zones, `Weekly Previews - in store Wednesday, October 21` with a `<title>`, and the no-stamp and impossible-stamp fallbacks identical to the original script. The read-only preflight was dispatched again at `a74692a8` (run `39610235213`): success on Node 22, every new test `ok`.
+
+**Not changed by this, still open:** § 6.3 (the date line is the faint 10px grey; Rick has not decided, so it ships as built) and the subject prefix. **Not verified:** the same list as § 6.4. The Tue 10-27 subject is expected to read `This Week's Comic Previews - in store Wednesday, October 28`, and the E9 reminders were edited to say so.
