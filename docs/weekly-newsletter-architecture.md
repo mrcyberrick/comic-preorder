@@ -342,8 +342,8 @@ full table in `docs/f135-decouple-feed-publish.md` § 11.7.
   green; week `2026-10-19 → 2026-10-25`, 133 titles, ONE commit `17eaf1f2`, `55/55 served`,
   `Campaign 38 confirmed SENT.`
 - **W1 DONE, F135 RESOLVED.** No send was dispatched by this session.
-- **Rick-only, still owed:** the `GITHUB_TOKEN_PULL_FEED` line is still in the scripts `.env` (checked);
-  delete it, revoke the token, delete Brevo draft campaign 34. Hygiene, not a gate.
+- **Rick-only clean-up DONE the same day:** the `.env` line is gone (checked), all three fine-grained
+  PATs deleted and Brevo draft campaign 34 deleted (Rick's report). F135 has nothing left open.
 
 ## References
 

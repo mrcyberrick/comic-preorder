@@ -687,6 +687,12 @@ the row count moving between the two preflights, and which day those rows landed
 database); Brevo's own campaign page (the `confirmed SENT` line is the send job's read of Brevo's status,
 which is the F96 check); inbox delivery.
 
+**DONE later on 2026-10-21:** the `.env` line is gone (checked: 0 matches); Rick deleted all three
+fine-grained PATs on GitHub (`pulllist-pull-feed`, the already-expired `Weekly-Feed-Consolidation`,
+and `weekly-pull-feed-script`) and Brevo draft campaign 34 (his report). Before deleting, the
+`weekly-pull-feed` repo was checked to hold no PAT secret (only `BREVO_API_KEY`, `FACEBOOK_PAGE_TOKEN`,
+`SENDER_EMAIL`; both workflows push with the built-in token) and no `.env` under `BookStop` held a
+GitHub token. *(The paragraph below read as follows until then.)*
 **Rick-only clean-up, still owed as of 2026-10-21:** the `GITHUB_TOKEN_PULL_FEED` line is still in the
 scripts `.env` (checked: 1 match); delete it, revoke that token on GitHub, and delete Brevo draft
 campaign 34 (a dry-run rehearsal artifact). Nothing reads the token any more, so this is hygiene, not a
