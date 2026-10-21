@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule INERT** (`FACEBOOK_ENABLED=false`); T1 dry run GREEN on the runner 2026-10-21; T2 (first real post, test Page) awaiting Rick's go; dedupe moved to an Actions cache entry because Facebook refuses this app a read of the Page's posts (§ 8, 2026-10-21) | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule INERT** (`FACEBOOK_ENABLED=false`); **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); owed: Rick's look at the post and the two failure emails, then T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -570,7 +570,25 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 - **Screenshot hygiene:** the Access Token Debugger puts the token in the address bar; one screenshot
   showed its first characters (truncated, not usable). Crop or blur the address bar too.
 
-**Owed now:** T2 (one real post to Book Stop Demo, Rick's go) then T3-T6 and R5 as in § 5 R4/R5.
+- **T2 GREEN (Rick: "Run T2"), run `39620495504`:** one photo post to Book Stop Demo,
+  https://www.facebook.com/122099205141518689/posts/122099205099518689 ; Facebook returned a post id
+  AND the single-post read-back worked (only the Page's post LIST is refused), so the run is green on a
+  real permalink; cache saved `fb-posted-1416367771558275-2026-10-19`. The permalink's numeric ids
+  differ from the Page id; that is how Facebook formats it, not a different Page.
+- **T3 GREEN, run `39620659455`:** same week again: "Cache hit", "Already posted for the week of
+  2026-10-19 on this Page; nothing to do", record step skipped, nothing posted.
+- **T4 RED as designed, run `39620869850`** (dry run, `week=2030-01-09`): "no shipment rows ... the
+  weekly shipment import has not run".
+- **T5 RED as designed, run `39620926494`** (dry run, `week=2026-10-12`): "the news page shows the
+  issue built 2026-10-20, not this week (2026-10-12 to 2026-10-18)". *(T5 was run with last week rather
+  than next week as § 5 R4 suggested: next week's rows may not exist yet, so it would have failed on the
+  rows check and never reached the freshness check.)*
+
+**Owed now:** (1) Rick looks at the post on Book Stop Demo (image, text, both links); (2) Rick confirms
+GitHub emailed him about the two red runs (T4/T5), which is the alert path; (3) T6: set
+`FACEBOOK_ENABLED=true` with the TEST Page id and read the first scheduled runs (Wed 2026-10-28,
+11-04); (4) R5 go-live (a token for the real Page, its id, a dry run, then on). Not verified: how the
+post looks to a follower's feed (the Page has none), and a phone view.
 
 ## References
 
