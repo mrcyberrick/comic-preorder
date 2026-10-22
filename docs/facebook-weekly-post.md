@@ -619,6 +619,13 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 11-04); (4) R5 go-live (a token for the real Page, its id, a dry run, then on). Not verified: how the
 post looks to a follower's feed (the Page has none), and a phone view.
 
+- **Gate scheduled (2026-10-22): T6's first scheduled run (Wed 2026-10-28, cron 12:00 UTC, test Page) elapses
+  with margin Thu 2026-10-29; reminder: routine `trig_01VoC1GtSvbeMi5Y6wNVV58m` and Google Calendar event
+  `fv5qtnf1cr8hulhcdavpnje6og`, 8:00 AM EDT (12:00 UTC).**
+- **Gate scheduled (2026-10-22): T6's second scheduled run (Wed 2026-11-04) elapses Thu 2026-11-05; reminder:
+  routine `trig_01CLKLpVQ2ambTVH2JSZZ96G` and Google Calendar event `ena8aubk8ssumme6i97jppqbfk`, 8:00 AM EST
+  (13:00 UTC, after the clocks change).** Both reminders only remind; R5 (the real Page) stays Rick's step.
+
 ## References
 
 `docs/weekly-newsletter-architecture.md` · `docs/f135-decouple-feed-publish.md` ·
