@@ -1,4 +1,5 @@
--- STATUS: staging=APPLIED 2026-10-22 (Rick; the first verdict read "FAIL - postgres default privileges ...
+-- STATUS: staging=APPLIED 2026-10-22 | prod=APPLIED 2026-10-22 (details below)
+--         Staging (Rick; the first verdict read "FAIL - postgres default privileges ...
 --         still grant anon", a defect in the VERDICT, which matched the functions row ('f') this file does not
 --         touch; narrowed to tables/sequences, re-run reads "OK - ... 48 authenticated grants untouched"; agent
 --         anon probe PASS: 401 on all 11 tables, the four anon RPCs 200; full Playwright suite after the revoke: 162 passed, 0 failed, 30.7 min, exit 0) | prod=APPLIED 2026-10-22 (Rick; verdict "OK - ... 78 authenticated grants untouched"; agent anon probe PASS: 401 on all 11 tables, the four anon RPCs 200; signed-out rjbookstop, apex and forgot-password: 0 page errors, 0 failed REST calls)
