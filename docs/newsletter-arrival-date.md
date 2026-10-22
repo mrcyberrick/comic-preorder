@@ -1,6 +1,6 @@
 # Weekly newsletter: show the on-sale date beside "This Week's Releases"
 
-**STATUS:** IN PROGRESS · BUILT and pushed 2026-10-21 (`weekly-pull-feed` `main` `800f460d`, E0-E8 done; **wording changed to "In store ..." the same day, `a74692a8`, § 6.6**), awaiting its first real send, the Tue 2026-10-27 cron (E9 open) · decisions D1-D5 ACCEPTED 2026-10-20 · F135 gate passed (E0) · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID) · **one design call open for Rick: see § 6.3 (the date line is faint)**
+**STATUS:** IN PROGRESS · BUILT and pushed 2026-10-21 (`weekly-pull-feed` `main` `800f460d`, E0-E8 done; **wording changed to "In store ..." the same day, `a74692a8`, § 6.6; date line made readable 2026-10-22, `d5a96816`, § 6.7**), awaiting its first real send, the Tue 2026-10-27 cron (E9 open) · decisions D1-D5 ACCEPTED 2026-10-20 · F135 gate passed (E0) · repo `weekly-pull-feed` (no staging/prod split; `main` is live) · findings none (feature, no ID) · no design call open (§ 6.3 resolved by § 6.7)
 
 Planned 2026-10-20. Rick's request: wherever a reader sees "This Week's Releases"
 (the newsletter web page, the RSS feed that drives `rjbookstop.com/news`, and
@@ -271,7 +271,7 @@ Written from the commands' own output, in the order they ran. **E9 is still open
 4. `buildNewsletterHtml`, `buildEmailHtml` and `buildRssXml` are now exported, for the tests; no behaviour change.
 5. The XML comment inside each RSS `<item>` was left as it was (it ships 133 times, so reword it only in the JS comment).
 
-### 6.3 Open for Rick: the date line is faint
+### 6.3 Open for Rick: the date line is faint ***(RESOLVED 2026-10-22: Rick, "Fix it!"; see § 6.7. The text below is as written on 2026-10-21 and is kept as the record of what was measured.)***
 
 Built to the plan ("same styling as that line"): 10px `#5a5755` on `#222222`, about **2.2:1** contrast, the same grey as the count line under it. In the screenshots at both widths it is in the right place and correct, and hard to read: the one line that carries the point of this feature is the faintest thing in the section. A legible alternative was rendered (scratch files only): `font-size:12px; color:#9a9390` (about **5.3:1**, a colour the cover titles already use), still one line at 390 px, no horizontal scroll. It is a two-spot edit (the new date `<div>` in `buildNewsletterHtml()` and in `buildEmailHtml()`, each carrying `font-size:10px;color:#5a5755`), no test change. **Default if Rick does not decide: it ships as built.** The change can land any time before the Tue 10-27 cron; before Mon 10-26 lets the preflight cover it.
 
@@ -305,4 +305,19 @@ Commit `a74692a8` on `weekly-pull-feed` `main` (after `800f460d`; the whole feat
 
 **Evidence.** The wording tests were changed first and went red (9 failures on the old builder, including the email *without* a date, which catches the old preheader fallback); a new guard asserts the words "on sale" never appear in the page, email or RSS, with or without a date. Suite **76/76** (49 + 27). Rebuilt the 2026-10-21 week (133 rows) against production data: **0 occurrences** of "on sale" or "on-sale" in the three artifacts (the published email had one), and the diff against the published files is only the intended lines; `rss.xml` parses, 133 items all `Wed, 21 Oct 2026 16:00:00 GMT`, item text 354-452 characters (min was 364 before; still over 300), email 74,955 B. Browser harness 24/24 again (control unchanged: the published feed reads Oct 20), screenshot inspected. The send script against the Brevo stub: `This Week's Comic Previews - in store Wednesday, October 21` under three time zones, `Weekly Previews - in store Wednesday, October 21` with a `<title>`, and the no-stamp and impossible-stamp fallbacks identical to the original script. The read-only preflight was dispatched again at `a74692a8` (run `39610235213`): success on Node 22, every new test `ok`.
 
-**Not changed by this, still open:** § 6.3 (the date line is the faint 10px grey; Rick has not decided, so it ships as built) and the subject prefix. **Not verified:** the same list as § 6.4. The Tue 10-27 subject is expected to read `This Week's Comic Previews - in store Wednesday, October 28`, and the E9 reminders were edited to say so.
+**Not changed by this, still open:** § 6.3 (the date line is the faint 10px grey; Rick has not decided, so it ships as built) ***(fixed the next day, § 6.7)*** and the subject prefix. **Not verified:** the same list as § 6.4. The Tue 10-27 subject is expected to read `This Week's Comic Previews - in store Wednesday, October 28`, and the E9 reminders were edited to say so.
+
+### 6.7 The date line made readable, 2026-10-22 (Rick: "Fix it!")
+
+Commit `d5a96816` on `weekly-pull-feed` `main` (after `a74692a8`; revert it alone to get the faint line back). Two style attributes, one in `buildNewsletterHtml()` and one in `buildEmailHtml()`, on the new date `<div>` only:
+
+| | Before | Now |
+|---|---|---|
+| Date line | 10px `#5a5755`, **2.22:1** on the `#222222` band | **12px `#9a9390`, 5.27:1** |
+| Count line beneath it, and the section label | unchanged | unchanged (still the quiet 10px grey) |
+
+**Evidence.** A new test computes WCAG contrast from the built markup and fails below 4.5:1, below 12px, or when the date line shares the count line's colour; it went red first on both artifacts (`date line #5a5755 on #222222 is 2.22:1`), then green. Suite **78/78** (49 + 29). Rebuilt the 2026-10-21 week against production data and measured the **browser's computed style** at 1350 and 390 px: `rgb(154, 147, 144)`, 12px, 5.27:1, the count line still 2.22:1, still one line at 390 px, no horizontal scroll, 24/24 checks; screenshots of the email at 390 px and the page at 1350 px inspected. Email 74,955 B (unchanged within bytes); the diff against what `main` serves is only the intended lines. The read-only preflight was dispatched at `d5a96816`: the first run (`39799271118`) passed its **Unit tests** step on Node 22 (both new readability tests `ok`) and then refused at its row check **by design**, because I dispatched it on a Thursday, when this week's books are already on sale ("Refusing to preview a past week"); a second run with the week named explicitly (`39799514398`) showed both steps `success` when read, **and its final run status was not read** (GitHub was slow to close it).
+
+**Not verified, beyond § 6.4:** the line in a real mail client. It is plain inline CSS (`font-size`, `color`), but nothing outside Chromium has rendered it, and Outlook and Gmail dark-mode inversion were not tried. **Observed, not changed:** the section label "This Week's Releases" is the same faint grey (2.22:1) and was not part of the request.
+
+**Another session shares this repo.** Between `a74692a8` and this commit, six Facebook-post commits (`033d3fe2` to `4d994aac`: a new `post-facebook.yml` workflow, `scripts/post-facebook.js` and its tests) landed on the same `main`. They touch none of this work's files, and the Facebook script already reads the feed's `lastBuildDate` and item `<pubDate>` as this work leaves them (its own comment cites `a74692a8`). No workflow has a `push` trigger, so none of these pushes sent or posted anything.
