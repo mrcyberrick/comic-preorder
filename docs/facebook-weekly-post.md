@@ -599,7 +599,20 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
   Page per week (T3). **Gap:** (b) tests WHEN the feed was built, not WHICH week it holds, so a
   deliberate manual re-publish of a past week during the current week would pass it. The newsletter
   now dates each RSS item on its on-sale day (`a74692a8`), so a check on the items' dates would close
-  this; not built (Rick's call).
+  this; not built (Rick's call). **BUILT 2026-10-21 (Rick: "build the small change"), `4d994aac`:** the
+  most common item `<pubDate>` must also fall inside this week, else red ("the news page lists the
+  titles for <date>, not this week ... a past week's newsletter may have been re-published"). Both feed
+  formats pass (today's live feed still dates items with the build time; from the Tue 10-27 build on,
+  items carry the on-sale day at noon Eastern). Tests 27 to 31; with the check removed exactly the two
+  new guard tests go red. Checked against the live feed locally (green). **Not yet exercised on the
+  runner:** the confirming dispatch (run `39631013636`, green) exited at "already posted" before
+  reaching it; the first real exercise is the Wed 10-28 scheduled run.
+- **Incident 2026-10-22, no harm:** the local `weekly-pull-feed` working copy of `post-facebook.js` and
+  its test file were found rewritten at 10:13:09 to be byte-identical to the older commit `6c69f3cb`
+  (both files in the same second; most likely OneDrive restoring an older copy). `origin/main` was never
+  affected (the schedule runs from GitHub). Restored with `git checkout --`, both files re-checked equal
+  to `origin/main`, tests 31/31. **Lesson: before editing in that folder, run `git status`; a clean
+  status is the only proof the local copy is the committed one.**
 
 **Owed now:** ~~(1) Rick looks at the post; (2) Rick confirms the failure emails~~ *(done, above)*; (3) T6: set
 `FACEBOOK_ENABLED=true` with the TEST Page id and read the first scheduled runs (Wed 2026-10-28,
