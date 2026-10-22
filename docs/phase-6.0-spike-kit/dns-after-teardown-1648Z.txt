@@ -1,0 +1,38 @@
+pulllist.app A -> Status 0 | 1:172.64.80.1
+pulllist.app AAAA -> Status 0 | 28:2606:4700:130:436c:6f75:6466:6c61:7265
+pulllist.app MX -> Status 0 | 15:10 eforward1.registrar-servers.com. ; 15:10 eforward2.registrar-servers.com. ; 15:10 eforward3.registrar-servers.com. ; 15:15 eforward4.registrar-servers.com. ; 15:20 eforward5.registrar-servers.com.
+pulllist.app TXT -> Status 0 | 16:v=spf1 include:_spf.mailersend.net include:spf.efwd.registrar-servers.com ~all
+pulllist.app NS -> Status 0 | 2:morgan.ns.cloudflare.com. ; 2:tia.ns.cloudflare.com.
+pulllist.app CAA -> Status 0
+www.pulllist.app A -> Status 3
+www.pulllist.app CNAME -> Status 3
+rjbookstop.pulllist.app A -> Status 0 | 1:172.64.80.1
+rjbookstop.pulllist.app AAAA -> Status 0 | 28:2606:4700:130:436c:6f75:6466:6c61:7265
+rjbookstop.pulllist.app CNAME -> Status 0
+comicstore.pulllist.app A -> Status 0 | 1:172.64.80.1
+comicstore.pulllist.app AAAA -> Status 0 | 28:2606:4700:130:436c:6f75:6466:6c61:7265
+comicstore.pulllist.app CNAME -> Status 0
+staging.pulllist.app A -> Status 3
+send.pulllist.app MX -> Status 0 | 15:10 feedback-smtp.us-east-1.amazonses.com.
+send.pulllist.app TXT -> Status 0 | 16:v=spf1 include:amazonses.com ~all
+mta.pulllist.app CNAME -> Status 0 | 5:mailersend.net.
+rjbookstop.pulllist.app TXT -> Status 0 | 16:brevo-code:bf61d9e565ef9d4134ac9c3ccbbbd856 ; 16:v=spf1 include:spf.brevo.com ~all
+comicstore.pulllist.app TXT -> Status 0
+rjbookstop.pulllist.app MX -> Status 0
+brevo1._domainkey.rjbookstop.pulllist.app CNAME -> Status 0 | 5:b1.rjbookstop-pulllist-app.dkim.brevo.com.
+brevo2._domainkey.rjbookstop.pulllist.app CNAME -> Status 0 | 5:b2.rjbookstop-pulllist-app.dkim.brevo.com.
+_domainkey.rjbookstop.pulllist.app TXT -> Status 0
+brevo3._domainkey.rjbookstop.pulllist.app CNAME -> Status 3
+_dmarc.rjbookstop.pulllist.app TXT -> Status 3
+resend._domainkey.pulllist.app TXT -> Status 0 | 16:p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDEUkJUC4KADdUQTxF1C6TBFzL15ogKOONzLnGUpe6HMGDe2yPxaYAj1CCXkX+NNF+T5wJoi+f/KdR19/zAmOnL/lN7TJ20UcqJTl6mXzE8/yiJLXARLEpVxeaCfkltJansIzec7llN3Iofp2lrWOlQ+wFYqPhFy7+u8ezIsIb6qQIDAQAB
+ms1._domainkey.pulllist.app CNAME -> Status 0 | 5:ms1._domainkey.mailersend.net.
+ms2._domainkey.pulllist.app CNAME -> Status 0 | 5:ms2._domainkey.mailersend.net.
+_dmarc.pulllist.app TXT -> Status 0 | 16:v=DMARC1; p=none; rua=mailto:hello@mrcyberrick.us
+_dmarc.gjq82078.pulllist.app TXT -> Status 3
+gjq82078.pulllist.app A -> Status 3
+gjq82078.pulllist.app AAAA -> Status 3
+gjq82078.pulllist.app CNAME -> Status 3
+gjq82078.pulllist.app TXT -> Status 3
+gjq82078.pulllist.app MX -> Status 3
+spike-gjq82078.pulllist.app A -> Status 0 | 1:172.64.80.1
+*.pulllist.app A -> Status 3
