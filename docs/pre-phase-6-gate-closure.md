@@ -1,6 +1,6 @@
 # Pre-Phase-6 gate closure — readiness re-check and session plan
 
-**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; third readiness pass 2026-10-06: verdict unchanged, G-C runbook written (§ 2f), G-J (F150 platform-wide) added, signup gate folded into G-F; **G-C DONE 2026-10-07**; fourth readiness pass 2026-10-07: D1 = keep Shape D (Rick), G-K (F171 fix) runbook in § 2g, **G-K BUILT AND ON STAGING 2026-10-19** (`04c6d05`; Step 1 answers `d1b07fa`; harness 30/30 on the deployed bytes; full suite 160 + 1 stale spec-12 test rewritten and 5/5; **PROMOTED TO PRODUCTION 2026-10-20, PR #179, merge `7380fab`; F171 RESOLVED on both environments**) (desk research and read-only probes; Rick skipped the live experiment; Phase 6 gate G1 stays OPEN; result in `docs/phase-6.0-serving-model-spike.md`; F171 filed); G-E..G-H, G-J NOT STARTED | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted), G-C 2026-10-07 (docs only) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only), G-C 2026-10-07 (read-only; no zone, Pages, Worker or Supabase change) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170,F171
+**STATUS:** IN PROGRESS — G-A DONE 2026-10-06 (SQL only: `tenants_plan_check` and the F151 row cleanup applied on both environments; the F150 revoke deliberately NOT run, deferred by Rick); G-B DONE 2026-10-06 (`register-tenant` fixed, PR #171, `register-tenant` v11 and `register-customer` v34 deployed to production, both smokes run and torn down; F151 RESOLVED on both environments; result in § 2c); G-D DONE 2026-10-06 (F164 traced: reachable through the API and written by the import script's unfiltered auto-reserve reads; raised to Medium; the two stale staging rows deleted; NO guard built; result in § 2e), the guard session G-I planned in § 2e, NOT STARTED; third readiness pass 2026-10-06: verdict unchanged, G-C runbook written (§ 2f), G-J (F150 platform-wide) added, signup gate folded into G-F; **G-C DONE 2026-10-07**; fourth readiness pass 2026-10-07: D1 = keep Shape D (Rick), G-K (F171 fix) runbook in § 2g, **G-K BUILT AND ON STAGING 2026-10-19** (`04c6d05`; Step 1 answers `d1b07fa`; harness 30/30 on the deployed bytes; full suite 160 + 1 stale spec-12 test rewritten and 5/5; **PROMOTED TO PRODUCTION 2026-10-20, PR #179, merge `7380fab`; F171 RESOLVED on both environments**) (desk research and read-only probes; Rick skipped the live experiment; Phase 6 gate G1 stays OPEN; result in `docs/phase-6.0-serving-model-spike.md`; F171 filed); G-E..G-H NOT STARTED; **2026-10-22 (§ 2h): G-J GO, SQL written and PENDING on both; G1 live test GO, kit in `docs/phase-6.0-spike-kit/`, not started** | staging=G-A 2026-10-06, G-B 2026-10-06, G-D 2026-10-06 (one throwaway-user test, two stale rows deleted), G-C 2026-10-07 (docs only) | prod=G-A 2026-10-06 (SQL only, Rick-run), G-B 2026-10-06 (PR #171 merge `3fadc00`, two Edge Function deploys), G-D 2026-10-06 (read-only), G-C 2026-10-07 (read-only; no zone, Pages, Worker or Supabase change) | findings=F150,F151,F153,F72,F164,F165,F169,F157,F170,F171
 
 **Written:** 2026-10-06, planning session (Rick asked: "Phase 6 readiness — check status, evaluate open
 items that need closing before starting, plan the sessions, hand off").
@@ -953,6 +953,79 @@ no account), and (c) optionally re-run V1 and V3 through the same interception a
 #### Rollback
 
 Revert the feature commit on `staging` and push; nothing else changes (no SQL, no DNS).
+
+---
+
+## 2h. Rick's 2026-10-22 decisions, and the runbooks for G-J and the G1 live test
+
+**Decisions (Rick, 2026-10-22, answering a status review):** (1) newsletter date-line contrast: done
+(`weekly-pull-feed` `d5a96816`); (2) F172: **drop at import** (built, scripts repo `main` `6de0c5f`);
+(3) **G-J: go**; (4) **G1: run the live test** (reverses the 2026-10-07 "skip"); (5) the 641-760 px
+desktop nav overflow: **file** (F178); (6) F145 hostname record: **go** (closed: it was already done in
+the runbook's Step 3a on 2026-08-30).
+
+### G-J — F150 platform-wide anon revoke (Rick runs SQL; staging first)
+
+**Precondition MET, checked from the code 2026-10-22 (agent):** no client page reads a table as anon (before
+sign-in only `resolve_tenant_by_slug` and `is_maintenance_mode` are called; `TenantContext` reads `tenants` /
+`user_profiles` only with a session); `weekly-pull-feed` calls only `get_pull_feed_week` and
+`get_pull_feed_spotlight` (both SECURITY DEFINER, `docs/sql/2026-10-01-…` and `2026-10-14-…`); every Edge
+Function sends the anon key only as `apikey` beside the caller's own bearer (role `authenticated`) or uses the
+service role; the Playwright suite's only anon-key use is GoTrue's password grant. **Baseline anon probe
+(2026-10-22):** production 200 `[]` on all 11 `public` tables; staging 200 `[]` on `order_submissions` and
+`settings`, 401 on the other 9 (matches G-A's sweep). The four anon RPCs answer 200 on both.
+
+1. **Staging:** Rick runs `docs/sql/2026-10-22-g-j-f150-anon-revoke.sql` (both PRE queries first, pasted;
+   then the whole file). The last result must read `OK - …`.
+2. **Agent:** anon probe (`docs/phase-6.0-spike-kit/gj-anon-probe.sh staging`) must read `PASS`: 401 on all 11 tables,
+   200 from `resolve_tenant_by_slug`, `is_maintenance_mode`, `get_pull_feed_week`,
+   `get_pull_feed_spotlight`. Then the full Playwright suite on staging (the gate; read the log's own summary
+   line).
+3. **Production:** the same file; `OK - …`; probe `prod` reads `PASS`; Rick loads `rjbookstop.pulllist.app`
+   signed out (branded sign-in shows) and signed in (catalog loads). The Tuesday newsletter and the Facebook
+   job use the RPCs; the next scheduled runs confirm them for real (the probe already calls both RPCs).
+4. **Halt** if any RPC stops answering or a page breaks: run the file's ROLLBACK block for that project.
+   Record the STATUS line, § 13 F150, the G7b gate.
+
+**The file is `PENDING` on both projects from commit until applied, so `/promote-prod` step 0 refuses any
+promotion until production runs it.** Run it soon, or hold promotions.
+
+### G1 — the live serving test (G-C Step 3, "Phase 2"; Rick operates Cloudflare, agent writes and checks)
+
+**Preconditions:** F171 fixed on production (PR #179, 2026-10-20), so an unknown name would show a neutral
+page rather than the founding store if the test ever reached the app (it is designed not to). **Before-
+baselines taken 2026-10-22 (agent):** `dns-baseline.mjs` 38 lines (`docs/phase-6.0-spike-kit/dns-before.txt`, label in
+`label.txt`); `edge-check.mjs`: the random label, `spike-<label>`, `www` and `staging` NXDOMAIN;
+`rjbookstop` and `comicstore` 200, `index.html` == `origin/main`, own single-name certificates.
+
+**Worker `pulllist-wildcard-spike`** (`docs/phase-6.0-spike-kit/worker.js`, Rick reads it before deploying):
+`spike-<label>.pulllist.app` → `200 text/plain`, `X-Spike: 1`; **every other hostname →
+`fetch(request)` passed through**, with one added header `X-Spike-Passthrough: 1` so a route collision (Q3)
+is visible. *(Deviation from G-C's text, which passed other hosts through "unchanged": without a marker Q3
+cannot be observed. The header only ever appears on a host the route should not have caught, and that is
+the halt condition.)*
+
+Steps, in order, all in one sitting:
+1. Rick: Workers & Pages → Create Worker `pulllist-wildcard-spike`, paste `worker.js`, deploy (no route yet).
+2. Rick: add the route **`spike-*.pulllist.app/*`** (narrowest pattern) to that Worker, zone `pulllist.app`.
+   If Cloudflare refuses a partial-label wildcard, use `*.pulllist.app/*` (this also tests Q3).
+3. Rick: DNS → add **one** record: `CNAME`, name `*`, target `pulllist.pages.dev`, **Proxied**. Nothing else
+   in the zone is touched.
+4. Agent: `node docs/phase-6.0-spike-kit/edge-check.mjs <label>` and `node docs/phase-6.0-spike-kit/dns-baseline.mjs <label> docs/phase-6.0-spike-kit/dns-during.txt`,
+   then diff against `dns-before.txt`. Answers: Q2 = what `spike-<label>` and the plain random label return
+   (status, body, SAN); Q3 = whether `rjbookstop` / `comicstore` show `X-Spike-Passthrough`; plus the
+   § 6 checklist item 4 type checks (`send.` A, random `_dmarc` TXT, MX, `brevo3._domainkey.rjbookstop`).
+   **HALT and go to step 5 immediately** if `edge-check` prints `HALT` or any email record line changes.
+5. Teardown, in order: Rick deletes the `*` record, then the route, then the Worker. Agent re-runs both
+   scripts until the random label is NXDOMAIN again (record how long) and `edge-check` shows the production
+   hostnames unchanged.
+6. Agent records the answers in `docs/phase-6.0-serving-model-spike.md` § 6 and § 7, and G1's status here and
+   in `docs/phase-6-self-service-signup.md`.
+
+**Exposure while it runs:** every unregistered `*.pulllist.app` name (typos included) resolves for the
+minutes the record exists; with the narrow route those names reach `pulllist.pages.dev` through Cloudflare,
+which is the case the spike doc § 7 most wanted measured. The email names are explicit records and are not
+affected by a wildcard (that is what step 4 checks).
 
 ---
 
