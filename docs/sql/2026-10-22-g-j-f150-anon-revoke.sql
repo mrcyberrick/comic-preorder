@@ -1,7 +1,7 @@
 -- STATUS: staging=APPLIED 2026-10-22 (Rick; the first verdict read "FAIL - postgres default privileges ...
 --         still grant anon", a defect in the VERDICT, which matched the functions row ('f') this file does not
 --         touch; narrowed to tables/sequences, re-run reads "OK - ... 48 authenticated grants untouched"; agent
---         anon probe PASS: 401 on all 11 tables, the four anon RPCs 200; full Playwright suite after the revoke: 162 passed, 0 failed, 30.7 min, exit 0) | prod=PENDING
+--         anon probe PASS: 401 on all 11 tables, the four anon RPCs 200; full Playwright suite after the revoke: 162 passed, 0 failed, 30.7 min, exit 0) | prod=APPLIED 2026-10-22 (Rick; verdict "OK - ... 78 authenticated grants untouched"; agent anon probe PASS: 401 on all 11 tables, the four anon RPCs 200; signed-out rjbookstop, apex and forgot-password: 0 page errors, 0 failed REST calls)
 --         Pre-Phase-6 gate closure, session G-J (docs/pre-phase-6-gate-closure.md § 2h): F150 platform-wide
 --         anon-grant hardening (Phase 6 gate G7b). Rick's go 2026-10-22. (F105) This line is the applied-state record.
 --
