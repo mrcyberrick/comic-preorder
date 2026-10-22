@@ -1,6 +1,6 @@
 # Weekly newsletter — decoupled, multi-tenant architecture (PLAN)
 
-**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PASSED 2026-10-21: the Tue 2026-10-20 cron read from its log (§ 9), so W1 is DONE and F135 is RESOLVED**; W2-W5 NOT STARTED; **product direction decided 2026-10-14 (§ 4: D3 tiers, D7 invoice content, D8 two hidden providers, D9 self-service shipment upload first)** | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
+**STATUS:** IN PROGRESS 2026-10-13 — W0 DONE, W1.1 DONE (scripts repo `fc044f9`, on `origin/main`), W1.2 DONE (`weekly-pull-feed` `c0a423c`; red and green both observed), W1.3 DECIDED (cron left at 21:00Z); **W1 gate PASSED 2026-10-21: the Tue 2026-10-20 cron read from its log (§ 9), so W1 is DONE and F135 is RESOLVED**; W2-W5 NOT STARTED; **product direction decided 2026-10-14 (§ 4: D3 tiers, D7 invoice content, D8 two hidden providers, D9 self-service shipment upload first); **D10 decided 2026-10-22: measure by clicks and app events, not opens; W1b (newsletter attribution) added, NOT STARTED, before W2** | staging=— | prod=— | findings=F135 (finishes it),F131,F169,F72,F172
 **Owner:** Rick. **Planning:** this doc. **Execution:** one session per W-step (§ 5), Sonnet CLI.
 **Repos touched by execution:** `mrcyberrick/weekly-pull-feed` (public, where the newsletter now
 runs), the private scripts repo (`catalogs/scripts`, only to remove the old path), and this repo
@@ -189,6 +189,18 @@ and the paid plan the price must cover, **re-check current pricing**; whether an
 fallback built from the order record is usable (not verified whether that record covers a shop's whole
 order or only reserved titles and shelf-copy suggestions).
 
+**D10 decided (Rick, 2026-10-22): measure the newsletter by clicks and what follows, not by opens.**
+Rick saw it in Brevo's reports: opening the email recorded nothing, and only a click recorded both the
+open and the click. Brevo counts an open only when the email loads a tracking image, so a mail app that
+blocks images (Outlook by default, some Gmail and phone setups) never records one, while Apple Mail
+preloads images and records opens nobody made. **No tool of ours can do better:** any open count is
+the same kind of tracking image and is blocked or faked the same way, so an own-pixel was considered and
+rejected. A click cannot be missed (the reader follows the link on purpose). **Found the same day:**
+every cover link already carries `ref=newsletter` (S2/S3), but **nothing in the app reads it**
+(`subscriptions.html` reads `series` only), so no visit, sign-up or reservation can be traced to the
+newsletter today. That makes D3's selling number unmeasurable until W1b lands. The runbook step is
+**W1b** (§ 5).
+
 ---
 
 ## 5. Runbook
@@ -211,6 +223,34 @@ is on `staging` with `prod=APPLIED`, so `/promote-prod` step 0 sees it.
 4. Delete Brevo draft 34.
 **Gate (= F135 V5):** one Tuesday with no import-time publish: feed built from DB, correct week,
 images served, campaign status `sent` read from the run log. **F135 closes here.**
+
+**W1b — newsletter attribution (D10; added 2026-10-22, NOT STARTED).** Two repos, one app change.
+1. **Builder (`weekly-pull-feed`):** add the issue's week to every app link, e.g.
+   `ref=newsletter&w=YYYY-MM-DD` (the Monday of the issue), so a click names its issue. RSS links are
+   unchanged unless Rick decides otherwise.
+2. **App (`app.js` + the landing pages; `/deploy-staging`, then `/promote-prod`):** on any page load
+   carrying `ref=newsletter`:
+   - **signed in:** log one `usage_events` row (a new event type, e.g. `newsletter_click`, with the
+     week and the series in its metadata), once per issue per browser;
+   - **signed out:** keep `{ref, week, series}` in `localStorage` (bounded, e.g. 14 days) and carry it
+     through sign-in or sign-up the way `PostAuthRedirect` carries `?series=`; when an account exists,
+     log the event then, marked as a first visit. **The browser cannot write it while signed out:**
+     since G-J (2026-10-22) `anon` holds no table privilege, so this is by design, not a workaround.
+   - Every storage access wrapped (private windows throw), the same rule as the Catalog banner.
+3. **Analytics (`analytics.html`):** a Newsletter card, built like the Catalog banner card: app clicks
+   per issue, new accounts whose first visit came from the newsletter, reservations within 7 days of a
+   newsletter click (labelled as following a click, not caused by it), and the most-clicked series. The
+   new event type is split out of the page's other metrics at load, as the banner's events are.
+
+**Limits, stated in the card:** counted per browser (a phone click and a laptop sign-up do not
+connect); a signed-out click that never becomes an account is lost (Brevo's click count still sees
+it); the 7-day window shows association only. **Gates:** an event row with the right `tenant_id`, week
+and series for a signed-in click (read back from the database); a signed-out click followed by a
+sign-in logs exactly one first-visit event; a reload logs nothing new; storage throwing logs nothing
+and breaks nothing; the card's counts reconcile against a service-role count; each check seen red
+first. **Sequencing:** do W1b BEFORE W2. W2's byte-identical gate must take its baseline from a build
+that already has the new link parameter, or the comparison fails for a reason that has nothing to do
+with the refactor.
 
 **W2 — tenant profile, zero behaviour change (`weekly-pull-feed` only).**
 Move every Book Stop literal (§ 2, Profile row) into `tenants.json` under `rjbookstop`, and make the
