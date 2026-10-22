@@ -1,4 +1,7 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=PENDING (applied 2026-10-22, Rick; first verdict read "FAIL - postgres default privileges
+--         ... still grant anon", a defect in the VERDICT: it matched the functions row ('f'), which this file
+--         does not touch; verdict narrowed to tables/sequences; live anon probe PASS: 401 on all 11 tables, the
+--         four anon RPCs 200; awaiting the corrected verdict re-run) | prod=PENDING
 --         Pre-Phase-6 gate closure, session G-J (docs/pre-phase-6-gate-closure.md § 2h): F150 platform-wide
 --         anon-grant hardening (Phase 6 gate G7b). Rick's go 2026-10-22. (F105) This line is the applied-state record.
 --
@@ -50,8 +53,9 @@ SELECT CASE
   WHEN EXISTS (SELECT 1 FROM pg_default_acl d
                 WHERE d.defaclrole = 'postgres'::regrole
                   AND d.defaclnamespace = 'public'::regnamespace
+                  AND d.defaclobjtype IN ('r', 'S')   -- tables, sequences; NOT functions ('f'), left as-is
                   AND d.defaclacl::text LIKE '%anon=%')
-    THEN 'FAIL - postgres default privileges in public still grant anon'
+    THEN 'FAIL - postgres default privileges in public still grant anon on tables or sequences'
   WHEN NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_maintenance_mode' AND prosecdef)
     THEN 'FAIL - is_maintenance_mode missing or not SECURITY DEFINER'
   ELSE 'OK - anon holds no table or sequence privileges in public; postgres defaults no longer grant anon; '
