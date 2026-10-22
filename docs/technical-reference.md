@@ -6995,7 +6995,16 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Leftover:** the gate-3 dry run's `check-dates-log-2026-10-19.json` (staging, `no_write`) carries the old shared name; harmless (production next runs 10-23) and safe to delete.
 - **Related:** **F175**, **F173**, **F159**.
 
-Next free finding ID: **F178**.
+#### F178 — the desktop nav row is wider than the window between about 641 and 760 px, so the Welcome / Sign Out block does not fit
+
+- **Filed 2026-10-22 (Rick: "file"). Status: OPEN (filed, not fixed).** **Severity: Low (cosmetic).** Desktop layout only (above the 640 px phone breakpoint), every signed-in user, both environments (the nav block is identical on all seven pages and on both branches).
+- **Symptom.** Between about 641 and 760 px wide, the nav row (logo, Catalog / My List / Subscriptions / This Week, the `Admin ▾` group for admins, then the Welcome / Sign Out block) needs more width than the window has, so the Welcome / Sign Out block overflows the bar.
+- **Measured 2026-09-30, during S2b (`4bf08c5`), not re-measured since.** The row needs **761 px** after S2b. **PRE-EXISTING:** against `HEAD` before S2b the flat seven-link row needed **833 px (catalog) / 930 px (admin)**, so S2b made 800 and 900 px fit and left only 641-760 px overflowing. Opening the `Admin ▾` panel adds no overflow at any width. F168 (`51d4b06`, 2026-09-30) changed only the phone layout and left the desktop bar untouched, so the figure should still hold; that is reasoning, not a fresh measurement.
+- **Root cause.** The bar has no layout for the 641-760 px band: the phone layout (hamburger drawer, Welcome / Sign Out in the drawer since F168) starts at 640 px, and the desktop row does not wrap or shrink above it.
+- **Fix direction (nothing decided).** Raise the phone breakpoint for the nav only to about 760 px, or hide the "Welcome," text (keep the name and Sign Out) in that band, or let the user block shrink with an ellipsis. Whichever is chosen needs a check at 641, 700 and 760 px for a customer and an admin, plus the existing seven-page nav hash check.
+- **Related:** **F168** (the phone-side counterpart, resolved), S2b (`docs/admin-settings-catalog-visibility.md`, the `Admin ▾` group).
+
+Next free finding ID: **F179**.
 
 ---
 
