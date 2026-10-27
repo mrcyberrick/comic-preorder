@@ -1,6 +1,6 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
@@ -11,10 +11,41 @@ narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canoni
 
 ---
 
-## The three runs (and one procedure for when a product code changes)
+## New to the system? Start here
+
+PULLLIST is the store's comic pre-order website. Customers browse next month's comics online and
+**reserve** the ones they want. Once a month the store turns those reservations into an order with
+the two comic distributors, and when the books arrive the store bags them for each customer.
+
+Words you will see on every screen:
+
+| Word | What it means |
+|---|---|
+| **Lunar** and **PRH** | The two distributors the store buys from (Lunar Distribution; Penguin Random House). Each has its own retailer website, and each needs its own order |
+| **Catalog month** | The monthly list of comics the distributors offer, loaded into the app once a month (Run A). Written `YYYY-MM`, for example `2026-11` |
+| **Reservation** | One customer asking for one title (with a quantity). "Pre-order" means the same thing |
+| **FOC date** | "Final Order Cutoff": the last day the store can order a title from the distributor. After it passes the app locks the title, and ordering it then is a **backorder** that may not arrive |
+| **Order cycle** | All the titles that share one FOC date. A catalog month has many (13 in July 2026), so you order **by cycle**, not "the whole month" |
+| **Order Deadline** | The date shown to customers as their last day to reserve. It is a customer cutoff only; the distributor's FOC dates are separate |
+| **Paper customer** | A customer with no login whose order was written on the printed catalog in the store. Staff type it in for them |
+| **Order record** | The app's list of what was actually ordered from each distributor. The Order Builder adds to it; it is never edited, only added to (corrections are new lines) |
+| **Maintenance Mode** | A switch that shows customers a "back soon" page so nothing changes while you work. Admins can still use everything |
+
+**Where things are.** Sign in at `https://pulllist.app/` with the store's admin account and open
+**Admin ▾ → Dashboard**. Along the top are three mode buttons: **Customers** (ongoing work, and the
+Order Follow-Up panel), **Bagging** (weekly) and **Ordering** (monthly). The **Order Deadline** box and
+the **Maintenance Mode** switch sit in the dashboard header, and appear **only in Ordering mode**.
+
+> **One naming note.** The Ordering tab labelled **All Orders** on screen is called "By
+> Distributor" in older notes and in a few on-screen messages. They are the same tab.
+
+---
+
+## The runs (and one procedure for when a product code changes)
 
 There is no single "import." There are three separate operator runs on different clocks, plus
-**Run D**, a procedure you start when the distributor changes a product code.
+**Run D**, a procedure you start when the distributor changes a product code, and **Run E**, the
+monthly distributor order, which is done in the website rather than with a script.
 **None of them is scheduled — every one is started by a human.**
 
 | # | Run | When | Script | Manual steps |
@@ -23,6 +54,7 @@ There is no single "import." There are three separate operator runs on different
 | B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (22:00 UTC)** | `import.js` | **5** (7 if ad-hoc) |
 | C | Weekly date re-check | Fri or Sat | `check-dates.js` | **3** |
 | D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | store admin: screens only (D0 to D3); operator: one SQL block to carry the reservation across (D4) | **4 per customer** (UI) |
+| E | **Place the monthly distributor order** | Once a month, after the customer Order Deadline passes, before the FOC dates you are ordering, and **before** Run A (Run A's new-month import closes the month) | none: the website only (admin dashboard + each distributor's retailer site) | **12** |
 
 **Everything runs from one folder:**
 
@@ -78,9 +110,9 @@ Customers see a holding page; you can still browse.
 
 ### 2. Close out the month that is ending
 - **My List** (as the store admin account) → **Suggest Shelf Order** → review, adjust quantities.
-- Confirm last month's order sheets were already exported and placed with the distributors
-  (admin → **By Distributor** / **Paper Orders**). If not, export them **now** — Step 5 purges
-  unreserved stale rows.
+- Confirm last month's order was already placed and recorded with both distributors (**Run E**
+  below). If not, do Run E **now** — Step 5 purges unreserved stale rows. (Run E Step E4 turns
+  Maintenance Mode on and Step E12 tells you to leave it on when Run A follows straight away.)
 
 ### 3. Revision sweep — re-pull the still-open older months
 Distributors revise dates after solicitation, and nothing re-reads an older month on its own.
@@ -526,6 +558,190 @@ rows; they are append-only. The 2026-10-11 version is the template; have it draf
 adapting it by hand. Afterwards: By Distributor shows the old code with no reservations and the new code
 "Ordered", the customer's My List shows the **new** date under Upcoming Arrivals, and the next Friday recheck
 lists nothing for the title.
+
+---
+
+## RUN E — Place the monthly distributor order (12 steps)
+
+**What this does.** It turns the month's customer reservations into two orders, one for Lunar and
+one for PRH, places them on each distributor's website, and records in the app what each
+distributor accepted. Everything after that depends on this record: customers see "Order placed"
+on My List from it, and the Order Follow-Up panel uses it to warn about titles nobody ordered.
+
+**How it works, in one paragraph.** The app does not send anything to a distributor. It builds a
+small text file for each distributor, one line per title in the form `code,quantity`. You paste
+those lines into the distributor's own website and submit there. Then you come back to the app
+and record what the distributor actually accepted. Downloading the file is **not** recording the
+order: only Step E9 records it.
+
+**You need:** the store admin login for `https://pulllist.app/`, the **Lunar** and **PRH**
+retailer website logins, a computer (the dashboard is built for a full-size screen), and about an
+hour. No scripts, no SQL.
+
+**When.** After the customer **Order Deadline** has passed (shown in the dashboard header), so
+customers have finished reserving (switch to **Ordering** mode to see it), and before the **FOC dates** of the cycles you are ordering.
+Do it before Run A's new-month import: that import closes this month. If an FOC date in this
+month falls *before* the Order Deadline, that title cannot wait for this run; see Step E1.
+
+### E1. Clear anything urgent first (Order Follow-Up)
+Dashboard → **Customers** mode. Above the tabs is the **Order Follow-Up** panel (it hides itself
+when there is nothing to show). Two groups matter for ordering:
+- **At risk**: reserved titles whose FOC date comes before this run will reach them. Order these
+  now, as single **ad-hoc** orders on the distributor's website. Then record each one: **Ordering**
+  mode → **All Orders** → find the title (type in the search box) → **Mark Ordered** in its Status
+  column → quantity you ordered, Order type **Ad-hoc**, today's date → **Save**. Ad-hoc orders are
+  then left out of the monthly file automatically, so they are not ordered twice.
+- **Backordered**: the FOC date passed and nothing was ordered. It can usually still be ordered
+  but may not arrive. Decide per title with the store; record any order you place the same way.
+
+The panel's **Never Arrived** group is about deliveries, not ordering. Leave it for the weekly work.
+
+### E2. Type in the paper orders
+Customers who ordered on the printed catalog in the store need their reservations entered, or
+they will not be in the order. Dashboard → **Ordering** mode → **Paper Orders** tab.
+1. A customer not on the system yet: type their name under **Add Paper Customer** → **Add**. No
+   email is sent and they never log in.
+2. Under **Add Title to Order**, search the title (title, series or writer) and click the right
+   result. It appears under **Pending Order**. Check the distributor badge (Lunar or PRH) and the
+   price to be sure it is the right edition and cover.
+3. On that title, use **+ Add customer…** to pick each customer who wants it, and set each
+   customer's quantity in the small box beside their name.
+4. Repeat for every title on the paper forms, then click **Submit Reservations**.
+5. Check: **All Orders** → search a title you entered; the paper customer is listed on it.
+
+### E3. Add the store's own shelf copies
+Copies for the store's shelves are reserved under the store admin account like any customer's.
+1. Signed in as the store admin, open **My List** (top menu) → **📦 Suggest Shelf Order**.
+2. A preview lists each title with a **Suggested Qty**, worked out from customer demand. Read it,
+   then click **Apply**. It only adds titles or raises quantities; it never lowers or removes
+   anything, so it is safe to run again.
+3. Adjust with the quantity controls on My List, or **Remove** lines the store does not want.
+
+Titles past their FOC date are never suggested.
+
+### E4. Turn Maintenance Mode ON
+Dashboard, **Ordering** mode, header → **Maintenance Mode** switch → ON (the label beside it reads
+ON). Customers now see a holding page, so no one can add
+or cancel a reservation while you build and place the order. This matters: the record you save in
+Step E9 is built from the reservations as they stand at that moment, and it must match the file you
+submitted.
+
+### E5. Review the month's orders
+**Ordering** mode → **All Orders** tab. Make sure **Catalog month** at the top reads the current
+month (marked "(current)"). If an older month is selected, the order buttons are greyed out and a
+yellow note says so; switch back to the current month.
+
+The page lists every reserved title, grouped under LUNAR DISTRIBUTION and PRH. The **Status**
+column on each title shows its order state: **Mark Ordered** (nothing ordered yet), **Add (n of m)**
+(some ordered, more reserved), **Over (n of m)** (more ordered than reserved), **Ordered (n)**
+(covered). A small amber badge such as **⚠ 1:25** means the distributor rations that title (one
+copy per 25 ordinary copies ordered); it may come back reduced or rejected.
+
+Read down the list for anything odd (a huge quantity, a duplicate title) before going on. To fix a
+customer's reservation, go to **Customers** mode → **Accounts**, find them and click
+**Manage**; you now see the site as that customer and can change their list. Leave their view from
+the banner at the top of the screen when done.
+
+### E6. Build the Lunar order file
+Click **↓ Lunar Order Sheet** (above the tabs, in Ordering mode). The **Lunar Order Builder**
+window opens.
+1. **ORDER CYCLE (FOC DATE)** lists each FOC date with how many titles and copies it holds. The
+   nearest upcoming one is ticked for you. Tick every cycle you are ordering now (usually the
+   upcoming FOC dates this month's order covers; **Select all** ticks every upcoming one).
+   - Cycles whose FOC already passed are hidden under a red **⚠ … FOC already passed** line and are
+     never ticked by Select all. Tick one only if you mean to backorder it.
+   - "· N restricted" on a cycle counts its rationed titles; they are still included.
+2. **⚠ ALREADY ORDERED — N need a call**: titles already partly on order (for example an earlier
+   ad-hoc order). Each shows how many are reserved and how many are already on order, and offers
+   the difference. Leave the box ticked to include that quantity, change the number, or untick to
+   leave it out. A line marked **over-ordered** already has more on order than customers reserved.
+   Titles already fully covered are folded away under a grey line: nothing to decide.
+3. **HELD BACK** lists what is **not** in this file and why, so nothing goes missing silently:
+   - **⛔ Withdrawn by the distributor**: cannot be ordered.
+   - **🔴 Backordered** and **🟡 At risk**: see Step E1.
+   - Grey, folded lines (**Outside selected cycle**, **Ad-hoc ordered**, **Rejected by
+     distributor**): correctly left out. "Outside selected cycle" is usually the biggest; those
+     titles belong to a later cycle you have not ticked.
+4. Bottom left reads **N titles ready to export**. When it looks right, click
+   **Generate & Download**. A file named like `lunar-order-2026-11-02.txt` downloads.
+
+**Do not click "Record submitted order" yet.** You have not ordered anything; you have a file.
+Leave this window open while you do Step E7, so your cycle choices and any quantities you changed
+are still there in Step E9.
+
+### E7. Place the Lunar order on Lunar's website
+1. Open the downloaded `.txt` file in Notepad. Each line is `code,quantity`.
+2. Sign in to Lunar's retailer website, open its order entry that accepts pasted lines of code and
+   quantity, paste every line, and submit the order there.
+3. Before leaving the site, note any title Lunar refused or reduced, and by how much. Lunar often
+   reports rejections only after it processes the order; that is handled in Step E11.
+
+### E8. Build the PRH order file and place it
+Same as E6 and E7 with **↓ PRH Order Sheet** and PRH's website (file `prh-order-YYYY-MM-DD.txt`;
+PRH lines use the ISBN where there is one). PRH tends to reject rationed titles at submission, so
+check the **⚠** titles first when you read PRH's confirmation.
+
+Do E9 for one distributor before starting the other, or keep two separate notes; the windows look
+alike.
+
+### E9. Record what each distributor accepted
+In the Order Builder window for that distributor, click **Record submitted order →**.
+1. It lists exactly the titles in the file you submitted, with the quantities you sent. Rationed
+   titles are listed first.
+2. **Untick any title the distributor rejected.** That records it as rejected (quantity 0), not
+   ordered, and the customer will see "Rejected by supplier" on their list.
+3. **Change the quantity** of any title the distributor filled only partly.
+4. For **Lunar**, if you do not know of any rejection yet, record the order exactly as submitted;
+   do not untick a title just because it has a ⚠ badge.
+5. Click **Record order**. A green message confirms ("Recorded N titles on the order ledger", or
+   "Recorded N ordered, M rejected"). The window closes.
+
+**If you closed the window before this step:** open it again with the same Order Sheet button,
+tick **exactly the same cycles** as before, and re-enter any quantity you changed under "Already
+ordered" (those reset when the window reopens). Then click **Record submitted order →**. Compare
+the list with the `.txt` file you pasted: they must match. If a title appears that you did not
+submit, untick it; if one you submitted is missing, record it with **Mark Ordered** (Order type
+**Monthly cycle**).
+
+Check: on **All Orders**, the titles you ordered now read **Ordered (n)**.
+
+### E10. Print the report for the store
+**All Orders** → **Print / Save Report**. Print it, or save it as a PDF, and give it to the store.
+For the in-store paper catalog customers write orders on: **Paper Orders** → **Print Catalog**
+(about 50 pages; print it after the new month is imported in Run A, so it shows the new titles).
+
+### E11. Fix rejections you learn about later
+Distributors (Lunar especially) can reject or cut a title days after you submitted. When that
+happens: **All Orders** → search the title →
+- Refused completely: **Rejected by supplier** in its Status column → confirm. The dialog says
+  exactly what will change; the customer's list shows "Rejected by supplier" straight away.
+- Filled only partly: **Mark Ordered** → Order type **Adjustment (correction)** → enter the
+  difference as a negative number (for example `-2` if two of five were cut) → **Save**.
+
+The order record is never edited, only added to, so a mistake is fixed by another correction, not
+by deleting anything. The Status button stays usable until 7 days after the title is delivered.
+
+### E12. Turn Maintenance Mode OFF, or carry on into Run A
+- If the new catalog is being loaded now, **leave Maintenance Mode on** and go to **Run A**,
+  Step 2 (Step 1 is already done).
+- Otherwise, dashboard, **Ordering** mode, header → **Maintenance Mode** switch → OFF.
+
+When Run A's new-month import runs later, it lists any reserved titles from the closing month that
+have **no order recorded** and asks `Record these as ordered?`. If Run E was done fully, that list
+should hold only titles you deliberately did not order. **Do not just press Enter**: Enter records
+every listed title as ordered. Type `none`, or the numbers of the titles you did not order (see
+**Answering the prompts** below).
+
+**When something goes wrong**
+
+| Symptom | What to do |
+|---|---|
+| The two Order Sheet buttons are greyed out | All Orders has an older Catalog month selected. Switch it back to the current month |
+| "No unfulfilled … reservations with an FOC date this month" | Nothing for that distributor is waiting to be ordered. Check the Catalog month and the HELD BACK lines |
+| "No … reservations selected for export" when downloading | No cycle is ticked, or every title in the ticked cycles is already ordered or held back |
+| "Ledger write failed: …" when recording | Nothing was recorded. Check your internet connection, reload the page, reopen the builder with the same cycles and record again |
+| You recorded the wrong quantity | Correct it with Step E11 (an Adjustment). Do not record the whole order a second time |
+| Mark Ordered does nothing | Reload the page. If it still does nothing, choose the title's catalog month in the Catalog month selector, then try again, and tell the platform operator |
 
 ---
 
