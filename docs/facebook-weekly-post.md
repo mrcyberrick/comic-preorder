@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-21 — **LIVE on `weekly-pull-feed` `main` (`6c69f3cb`), schedule ON for the TEST Page since 2026-10-21 15:57Z (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-28 — **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -86,7 +86,7 @@ on staging, then production).
 | Q2 | Items per week, edits after publishing | Measured: 119 titles this week; earlier publishes 19 to 72. The whole feed is rebuilt each Tuesday; a re-dispatch with `week=` can republish a past week (deliberate). **Not an issue under week-based dedupe** |
 | Q3 | Meta developer app? Are you an admin of the Ray & Judy's Page? | **Answered 2026-10-14: Rick is the Page admin.** The Meta developer app is created in R1 (no app yet assumed) |
 | Q4 | Test Page? | A private group **cannot** be used (Groups API removed). Create a throwaway Page you admin, with no followers. Whether a brand-new or unpublished Page accepts API posts is checked in R1 |
-| Q5 | Post when the feed updates, or a fixed day? | **DECIDED 2026-10-14 (Rick): Wednesday morning, cron 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
+| Q5 | Post when the feed updates, or a fixed day? | **CHANGED 2026-10-28 (Rick, option 1): right after the scheduled Tuesday newsletter run succeeds, the night before in-store day (§ 8, 2026-10-28).** Was: **DECIDED 2026-10-14 (Rick): Wednesday morning, cron 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
 | Q6 | Photo post, link post, or both? | **DECIDED: a photo post** (the composed top-picks image, § 3a; the link in the text). Meta ignores a custom image on link posts from the API unless the Page "owns" the linked domain (Graph API v2.9/v2.11 changelog), and `newsletter.html` has **no Open Graph tags**, so a link post would show a generic or scraped preview and a custom image cannot work. Trade-off: a link inside photo text is clickable but less prominent than a link card. Confirm in R1 |
 | Q7 | Prices and descriptions on the page? | **Recommend no for v1.** It means widening the anon RPC (SQL on staging then production), a page redesign and 119 descriptions on one page. File separately if wanted |
 | Q8 | Post wording | Draft in § 4.4. Approve or edit |
@@ -212,7 +212,7 @@ pinned with a lockfile, installed in the Facebook job only.
 name: Post to Facebook
 on:
   schedule:
-    - cron: "0 12 * * 3"   # Wed 12:00 UTC (Q5)
+    - cron: "0 12 * * 3"   # Wed 12:00 UTC (Q5)   [replaced 2026-10-28 by workflow_run on "Send Weekly Newsletter", § 8]
   workflow_dispatch:
     inputs:
       dry_run: { type: boolean, default: true }
@@ -625,6 +625,40 @@ post looks to a follower's feed (the Page has none), and a phone view.
 - **Gate scheduled (2026-10-22): T6's second scheduled run (Wed 2026-11-04) elapses Thu 2026-11-05; reminder:
   routine `trig_01CLKLpVQ2ambTVH2JSZZ96G` and Google Calendar event `ena8aubk8ssumme6i97jppqbfk`, 8:00 AM EST
   (13:00 UTC, after the clocks change).** Both reminders only remind; R5 (the real Page) stays Rick's step.
+  *(Both superseded 2026-10-28, see below: re-aimed at the Tuesday-evening runs.)*
+
+**2026-10-28: the first scheduled run never started, and the post now follows the newsletter.**
+- **The Wed 10-28 12:00 UTC cron did not run.** At 17:45Z (5h45m past the cron) the workflow had no
+  run at all for the day, though `FACEBOOK_ENABLED` was still `true` and the workflow active (a
+  disabled switch shows as a *skipped* run, not a missing one). GitHub simply never started it; the
+  newsletter's own cron had fired the night before (+3h14m). So T6's first check could not happen.
+- **Posted by hand instead (Rick: "run it please"):** dispatch `40738912868`, `dry_run=false`, green:
+  week 2026-10-26 -> 11-01, spotlight Absolute Batman #25 Cvr A / Amazing Spider-Man #1002 / Conan the
+  Barbarian #36 Cvr A, 144 titles, `Posted: https://www.facebook.com/122099205141518689/posts/122105680581518689`,
+  cache key `fb-posted-1416367771558275-2026-10-26` saved. Rick checked it in a browser: "looks correct".
+  This is the first real feed with on-sale item dates, so the past-week guard passed on the runner for
+  the first time.
+- **Timing changed (Rick: post 24 hours before in-store day, then "option 1").** A Tuesday-morning post
+  cannot work: the news page only switches to the new week when the Tuesday newsletter publishes it
+  (`rss.xml` commits 10-27 00:23Z, 10-20 23:40Z, 10-14 00:08Z, i.e. about 7:40-8:25 PM ET), so both feed
+  guards would fail all day and the link would show last week. **Now (`weekly-pull-feed` `0b8ed69f`):**
+  the post is started by `workflow_run` when **"Send Weekly Newsletter" completes**, and runs only if
+  that run was `event=schedule` and succeeded (a manual newsletter run may be build-only or a dry run;
+  after a manual recovery send, dispatch the post by hand). The Wednesday cron is removed. No clock or
+  time zone of its own: the newsletter's Tuesday 21:00 UTC cron is the only one (5 PM EDT / 4 PM EST,
+  plus GitHub's ~3 h delay), so the post should land about 7-8:30 PM ET, the night before in-store day.
+  The message still reads "New comics this Wednesday, <date>!", which is right the evening before.
+- **Feed wait:** the news page's Worker caches `rss.xml` 5 min (`Cache-Control: public, max-age=300`,
+  measured) and GitHub Pages up to 10, so on the triggered run (`FEED_WAIT_MINUTES=20`; 0 for manual
+  runs) the script re-checks the feed once a minute before failing. Job timeout 10 -> 30 min.
+  Tests 31 -> 34; with the wait disabled the three new ones go red. A dry dispatch on the new file
+  (`40745823188`) was green (34/34, `FEED_WAIT_MINUTES: 0`, stopped at "already posted").
+  **Not yet exercised:** the `workflow_run` trigger itself (only a scheduled newsletter run can start
+  it) and the wait on a real lag. First real run: **Tue 2026-11-03 evening.**
+- **Gates re-aimed (2026-10-28):** `trig_01CLKLpVQ2ambTVH2JSZZ96G` + calendar `ena8aubk8ssumme6i97jppqbfk`
+  now fire **Wed 2026-11-04 8:00 AM EST** to read the Tue 11-03 run; `trig_01VoC1GtSvbeMi5Y6wNVV58m` +
+  calendar `fv5qtnf1cr8hulhcdavpnje6og` now fire **Wed 2026-11-11 8:00 AM EST** to read the Tue 11-10
+  run and, if both are good, plan R5. Both still only remind.
 
 ## References
 
