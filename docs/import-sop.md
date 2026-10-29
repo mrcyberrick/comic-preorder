@@ -1,11 +1,11 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
 **reasoning**; this file is canonical for **sequence**.
-**Last checked against the scripts:** scripts repo `main` at `3ef4b89` (read 2026-10-09). If
+**Last checked against the scripts:** scripts repo `main` at `6de0c5f` (read 2026-10-29; was `3ef4b89` on 2026-10-09). If
 `git log` in the scripts folder shows newer commits to `import.js`, `import-staging.js` or
 `check-dates.js`, re-check the prompts table and the Run C report sections before trusting this file.
 
@@ -51,7 +51,7 @@ monthly distributor order, which is done in the website rather than with a scrip
 | # | Run | When | Script | Manual steps |
 |---|---|---|---|---|
 | A | Monthly catalog refresh | Once a month, when both new CSVs land | `import.js` | **9** |
-| B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (22:00 UTC)** | `import.js` | **5** (7 if ad-hoc) |
+| B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (cron 21:00 UTC)** | `import.js` | **3** |
 | C | Weekly date re-check | Fri or Sat | `check-dates.js` | **3** |
 | D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | store admin: screens only (D0 to D3); operator: one SQL block to carry the reservation across (D4) | **4 per customer** (UI) |
 | E | **Place the monthly distributor order** | Once a month, after the customer Order Deadline passes, before the FOC dates you are ordering, and **before** Run A (Run A's new-month import closes the month) | none: the website only (admin dashboard + each distributor's retailer site) | **12** |
@@ -67,15 +67,18 @@ CSV files go in the folder **above** that one (`..\catalogs\`).
 
 **Flags worth knowing:**
 - `--no-write` — dry run (`import.js` and `check-dates.js`). Prints what it *would* write, changes
-  nothing. Use it whenever unsure. Two limits: `import.js` will not tell you which week the feed
-  would publish, and `check-dates.js` still records what it saw in its state file (see Run C).
+  nothing. Use it whenever unsure. One limit: `check-dates.js` still records what it saw in its
+  state file and writes its before-state log (see Run C). On `import.js`, a few dry-run lines read
+  differently from the real run because nothing was written (Run A, Step 5).
 - `--skip-autoreserve` — `import.js` only. Skips subscriber auto-reserve. Pass it on any
   older-month re-import (Run A, Step 3); the script also switches it on by itself when the month
   is older than the database's.
 - `--staging` — `check-dates.js` only. Points it at staging. It still needs the **production**
-  variables in `.env`, because it loads `import.js`.
-- `--include-unreserved` — `check-dates.js` only. Also checks, and corrects, dates on
-  **unreserved** current-month titles. Off by default.
+  variables in `.env`, because it loads `import.js`. Since 2026-10-19 it keeps its own state file
+  (`check-dates-state.staging.json`) and its logs carry `-staging-` in the name (F175, F177), so a
+  staging run no longer touches production's withdrawal history or revert logs.
+- *(`--include-unreserved` was REMOVED 2026-10-19. Run C now checks unreserved Lunar listings in
+  every month on every run and corrects them under their own prompt; see Run C, Step 3.)*
 
 ---
 
@@ -97,7 +100,9 @@ SELECT tenant_id, catalog_month, count(*) FROM catalog GROUP BY tenant_id, catal
 
 Expect one tenant in the first. In the second, expect only the founding tenant for the month you
 are importing. Production read exactly that on 2026-10-06 and again on 2026-10-09 (63 subscriptions,
-one tenant; 2026-10 all one tenant; a second tenant held only 2 rows, in 2026-06, which is harmless).
+one tenant; 2026-10 all one tenant; a second tenant held only 2 rows, in 2026-06, which is harmless),
+and again before the 2026-11 import on 2026-10-28 (66 subscriptions, all the founding tenant; the
+same 2 `comicstore` rows in 2026-06, nothing else).
 Staging holds `demoshop` rows for 2026-09, which is why a 2026-10 staging import cannot misfire.
 
 ---
@@ -105,7 +110,8 @@ Staging holds `demoshop` rows for 2026-09, which is why a 2026-10 staging import
 ## RUN A — Monthly catalog refresh (9 steps)
 
 ### 1. Turn Maintenance Mode ON
-`https://pulllist.app/admin.html` → **Maintenance Mode** toggle → ON.
+`https://pulllist.app/admin.html` → **Ordering** mode → **Maintenance Mode** switch in the
+dashboard header → ON. (The switch only appears in Ordering mode.)
 Customers see a holding page; you can still browse.
 
 ### 2. Close out the month that is ending
@@ -141,6 +147,15 @@ Distributors revise dates after solicitation, and nothing re-reads an older mont
 > **Re-importing a month restores whatever the file says.** Any hand-correction to a date is
 > silently reverted. Re-apply corrections *after* an older-month import, never before.
 
+> **Weigh this step against Run C before doing it (added 2026-10-29).** Since 2026-10-19 the weekly
+> recheck (Run C) corrects dates on **reserved** titles and on **unreserved Lunar** listings in every
+> catalog month, from fresher sources than a monthly file. So the Lunar half of this sweep is now
+> covered every week, and a re-import can put back a date Run C has already fixed. What only this
+> step still catches is a revised date on an **unreserved PRH** title in a live PRH month (Run C
+> leaves unreserved PRH rows alone, F159). If Run C ran in the last week, skipping this step is
+> reasonable; if you do run it, run Run C straight after it so any reverted date is corrected
+> again. The 2026-11 import (2026-10-28) skipped it; Run C had last run 2026-10-23.
+
 ### 4. Drop the new month's files in place
 Put the two new CSVs in `..\catalogs\`:
 - `Lunar_Product_Data_MMYY.csv`
@@ -150,11 +165,24 @@ Filenames don't matter — you pass them as arguments — but the Lunar name is 
 reads the month from, so keep the convention.
 
 ### 5. Run the import
+Dry run first, then the real run:
 ```powershell
+node .\import.js "..\Lunar_Product_Data_MMYY.csv" "..\YYYY_MM_PRH_metadata_full_active.csv" --no-write
 node .\import.js "..\Lunar_Product_Data_MMYY.csv" "..\YYYY_MM_PRH_metadata_full_active.csv"
 ```
 Then answer the prompts — see **Answering the prompts** below. This is one step with several
-questions inside it, not several steps.
+questions inside it, not several steps. Pass **no** shipment files on a catalog run and answer
+`n` to the shipment question.
+
+**Three dry-run lines that are NOT problems** (seen on the 2026-11 dry run; the real run read
+correctly):
+- `No order_deadline row on record for this tenant — nothing to clear.` The dry run pretends to
+  write and gets nothing back. The real run prints `✅ order_deadline cleared`.
+- `Catalog rows fetched: 0` and `✅ No new auto-reserves needed.` The new month's rows were not
+  written, so there is nothing to match subscriptions against. The real run should show a non-zero
+  `To insert` (2026-11: 66 subscriptions, 33 auto-reserved). **A zero in the real run is a problem.**
+- `✅ Archived  reservation(s)`, `Purged  stale unreserved rows`, and so on, with no number. The
+  counts only exist once the database has done the work.
 
 ### 6. Read what the script prints
 Do not skip past these; nothing else surfaces them.
@@ -189,6 +217,12 @@ being rejected — usually a changed export format. A normalised count of **zero
 - `N title(s) are about to be marked fulfilled with nothing showing they arrived` — books the
   customer is about to be told "Order placed" for. Non-blocking by design. Note them; they land
   on admin → Ordering → **Never Arrived** for a Received / Didn't arrive / Damaged decision.
+  **This list overstates what is fulfilled now.** It counts every unfulfilled reservation past its
+  on-sale date, but the fulfil step itself holds back any title with no shipment record until 14
+  days after its on-sale date (F155 S3). Compare with the next line, `Auto-fulfilled N preorder(s)`:
+  on 2026-10-28 the list named 36 titles (38 reservations) and only 2 reservations were fulfilled,
+  the one title more than 14 days past on-sale. The rest stay open and are still flagged for
+  Never Arrived.
 
 **The withdrawal line (every run, since 2026-10-04 — F165 S1):**
 ```
@@ -212,23 +246,45 @@ ORDER BY distributor;
 Expect two rows (Lunar, PRH) with counts matching what the script printed.
 
 ### 8. Set the Order Deadline
-Admin → **Settings** → **Order Deadline**.
+Admin dashboard → **Ordering** mode → **Order Deadline** box in the dashboard header.
+*(This step read "Admin → Settings → Order Deadline" until 2026-10-29. The Settings page only links
+back to the dashboard for it.)*
 
 > **This is not optional.** A new-month import *clears* the deadline on purpose. Until you set
 > it, the At-Risk and Backorder panels classify against an empty value.
 
 Pick a date before the bulk of the new month's FOC dates, leaving customers the longest
-possible reservation window.
+possible reservation window. Step 7's `earliest_foc` gives the first one; to see how titles spread
+across FOC dates:
+```sql
+SELECT foc_date, COUNT(*) FROM catalog WHERE catalog_month = 'YYYY-MM'
+GROUP BY foc_date ORDER BY foc_date LIMIT 6;
+```
+Titles whose FOC falls before your deadline show as **At risk** and are ordered ad-hoc (Run E, E1).
 
 ### 9. Turn Maintenance Mode OFF
-Admin → **Maintenance Mode** → OFF. The catalog is live. The script reminds you at the end.
+Admin dashboard → **Ordering** mode → **Maintenance Mode** → OFF. The catalog is live. The script
+reminds you at the end.
+
+**Then:** print the in-store paper catalog for the new month (Paper Orders → **Print Catalog**,
+Run E step E10).
 
 ---
 
-## RUN B — Weekly shipment import (5 steps)
+## RUN B — Weekly shipment import (3 steps)
 
 The shipment path lives inside the same script, so you still pass the **current month's**
 catalog files. That re-upserts the catalog in place, which is safe and expected.
+
+> **The import does not publish the newsletter any more (F135 S4, scripts `fc044f9`, 2026-10-13).**
+> The `weekly-pull-feed` repo's own Tuesday workflow builds the feed from the database and sends it;
+> a read-only Monday preflight warns if the week is empty. So there is no `.env` edit for an ad-hoc
+> or catch-up shipment, no feed line to check, and no token to keep alive: an old week's invoice can
+> no longer republish a past newsletter. *(Until 2026-10-29 this run had five steps, including
+> "comment out `GITHUB_TOKEN_PULL_FEED` for an ad-hoc import", "check the feed line" and "restore
+> `.env`". Those are retired; the `GITHUB_TOKEN_PULL_FEED` line is gone from `.env` and the tokens
+> were deleted on 2026-10-21.)* **Run the import before Tuesday's send** (cron 21:00 UTC, often
+> starting a few hours late), because the send reads whatever shipment rows are loaded.
 
 ### 1. Get every invoice file for the week
 - **Lunar** — the numbered code invoice (first line is just digits). One per week.
@@ -245,37 +301,13 @@ catalog files. That re-upserts the catalog in place, which is safe and expected.
 > deliveries is only right if both files go in the same run — a later run with just one of them
 > overwrites the other's quantity instead of adding to it. Titles in only one file are unaffected.
 
-### 2. If this is an AD-HOC catch-up shipment, not the current week — edit `.env` first
-Comment out this line in `scripts\.env`:
-```
-# GITHUB_TOKEN_PULL_FEED=...
-```
-**Comment it out. Do not blank it.** Otherwise the newsletter republishes an old week, deletes
-the current week's thumbnails, and the Tuesday mailout sends the stale issue. This has happened
-for real (2026-08-11).
-
-> **How to tell, and it is NOT about how many shipments you have this week.** Open the invoice and
-> look at the on-sale dates. The publish targets the **most common** on-sale date in the file.
-> - Most dates in the **current** week → skip this step.
-> - Most dates in a week that has **already passed** → do this step.
->
-> **A second shipment in the current week is safe** and needs no `.env` edit — it just rebuilds the
-> current week's feed with more titles. **A single catch-up shipment is the dangerous one**, even
-> though it is the only shipment that week. Count of shipments is irrelevant; the dates decide.
->
-> A stray late row inside an otherwise-current shipment is also fine — the "most common date" rule
-> was adopted on 2026-08-11 precisely to stop one straggler dragging the publish backwards.
-
-> **A `--no-write` dry run will not answer this for you.** Under `--no-write` the script prints
-> `[no-write] would publish weekly pull feed` and never works out which week it would target, so
-> you cannot dry-run first to decide. Read the dates off the invoice instead.
-
-### 3. Run the import: the two catalog files, then every shipment file
+### 2. Run the import: the two catalog files, then every shipment file
 ```powershell
-node .\import.js "..\Lunar_Product_Data_1026.csv" "..\2026_10_PRH_metadata_full_active.csv" "..\Shipment-detail-LUNAR.csv" "..\Shipment-detail-PRH.csv"
+node .\import.js "..\Lunar_Product_Data_1126.csv" "..\2026_11_PRH_metadata_full_active.csv" "..\Shipment-detail-LUNAR.csv" "..\Shipment-detail-PRH.csv"
 ```
-That is the 2026-10-09 week as an example: substitute the current month's two catalog files, and
-add one more quoted path for each extra delivery.
+That is the shape for a week in the 2026-11 catalog month: substitute the current month's two
+catalog files (the month the database is on, which changes after each Run A), and add one more
+quoted path for each extra delivery.
 
 Confirm the month at the prompt (it is the **current** month — same month as the DB, so only an
 upsert refresh runs). Answer **n** to the notification email.
@@ -285,7 +317,7 @@ invoices?". Leave them off and it asks, then takes one path per line until a bla
 
 **All-or-nothing, and it says so.** If any listed shipment file is missing, or one repeats another
 (same path, or the same delivery/shipment number), the script prints a `❌` line naming the file and
-skips the **whole** shipment import: nothing is read or written, and the feed is **not** published.
+skips the **whole** shipment import: nothing is read or written for the shipment.
 The catalog refresh before it still happened. Fix the list and run again with the full set; re-running
 files that already loaded is safe. A file that yields no rows is called out by name
 (`contributed 0 rows`); a file that is neither format prints `Unrecognized shipment format`.
@@ -295,32 +327,15 @@ files that already loaded is safe. A file that yields no rows is called out by n
 > means a bad catalog file delays the shipment import, so reuse the current month's files you
 > already imported rather than re-downloading on the day.
 
-### 4. Check the feed line
-- Normal run: `Feed week: YYYY-MM-DD (from ...)` — confirm that date is the week you mean.
-- Ad-hoc run: confirm you see `GITHUB_TOKEN_PULL_FEED missing from .env — skipping feed
-  publish.` That warning is how you know Step 2 worked.
-- If you see `Pull-feed publish failed (import is unaffected)`: the shipment landed but the feed did
-  not, so Tuesday's newsletter would go out stale. Re-publish by hand (it targets the latest loaded
-  shipment; add `--week=YYYY-MM-DD` only if that is not the week you mean):
-  ```powershell
-  node .\build-pull-feed.js --publish
-  ```
-- If the failure says `HTTP 401 ... Bad credentials`, **republishing will fail the same way**: the
-  GitHub token in `.env` (`GITHUB_TOKEN_PULL_FEED`) is dead (expired or revoked; seen on 2026-10-09). Create a new fine-grained token scoped to **contents: read and write on
-  `weekly-pull-feed` only**, put it in `.env` in place of the old value, then run the command above.
-  Do this before **Tuesday 22:00 UTC**; the live feed's `pull-feed-generated` stamp is what the
-  newsletter's stale guard reads. Write down the expiry date you choose so the next lapse is not a surprise.
-- If the publish fails with `HTTP 403 ... Resource not accessible by personal access token`, the token
-  is alive but **cannot write**: its **Contents** permission is Read-only. A read-only token passes
-  every read check (a repo read, the same `git/ref` call as the publish's first step), so a green
-  check of the token does **not** prove it can publish; only the publish does. Nothing is written when
-  this happens (the failure comes before any commit). Edit the token (Settings → Developer settings →
-  Fine-grained tokens → the token → Edit → Contents: **Read and write** → Update), which keeps the
-  same value, then re-run `node .\build-pull-feed.js --publish`. After a publish, confirm it was **one**
-  new commit on `weekly-pull-feed` and that the live `pull-feed-generated` stamp moved.
-
-### 5. Restore `.env` (ad-hoc only)
-Uncomment `GITHUB_TOKEN_PULL_FEED`. Do it now, not later — the next weekly run needs it.
+### 3. Read what it printed
+- The F157 per-distributor counts and the reports from Run A, Step 6 print here too (a same-month
+  refresh); the `PINNED` one is the one to act on.
+- Each shipment file's row count. A file that `contributed 0 rows` is usually the wrong download.
+- **Free promos are dropped on purpose** (F172, since 2026-10-23): a Lunar row with `Retail` 0, or
+  with `Total` or `Discounted Price` exactly 0 (a 100%-discounted giveaway such as an ashcan), is
+  not loaded, so it is not on the store grid or the newsletter even though it is in the box.
+- The newsletter is not mentioned: the import does not publish it (see the note at the top of this
+  run). If Tuesday's email looks wrong, look at the `weekly-pull-feed` workflow run, not here.
 
 **Optional:** see what was reserved but did not arrive:
 ```powershell
@@ -371,20 +386,26 @@ node .\check-dates.js
 The `--no-write` run first is cheap: it reads and reports, and applies nothing. It still records what
 it saw in `check-dates-state.json` (scripts folder), and a dry run plus the real run on the same day
 count as **one** observation, not two. Do not delete that file: the withdrawal report's two-run
-history lives in it.
+history lives in it. A `--staging` run uses `check-dates-state.staging.json` instead (F175), so it
+is safe to run against staging again.
 
 ### 3. Read the report, then answer the apply prompt
-Read these in order. Only the first three groups are written by the apply prompt; the rest are for you.
+Read these in order. The first two groups are written by the first apply prompt, the unreserved
+Lunar group by a second one, and withdrawal candidates by their own per-title question; the rest
+are for you.
 
 | Section | What it means | What you do |
 |---|---|---|
-| `⚠️ STRANDED` | Reserved title in an **older** month whose date moved. `← ALREADY HIDDEN FROM CUSTOMERS` means the customer cannot see it at all | Applied by the prompt below — read these first |
-| `N reserved title(s) in the current month … changed date`, `N title(s) changed FOC date only` | Ordinary revisions | Applied by the prompt below |
-| `N UNRESERVED title(s) … changed date` | Only appears with `--include-unreserved` | Applied by the prompt below |
+| `⚠️ STRANDED` | Reserved title in an **older** month whose date moved. `← ALREADY HIDDEN FROM CUSTOMERS` means the customer cannot see it at all | Applied by the first prompt below — read these first |
+| `N reserved title(s) in the current month … changed date`, `N title(s) changed FOC date only` | Ordinary revisions | Applied by the first prompt below |
+| `📋 UNRESERVED LUNAR LISTINGS (F173 (a))`, with `HIDDEN BUT STILL ORDERABLE` listed first | Unreserved Lunar listings, any catalog month, whose dates disagree with Lunar's export. "Hidden but still orderable" means our FOC has passed and Lunar's has not, so no customer can reserve a title that is still for sale | Applied by the **second** prompt below. Replaces the removed `--include-unreserved` flag |
+| `✋ PREVIOUSLY CORRECTED; CHECK BY HAND` | Unreserved Lunar listings whose current value was set by an earlier **hand fix** (read from the one-off fix scripts' logs), held out so the recheck does not undo it (F159) | **Report only.** Check on Lunar's site; correct by hand if needed |
+| `🔁 LIKELY RECODES` | A reserved Lunar code missing from the export while another of our listings, in a **different** month, has the same UPC (or ISBN) | **Report only.** If Lunar confirms the recode, move the reservations with Run D-MOVE |
+| `📅 CHECK THESE DATES BY HAND on Lunar's site` | Reserved Lunar titles in-store within 35 days but absent from the export, so no file can correct their date | **Report only.** Look each up on Lunar's site |
 | `🚨 N FULFILLED reservation(s) with no arrival judgement …` (F158) | Closed within the last 14 days, so customers already see "Order placed", with nothing showing it arrived. Nothing else catches these | **Report only.** Each needs a human decision |
 | `⛔ N reserved title(s) the distributor shows as CANCELLED / no longer sold` | Lunar still lists the title but with a **placeholder** in-store date before 2000 (usually 1/1/1901, FOC 1/1/1900; the title often ends "Cancelled"). The script never writes that as a date | **Report only.** See below |
 | `N reserved code(s) absent from this week's exports`, then `>> N … PAST on-sale with NO shipment evidence` | "Catalog not pulled" is no signal. The `>>` list is the F155 shape: nothing can correct it automatically | **Report only.** Look the listed titles up by hand |
-| `🔎 WITHDRAWAL CANDIDATES (F165 S2, report only)` | Titles absent from their **own** source on two runs, on different dates | **Report only.** See below |
+| `🔎 WITHDRAWAL CANDIDATES` | Titles absent from their **own** source on two runs, on different dates. Lunar ratio covers (1:25 and so on) and PRH codes listed in any supplied PRH file are no longer candidates (the two V5 false-alarm causes) | One `Mark as withdrawn? [y/N]` question each, after the report. See below |
 | `📥 NEXT RUN`, `🧊 FROZEN CATALOG(S)` | Which PRH catalogs to pull next time; catalogs whose file stopped changing | Ignore any month on the frozen list |
 
 **Cancelled titles (Lunar's 1/1/1901 date).** Lunar sometimes keeps a title it no longer sells in
@@ -402,29 +423,38 @@ site, then:
 | Ordered (`ledger net` above 0), in-store date not yet passed | **Rejected by supplier** (the customer sees Rejected and can remove it) |
 | Never ordered (`no order recorded`) | Cancel the reservation for the customer through impersonation |
 
-There is no "Withdrawn" mark to set; that is F165 S3 and is not built. A title Lunar drops from
+*(This paragraph read "There is no Withdrawn mark to set; that is F165 S3 and is not built" until
+2026-10-29. S3 landed 2026-10-19; see Withdrawal candidates below.)* A title Lunar drops from
 the export altogether, rather than re-dating it, shows up under withdrawal candidates instead. That
 is how BUFFY THE VAMPIRE SLAYER #2 CVR A (shown as Cancelled, 1/1/1901 on Lunar's site, 2026-10-11)
 appeared, and it was already marked Didn't arrive.
 
-**Withdrawal candidates.** Nothing marks a title withdrawn any more (F165 S1), and this section
-writes nothing. Absence is evidence, not proof: a withdrawn title and one whose allocation merely
-closed look the same in these files. Check **each** candidate on the distributor's site and record
-the true/false split — that is gate V5 in `docs/f165-withdrawal-detection-redesign.md` § 7, and it
-decides whether the confirm-to-mark step (S3) is ever built. A title is only listed after it is
-absent on two runs on **different dates**, so the first run that has this section records first
-sightings (`N absent for the first time`) and can list nothing; the second, on a later date, is the
-first that can.
+**Withdrawal candidates.** The import never marks a title withdrawn (F165 S1). Since 2026-10-19
+(F165 S3) this script asks about **each** candidate, after the report and never under `--no-write`:
+`Mark as withdrawn? Check the distributor's site first. [y/N]`. **The default is No**, and only
+`y` or `yes` marks. The question first says what a "y" does: the reservation's customers see
+"cannot arrive" on My List at once and may remove it, even if it was ordered. Absence is evidence,
+not proof (a withdrawn title and one whose allocation merely closed look the same in these files),
+so check each one on the distributor's site before answering. **If you mark one that was ordered,
+also record "Rejected by supplier"** in admin (Order Follow-Up), so the order record nets to 0.
+Before writing, the script saves each chosen row's before-state to that day's
+`check-dates-log-YYYY-MM-DD.json`, and afterwards it re-reads the rows and counts them. A title is
+only listed after it is absent on two runs on **different dates**, so the first run on a new title
+records a first sighting (`N absent for the first time`) and cannot list it.
 
-**The apply prompt** appears only if there is something to write (otherwise `No date corrections
-needed`):
+**The apply prompts** appear only if there is something to write (otherwise `No reserved date
+corrections needed`), in this order:
 
-`Apply N date correction(s) to PRODUCTION? (y/n)`
+1. `Apply N date correction(s) to PRODUCTION? (y/n)` (reserved titles). Before it asks, the script
+   writes the before-state to `check-dates-log-YYYY-MM-DD.json` in the scripts folder (exact revert
+   data; written for `--no-write` too).
+2. `Apply N UNRESERVED Lunar date correction(s) to PRODUCTION? (y/n)` (the `📋` group). Its own
+   before-state log is `check-dates-unreserved-log-YYYY-MM-DD.json`; `--no-write` writes neither
+   this log nor the rows. It is asked whichever way you answered the first.
 
-Before it asks, the script writes the before-state to `check-dates-log-YYYY-MM-DD.json` in the
-scripts folder (exact revert data; written for `--no-write` too). After `y` it re-reads the rows
-and prints `Done. N/N confirmed by an independent re-read`; `VERIFICATION FAILED` means stop and
-look. **Re-run this after any older-month import** — re-importing a month restores whatever its file says.
+After each `y` it re-reads the rows and prints `Done. N/N confirmed by an independent re-read`;
+`VERIFICATION FAILED` means stop and look. On a `--staging` run the prompts say STAGING and the
+log names carry `-staging-`. **Re-run this after any older-month import** — re-importing a month restores whatever its file says.
 
 A frozen PRH catalog is a **known dead end, not a mistake on your part** — once frozen, no file
 carries revisions for that month any more.
@@ -745,7 +775,7 @@ every listed title as ordered. Type `none`, or the numbers of the titles you did
 
 ---
 
-## Answering the prompts (Run A Step 5 / Run B Step 3)
+## Answering the prompts (Run A Step 5 / Run B Step 2)
 
 Up to seven questions. Three are conditional guards that appear only when something looks wrong.
 The shipment question is skipped when shipment files are given on the command line.
@@ -788,7 +818,7 @@ You do not trigger any of these; they are listed so the console output is readab
 | New month only | Prompt to confirm the closing cycle's open orders |
 | New month only | **Clear the order deadline** (you re-set it at Step 8) |
 | New / same month | Auto-reserve subscribers' standard covers |
-| Shipment supplied | Import shipment rows, then publish the weekly pull feed (skipped with a warning if `GITHUB_TOKEN_PULL_FEED` is absent, or if the shipment import was skipped) |
+| Shipment supplied | Import shipment rows, dropping Lunar free promos (`Retail` 0, or `Total` / `Discounted Price` exactly 0; F172). **Publishes nothing**: the newsletter is built by the `weekly-pull-feed` Tuesday workflow (F135 S4, 2026-10-13) |
 | Every run | Purge `usage_events` older than 90 days |
 | Every run | Report about-to-be-fulfilled titles with no arrival evidence, then auto-fulfill past-on-sale preorders (anything with no arrival evidence is held back 14 days) |
 
@@ -820,9 +850,9 @@ and answer the email prompt again.
 | `FATAL: SUPABASE_URL_PROD does not point at the production Supabase project` | The `.env` points at the wrong project. The script refuses rather than writing to the wrong database |
 | `A CATALOG FILE PRODUCED NO RECORDS (F157)` | **The run aborted before writing anything — nothing was changed.** One of the two catalog files yielded zero usable records. Almost always the wrong file, an empty export, or a changed export format. Note that *raw* rows can look plausible while every row fails: the message prints both counts. Re-download the named file and run again. There is no override, and that is deliberate |
 | `Unrecognized shipment format` | The file isn't a Lunar code invoice or a PRH delivery invoice. Check you downloaded the invoice, not a summary |
-| `❌ Shipment file not found` or `❌ … repeats …`, then `Skipping shipment import` | A path is wrong, or two paths are the same delivery. **Nothing was read or written for the shipment, and the feed was not published.** Fix the list and run again with every file for the week |
+| `❌ Shipment file not found` or `❌ … repeats …`, then `Skipping shipment import` | A path is wrong, or two paths are the same delivery. **Nothing was read or written for the shipment.** Fix the list and run again with every file for the week |
 | `⚠️ … contributed 0 rows` | That file parsed to nothing. Usually the wrong download, or a summary rather than the invoice. The other files still loaded, so re-run with the right file **and** the rest of the week's files |
-| `Pull-feed publish failed` | The shipment landed; the feed did not. Run `node .\build-pull-feed.js --publish` (Run B, Step 4). If the message says `HTTP 401 ... Bad credentials`, the token is dead: replace it first (Run B, Step 4) |
+| Tuesday's newsletter is empty, stale or did not send | Not an import problem any more: the import publishes nothing (F135 S4). Check that week's shipment rows landed (Run B), then the `weekly-pull-feed` repo's Actions log (the Monday preflight and the Tuesday send). *(`Pull-feed publish failed` and `build-pull-feed.js` in this folder are gone since 2026-10-13.)* |
 | `No .csv files in …\recheck` or `Skipped (unrecognised header)` (`check-dates.js`) | The folder is empty, or the file is not a Lunar All Products export or a PRH master-data file. Re-download it |
 | Wrong catalog month imported | Re-import that month's real file under the correct month; see `monthly-catalog-refresh.md` |
 
