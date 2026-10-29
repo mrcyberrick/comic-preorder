@@ -29,6 +29,10 @@ Three things converged that were not all true when F99 was filed on 2026-07-25:
    8:00 AM ET, after two weeks of aggregate reports; reminder: cloud routine
    `trig_01SwSakp3uft7RE7khDPgYbo` and Google Calendar event `ni7srpe773f1kguv42o9oo5c9s`. The reminder
    only reminds; the decision stays Rick-in-the-loop.)*
+   *(Gate CLOSED 2026-10-29: the reminder fired and the reports, DNS and secrets were all clean, with
+   `mrcyberrick.us` showing one message in the window (Rick's own test, aligned on SPF and DKIM) and no
+   MailerLite or MailerSend source anywhere. See `technical-reference.md` § 13 F99. Tightening itself is
+   a separate decision, not made.)*
 2. **A second tenant is being scoped**, and transactional email is one of its two hard blockers (the
    other is F131's import path). Every customer-facing email currently hardcodes
    `noreply@mrcyberrick.us` with the founding tenant's name, street address and phone.
