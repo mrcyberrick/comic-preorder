@@ -2,7 +2,7 @@
 
 **STATUS:** ON STAGING 2026-10-29 (`7a46228`: `policy.html`, `terms.html`, `privacy.html`, footer links on the seven nav pages, Terms/Privacy on the apex footer) · NOT promoted · needs Rick's review, then a lawyer's read before production
 
-**Built with these defaults for the [CONFIRM] items below:** effective date October 29, 2026; contact `pulllist@mrcyberrick.us`; New Jersey law; after six weeks books "may be returned to the shelf for sale" (nothing about pausing accounts); the newsletter line reworded to "If your shop sends a newsletter, it is a separate sign-up". The live Privacy page also adds one line not in this draft: pages load fonts from Google Fonts and covers from distributors' websites, which see the browser's IP address. The Pull-List Policy footer link is `data-paid-only` (founding store's rules). No signup checkbox was added.
+**Built with these defaults for the [CONFIRM] items below:** effective date October 29, 2026; contact `pulllist@mrcyberrick.us`; New Jersey law; after six weeks books "may be returned to the shelf for sale" (nothing about pausing accounts); the newsletter line reworded to "If your shop sends a newsletter, it is a separate sign-up". The live Privacy page also adds one line not in this draft: pages load fonts from Google Fonts and covers from distributors' websites, which see the browser's IP address. The Pull-List Policy footer link is `data-paid-only` (founding store's rules). *(This read "No signup checkbox was added." until the same day:)* The signup form now has a required agreement checkbox (`43db594`), client side only; nothing records the acceptance.
 
 Three documents, each to become its own page linked from the footer of every page:
 
