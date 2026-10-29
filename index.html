@@ -428,6 +428,17 @@
         <label for="signup-hp">Leave this field blank</label>
         <input type="text" id="signup-hp" name="signup-hp" tabindex="-1" autocomplete="off">
       </div>
+      <!-- Policy agreement (2026-10-29). Required by doSignup(), client side only:
+           nothing records the acceptance. The Pull-List Policy link is
+           unconditional because native signup is founding-tenant only (see the
+           "Native signup" gate below); revisit when signup opens to other shops. -->
+      <label class="signup-agree" for="signup-agree">
+        <input type="checkbox" id="signup-agree">
+        <span>I agree to the
+          <a href="policy.html" target="_blank" rel="noopener">Pull-List Policy</a>,
+          <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and
+          <a href="privacy.html" target="_blank" rel="noopener">Privacy Statement</a>.</span>
+      </label>
       <div id="signup-turnstile" style="margin:14px 0"></div>
       <button id="btn-signup" class="btn btn-primary btn-full" style="margin-top:8px">
         Create Account
@@ -920,6 +931,12 @@
 
     if (!name || !email) {
       signupErrorEl.textContent   = 'Please enter your name and email.';
+      signupErrorEl.style.display = 'block';
+      return;
+    }
+
+    if (!document.getElementById('signup-agree')?.checked) {
+      signupErrorEl.textContent   = 'Please agree to the Pull-List Policy, Terms of Use and Privacy Statement.';
       signupErrorEl.style.display = 'block';
       return;
     }
