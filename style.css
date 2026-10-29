@@ -2253,6 +2253,32 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--text-muted);
   letter-spacing: 0.03em;
 }
+/* Policy / Terms / Privacy links (customer-policies, 2026-10-29). The
+   Pull-List Policy link is data-paid-only: its text is the founding store's. */
+.site-footer-links { margin-top: 6px; }
+.site-footer-links a { text-decoration: underline; text-underline-offset: 2px; }
+.site-footer-links a:hover { color: var(--text-secondary); }
+
+/* The three static policy pages (policy.html, terms.html, privacy.html). */
+.legal-top { border-bottom: 1px solid var(--border); padding: 14px 0; }
+.legal { max-width: 760px; padding-top: 32px; padding-bottom: 64px; }
+.legal h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.6rem);
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+.legal-meta { color: var(--text-secondary); font-size: 0.85rem; margin: 6px 0 24px; }
+.legal h2 { font-size: 1.05rem; font-weight: 600; margin: 28px 0 8px; }
+.legal p, .legal li { color: var(--text-secondary); font-size: 0.95rem; }
+.legal strong { color: var(--text-primary); }
+.legal ul { padding-left: 20px; }
+.legal li { margin-bottom: 8px; }
+.legal a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.legal-links { margin-top: 36px; }
+@media print {
+  .site-footer-links { display: none; }
+}
 
 /* Catalog-month tag on a search result (F121 session 5b).
    Cross-month search is only safe if every row says which month it came from --
