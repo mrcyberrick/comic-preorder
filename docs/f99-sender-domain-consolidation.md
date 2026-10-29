@@ -33,6 +33,9 @@ Three things converged that were not all true when F99 was filed on 2026-07-25:
    `mrcyberrick.us` showing one message in the window (Rick's own test, aligned on SPF and DKIM) and no
    MailerLite or MailerSend source anywhere. See `technical-reference.md` § 13 F99. Tightening itself is
    a separate decision, not made.)*
+   *(Update later the same day: Rick then tightened DMARC to `p=quarantine; sp=none; pct=25` and deleted the
+   three `dc-*._spfm` helper rows. Both verified on the GoDaddy nameservers, and a mailbox test read
+   `dmarc=pass`. See `technical-reference.md` § 13 F99.)*
 2. **A second tenant is being scoped**, and transactional email is one of its two hard blockers (the
    other is F131's import path). Every customer-facing email currently hardcodes
    `noreply@mrcyberrick.us` with the founding tenant's name, street address and phone.
