@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-14 — Rick signed off ("go"); **built and tested locally, NOT pushed** (`weekly-pull-feed` local branch `facebook-weekly-post` `2e1a1d1b`; SQL `docs/sql/2026-10-14-fb-spotlight-rpc.sql` staging and prod APPLIED 2026-10-14); held until the F135 gate (Tue 10-20 run read); Meta setup (R1) DONE 2026-10-14; see § 8 | staging=— | prod=— | findings=none consumed
+**STATUS:** IN PROGRESS 2026-10-28 — **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -86,7 +86,7 @@ on staging, then production).
 | Q2 | Items per week, edits after publishing | Measured: 119 titles this week; earlier publishes 19 to 72. The whole feed is rebuilt each Tuesday; a re-dispatch with `week=` can republish a past week (deliberate). **Not an issue under week-based dedupe** |
 | Q3 | Meta developer app? Are you an admin of the Ray & Judy's Page? | **Answered 2026-10-14: Rick is the Page admin.** The Meta developer app is created in R1 (no app yet assumed) |
 | Q4 | Test Page? | A private group **cannot** be used (Groups API removed). Create a throwaway Page you admin, with no followers. Whether a brand-new or unpublished Page accepts API posts is checked in R1 |
-| Q5 | Post when the feed updates, or a fixed day? | **DECIDED 2026-10-14 (Rick): Wednesday morning, cron 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
+| Q5 | Post when the feed updates, or a fixed day? | **CHANGED 2026-10-28 (Rick, option 1): right after the scheduled Tuesday newsletter run succeeds, the night before in-store day (§ 8, 2026-10-28).** Was: **DECIDED 2026-10-14 (Rick): Wednesday morning, cron 12:00 UTC** (8 AM ET in EDT, 7 AM in EST, plus GitHub's 2-3 h delay = mid-morning on new comic day). The newsletter already covers Tuesday evening. Your call |
 | Q6 | Photo post, link post, or both? | **DECIDED: a photo post** (the composed top-picks image, § 3a; the link in the text). Meta ignores a custom image on link posts from the API unless the Page "owns" the linked domain (Graph API v2.9/v2.11 changelog), and `newsletter.html` has **no Open Graph tags**, so a link post would show a generic or scraped preview and a custom image cannot work. Trade-off: a link inside photo text is clickable but less prominent than a link card. Confirm in R1 |
 | Q7 | Prices and descriptions on the page? | **Recommend no for v1.** It means widening the anon RPC (SQL on staging then production), a page redesign and 119 descriptions on one page. File separately if wanted |
 | Q8 | Post wording | Draft in § 4.4. Approve or edit |
@@ -212,7 +212,7 @@ pinned with a lockfile, installed in the Facebook job only.
 name: Post to Facebook
 on:
   schedule:
-    - cron: "0 12 * * 3"   # Wed 12:00 UTC (Q5)
+    - cron: "0 12 * * 3"   # Wed 12:00 UTC (Q5)   [replaced 2026-10-28 by workflow_run on "Send Weekly Newsletter", § 8]
   workflow_dispatch:
     inputs:
       dry_run: { type: boolean, default: true }
@@ -523,6 +523,142 @@ the Meta app (not needed to post to a Page you admin, if D1 holds).
 3. **After the F135 gate is read (Wed 10-21):** rebase `facebook-weekly-post` onto `origin/main`,
    fast-forward and push (not on a Tuesday evening), then T1-T6 (§ 5 R4) on the test Page.
 4. R5 go-live after T6 is reviewed.
+
+**2026-10-21, second session (the F135 gate closed today, so the hold is lifted).**
+
+- **Pushed:** the branch was rebased onto `weekly-pull-feed` `main` (which had gained the newsletter's
+  on-sale-date work, `800f460d` / `a74692a8`; the four builder exports the script uses were still
+  there), both suites green (newsletter 76/76, Facebook 24/24), the newsletter's files byte-identical
+  to `main`, then fast-forwarded to `main` (`ca8bf02d`) on a Wednesday. GitHub registered "Post to
+  Facebook"; its schedule stays inert (`FACEBOOK_ENABLED=false`).
+- **Local dry run against live production, real spotlight lookup:** week 2026-10-19, 133 titles,
+  spotlight AMAZING SPIDER-MAN: HALLOWEEN SPECIAL #1 | CATWOMAN #92 | WONDER WOMAN #38; picture
+  inspected.
+- **T1 failed red twice, correctly, and found a real limit.** `GET /{page}/posts` returned **code 100 /
+  subcode 33** ("does not exist, cannot be loaded due to missing permissions"). Isolated in steps:
+  (1) the `Authorization: Bearer` header is read (a fake token gets 190 by header and by query, 104
+  with none), so the script sends the token correctly; (2) the first secret was a token without
+  access; Rick regenerated it with Book Stop Demo ticked, and the Debugger then read **Type Page,
+  Page ID `1416367771558275` Book Stop Demo, Expires Never, Data Access Expires 1800367967 (about
+  2027-01-19), scopes `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `public_profile`,
+  granular "applies to all objects"**; secret updated 2026-10-21 14:27Z; (3) still 100/33 from
+  GitHub, and **the same in Graph API Explorer with that token**: `me` returns Book Stop Demo, but
+  `/{page}/posts` and `/{page}/feed` both return 100/33. **So Facebook refuses this app (Development
+  mode) a read of the Page's posts even with a correct Page token.** Cause not established (the
+  developer forums report the same message with the permission granted). **Posting uses a different
+  permission and is untested until T2.**
+- **Dedupe redesigned (`da3dc00b`):** the record of "posted for week X on Page Y" is now a **GitHub
+  Actions cache entry** (`fb-posted-<page id>-<monday>`), restored with `lookup-only` before the post
+  step and saved after it. The script writes `posted-<monday>.txt` the moment Facebook returns a post
+  id, **before** reading the post back, and the save step runs even if the run is red, so a run that
+  posted cannot be followed by a second post. Still never commits. Tests 24 to 27 (the fake now
+  refuses posts/feed reads as Facebook does); two negative controls (a cache hit ignored; the record
+  not written) each red, script restored byte-identical. **Known limits of the cache:** an entry not
+  read for 7 days is evicted (harmless: the key is per week), and it is not visible in the UI as a
+  "posted" log (the run summary is).
+- **A second error of mine, caught by the T1 rerun:** the output folder was moved to `.fb-out` so
+  `hashFiles()` could see it (it only searches the workspace), and `upload-artifact` skips dot folders,
+  so the picture was silently not attached (`if-no-files-found: ignore` hid it). Renamed to `fb-out`
+  and the setting is now `warn` (`6c69f3cb`).
+- **T1 GREEN on the runner** (run `39619669616`): tests, Chrome present, week 2026-10-19, cache miss,
+  picture built and attached (887 KB, identical to the local render, fonts included), message built,
+  nothing posted, record step skipped.
+- **Token upkeep, new:** the token never expires, but **data access ends about 2027-01-19** (90 days
+  after Rick last authorised the app). After that the job fails red until the generate / extend /
+  `me/accounts` steps are repeated and the secret updated (about 5 minutes). Set a reminder a week
+  before, once the real Page is live.
+- **Screenshot hygiene:** the Access Token Debugger puts the token in the address bar; one screenshot
+  showed its first characters (truncated, not usable). Crop or blur the address bar too.
+
+- **T2 GREEN (Rick: "Run T2"), run `39620495504`:** one photo post to Book Stop Demo,
+  https://www.facebook.com/122099205141518689/posts/122099205099518689 ; Facebook returned a post id
+  AND the single-post read-back worked (only the Page's post LIST is refused), so the run is green on a
+  real permalink; cache saved `fb-posted-1416367771558275-2026-10-19`. The permalink's numeric ids
+  differ from the Page id; that is how Facebook formats it, not a different Page.
+- **T3 GREEN, run `39620659455`:** same week again: "Cache hit", "Already posted for the week of
+  2026-10-19 on this Page; nothing to do", record step skipped, nothing posted.
+- **T4 RED as designed, run `39620869850`** (dry run, `week=2030-01-09`): "no shipment rows ... the
+  weekly shipment import has not run".
+- **T5 RED as designed, run `39620926494`** (dry run, `week=2026-10-12`): "the news page shows the
+  issue built 2026-10-20, not this week (2026-10-12 to 2026-10-18)". *(T5 was run with last week rather
+  than next week as § 5 R4 suggested: next week's rows may not exist yet, so it would have failed on the
+  rows check and never reached the freshness check.)*
+
+- **Rick's checks, 2026-10-21 (his report):** the post is confirmed on Book Stop Demo and both links load
+  the right pages; GitHub emailed "Run failed: Post to Facebook - main (6c69f3c)" for each of the two red
+  runs (failed in 7 s and 10 s, 10:54 AM ET), each delivered to his Inbox and his REG MAIL folder. So the
+  alert path works.
+
+- **T6 STARTED 2026-10-21 15:57Z (Rick: "Switch it on"):** `FACEBOOK_ENABLED=true`, `FACEBOOK_PAGE_ID`
+  still the TEST Page (`1416367771558275`). This week is already recorded, so the first post the
+  schedule makes is Wed 2026-10-28.
+- **Stale-content guards, as built (Rick asked):** (a) no shipment rows for this week: red, nothing
+  posted (T4); (b) the news page's feed, read through the site's Worker, must have a `lastBuildDate`
+  inside this Mon-Sun week, else red (T5); (c) the scheduled run always targets the week containing
+  its own run date, and the spotlight lookup refuses any week but this one or last; (d) one post per
+  Page per week (T3). **Gap:** (b) tests WHEN the feed was built, not WHICH week it holds, so a
+  deliberate manual re-publish of a past week during the current week would pass it. The newsletter
+  now dates each RSS item on its on-sale day (`a74692a8`), so a check on the items' dates would close
+  this; not built (Rick's call). **BUILT 2026-10-21 (Rick: "build the small change"), `4d994aac`:** the
+  most common item `<pubDate>` must also fall inside this week, else red ("the news page lists the
+  titles for <date>, not this week ... a past week's newsletter may have been re-published"). Both feed
+  formats pass (today's live feed still dates items with the build time; from the Tue 10-27 build on,
+  items carry the on-sale day at noon Eastern). Tests 27 to 31; with the check removed exactly the two
+  new guard tests go red. Checked against the live feed locally (green). **Not yet exercised on the
+  runner:** the confirming dispatch (run `39631013636`, green) exited at "already posted" before
+  reaching it; the first real exercise is the Wed 10-28 scheduled run.
+- **Incident 2026-10-22, no harm:** the local `weekly-pull-feed` working copy of `post-facebook.js` and
+  its test file were found rewritten at 10:13:09 to be byte-identical to the older commit `6c69f3cb`
+  (both files in the same second; most likely OneDrive restoring an older copy). `origin/main` was never
+  affected (the schedule runs from GitHub). Restored with `git checkout --`, both files re-checked equal
+  to `origin/main`, tests 31/31. **Lesson: before editing in that folder, run `git status`; a clean
+  status is the only proof the local copy is the committed one.**
+
+**Owed now:** ~~(1) Rick looks at the post; (2) Rick confirms the failure emails~~ *(done, above)*; (3) T6: set
+`FACEBOOK_ENABLED=true` with the TEST Page id and read the first scheduled runs (Wed 2026-10-28,
+11-04); (4) R5 go-live (a token for the real Page, its id, a dry run, then on). Not verified: how the
+post looks to a follower's feed (the Page has none), and a phone view.
+
+- **Gate scheduled (2026-10-22): T6's first scheduled run (Wed 2026-10-28, cron 12:00 UTC, test Page) elapses
+  with margin Thu 2026-10-29; reminder: routine `trig_01VoC1GtSvbeMi5Y6wNVV58m` and Google Calendar event
+  `fv5qtnf1cr8hulhcdavpnje6og`, 8:00 AM EDT (12:00 UTC).**
+- **Gate scheduled (2026-10-22): T6's second scheduled run (Wed 2026-11-04) elapses Thu 2026-11-05; reminder:
+  routine `trig_01CLKLpVQ2ambTVH2JSZZ96G` and Google Calendar event `ena8aubk8ssumme6i97jppqbfk`, 8:00 AM EST
+  (13:00 UTC, after the clocks change).** Both reminders only remind; R5 (the real Page) stays Rick's step.
+  *(Both superseded 2026-10-28, see below: re-aimed at the Tuesday-evening runs.)*
+
+**2026-10-28: the first scheduled run never started, and the post now follows the newsletter.**
+- **The Wed 10-28 12:00 UTC cron did not run.** At 17:45Z (5h45m past the cron) the workflow had no
+  run at all for the day, though `FACEBOOK_ENABLED` was still `true` and the workflow active (a
+  disabled switch shows as a *skipped* run, not a missing one). GitHub simply never started it; the
+  newsletter's own cron had fired the night before (+3h14m). So T6's first check could not happen.
+- **Posted by hand instead (Rick: "run it please"):** dispatch `40738912868`, `dry_run=false`, green:
+  week 2026-10-26 -> 11-01, spotlight Absolute Batman #25 Cvr A / Amazing Spider-Man #1002 / Conan the
+  Barbarian #36 Cvr A, 144 titles, `Posted: https://www.facebook.com/122099205141518689/posts/122105680581518689`,
+  cache key `fb-posted-1416367771558275-2026-10-26` saved. Rick checked it in a browser: "looks correct".
+  This is the first real feed with on-sale item dates, so the past-week guard passed on the runner for
+  the first time.
+- **Timing changed (Rick: post 24 hours before in-store day, then "option 1").** A Tuesday-morning post
+  cannot work: the news page only switches to the new week when the Tuesday newsletter publishes it
+  (`rss.xml` commits 10-27 00:23Z, 10-20 23:40Z, 10-14 00:08Z, i.e. about 7:40-8:25 PM ET), so both feed
+  guards would fail all day and the link would show last week. **Now (`weekly-pull-feed` `0b8ed69f`):**
+  the post is started by `workflow_run` when **"Send Weekly Newsletter" completes**, and runs only if
+  that run was `event=schedule` and succeeded (a manual newsletter run may be build-only or a dry run;
+  after a manual recovery send, dispatch the post by hand). The Wednesday cron is removed. No clock or
+  time zone of its own: the newsletter's Tuesday 21:00 UTC cron is the only one (5 PM EDT / 4 PM EST,
+  plus GitHub's ~3 h delay), so the post should land about 7-8:30 PM ET, the night before in-store day.
+  The message still reads "New comics this Wednesday, <date>!", which is right the evening before.
+- **Feed wait:** the news page's Worker caches `rss.xml` 5 min (`Cache-Control: public, max-age=300`,
+  measured) and GitHub Pages up to 10, so on the triggered run (`FEED_WAIT_MINUTES=20`; 0 for manual
+  runs) the script re-checks the feed once a minute before failing. Job timeout 10 -> 30 min.
+  Tests 31 -> 34; with the wait disabled the three new ones go red. A dry dispatch on the new file
+  (`40745823188`) was green (34/34, `FEED_WAIT_MINUTES: 0`, stopped at "already posted").
+  **Not yet exercised:** the `workflow_run` trigger itself (only a scheduled newsletter run can start
+  it) and the wait on a real lag. First real run: **Tue 2026-11-03 evening.**
+- **Gates re-aimed (2026-10-28):** `trig_01CLKLpVQ2ambTVH2JSZZ96G` + calendar `ena8aubk8ssumme6i97jppqbfk`
+  now fire **Wed 2026-11-04 8:00 AM EST** to read the Tue 11-03 run; `trig_01VoC1GtSvbeMi5Y6wNVV58m` +
+  calendar `fv5qtnf1cr8hulhcdavpnje6og` now fire **Wed 2026-11-11 8:00 AM EST** to read the Tue 11-10
+  run and, if both are good, plan R5. Both still only remind.
 
 ## References
 
