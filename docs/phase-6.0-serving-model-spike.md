@@ -1,6 +1,6 @@
 # Phase 6.0 — Serving-model spike (S0): how `*.pulllist.app` could be served, and what it costs
 
-**STATUS:** COMPLETE as a decision record (desk research and read-only probes; the Phase 2 live experiment was deliberately SKIPPED by Rick 2026-10-07) — **Phase 6 gate G1 stays OPEN**, with Q2 and Q3 named below as the unanswered questions | staging=docs only 2026-10-07 | prod=N/A (no zone, Pages, Worker, Supabase or code change was made anywhere) | findings=F145,F171,F72
+**STATUS:** LIVE TEST RUN 2026-10-22 (§ 6a: Q2 and Q3 measured; halted on the route collision and torn down; G1 still OPEN, narrowed) · previously COMPLETE as a decision record (desk research and read-only probes; the Phase 2 live experiment was deliberately SKIPPED by Rick 2026-10-07) — **Phase 6 gate G1 stays OPEN**, with Q2 and Q3 named below as the unanswered questions | staging=docs only 2026-10-07 | prod=N/A (no zone, Pages, Worker, Supabase or code change was made anywhere) | findings=F145,F171,F72
 
 **Written:** 2026-10-07, pre-Phase-6 session G-C (runbook: `docs/pre-phase-6-gate-closure.md` § 2f).
 **Parent:** `docs/phase-6-self-service-signup.md` (§ Gating prerequisite, § Readiness G1).
@@ -121,6 +121,57 @@ Each of the five main pages loads about 8 to 9 same-origin sub-resources plus it
 6. Teardown: delete the record, then the route, then the Worker; confirm a random label is NXDOMAIN again (record how long the TTL took) and the production bytes and certificates are unchanged. **Halt and tear down first** if a production hostname shows the marker or any email record changes.
 
 **6.0 must also decide before any wildcard serves the real app:** what an unclaimed name renders (404 or the apex marketing page), and how F171's fix tells "no such tenant" from "lookup failed". Phase 6's provisional 6.1 (status filtering in `resolve_tenant_by_slug`) does not cover F171 and would widen it.
+
+---
+
+## 6a. The live test, RUN 2026-10-22 (Rick: "G1 - Go!"; halted on the collision check, torn down)
+
+Kit and runbook: `docs/phase-6.0-spike-kit/`, `docs/pre-phase-6-gate-closure.md` § 2h. Label `gjq82078`.
+Rick operated Cloudflare; the agent ran the checks.
+
+**Set up (Rick, about 16:44Z):** Worker `pulllist-wildcard-spike` (`worker.js`: a `spike-<label>` name gets
+a fixed `200` with `X-Spike: 1`; every other host is passed through with `fetch(request)` plus an
+`X-Spike-Passthrough: 1` marker); **one Route, `spike-*.pulllist.app/*`, zone `pulllist.app`** (Rick
+confirmed: a Route, not a Custom Domain, and that exact text); one proxied `CNAME * → pulllist.pages.dev`.
+
+**Measured at 16:45:28Z [measured]:**
+
+| Name | Result |
+|---|---|
+| `spike-gjq82078.pulllist.app` | **200**, `X-Spike: 1`, body `spike ok: …`; certificate SAN `pulllist.app, *.pulllist.app` |
+| `gjq82078.pulllist.app` (unregistered, not `spike-`) | **522** (Cloudflare cannot reach the origin), **`X-Spike-Passthrough: 1`** |
+| `www`, `staging` (unregistered) | **522**, `X-Spike-Passthrough: 1` |
+| `rjbookstop`, `comicstore` | 200, `index.html` == `origin/main`, own single-name certificates, **but `X-Spike-Passthrough: 1`: the Worker ran for them** → HALT |
+| DNS (`dns-during.txt` vs `dns-before.txt`) | the wildcard answered every unregistered name and type (A, AAAA, CNAME, TXT, MX, `_dmarc.<x>`); **the apex, `rjbookstop` and `comicstore` A/AAAA moved from `104.21.89.143` / `172.67.160.220` to `172.64.80.1` / `2606:4700:130:…`**; every email name (`send`, `mta`, `resend._domainkey`, Brevo DKIM, both `_dmarc`, `ms1`/`ms2`) **unchanged** |
+
+**Halt and teardown:** Rick deleted the DNS record, the route and the Worker. At 16:48:50Z no host carried
+either marker and both stores served `main` on their own certificates; **DNS matched the baseline exactly,
+all 38 lines, at 16:50:08Z** (Google's resolver; about 1 minute after teardown). **Exposure window about
+4-5 minutes:** every unregistered `*.pulllist.app` name resolved (to a Cloudflare 522 page), and the two
+production stores were served through the pass-through Worker, with unchanged bytes and certificates.
+
+**Answers:**
+- **Q2: a wildcard name can get a valid certificate and a Worker response, but Pages will not serve a
+  hostname it has not registered** (522 through the pass-through). So model (a1), a Worker that forwards to
+  Pages, does not work as such: the Worker would have to serve the app itself (model (a2), Workers static
+  assets) or rewrite the request to a registered hostname. **[measured]**
+- **Q3: a Worker route collides with the Pages custom domains, even a route that names a prefix.** A route
+  saved as `spike-*.pulllist.app/*` ran for `rjbookstop` and `comicstore`. **[measured]** Why is
+  **[inferred]**: Cloudflare's route patterns allow a wildcard only at the start of the hostname, so the
+  `spike-` prefix was most likely not honoured and the route behaved as `*.pulllist.app/*`; and the
+  route took precedence over the Pages custom domains, which the docs say may not coexist with a routed
+  Worker. Not proven which. Either way, a zone-wide Worker on `pulllist.app` runs in front of the store that
+  is printed on customer paper.
+- **Also observed, not explained:** the apex and store addresses moved to `172.64.80.1` while the Worker
+  route existed and moved back after teardown. Consistent with Cloudflare putting the hosts behind the
+  Worker; not investigated.
+
+**Consequence for D4 (provisional, nothing decided):** (a1) is ruled out as designed. A wildcard front needs
+either (a2) the Worker serving the build itself for EVERY host (so the stores move onto it, the "moves the
+project that serves the printed hostname" cost), or a route scheme that provably excludes the store hosts
+(a sub-zone such as `*.shops.pulllist.app` was not tested). **(c), per-tenant Pages custom domains, is now
+the only model proven safe in production.** G1 stays OPEN, narrowed: the question is no longer whether a
+Worker can front Pages, but whether (a2) or a sub-zone is acceptable.
 
 ---
 
