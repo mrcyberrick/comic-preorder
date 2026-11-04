@@ -1,6 +1,6 @@
 # F72 G-F — the five remaining mail functions and the client signup gate
 
-**STATUS:** NOT STARTED — plan written 2026-11-04 (planning session, read-only; no code, SQL or deploy). Decisions Q12-Q16 below (continuing the F72 plan's Q1-Q11) are open for Rick; each has a recommended default. | staging=— | prod=— | findings=F72
+**STATUS:** NOT STARTED — plan written 2026-11-04 (planning session, read-only; no code, SQL or deploy). Decisions Q12-Q16 below (continuing the F72 plan's Q1-Q11) ANSWERED 2026-11-04, Rick: "defaults" (every recommended column below is the decision). D1 itself is still Rick's, so S3 (the gate) waits on it. | staging=— | prod=— | findings=F72
 
 Parent records: `docs/f72-multi-tenant-branding.md` (design, § 0.1 tier rules, § 4.2 S2) and
 `docs/pre-phase-6-gate-closure.md` (row G-F, Phase 6 gate G3). This doc is the execution plan for
@@ -50,7 +50,7 @@ founding-only is correct while the import is single-tenant (F131, F169).
 
 ## 3. Decisions (each has a recommended default)
 
-| # | Question | Recommended | Why |
+| # | Question | Decided 2026-11-04 (Rick: "defaults") | Why |
 |---|---|---|---|
 | **Q12** | Do the five emails now, under Shape D? | **Yes, emails now; open the gate in the same pass only if D1 says so** | The emails fix a defect that exists today for `comicstore` and `demoshop` (an approved demo customer gets "Ray & Judy's Book Stop"), whatever D1 decides. The gate is the Phase-6-shaped part |
 | **Q13** | Free-tier `notify-customers` footer | **On this one email a free tenant's footer shows its own name and `tenants.location` (the F72 plan's Q1 says that holds a full postal address); if `location` is empty, send nothing and log a warning. `pro` keeps today's footer (Q14)** | Keeps the legal requirement without inventing a platform address. Today only the founding tenant (`pro`) can trigger it, so it changes nothing live |
