@@ -4692,6 +4692,8 @@
   // "not loaded" — the two are different claims and the UI must not conflate
   // them: an empty Map would say nobody has ever signed in.
   let activityById    = null;
+  // id → newest usage_events instant (ms). Folded into Last seen below.
+  let lastEventById   = new Map();
 
   async function ensureAccounts({ force = false } = {}) {
     if (accountsLoaded && !force) return;
@@ -4726,6 +4728,41 @@
       activityById = new Map((act || []).map(r => [r.id, r]));
     } catch (err) {
       console.warn('get_account_activity unavailable — Last seen will read "unknown"', err);
+    }
+
+    // last_sign_in_at only moves on a real sign-in, and a customer on a
+    // persisted session can go months without one while using the app every
+    // week, so on its own it understated Last seen (Brian Moss: Mar 8 here,
+    // Nov 2 on Analytics > Customer Activity). Take the later of it and the
+    // newest usage event, the source Customer Activity reads. Same exclusions
+    // as analytics.html: the two promo-banner types are not activity, and
+    // impersonated sessions log nothing (UsageEvents._log). Non-fatal: on
+    // failure the column falls back to sign-in alone, as before.
+    lastEventById = new Map();
+    try {
+      // Not fetchPaged(): it counts the whole table, unfiltered, and a page
+      // past the end of the filtered rows would 416. Count with the filter.
+      const evQuery = (sel, opts) => db.from('usage_events').select(sel, opts)
+        .not('user_id', 'is', null)
+        .not('event_type', 'in', '(promo_banner_shown,promo_banner_dismissed)');
+      const cnt = await evQuery('id', { count: 'exact', head: true });
+      if (cnt.error) throw cnt.error;
+      const batches = [];
+      for (let from = 0; from < (cnt.count || 0); from += 1000) {
+        batches.push(evQuery('id, user_id, created_at')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, Math.min(from + 999, cnt.count - 1)));
+      }
+      const results = await Promise.all(batches);
+      const bad = results.find(r => r.error);
+      if (bad) throw bad.error;
+      results.flatMap(r => r.data || []).forEach(e => {
+        const t = Date.parse(e.created_at);
+        if (!(lastEventById.get(e.user_id) >= t)) lastEventById.set(e.user_id, t);
+      });
+    } catch (err) {
+      console.warn('usage_events unavailable — Last seen uses sign-in time only', err);
     }
 
     // The Follow-Up panel and the Customers attention dot both count pending
@@ -4769,10 +4806,14 @@
   // into a liar — "unknown" would read as "never", and every active customer
   // would look like an unanswered invite.
   function lastSeenOf(u) {
-    if (!activityById) return { sort: -1, text: 'unknown', muted: true };
-    const ts = activityById.get(u.id)?.last_sign_in_at;
-    if (!ts)          return { sort: 0,  text: 'never',   muted: false };
-    return { sort: Date.parse(ts), text: formatDate(ts.split('T')[0]), muted: false };
+    const ev = lastEventById.get(u.id) || 0;
+    if (!activityById && !ev) return { sort: -1, text: 'unknown', muted: true };
+    const ts = activityById?.get(u.id)?.last_sign_in_at;
+    const t  = Math.max(ts ? Date.parse(ts) : 0, ev);
+    if (!t)           return { sort: 0,  text: 'never',   muted: false };
+    // Local calendar date, as analytics.html shows it. The old split('T') took
+    // the UTC date, a day late for anything after 8 pm Eastern.
+    return { sort: t, text: formatDate(DateUtils.fmtLocal(new Date(t))), muted: false };
   }
 
   // "Has an account, has never used it."
@@ -4795,7 +4836,7 @@
   function isNeverSignedIn(u) {
     if (!activityById || u.is_paper) return false;
     if (u.status === 'pending') return false;
-    return !activityById.get(u.id)?.last_sign_in_at;
+    return !activityById.get(u.id)?.last_sign_in_at && !lastEventById.has(u.id);
   }
 
   function accountsMatching() {
