@@ -1,6 +1,6 @@
 # F72 G-F — the five remaining mail functions and the client signup gate
 
-**STATUS:** NOT STARTED — plan written 2026-11-04 (planning session, read-only; no code, SQL or deploy). Decisions Q12-Q16 below (continuing the F72 plan's Q1-Q11) ANSWERED 2026-11-04, Rick: "defaults" (every recommended column below is the decision). D1 itself is still Rick's, so S3 (the gate) waits on it. | staging=— | prod=— | findings=F72
+**STATUS:** IN PROGRESS — S1 BUILT AND DEPLOYED TO STAGING 2026-11-04 (`6bda474`); V1-V4 green; V5 (real-inbox, Rick) NOT RUN; S2 (production) and S3 (gate) NOT STARTED. Decisions Q12-Q16 ANSWERED 2026-11-04, Rick: "defaults" (every recommended column in § 3 is the decision); D1 itself is still Rick's, so S3 waits on it. | staging=S1 2026-11-04 (five functions deployed) | prod=— | findings=F72
 
 Parent records: `docs/f72-multi-tenant-branding.md` (design, § 0.1 tier rules, § 4.2 S2) and
 `docs/pre-phase-6-gate-closure.md` (row G-F, Phase 6 gate G3). This doc is the execution plan for
@@ -117,3 +117,47 @@ greeting of the customer's own email, observed, not filed); the pricing copy at 
 
 Functions: redeploy the saved previous artifact with the same `verify_jwt` flag. Gate: revert the
 `index.html` commit (Cloudflare Pages redeploys `main`).
+
+---
+
+## 8. S1 result — 2026-11-04
+
+**Code (`6bda474`, staging, pushed):** the five functions, +394 / -58. One shared block, byte-identical in
+all five (`escapeHtml`, `mailFromName`, `fetchTenantIdentity`, `PAID_CONTACT_HTML`, fallback
+`PULLLIST`). `MAIL_FROM_NAME` is no longer read by any of the five (its secret is Ray & Judy's name).
+`from.email` untouched; links and `APP_BASE_URL` untouched (Q15).
+
+**Verified:**
+- **V1** harness (local, scratchpad `gf/harness.mjs`): each function's OLD (`git show HEAD`) and NEW file run
+  under Node with a fake Deno and fake network, comparing what reaches Resend. **48/48.** For the founding
+  tenant (`pro`, `Ray & Judy's Book Stop`) the From, subject and HTML are **byte-identical** to the old code in
+  all five; a free tenant gets its own name in From/subject/body and none of "Ray", "Judy", "Rockaway",
+  "Main St", "973"; a failed lookup says PULLLIST; a hostile name is escaped in HTML and stripped in From;
+  `notify-customers` for a free shop with no `location` returns 422 and sends nothing. **Negative controls
+  red:** one changed digit in the paid phone (1 fail), and the old code run as "new" (26 fails).
+- **V2:** the shared block hashes `5dfc44bc878611bb` in all five.
+- **V3:** staging `verify_jwt` read by behaviour before and after: `approve-customer` and `send-my-list` ON,
+  the other three OFF, unchanged. Deployed artifacts downloaded and hashed: all five equal the committed
+  files. Rollback copies (the pre-change code, which staging was running) are in the session scratchpad;
+  re-derive from `6bda474~1` if that is gone.
+- **V4:** harness (known and unknown address give the same response) plus a live unknown-address probe on
+  staging: `{"success":true}`, HTTP 200.
+- Staging's founding tenant `display_name` read as exactly `Ray & Judy's Book Stop`, so the byte-identical
+  result applies there.
+
+**Not verified:**
+- **V5, real inboxes (Rick):** no real email was sent by this session.
+- **Production's `rjbookstop` `display_name`:** my read was refused by the session's permission check. If it is
+  not exactly `Ray & Judy's Book Stop`, Ray & Judy's mail will change in that one string. Rick checks it before S2:
+  `SELECT slug, display_name, plan FROM public.tenants ORDER BY slug;`
+- `approve-customer` and `send-my-list` were never run live after the change; the harness is the evidence.
+- Staging `demoshop`'s `location` is `Springfield, IL`, not a postal address; only matters if someone sends its
+  catalog email.
+
+**V5 steps for Rick (staging, headers only, replace the link with `[link]`):**
+1. Signed in as Ray & Judy's admin on staging, Customers > Invite a throwaway address you can read. Expect
+   From `Ray & Judy's Book Stop <noreply@pulllist.app>` and the address/phone footer, as today.
+2. Signed in as `demoshop`'s admin (`?t=demoshop`), invite a second throwaway address. Expect From
+   `Capital City Comics <noreply@pulllist.app>`, no address/phone, no Ray & Judy's anywhere.
+3. On `forgot-password.html`, request a reset for the step-2 address. Expect From `Capital City Comics`.
+Then tell me the two addresses and I delete both test accounts.
