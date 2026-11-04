@@ -672,6 +672,14 @@ without waiting for the 11-10 run. **Also seen:** the removed Wednesday cron's 1
 because of the manual post, so the dedupe check worked on a real duplicate.
 **Not verified:** how the post looks to someone who is not an admin of the app or the Page (see R5).
 
+**2026-11-04, R5 started (Rick).** He generated a Page token for Ray & Judy's real Page (Edit settings
+on the login dialog to add the Page) and updated `FACEBOOK_PAGE_TOKEN` (16:16Z) and `FACEBOOK_PAGE_ID`
+(16:17Z, now `10241219057960883`). Dry run `41865812089` green: 34/34, `Cache not found` for
+`fb-posted-10241219057960883-2026-11-02`, week 11-02 -> 11-08, picture 1080x1350 built, message "New
+comics this Wednesday, Nov 4! 90 new arrivals", nothing posted. **A dry run never calls Facebook, so the
+token and Page id are proven only by the first real post** (Rick's Debugger check read Type Page /
+Expires Never). Not yet confirmed: that `10241219057960883` is Ray & Judy's Page; the first post shows it.
+
 ## References
 
 `docs/weekly-newsletter-architecture.md` · `docs/f135-decouple-feed-publish.md` ·
