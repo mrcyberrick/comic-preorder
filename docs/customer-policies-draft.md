@@ -1,6 +1,6 @@
 # Customer policies — DRAFT
 
-**STATUS:** ON STAGING 2026-10-29 (`7a46228`: `policy.html`, `terms.html`, `privacy.html`, footer links on the seven nav pages, Terms/Privacy on the apex footer) · NOT promoted · needs Rick's review, then a lawyer's read before production
+**STATUS:** PROMOTED TO PRODUCTION 2026-11-01 (PR #180, merge `85bea29`; staging `7a46228` pages + footer links, `43db594` sign-up checkbox) · Rick approved the content · a lawyer's read of Terms and Privacy is still recommended, not done *(was: "ON STAGING 2026-10-29 ... NOT promoted · needs Rick's review, then a lawyer's read before production")*
 
 **Built with these defaults for the [CONFIRM] items below:** effective date October 29, 2026; contact `pulllist@mrcyberrick.us`; New Jersey law; after six weeks books "may be returned to the shelf for sale" (nothing about pausing accounts); the newsletter line reworded to "If your shop sends a newsletter, it is a separate sign-up". The live Privacy page also adds one line not in this draft: pages load fonts from Google Fonts and covers from distributors' websites, which see the browser's IP address. The Pull-List Policy footer link is `data-paid-only` (founding store's rules). *(This read "No signup checkbox was added." until the same day:)* The signup form now has a required agreement checkbox (`43db594`), client side only; nothing records the acceptance.
 
