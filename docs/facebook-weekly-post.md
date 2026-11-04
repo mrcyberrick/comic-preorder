@@ -660,6 +660,18 @@ post looks to a follower's feed (the Page has none), and a phone view.
   calendar `fv5qtnf1cr8hulhcdavpnje6og` now fire **Wed 2026-11-11 8:00 AM EST** to read the Tue 11-10
   run and, if both are good, plan R5. Both still only remind.
 
+**2026-11-04: the first newsletter-triggered post worked (read from the run logs).** Newsletter run
+`41751136309` (`event=schedule`, started 01:01Z, green) was followed at 01:06Z by Facebook run
+`41751666166` (`event=workflow_run`, green): `Cache not found` for `fb-posted-1416367771558275-2026-11-02`,
+`FEED_WAIT_MINUTES: 20`, no "checking again" line (the news page was already current, so the wait was
+not exercised), `Facebook post: week 2026-11-02 -> 2026-11-08`, spotlight Absolute Superman #25 Cvr A /
+Batman #15 Cvr A / DNX #4, `Posted: https://www.facebook.com/122099205141518689/posts/122108217411518689`,
+cache key saved. About 9:06 PM ET Tuesday. **Rick: "This ran as expected"** and asked to go live (R5)
+without waiting for the 11-10 run. **Also seen:** the removed Wednesday cron's 10-28 run DID start, at
+17:59Z (about 6 hours late, from the file as it stood before `0b8ed69f`), and stopped at "Already posted"
+because of the manual post, so the dedupe check worked on a real duplicate.
+**Not verified:** how the post looks to someone who is not an admin of the app or the Page (see R5).
+
 ## References
 
 `docs/weekly-newsletter-architecture.md` · `docs/f135-decouple-feed-publish.md` ·
