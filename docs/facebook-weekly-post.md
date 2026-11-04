@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** IN PROGRESS 2026-10-28 — **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -659,6 +659,40 @@ post looks to a follower's feed (the Page has none), and a phone view.
   now fire **Wed 2026-11-04 8:00 AM EST** to read the Tue 11-03 run; `trig_01VoC1GtSvbeMi5Y6wNVV58m` +
   calendar `fv5qtnf1cr8hulhcdavpnje6og` now fire **Wed 2026-11-11 8:00 AM EST** to read the Tue 11-10
   run and, if both are good, plan R5. Both still only remind.
+
+**2026-11-04: the first newsletter-triggered post worked (read from the run logs).** Newsletter run
+`41751136309` (`event=schedule`, started 01:01Z, green) was followed at 01:06Z by Facebook run
+`41751666166` (`event=workflow_run`, green): `Cache not found` for `fb-posted-1416367771558275-2026-11-02`,
+`FEED_WAIT_MINUTES: 20`, no "checking again" line (the news page was already current, so the wait was
+not exercised), `Facebook post: week 2026-11-02 -> 2026-11-08`, spotlight Absolute Superman #25 Cvr A /
+Batman #15 Cvr A / DNX #4, `Posted: https://www.facebook.com/122099205141518689/posts/122108217411518689`,
+cache key saved. About 9:06 PM ET Tuesday. **Rick: "This ran as expected"** and asked to go live (R5)
+without waiting for the 11-10 run. **Also seen:** the removed Wednesday cron's 10-28 run DID start, at
+17:59Z (about 6 hours late, from the file as it stood before `0b8ed69f`), and stopped at "Already posted"
+because of the manual post, so the dedupe check worked on a real duplicate.
+**Not verified:** how the post looks to someone who is not an admin of the app or the Page (see R5).
+
+**2026-11-04, R5 started (Rick).** He generated a Page token for Ray & Judy's real Page (Edit settings
+on the login dialog to add the Page) and updated `FACEBOOK_PAGE_TOKEN` (16:16Z) and `FACEBOOK_PAGE_ID`
+(16:17Z, now `10241219057960883`). Dry run `41865812089` green: 34/34, `Cache not found` for
+`fb-posted-10241219057960883-2026-11-02`, week 11-02 -> 11-08, picture 1080x1350 built, message "New
+comics this Wednesday, Nov 4! 90 new arrivals", nothing posted. **A dry run never calls Facebook, so the
+token and Page id are proven only by the first real post** (Rick's Debugger check read Type Page /
+Expires Never). Not yet confirmed: that `10241219057960883` is Ray & Judy's Page; the first post shows it.
+*(Superseded below: it was not.)*
+
+**2026-11-04, FIRST REAL POST ON RAY & JUDY'S PAGE (R5), after three refusals.** Runs `41867504901` and
+`41868526768` failed `(#200) This endpoint is deprecated since the required permission publish_actions is
+deprecated`: `10241219057960883` was not a Page. Rick then supplied the Page id `218209818226021` (set by
+me, 16:44Z); run `41870513667` failed `(#200) The permission(s) publish_actions are not available`: right
+Page, but the secret held a USER token. Rick saved the Page's own token from its `me/accounts` entry
+(16:47Z); run `41871121394` green: `Posted: https://www.facebook.com/1786816593453288/posts/1786816563453291`,
+cache key `fb-posted-218209818226021-2026-11-02` saved. Each refusal posted nothing and saved no record.
+**Lesson for the next token (and for the R5 steps): the two #200 messages tell the two mistakes apart.**
+"endpoint is deprecated" = the id is not a Page; "permission(s) publish_actions are not available" = a
+user token, not the Page's token. Use the `id` AND the `access_token` from the SAME `me/accounts` entry.
+**Not verified:** how the post looks to a follower who is not an admin of the app or the Page (the app is
+still in Development mode); Rick to open it signed out or from another account.
 
 ## References
 

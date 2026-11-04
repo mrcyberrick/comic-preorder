@@ -625,6 +625,7 @@
     promoCfg: null,       // the live Subscribe banner config (PromoBanner.load), or null
     preorderRows: [],      // current catalog month, {user_id, catalog:{price_usd}}
     subscriberIds: new Set(),
+    signInById: new Map(), // id → last auth sign-in (ms), from get_account_activity; empty if unavailable
     currentMonth: null,
     orderDeadline: null,   // 'YYYY-MM-DD' | null
     cycleStart: null,      // ISO timestamp | null — min(created_at) for currentMonth
@@ -717,14 +718,22 @@
     // applied here. Low risk today for a single-shop customer count, but the
     // same helpers already exist in this file, so routed through them.
     const profilesSelect = 'id, full_name, email, is_admin, is_paper, status, created_at';
-    const [profilesTotal, ueTotal, orderDeadline, cycleStart, prevStart, promoCfg] = await Promise.all([
+    const [profilesTotal, ueTotal, orderDeadline, cycleStart, prevStart, promoCfg, signIns] = await Promise.all([
       countRows('user_profiles'),
       countRows('usage_events', ueFilter),
       Settings.getOrderDeadline().catch(() => null),
       fetchCycleStart(currentMonth),
       fetchCycleStart(prevMonth),
       PromoBanner.load(TenantContext.current()),   // never rejects; null = no banner configured anywhere
+      // Last sign-in per account (admin-only RPC, the same one admin.html's
+      // Accounts tab reads). Win-back folds it into Last Seen so the two
+      // screens agree. Non-fatal: on failure Last Seen is events-only, as before.
+      db.rpc('get_account_activity').then(r => r.error ? null : r.data, () => null),
     ]);
+    state.signInById = new Map();
+    (signIns || []).forEach(r => {
+      if (r.last_sign_in_at) state.signInById.set(r.id, Date.parse(r.last_sign_in_at));
+    });
     const profiles = await fetchRanged('user_profiles', profilesSelect, null, profilesTotal);
 
     state.profiles = new Map();
@@ -1917,7 +1926,11 @@
         rows.push({ id, name: p.full_name, type: 'paper', priority: 'paper', lastSeenLabel: 'Never logged in', inactiveDays: 9999, email: p.email, reserves, cancels, value: val });
         return;
       }
-      const ls = lastSeen.get(id) || null;
+      // Later of the newest event and the last sign-in, the same rule as the
+      // Accounts tab. Events alone cover 90 days, so a customer last seen
+      // earlier used to read "None in retention" here while Accounts showed
+      // a date; the sign-in time gives their real last-seen date.
+      const ls = Math.max(lastSeen.get(id) || 0, state.signInById.get(id) || 0) || null;
       let inactiveDays, lastSeenLabel;
       if (ls === null) { inactiveDays = 91; lastSeenLabel = 'None in retention'; }
       else {
