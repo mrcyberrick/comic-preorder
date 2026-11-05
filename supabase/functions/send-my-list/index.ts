@@ -1,5 +1,57 @@
 const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
-const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
+
+// ── F72 G-F shared tenant-identity block — BEGIN ─────────────────────────────
+// Byte-identical in approve-customer, invite-customer, notify-customers,
+// reset-password and send-my-list; a grep gate checks the five copies match
+// (docs/f72-g-f-mail-and-signup-gate.md, V2). Every tenant's own display_name
+// is shown, both tiers; plan = 'pro' adds the shop address and phone. On any
+// lookup failure the mail says PULLLIST, never MAIL_FROM_NAME (that secret
+// holds the founding tenant's name, so falling back to it re-leaks it).
+const PLATFORM_NAME = 'PULLLIST'
+
+// Q14: the only `pro` tenant is the founding store, so the paid contact line is
+// a literal. A second paid tenant needs it read from the tenants row instead.
+const PAID_CONTACT_HTML = '40 W Main St. Rockaway, NJ 07866 &middot; (973) 586-9182'
+
+type TenantIdentity = { storeName: string; isPaid: boolean; location: string }
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// The display name inside a "Name <address>" From header: drop characters
+// that would break the header.
+function mailFromName(t: TenantIdentity): string {
+  return t.storeName.replace(/[<>"\r\n]/g, '').trim() || PLATFORM_NAME
+}
+
+async function fetchTenantIdentity(
+  supabaseUrl: string | undefined,
+  serviceKey: string | undefined,
+  tenantId: string | null | undefined,
+): Promise<TenantIdentity> {
+  const fallback: TenantIdentity = { storeName: PLATFORM_NAME, isPaid: false, location: '' }
+  if (!supabaseUrl || !serviceKey || !tenantId) return fallback
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/tenants?id=eq.${encodeURIComponent(tenantId)}&select=display_name,plan,location`,
+      { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, Accept: 'application/json' } },
+    )
+    if (!res.ok) return fallback
+    const rows = await res.json()
+    const row = Array.isArray(rows) ? rows[0] : undefined
+    if (!row) return fallback
+    return {
+      storeName: (typeof row.display_name === 'string' && row.display_name.trim()) ? row.display_name : PLATFORM_NAME,
+      isPaid:    row.plan === 'pro',
+      location:  typeof row.location === 'string' ? row.location.trim() : '',
+    }
+  } catch (err) {
+    console.warn('fetchTenantIdentity: lookup failed', String(err))
+    return fallback
+  }
+}
+// ── F72 G-F shared tenant-identity block — END ───────────────────────────────
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -149,9 +201,21 @@ Deno.serve(async (req) => {
     const totalValue = items.reduce((s: number, p: any) =>
       s + ((parseFloat(p.catalog?.price_usd) || 0) * (p.quantity || 1)), 0)
 
+    // F72 G-F: the customer's own shop. The address/phone paragraph is for
+    // plan = 'pro' only; the founding tenant's mail is byte-identical to before.
+    const tenant    = await fetchTenantIdentity(SUPABASE_URL, SUPABASE_SERVICE, callerTenantId)
+    const safeStore = escapeHtml(tenant.storeName)
+    const contactParagraph = tenant.isPaid
+      ? `    <p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">
+      Questions? Stop by or give us a call.<br>
+      ${safeStore} &middot; ${PAID_CONTACT_HTML}
+    </p>
+`
+      : ''
+
     const subject = (week_start && week_end)
-      ? `Your books are in — Ray & Judy's Book Stop`
-      : `Your ${monthLabel} pull list — Ray & Judy's Book Stop`
+      ? `Your books are in — ${tenant.storeName}`
+      : `Your ${monthLabel} pull list — ${tenant.storeName}`
 
     const emailIntro = (week_start && week_end)
       ? 'These items from your pull list are in and ready to pick up.'
@@ -194,7 +258,7 @@ Deno.serve(async (req) => {
 
   <div style="background:#111;padding:24px 32px;border-bottom:3px solid #e63946">
     <div style="font-size:1.6rem;font-weight:900;letter-spacing:0.08em">PULL<span style="color:#e63946">LIST</span></div>
-    <div style="font-size:0.75rem;color:#888;margin-top:2px">Ray &amp; Judy's Book Stop &mdash; Monthly Comics Pre-Order System</div>
+    <div style="font-size:0.75rem;color:#888;margin-top:2px">${safeStore} &mdash; Monthly Comics Pre-Order System</div>
   </div>
 
   <div style="padding:28px 32px">
@@ -223,14 +287,10 @@ Deno.serve(async (req) => {
       </tfoot>
     </table>
 
-    <p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">
-      Questions? Stop by or give us a call.<br>
-      Ray &amp; Judy's Book Stop &middot; 40 W Main St. Rockaway, NJ 07866 &middot; (973) 586-9182
-    </p>
-  </div>
+${contactParagraph}  </div>
 
   <div style="background:#111;padding:16px 32px;font-size:0.72rem;color:#555;border-top:1px solid #222">
-    Ray &amp; Judy's Book Stop &middot; Sent via the PullList pre-order system
+    ${safeStore} &middot; Sent via the PullList pre-order system
   </div>
 
 </div>`
@@ -243,7 +303,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${MAIL_FROM_NAME} <${MAIL_FROM_EMAIL}>`,
+        from: `${mailFromName(tenant)} <${MAIL_FROM_EMAIL}>`,
         to: email,
         subject,
         html,
