@@ -1,6 +1,6 @@
 # F72 G-F — the five remaining mail functions and the client signup gate
 
-**STATUS:** IN PROGRESS — S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production email from Rick is still owed;** S3 (gate) NOT STARTED, waits on Rick's D1. Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182) | findings=F72
+**STATUS:** IN PROGRESS — S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production reset email was read 2026-11-05 and is correct;** S3 (gate) NOT STARTED, waits on Rick's D1. Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182) | findings=F72
 
 Parent records: `docs/f72-multi-tenant-branding.md` (design, § 0.1 tier rules, § 4.2 S2) and
 `docs/pre-phase-6-gate-closure.md` (row G-F, Phase 6 gate G3). This doc is the execution plan for
@@ -195,6 +195,11 @@ every page identical on both branches, `config.js` == `origin/main` (prod ref x1
   shared block one hash (`5dfc44bc`) across all five.
 - Live probe: an unknown-address reset on production returns `{"success":true}`, HTTP 200.
 
-**Not verified:** no real production email has been read yet (Rick's check, headers only); `approve-customer`,
+**Real production email, read 2026-11-05:** Rick's own forgot-password reset (02:39 UTC, Outlook) came from
+`Ray & Judy's Book Stop <noreply@pulllist.app>` with subject `Ray & Judy's Book Stop — Reset your password` and the
+paid address and phone footer; `dkim=pass` (pulllist.app and amazonses.com), `spf=pass`, `dmarc=pass`, `compauth=pass`;
+delivered to the Inbox, partly because the sender is on his safe-sender list (F152 untouched).
+
+**Not verified:** `approve-customer`,
 `send-my-list` and `notify-customers` have not sent live on production since the deploy; inbox versus spam is not
 established. Write-smoke skipped: no web byte changed, nothing on the reserve path.
