@@ -146,7 +146,16 @@ all five (`escapeHtml`, `mailFromName`, `fetchTenantIdentity`, `PAID_CONTACT_HTM
   result applies there.
 
 **Not verified:**
-- **V5, real inboxes (Rick):** no real email was sent by this session.
+- ~~**V5, real inboxes (Rick):** no real email was sent by this session.~~ **V5 DONE 2026-11-04/05 (Rick's three
+  pastes, read by me):** (1) Ray & Judy's invite: From `Ray & Judy's Book Stop <noreply@pulllist.app>`, address and
+  phone footer present; (2) `demoshop` invite: From `Capital City Comics`, its name throughout, no address, phone or
+  Ray & Judy's text; (3) reset for the `demoshop` address: From `Capital City Comics`, no contact paragraph, and
+  Rick reports the reset link worked. All three `dkim=pass` (`pulllist.app` and `amazonses.com`), `spf=pass`,
+  `dmarc=pass`; links direct, no tracker. Received by a PrivateEmail-hosted mailbox, so inbox versus spam at other
+  providers is not established. Both test accounts deleted afterwards (profile re-read 0, auth 404; the `demoshop`
+  one left 4 `usage_events`, kept with `user_id` NULL by design). To sign in as the `demoshop` admin
+  (`demo-admin@example.test`, no inbox) a password was set on that staging account. Observed, pre-existing and
+  unchanged by S1: the reset greeting used the email's local part ("devdemo") rather than the invite's full name.
 - ~~**Production's `rjbookstop` `display_name`:** my read was refused by the session's permission check. If it is
   not exactly `Ray & Judy's Book Stop`, Ray & Judy's mail will change in that one string. Rick checks it before S2:
   `SELECT slug, display_name, plan FROM public.tenants ORDER BY slug;`~~ **CHECKED 2026-11-04 (Rick ran the query on
