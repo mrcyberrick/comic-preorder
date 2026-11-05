@@ -147,9 +147,12 @@ all five (`escapeHtml`, `mailFromName`, `fetchTenantIdentity`, `PAID_CONTACT_HTM
 
 **Not verified:**
 - **V5, real inboxes (Rick):** no real email was sent by this session.
-- **Production's `rjbookstop` `display_name`:** my read was refused by the session's permission check. If it is
+- ~~**Production's `rjbookstop` `display_name`:** my read was refused by the session's permission check. If it is
   not exactly `Ray & Judy's Book Stop`, Ray & Judy's mail will change in that one string. Rick checks it before S2:
-  `SELECT slug, display_name, plan FROM public.tenants ORDER BY slug;`
+  `SELECT slug, display_name, plan FROM public.tenants ORDER BY slug;`~~ **CHECKED 2026-11-04 (Rick ran the query on
+  production):** `rjbookstop` = `Ray & Judy's Book Stop`, `pro`; `comicstore` = `The Comic Store`, `free`. So the
+  byte-identical result applies on production too; this S2 precondition is met. (`comicstore`'s `location` was not
+  read; with none, its catalog email returns 422 and sends nothing, per Q13.)
 - `approve-customer` and `send-my-list` were never run live after the change; the harness is the evidence.
 - Staging `demoshop`'s `location` is `Springfield, IL`, not a postal address; only matters if someone sends its
   catalog email.
