@@ -1,6 +1,6 @@
 # F72 G-F — the five remaining mail functions and the client signup gate
 
-**STATUS:** IN PROGRESS — S1 BUILT AND DEPLOYED TO STAGING 2026-11-04 (`6bda474`); V1-V4 green; V5 (real-inbox, Rick) NOT RUN; S2 (production) and S3 (gate) NOT STARTED. Decisions Q12-Q16 ANSWERED 2026-11-04, Rick: "defaults" (every recommended column in § 3 is the decision); D1 itself is still Rick's, so S3 waits on it. | staging=S1 2026-11-04 (five functions deployed) | prod=— | findings=F72
+**STATUS:** IN PROGRESS — S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production email from Rick is still owed;** S3 (gate) NOT STARTED, waits on Rick's D1. Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182) | findings=F72
 
 Parent records: `docs/f72-multi-tenant-branding.md` (design, § 0.1 tier rules, § 4.2 S2) and
 `docs/pre-phase-6-gate-closure.md` (row G-F, Phase 6 gate G3). This doc is the execution plan for
@@ -173,3 +173,28 @@ all five (`escapeHtml`, `mailFromName`, `fetchTenantIdentity`, `PAID_CONTACT_HTM
    `Capital City Comics <noreply@pulllist.app>`, no address/phone, no Ray & Judy's anywhere.
 3. On `forgot-password.html`, request a reset for the step-2 address. Expect From `Capital City Comics`.
 Then tell me the two addresses and I delete both test accounts.
+
+## 9. S2 result (2026-11-05, production)
+
+Rick: `/promote-prod`, then merged PR #182 (merge `4ccf239`; promotion commit `bad6de3`, parents `59362be` main +
+`8b42450` staging tip). The PR is 8 files: the five functions and three docs; re-read on GitHub, no `config.js`,
+nothing under `supabase/migrations/`.
+
+**Gates before the PR:** step 0 found no pending SQL; merge result of all five functions == staging, `app.js` and
+every page identical on both branches, `config.js` == `origin/main` (prod ref x1, staging ref x0), migrations 2 files.
+
+**Deploy, from a worktree of `origin/main` at `4ccf239`:**
+- `verify_jwt` read on production by behaviour BEFORE the deploy: `approve-customer` and `send-my-list` ON (gateway
+  `UNAUTHORIZED_NO_AUTH_HEADER`), `invite-customer`, `notify-customers`, `reset-password` OFF (their own errors).
+  Deployed accordingly (`--no-verify-jwt` only on the three OFF ones); re-read AFTER: unchanged.
+- Rollback: the live versions were downloaded first and equal `4ccf239^1`'s copies modulo CR, so the previous code
+  is `git show 4ccf239^1:supabase/functions/<name>/index.ts`. Versions before -> after: approve-customer 30 -> 31,
+  invite-customer 52 -> 53, notify-customers 42 -> 43, reset-password 30 -> 31, send-my-list 31 -> 32.
+- Deployed artifacts downloaded and hashed (CR stripped): equal to `main` and to staging's deployed copies
+  (approve `bb54919799fa`, invite `59bf28adb893`, notify `9ef4e9e7f0e1`, reset `84096b20ec3d`, send `413e0071c7ae`);
+  shared block one hash (`5dfc44bc`) across all five.
+- Live probe: an unknown-address reset on production returns `{"success":true}`, HTTP 200.
+
+**Not verified:** no real production email has been read yet (Rick's check, headers only); `approve-customer`,
+`send-my-list` and `notify-customers` have not sent live on production since the deploy; inbox versus spam is not
+established. Write-smoke skipped: no web byte changed, nothing on the reserve path.
