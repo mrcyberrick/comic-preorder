@@ -1,6 +1,6 @@
 # F72 G-F — the five remaining mail functions and the client signup gate
 
-**STATUS:** IN PROGRESS — S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production reset email was read 2026-11-05 and is correct;** S3 (gate) NOT STARTED, waits on Rick's D1. Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182) | findings=F72
+**STATUS:** IN PROGRESS — S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production reset email was read 2026-11-05 and is correct;** **S3 (gate) BUILT ON STAGING 2026-11-05 (`9c70646`), NOT promoted; D1 answered by Rick 2026-11-05: have self-service customer sign-up available, not promoted yet (Phase 6 stays closed).** Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182) | findings=F72
 
 Parent records: `docs/f72-multi-tenant-branding.md` (design, § 0.1 tier rules, § 4.2 S2) and
 `docs/pre-phase-6-gate-closure.md` (row G-F, Phase 6 gate G3). This doc is the execution plan for
@@ -36,7 +36,7 @@ Turnstile already works on `comicstore.pulllist.app` (G-B smoke 6b, 2026-10-06).
 
 | # | Item | Kind | Blocks |
 |---|---|---|---|
-| B1 | **D1 is due.** The G-F row says it waits on D1; D1 was "keep Shape D, revisit after the November import", and that import ran 2026-10-28 | Rick's decision (Q12) | the gate only, by the recommendation below |
+| B1 | **D1 ANSWERED 2026-11-05 (Rick: "we should have the capability to allow self-service sign up even if we are not promoting it yet"), so S3 proceeds; Shape D and the Phase 6 gate are unchanged.** *(Was:)* **D1 is due.** The G-F row says it waits on D1; D1 was "keep Shape D, revisit after the November import", and that import ran 2026-10-28 | Rick's decision (Q12) | the gate only, by the recommendation below |
 | B2 | **The sign-up form now links Ray & Judy's own policy.** PR #180 (2026-11-01) added a required "I agree to the Pull-List Policy, Terms and Privacy" box; `policy.html` is Ray & Judy's text (six-week pickup, 10% off), and the comment says it is unconditional *because* signup is founding-only. Opening the gate as-is shows another shop's customers Ray & Judy's terms | code, S3 below | the gate |
 | B3 | **`notify-customers` is promotional mail, and the free tier sends no postal address.** § 0.1 Q8 says a free tier's email footer carries no phone or address; § 4.2.3 says the monthly catalog email needs a physical postal address. They conflict for this one function | Rick's decision (Q13) | `notify-customers` only |
 | B4 | **Where a paid tenant's footer comes from.** S2a hardcoded Ray & Judy's address and phone for any `pro` tenant. Production `rjbookstop` still has `contact_phone` and `location` NULL (§ 1.7 of the F72 plan, not re-read since 2026-09-01), so a database-driven footer needs a data step first | Rick's decision (Q14) | the paid branch of all five |
@@ -203,3 +203,24 @@ delivered to the Inbox, partly because the sender is on his safe-sender list (F1
 **Not verified:** `approve-customer`,
 `send-my-list` and `notify-customers` have not sent live on production since the deploy; inbox versus spam is not
 established. Write-smoke skipped: no web byte changed, nothing on the reserve path.
+
+## 10. S3 result (2026-11-05, staging)
+
+`index.html` only (`9c70646`, +28 / -20). "Create one" shows on any store hostname that resolved to its store
+(`tenantSlugFromHostname()` non-null and equal to `TenantContext.current().slug`); never on the apex, `*.pages.dev` or
+localhost; an unknown or failed name still halts first (F171). Q16: the Pull-List Policy link is a hidden span shown
+only when the resolved store is the founding store, and the unchecked-box error drops "Pull-List Policy" elsewhere.
+The two "founding tenant only" comments are updated. `register-customer` needed no change.
+
+**Verified:** local harness `f72-s3-signup-gate-verify.mjs` (working tree, fake hostnames, staging Supabase) 20/20:
+founding shows Create one and the policy; `demoshop` shows Create one, no policy, the shorter error text; apex and
+`*.pages.dev` hide it; an unknown name halts; `register-customer` never called. Control: the same harness on the
+previous `index.html` is red (other store has no Create one). Spec 12 rewritten for the new contract (it asserted
+"Contact the shop" on `demoshop`) and 5/5 on the working tree. Served staging bytes confirmed (`signup-agree-policy` x2). Full suite on the deployed bytes: 161 passed, 1 skipped, 0 failed, 25.5 min, exit 0.
+
+**Not verified:** a completed real sign-up (staging cannot: Turnstile rejects `*.pages.dev` and no store hostname
+exists there); that is the production check below. Chromium only.
+
+**Promotion (needs Rick's `/promote-prod`):** `index.html` only, no SQL, no Edge Function. After the merge, Rick: open
+`comicstore.pulllist.app`, Create one, sign up with a throwaway address, read the pending email (headers only), approve it
+as `comicstore`'s admin, read the approval email, then delete the test account. Rollback: revert the `index.html` commit.
