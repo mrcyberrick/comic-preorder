@@ -408,9 +408,9 @@
       </p>
     </div>
 
-    <!-- ── Create Account Form (native self-registration — founding tenant only,
-         F72 gates non-founding tenant email branding; shown/hidden via JS after
-         TenantContext resolves, see the final script block) ── -->
+    <!-- ── Create Account Form (native self-registration on any store's own
+         hostname, F72 G-F S3; shown/hidden via JS after TenantContext
+         resolves, see the final script block) ── -->
     <div id="signup-form" style="display:none">
       <h2>Create your account</h2>
       <div id="signup-error" class="alert alert-error" style="display:none"></div>
@@ -429,13 +429,13 @@
         <input type="text" id="signup-hp" name="signup-hp" tabindex="-1" autocomplete="off">
       </div>
       <!-- Policy agreement (2026-10-29). Required by doSignup(), client side only:
-           nothing records the acceptance. The Pull-List Policy link is
-           unconditional because native signup is founding-tenant only (see the
-           "Native signup" gate below); revisit when signup opens to other shops. -->
+           nothing records the acceptance. The Pull-List Policy link is Ray &
+           Judy's own terms, so it shows on the founding store only (F72 G-F
+           Q16; revealed by the "Native signup" block below). -->
       <label class="signup-agree" for="signup-agree">
         <input type="checkbox" id="signup-agree">
         <span>I agree to the
-          <a href="policy.html" target="_blank" rel="noopener">Pull-List Policy</a>,
+          <span id="signup-agree-policy" style="display:none"><a href="policy.html" target="_blank" rel="noopener">Pull-List Policy</a>,</span>
           <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and
           <a href="privacy.html" target="_blank" rel="noopener">Privacy Statement</a>.</span>
       </label>
@@ -573,21 +573,27 @@
   await TenantContext.resolve();
   Branding.apply(TenantContext.current());
 
-  // ── Native signup — founding tenant only (F72 gates non-founding email
-  //    branding; see docs/native-customer-signup.md). ax-when-tenant alone
-  //    fires for ANY tenant subdomain (comicstore too), so reveal the
-  //    "Create one" trigger only when the HOSTNAME itself is specifically
-  //    the founding subdomain. Deliberately not TenantContext.current().id:
-  //    that falls back to FOUNDING_TENANT whenever resolve_tenant_by_slug()
-  //    misses (e.g. any tenant slug absent from this env's DB — comicstore
-  //    doesn't exist on staging, would otherwise misreport as founding here),
-  //    which would also incorrectly surface founding's signup on a broken or
-  //    unresolvable non-founding subdomain in production.
-  if (tenantSlugFromHostname() === FOUNDING_TENANT.slug) {
+  // ── Native signup — every store's own hostname (F72 G-F S3, 2026-11-05).
+  //    The mail is tenant-branded since S2a / G-F S2, so the old
+  //    founding-only gate is gone. Reveal "Create one" only when the
+  //    HOSTNAME named a store and resolved to it: never on the apex,
+  //    *.pages.dev or localhost (tenantSlugFromHostname() is null there and
+  //    current() can be the FOUNDING_TENANT default). An unknown or failed
+  //    store name never reaches this line: F171's halt throws in resolve().
+  const hostSlug     = tenantSlugFromHostname();
+  const isFoundingTn = TenantContext.current().slug === FOUNDING_TENANT.slug;
+  if (hostSlug && TenantContext.current().slug === hostSlug) {
     const contactEl = document.getElementById('tenant-no-account-contact');
     const signupEl  = document.getElementById('tenant-no-account-signup');
     if (contactEl) contactEl.style.display = 'none';
     if (signupEl)  signupEl.style.display  = 'inline';
+  }
+  // Q16: policy.html is Ray & Judy's own terms, so only the founding store's
+  // sign-up asks customers to agree to it; other shops agree to Terms and
+  // Privacy only. Hidden by default, so a failure never shows it elsewhere.
+  if (isFoundingTn) {
+    const policyEl = document.getElementById('signup-agree-policy');
+    if (policyEl) policyEl.style.display = 'inline';
   }
 
   // ── Parse URL for tokens (query params AND hash fragment) ──
@@ -874,7 +880,7 @@
   passwordEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   emailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') passwordEl.focus(); });
 
-  // ── Create Account (native signup, founding tenant only) ────
+  // ── Create Account (native signup, any store hostname) ──────
   const TURNSTILE_SITE_KEY   = '0x4AAAAAAD8S0ONolq3newIs';
   const signupNameEl         = document.getElementById('signup-name');
   const signupEmailEl        = document.getElementById('signup-email');
@@ -936,7 +942,9 @@
     }
 
     if (!document.getElementById('signup-agree')?.checked) {
-      signupErrorEl.textContent   = 'Please agree to the Pull-List Policy, Terms of Use and Privacy Statement.';
+      signupErrorEl.textContent   = isFoundingTn
+        ? 'Please agree to the Pull-List Policy, Terms of Use and Privacy Statement.'
+        : 'Please agree to the Terms of Use and Privacy Statement.';
       signupErrorEl.style.display = 'block';
       return;
     }
