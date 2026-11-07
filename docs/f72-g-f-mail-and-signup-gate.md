@@ -1,6 +1,6 @@
 # F72 G-F — the five remaining mail functions and the client signup gate
 
-**STATUS:** IN PROGRESS — S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production reset email was read 2026-11-05 and is correct;** **S3 (gate) BUILT ON STAGING 2026-11-05 (`9c70646`), NOT promoted; D1 answered by Rick 2026-11-05: have self-service customer sign-up available, not promoted yet (Phase 6 stays closed).** Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182) | findings=F72
+**STATUS:** COMPLETE — **S3 PROMOTED TO PRODUCTION 2026-11-06 (PR #183, merge `cda070cd`) and verified with a real sign-up on `comicstore` (pending, reset and approval emails read); F72 RESOLVED.** Earlier: S1 on staging 2026-11-04 (`6bda474`, V1-V5 green); **S2 DONE 2026-11-05: PR #182 (merge `4ccf239`), all five functions DEPLOYED TO PRODUCTION from `origin/main`, deployed code == main, `verify_jwt` preserved; a real production reset email was read 2026-11-05 and is correct;** **S3 (gate) BUILT ON STAGING 2026-11-05 (`9c70646`), NOT promoted; D1 answered by Rick 2026-11-05: have self-service customer sign-up available, not promoted yet (Phase 6 stays closed).** Decisions Q12-Q16 ANSWERED 2026-11-04 (Rick: "defaults"). | staging=S1 2026-11-04 | prod=S2 2026-11-05 (PR #182), S3 2026-11-06 (PR #183) | findings=F72
 
 Parent records: `docs/f72-multi-tenant-branding.md` (design, § 0.1 tier rules, § 4.2 S2) and
 `docs/pre-phase-6-gate-closure.md` (row G-F, Phase 6 gate G3). This doc is the execution plan for
@@ -224,3 +224,31 @@ exists there); that is the production check below. Chromium only.
 **Promotion (needs Rick's `/promote-prod`):** `index.html` only, no SQL, no Edge Function. After the merge, Rick: open
 `comicstore.pulllist.app`, Create one, sign up with a throwaway address, read the pending email (headers only), approve it
 as `comicstore`'s admin, read the approval email, then delete the test account. Rollback: revert the `index.html` commit.
+
+## 11. S3 production result (2026-11-06 / 2026-11-07)
+
+PR #183 merged 2026-11-06T05:15:13Z (merge `cda070cd`), Rick's `/promote-prod`. `index.html` only. **Served bytes:** on
+`pulllist.app` and `rjbookstop.pulllist.app` the served `index.html` equals `origin/main` except Cloudflare's `mailto:`
+obfuscation (the known rewrite); `signup-agree-policy` x2 and the new gate line x1 on all three hostnames; `config.js`
+prod ref x1, staging ref x0.
+
+**Real sign-up on production (Rick, 2026-11-06), every email read from its delivered headers:**
+- `comicstore.pulllist.app` showed Create one; the test account landed as a pending `comicstore` customer (read back
+  from the database).
+- **Pending email** (`register-customer`): From `The Comic Store <noreply@pulllist.app>`, no Ray & Judy's name, phone
+  or address, dkim/spf/dmarc pass.
+- **Reset email** (`reset-password`, 2026-11-07, to the shop's admin): From `The Comic Store`, subject `The Comic Store —
+  Reset your password`, footer with no phone or address, dkim (`pulllist.app`, `amazonses.com`), spf, dmarc pass. A
+  first attempt to a mistyped address sent nothing, by design (the function never reveals whether an address exists).
+- **Approval email** (`approve-customer`, 2026-11-07): From `The Comic Store`, subject `The Comic Store — You're approved
+  for the pull list!`, body "approved by The Comic Store", footer with no phone or address, dkim/spf/dmarc pass; the
+  profile read `active` afterwards.
+
+So the free-shop branch of `register-customer`, `reset-password` and `approve-customer` is now proven on production.
+**Not verified:** `invite-customer`, `notify-customers` and `send-my-list` have not sent live on production since S2;
+the paid branch of `register-customer` live; inbox versus spam (the mailbox is PrivateEmail-hosted, so F152 is
+untouched); Chromium only for the harness. **Test account deletion: pending Rick** (the pasted emails carried live
+links, bounded by deleting it).
+
+**Finding-ID disposition: closes F72** (a genuine defect: other shops' customers received Ray & Judy's identity, and
+no other shop could take a sign-up). No new finding ID consumed; F179 remains the next free ID.

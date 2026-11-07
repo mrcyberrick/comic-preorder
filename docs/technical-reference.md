@@ -3421,7 +3421,7 @@ Surfaced during the Phase 4 completion audit (2026-06-10).
 - **Where:** `C:\Users\richa\…\catalogs\scripts\import-staging.js:63` (local-only, no repo).
 
 #### F72 — `register-customer` email template stays founding-branded after the F34 un-pin
-- **Status:** filed 2026-06-16 (5.4 S2). **NO LONGER DEFERRED — IN PROGRESS as of 2026-09-02;
+- **Status:** filed 2026-06-16 (5.4 S2). **✅ RESOLVED on BOTH environments 2026-11-07:** G-F S3 (the sign-up gate) promoted 2026-11-06 (PR #183, merge `cda070cd`) after S2 (all five mail functions, PR #182); a real `comicstore` sign-up on production delivered the pending, reset and approval emails as `The Comic Store` with no Ray & Judy's identity, all authenticated (`docs/f72-g-f-mail-and-signup-gate.md` § 11). Not verified live on production: `invite-customer`, `notify-customers`, `send-my-list`, and the paid branch. *(The text below is the history; it read "IN PROGRESS" until this close.)* **NO LONGER DEFERRED — IN PROGRESS as of 2026-09-02;
   S0 (the tier mechanism) is on STAGING.** ***This entry's recorded scope is too narrow and
   always was:*** it names one email template in one function; the measured surface is **6 Edge
   Functions plus 24 client line sites across 7 files**, and the work is now **tier-gated on
