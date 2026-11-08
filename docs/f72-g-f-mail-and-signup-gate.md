@@ -247,8 +247,9 @@ prod ref x1, staging ref x0.
 So the free-shop branch of `register-customer`, `reset-password` and `approve-customer` is now proven on production.
 **Not verified:** `invite-customer`, `notify-customers` and `send-my-list` have not sent live on production since S2;
 the paid branch of `register-customer` live; inbox versus spam (the mailbox is PrivateEmail-hosted, so F152 is
-untouched); Chromium only for the harness. **Test account deletion: pending Rick** (the pasted emails carried live
-links, bounded by deleting it).
+untouched); Chromium only for the harness. **Test account deleted 2026-11-08** (Rick's go; service-role auth admin API,
+since the Accounts tab cannot delete an active account): auth user 404, 0 profiles, its 4 usage events kept with
+the user cleared. Deleting it voided the live links the pasted emails carried.
 
 **Finding-ID disposition: closes F72** (a genuine defect: other shops' customers received Ray & Judy's identity, and
 no other shop could take a sign-up). No new finding ID consumed; F179 remains the next free ID.
