@@ -7007,7 +7007,17 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Fix direction (nothing decided).** Raise the phone breakpoint for the nav only to about 760 px, or hide the "Welcome," text (keep the name and Sign Out) in that band, or let the user block shrink with an ellipsis. Whichever is chosen needs a check at 641, 700 and 760 px for a customer and an admin, plus the existing seven-page nav hash check.
 - **Related:** **F168** (the phone-side counterpart, resolved), S2b (`docs/admin-settings-catalog-visibility.md`, the `Admin ▾` group).
 
-Next free finding ID: **F179**.
+#### F179 — the admin Accounts tab cannot delete an active (or paused) customer account
+
+- **Filed 2026-11-08 (Rick: "log the finding about no delete"). Status: OPEN (filed, not fixed).** **Severity: Low today, Medium once other shops run their own stores.** Both environments (`admin.html` is identical on both branches).
+- **Symptom.** Customers ▸ Accounts offers **Decline** only for a `pending` account (`declineAccount()`, `admin.html:5156`, which deletes the profile and leaves the auth user, F64 item 5 Option A). An `active` account has only **Pause** / **Resume** (`setStatus()`, `admin.html:5065-5082`). Nothing in the app deletes an active or paused account, its profile or its auth user.
+- **Found 2026-11-08** removing the F72 G-F S3 production test account (`comicstore`, active after approval). It was deleted through the service-role auth admin API (`DELETE /auth/v1/admin/users/<id>`, with Rick's go): auth user 404, profile gone by `user_profiles_id_fkey` `ON DELETE CASCADE`, its 4 `usage_events` kept with `user_id` set NULL. It had no reservations, subscriptions or history.
+- **Why it matters.** A store admin on another tenant cannot remove a test account, a duplicate, or a customer who asks to be deleted (a privacy request); each needs the operator. Pausing hides the account but keeps it.
+- **Root cause.** Not a regression: account removal was never built for non-pending accounts. Deleting an auth user needs the service role, so it must be an Edge Function (the F25 / F126 pattern), not a client write.
+- **What a delete must decide (nothing decided).** What happens to the customer's `preorders` (an ordered reservation is guarded by F109's trigger), `subscriptions`, `reservation_history` (cascades from `auth.users`, the F13 question) and `usage_events` (set NULL); whether to delete or anonymise; a confirm naming those effects; admin-only and tenant-scoped in the function body; whether an admin may delete another admin.
+- **Related:** **F126** (no profile-editing surface; the same account-lifecycle gap, and the same Edge Function would carry both), **F64** (Decline's design), **F109**, **F13**.
+
+Next free finding ID: **F180**.
 
 ---
 
