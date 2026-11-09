@@ -1,6 +1,6 @@
 # Order Follow-Up — marks that survive imports, actions for every section, and an SOP
 
-**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); **S1 DONE 2026-11-09 (scripts repo `main` `271e824`; V1 + V2 green; V3 = Rick's next weekly run, Fri 2026-11-13)**; Query 2 and S2-S5 not started · staging: S1 V2 only · prod: — · PR: — · findings: F180 (filed 2026-11-09, open until V3)
+**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); **S1 DONE 2026-11-09 (scripts repo `main` `271e824`; V1 + V2 green; V3 = Rick's next weekly run, Fri 2026-11-13)**; **S2 APPLIED ON STAGING, S3 + S4 BUILT ON STAGING 2026-11-09 (`48c3c75`, help fix `1ea2172`; V5 8/8 seen red first, V6 full suite 169/0)**; S2 production SQL, Query 2 and S5 (promotion) not started · staging: 2026-11-09 · prod: — · PR: — · findings: F180 (filed 2026-11-09, open until V3)
 
 Owner of the defect record: `docs/technical-reference.md` § 13 F180. This doc is the plan.
 
@@ -76,6 +76,20 @@ would read as never arrived after it shipped. S0 checks this.
   panel. **It is the SOP:** there is no second Markdown copy to drift.
 - **C6. Snoozed rows do not light the Customers attention dot.** A standing "N snoozed — Show them" line
   keeps them findable (the Pending Accounts "Hide" pattern, PR #153).
+
+**Changed at build time (2026-11-09), each stated to Rick:**
+
+- **C7. Withdrawn stays its own grey panel**, directly under Order Follow-Up, instead of moving inside it
+  (this plan's S3 first said "moved in"). Spec 15 asserts the two panels are distinct, which is F110 § 2.1's
+  rule that Withdrawn and Backordered must never look interchangeable. It still gets acknowledged and
+  cleared, which is D7.
+- **C8. No Snooze on Withdrawn rows.** D1 named Never arrived, Backordered and At risk; Acknowledge covers
+  Withdrawn.
+- **C9. The bagging list does a little more than planned:** Didn't arrive and Damaged also move to "Not
+  arriving this week" (not only Can't get it), and Received now outranks a ledger rejection there, the
+  same rule My List already uses.
+- **C10. The panel fails open.** If `order_follow_ups` cannot be read, Snooze and Acknowledge are not
+  offered, nothing is stamped, a one-line notice says so, and every other control works.
 
 ## 3. The list after this work
 
@@ -212,6 +226,11 @@ The minimum change that fixes Rick's report. No schema, no app change.
 
 ### S2 — schema (Rick-run SQL, staging then production)
 
+**STAGING APPLIED 2026-11-09 (Rick), production PENDING.** File `docs/sql/2026-11-09-order-follow-ups.sql`
+(STATUS `staging=APPLIED 2026-11-09 | prod=PENDING`). Pre-check: the four-value CHECK, no table, tenants
+`demoshop,raysandjudys,riverside-comics` (the file's expected list first omitted `riverside-comics`, a
+staging test shop; corrected). Verdict: `true / true / 1 / 0 / DELETE,INSERT,SELECT,UPDATE`.
+
 One file, `docs/sql/<date>-order-follow-ups.sql`, created at build time (a `PENDING` file blocks
 `/promote-prod`), applied to staging first and to production before S3/S4 are promoted.
 
@@ -255,6 +274,9 @@ same `exportCode()` value the panel groups by.
 
 ### S3 — the panel (staging, `admin.html`)
 
+**BUILT ON STAGING 2026-11-09 (`48c3c75`, with S4; merged `--ff-only`, pushed; served files hash-equal to
+the commit).** As planned below, with C7-C10. Gate results in § 5 (V5).
+
 - **Received also writes `fulfilled = true, fulfilled_at = now()`** on every reservation the row collapsed
   (C1), in the same update as `arrival_outcome = 'arrived'`.
 - **Every panel action stamps `order_follow_ups`** (upsert on tenant, distributor, order code; explicit
@@ -289,6 +311,10 @@ same `exportCode()` value the panel groups by.
 
 ### S4 — the customer side and the help page (staging)
 
+**BUILT ON STAGING 2026-11-09 (`48c3c75`, with S3).** `mylist.html` (table, phone cards, No longer coming,
+Upcoming Arrivals; the Upcoming Remove confirm now says why per row), `app.js` (`Preorders.cancel()`
+allowance), `help-order-follow-up.html`.
+
 - **My List** (`mylist.html`): `not_available` joins "No longer coming" (`:1087-1089`) and the main
   table and phone cards (the same spots as Did not arrive), reading **"Not available — the store could
   not get this title."** with **Remove** allowed (`canRemove`).
@@ -322,6 +348,26 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 | V5 | S3/S4 | Local harness on the deployed staging bytes: Received leaves every collapsed reservation `arrived` and fulfilled, and the others open; snooze hides and returns with its note; Show them / Wake now; dot not lit by a snoozed row; Mark Ordered opens for a row from another month; Can't get it: Cancel writes nothing, OK writes `not_available` on every collapsed reservation; customer sees the new line and can remove an open and a closed row; Turned up after all appears once and leaves after either action; a mark survives the S1 pre-flight run against staging; bagging list shows the reason; Withdrawn: Acknowledge hides the row and the customer's My List is unchanged, a reservation added after the acknowledgement brings it back, Move reservations opens for that title, Rejected by supplier appears only with an order on record; no horizontal scroll at 390 px. Each new check seen red first |
 | V6 | S3/S4 | Specs that touch this path re-run (sweep with `grep -rn` in the Playwright folder; at least 06, 15, 21, 22, 25), then the full suite once on the deployed bytes |
 | V7 | S5 | Served bytes on both production hostnames equal `origin/main`; write-smoke (reserve, cancel) observed |
+
+**V5 and V6 results, 2026-11-09 (staging).** V5 became a committed-style local spec,
+`playwright/tests/26-order-follow-up.spec.ts` (gitignored suite), 8 tests:
+- **Seen red first, on the old deployed bytes after the SQL was applied:** all 8 failed for the reason
+  each targets (V5a no help line, V5b no Mark Ordered button on the At risk row, V5c Received left the
+  reservation open, V5d no new Withdrawn row, V5e no fail-open notice, V5f no bagging note, V5g My List read
+  "FOC passed — contact the store", V5h no help page). V5b-V5e first skipped behind V5a (serial mode) and
+  were then run one at a time to see each red.
+- **Green on the deployed bytes** (served `admin.html`, `mylist.html`, `app.js` hash-equal to `48c3c75`):
+  **8/8, no retries, 2.1 min.**
+- **V6:** specs 03, 06, 15, 17, 21, 22, 23, 25 **86/86** (16.3 min); **full suite 169 passed, 1 skipped
+  (pre-existing), 0 failed, 0 flaky, 28.1 min, exit 0** (161 before plus spec 26's 8).
+- **Screenshots inspected** at 1350 and 390 px (panel with every section and the snoozed list open, the
+  Snooze dialog, Withdrawn, the customer's table row and phone card, the help page): no horizontal scroll at
+  either width. One flaw found and fixed (`1ea2172`): the help page's numbered lists sat flush against the
+  screen edge at 390 px (style.css indents `.legal ul`, not `ol`).
+- **Teardown re-read clean:** 0 test catalog, shipment, follow-up or profile rows on staging.
+- **Not covered:** the attention dot (staging's own alerts keep it lit, so a snoozed row's effect cannot be
+  isolated; the logic is reviewed, not tested); "a mark survives the S1 pre-flight run against staging"
+  (S1's V2 covered the import side separately); Chromium only; production.
 
 ## 6. The SOP (draft text for the help page and the panel lines)
 
