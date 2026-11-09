@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Follow-Up help — Pull List</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192-v2.png">
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* style.css indents .legal ul (20px) but not ol: the policy pages have no numbered lists. Without this the
+       numbers sat flush against the screen edge at phone width. Page-local so style.css is untouched. */
+    .legal ol { padding-left: 24px; }
+  </style>
+</head>
+<body>
+<!-- Order Follow-Up help (the SOP). Static, no app.js, no app nav, so it is not
+     part of the seven-page nav sync set; readable signed out because it holds
+     process, not data. Names no store: every shop's admin reads the same page.
+     Linked from the Order Follow-Up and Withdrawn panels on admin.html. Source
+     and history: docs/order-follow-up-redesign.md § 6 (this page IS the SOP;
+     there is deliberately no second Markdown copy to drift). -->
+
+<header class="legal-top">
+  <div class="container"><a class="nav-logo" href="admin.html">PULL<span>LIST</span></a></div>
+</header>
+
+<main class="container legal">
+  <h1>Order Follow-Up: how to handle these</h1>
+  <p class="legal-meta">For store admins · <a href="admin.html">Back to the dashboard</a></p>
+
+  <h2>What this list is for</h2>
+  <p>It shows reserved titles that need a decision, at the point where the decision still helps: before the order cutoff (<strong>At risk</strong>), after a missed cutoff (<strong>Backordered</strong>), after the on-sale date (<strong>Never arrived</strong>) and when a distributor withdraws a title (<strong>Withdrawn</strong>). Handle a row and it leaves the list. Your choice stays put; the weekly import does not undo it.</p>
+
+  <h2 id="at-risk">At risk</h2>
+  <p>Reserved, not ordered, and the order cutoff (FOC) falls before this cycle's Order Deadline.</p>
+  <ul>
+    <li>Going into this cycle's order? <strong>Mark Ordered.</strong> Customers see "Order placed".</li>
+    <li>The store won't stock it? <strong>Can't get it.</strong> Customers see "Not available — the store could not get this title." and can remove it.</li>
+  </ul>
+
+  <h2 id="backordered">Backordered</h2>
+  <p>The order cutoff has passed and it was never ordered.</p>
+  <ul>
+    <li>Ordered it late anyway? <strong>Mark Ordered.</strong></li>
+    <li>Can't get it now? <strong>Can't get it</strong> (customers see the same message as above).</li>
+  </ul>
+
+  <h2 id="never-arrived">Never arrived</h2>
+  <p>On sale, and no invoice line shows it came.</p>
+  <ol>
+    <li>Look on the shelf, in the boxes and on the counter. Invoices miss lines, and a book handed over the counter leaves no record.</li>
+    <li>Then mark one:
+      <ul>
+        <li><strong>Received</strong>: it is here. The reservation is marked fulfilled and customers see it as normal.</li>
+        <li><strong>Didn't arrive</strong>: it never came. Customers see "No longer coming: the store already knows and handles it with the supplier" and cannot remove it. It stays there for 180 days from the on-sale date.</li>
+        <li><strong>Damaged</strong>: it came damaged. Customers see the same, worded "Arrived damaged".</li>
+        <li><strong>Rejected by supplier</strong>: the distributor refused the order. Shown only when an order is on record. Customers see "Rejected by the supplier — this title will not arrive as scheduled." and can remove it.</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2 id="turned-up">Turned up after all</h2>
+  <p>You marked it Didn't arrive, then a later invoice listed it. It appears once, at the top of Never arrived. If it is here, mark <strong>Received</strong> so customers stop reading "No longer coming". If not, mark <strong>Didn't arrive (keep)</strong> and it will not come back for that invoice.</p>
+
+  <h2 id="withdrawn">Withdrawn by the distributor</h2>
+  <p>The distributor dropped the code, so it can no longer be ordered. Customers already see "Withdrawn — cannot be ordered" on My List and can remove it themselves.</p>
+  <ol>
+    <li>Check the distributor's site for the same book under a new code. If it is there, use <strong>Move reservations…</strong> to move everyone's reservation to the new listing.</li>
+    <li>If a "⚠ already submitted" line shows, an order is on record for the old code. Confirm with the distributor, then <strong>Rejected by supplier</strong> to settle it.</li>
+    <li><strong>Acknowledge</strong> when you have read it or acted on it. It leaves the list and customers see no change. It comes back only if the title is marked withdrawn again or someone new reserves it.</li>
+  </ol>
+
+  <h2 id="snooze">Still finding out?</h2>
+  <p>Use <strong>Snooze</strong> on an At risk, Backordered or Never arrived row: pick a date and add a note ("emailed PRH 11/9"). The row hides until that date, then comes back with your note if it is still open. Customers see nothing change. <strong>Show them</strong> lists snoozed rows; <strong>Wake now</strong> brings one back early.</p>
+
+  <h2>Rows that clear themselves</h2>
+  <p>A title that gets ordered, shows up on an invoice, has a supplier rejection recorded, or is withdrawn by the distributor (it moves to the Withdrawn panel).</p>
+
+  <h2>Mistakes</h2>
+  <p>Received, Didn't arrive and Damaged take effect at once and have no undo in the app. If you mark the wrong one, ask your PULLLIST operator to correct it. Can't get it and Rejected by supplier ask you to confirm first.</p>
+
+  <h2>Customers are not emailed</h2>
+  <p>They see these messages on My List.</p>
+</main>
+</body>
+</html>

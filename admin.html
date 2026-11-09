@@ -770,6 +770,56 @@
   </div>
 </div>
 
+<!-- Order Follow-Up: Snooze (2026-11-09, docs/order-follow-up-redesign.md D1).
+     Hides one title until a date, with an optional note; it comes back on
+     that date if it is still open. Customers see nothing change. Same shell
+     as the Edit Account modal above. -->
+<div id="ofu-snooze-overlay" style="display:none;position:fixed;inset:0;z-index:200;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div role="dialog" aria-modal="true" aria-labelledby="ofu-snooze-heading"
+       style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:28px;width:100%;max-width:420px;margin:16px;position:relative;box-sizing:border-box">
+    <button id="ofu-snooze-close" aria-label="Close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 6px;font-size:1.1rem" id="ofu-snooze-heading">Snooze</h2>
+    <p id="ofu-snooze-title" style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 16px;line-height:1.5"></p>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button type="button" class="btn btn-ghost btn-sm ofu-snooze-quick" data-days="3">3 days</button>
+      <button type="button" class="btn btn-ghost btn-sm ofu-snooze-quick" data-days="7">1 week</button>
+      <button type="button" class="btn btn-ghost btn-sm ofu-snooze-quick" data-days="14">2 weeks</button>
+    </div>
+
+    <label for="ofu-snooze-date" style="display:block;font-size:0.78rem;font-weight:600;
+                   color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">UNTIL</label>
+    <input id="ofu-snooze-date" type="date"
+      style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+             color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+             font-size:0.9rem;box-sizing:border-box">
+
+    <label for="ofu-snooze-note" style="display:block;font-size:0.78rem;font-weight:600;
+                   color:var(--text-secondary);margin:14px 0 6px;letter-spacing:0.04em">
+      NOTE <span style="font-weight:400;letter-spacing:0;color:var(--text-muted)">— optional</span>
+    </label>
+    <textarea id="ofu-snooze-note" maxlength="300" rows="3" placeholder="e.g. emailed PRH 11/9"
+      style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+             color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+             font-size:0.9rem;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+
+    <p style="font-size:0.75rem;color:var(--text-muted);margin:10px 0 0;line-height:1.5">
+      It comes back on that date if it is still open, with your note. Customers see nothing change.
+    </p>
+
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="ofu-snooze-cancel">Cancel</button>
+      <button class="btn btn-primary" id="ofu-snooze-save">Snooze</button>
+    </div>
+
+    <div id="ofu-snooze-result" style="display:none;margin-top:12px;font-size:0.82rem;color:var(--danger,#e63946)"></div>
+  </div>
+</div>
+
 <!-- Order Builder Modal (F101/F102) — shared shell for the Lunar and PRH
      order-cycle selector, populated per-distributor by openOrderBuilder() -->
 <div id="order-builder-overlay" style="display:none;position:fixed;inset:0;z-index:200;
@@ -1077,10 +1127,14 @@
   // isCoveredByShipment() — catalog_id alone under-matches, because shipment
   // rows can carry a null catalog_id with a valid upc/item_code.
   let shipCatalogIds = new Set(), shipUpcs = new Set(), shipItemCodes = new Set();
+  // Order Follow-Up redesign (2026-11-09, D6): the newest invoice line's import
+  // time per key, so a title marked Didn't arrive can come back once when a
+  // LATER invoice lists it. Same three keys as hasShipmentEvidence().
+  let shipNewestAt = new Map();
 
   async function loadShipmentEvidence() {
     const { data, error } = await fetchPaged('weekly_shipment', () =>
-      db.from('weekly_shipment').select('catalog_id, upc, item_code'));
+      db.from('weekly_shipment').select('catalog_id, upc, item_code, created_at'));
     if (error) {
       // Fail loud-but-safe: with no evidence loaded nothing clears, so the
       // panel over-reports rather than silently hiding a real problem.
@@ -1090,7 +1144,109 @@
     shipCatalogIds = new Set((data || []).map(s => s.catalog_id).filter(Boolean));
     shipUpcs       = new Set((data || []).map(s => s.upc).filter(Boolean));
     shipItemCodes  = new Set((data || []).map(s => s.item_code).filter(Boolean));
+    shipNewestAt = new Map();
+    const note = (key, at) => { if (at > (shipNewestAt.get(key) || 0)) shipNewestAt.set(key, at); };
+    (data || []).forEach(s => {
+      const at = Date.parse(s.created_at) || 0;
+      if (s.catalog_id) note(`c:${s.catalog_id}`, at);
+      if (s.upc)        note(`u:${s.upc}`, at);
+      if (s.item_code)  note(`i:${s.item_code}`, at);
+    });
   }
+
+  // Newest invoice-line time (ms) across every listing a group of reservations
+  // sits on; 0 when none.
+  function newestInvoiceAt(rows) {
+    let newest = 0;
+    (rows || []).forEach(p => {
+      const c = p.catalog || {};
+      [c.id && `c:${c.id}`, c.upc && `u:${c.upc}`, c.item_code && `i:${c.item_code}`]
+        .filter(Boolean).forEach(k => { newest = Math.max(newest, shipNewestAt.get(k) || 0); });
+    });
+    return newest;
+  }
+
+  // ── Follow-up records (Order Follow-Up redesign, 2026-11-09) ──
+  // One admin-only row per title in order_follow_ups (docs/sql/
+  // 2026-11-09-order-follow-ups.sql): the snooze date and note (D1), and the
+  // last Follow-Up action with who and when (D6 "Turned up after all", D7
+  // Withdrawn acknowledgement). Keyed like the panel groups rows: distributor
+  // + exportCode(). The import never touches it.
+  //
+  // FAILS OPEN. If the table cannot be read (for example production before
+  // its SQL runs), followUpsError is set, Snooze and Acknowledge are not
+  // offered, nothing is stamped, and every existing action still works.
+  //
+  // Declared HERE, above the initial applyMode() call, on purpose: the first
+  // render reads these, and a `let` declared further down would still be in
+  // its temporal dead zone at that moment (the hazard noted at
+  // neverArrivedFromFulfilled()).
+  let followUps = new Map();
+  let followUpsError = null;
+  let ofuEntries = new Map();     // row key -> { catalog, rows }, rebuilt on every Order Follow-Up render
+  let wdEntries  = new Map();     // the same for the Withdrawn panel (its own map: the two render separately)
+  let ofuShowSnoozed = false;
+  let snoozeTarget = null;        // the row the Snooze dialog is open for
+
+  async function loadFollowUps() {
+    const { data, error } = await fetchPaged('order_follow_ups', () =>
+      db.from('order_follow_ups')
+        .select('id, distributor, order_code, title, snoozed_until, note, last_action, last_action_at, last_action_by')
+        .order('id'));
+    if (error) {
+      followUpsError = error.message;
+      followUps = new Map();
+      console.error('order_follow_ups load failed (Snooze and Acknowledge are off):', error.message);
+      return;
+    }
+    followUpsError = null;
+    followUps = new Map((data || []).map(r => [`${r.distributor}||${r.order_code}`, r]));
+  }
+
+  function followUpKey(c) {
+    const code = c ? exportCode(c, c.distributor) : null;
+    return (code && c.distributor) ? `${c.distributor}||${code}` : null;
+  }
+  function followUpFor(c) {
+    const k = followUpKey(c);
+    return k ? followUps.get(k) : undefined;
+  }
+  // Hidden until the snooze date; back ON that date.
+  function isSnoozedNow(fu) {
+    return !!(fu && fu.snoozed_until && fu.snoozed_until > DateUtils.todayLocal());
+  }
+
+  // Upsert the title's follow-up row. Only the fields passed are changed, so
+  // stamping an action keeps an earlier note. Updates the local map on
+  // success so a re-render needs no reload.
+  async function stampFollowUp(c, fields) {
+    if (followUpsError) return { error: null, skipped: true };
+    const k = followUpKey(c);
+    if (!k) return { error: { message: 'this title has no order code' } };
+    const row = {
+      tenant_id:   TenantContext.current().id,
+      distributor: c.distributor,
+      order_code:  exportCode(c, c.distributor),
+      title:       c.title || null,
+      updated_at:  new Date().toISOString(),
+      ...fields,
+    };
+    const { error } = await db.from('order_follow_ups')
+      .upsert(row, { onConflict: 'tenant_id,distributor,order_code' });
+    if (!error) followUps.set(k, { ...(followUps.get(k) || {}), ...row });
+    return { error };
+  }
+  const followUpStamp = (action) => ({
+    last_action: action, last_action_at: new Date().toISOString(), last_action_by: navData.user.id,
+  });
+
+  // The panels replace their contents on every render, so their new buttons
+  // are handled by one delegated listener each, attached ONCE here (before the
+  // first render). onFollowUpPanelClick and setupSnoozeModal are hoisted
+  // function declarations further down.
+  document.getElementById('backorder-risk-panel')?.addEventListener('click', onFollowUpPanelClick);
+  document.getElementById('withdrawn-panel')?.addEventListener('click', onFollowUpPanelClick);
+  setupSnoozeModal();
 
   function hasShipmentEvidence(c) {
     if (!c) return false;
@@ -1450,6 +1606,7 @@
       fetchPaged('user_profiles', () => db.from('user_profiles').select('id, full_name')),
       loadOrderLedger(),
       loadShipmentEvidence(),
+      loadFollowUps(),
       Settings.getOrderDeadline().then(v => { orderDeadline = v; }),
     ]);
 
@@ -1755,8 +1912,12 @@
     if (typeof pendingVisibleCount === 'number' && pendingVisibleCount > 0) raise('warn');
 
     if (fullDataLoaded) {
-      const risk = computeBackorderRisk();
-      if (risk.neverArrived.length || computeWithdrawnTitles().length) raise('alert');
+      // Snoozed and acknowledged rows do not light the dot (plan C6), for the
+      // same reason Hidden pending accounts do not. A title that turned up on a
+      // later invoice after being marked Didn't arrive is red: its customers
+      // are reading "No longer coming" while the book may be in the store.
+      const risk = followUpView();
+      if (risk.neverArrived.length || risk.turnedUp.length || visibleWithdrawn().length) raise('alert');
       else {
         const today = DateUtils.todayLocal();
         const [y, m, d] = today.split('-').map(Number);
@@ -2021,13 +2182,93 @@
     };
   }
 
+  // ── Order Follow-Up redesign helpers (2026-11-09) ─────────
+  // docs/order-follow-up-redesign.md. Every helper below is a function
+  // DECLARATION on purpose: the first render runs before the script's linear
+  // execution reaches this point (see neverArrivedFromFulfilled()), and a
+  // top-level const/let here would still be in its temporal dead zone.
+
+  // D6: a title marked Didn't arrive comes back ONCE when an invoice line
+  // imported AFTER that mark lists it. Only marks stamped in order_follow_ups
+  // qualify (a mark made before this shipped has no time to compare against).
+  // Keeping it as Didn't arrive re-stamps the mark with a new time, which is
+  // what makes it "once". Damaged is deliberately excluded: a damaged book
+  // always has an invoice line.
+  function computeTurnedUp() {
+    const rows = gatherCollapsed.filter(p => p.arrival_outcome === 'not_arrived' && !p.catalog?.withdrawn_at);
+    return groupByExportCode(rows.map(p => ({ p }))).filter(e => {
+      const fu = followUpFor(e.catalog);
+      if (!fu || fu.last_action !== 'not_arrived' || !fu.last_action_at) return false;
+      return newestInvoiceAt(e.rows) > (Date.parse(fu.last_action_at) || 0);
+    });
+  }
+
+  // What the panel AND the attention dot show: computeBackorderRisk() minus
+  // the snoozed titles (listed separately, behind "Show them"), plus Turned up
+  // after all. computeBackorderRisk() itself is unchanged.
+  function followUpView() {
+    const risk = computeBackorderRisk();
+    const snoozed = [];
+    const awake = (list, state) => list.filter(e => {
+      const fu = followUpFor(e.catalog);
+      if (isSnoozedNow(fu)) { snoozed.push({ entry: e, state, fu }); return false; }
+      return true;
+    });
+    return {
+      turnedUp:     computeTurnedUp(),
+      neverArrived: awake(risk.neverArrived, 'neverArrived'),
+      backordered:  awake(risk.backordered,  'backordered'),
+      atRisk:       awake(risk.atRisk,       'atRisk'),
+      snoozed,
+    };
+  }
+
+  // The listing holding most of a group's OPEN reservations: the one the Mark
+  // Ordered and Move dialogs (both keyed by catalog id) should open on.
+  function primaryCatalogId(rows) {
+    const counts = new Map();
+    (rows || []).filter(p => !p.fulfilled && p.catalog?.id)
+      .forEach(p => counts.set(p.catalog.id, (counts.get(p.catalog.id) || 0) + 1));
+    let best = null, most = 0;
+    counts.forEach((n, id) => { if (n > most) { best = id; most = n; } });
+    return best || (rows && rows[0] && rows[0].catalog ? rows[0].catalog.id : null);
+  }
+
+  // The one-line "what this means, what to do" under each section (D4). The
+  // full text is the help page, help-order-follow-up.html.
+  function ofuHelpLine(text, color) {
+    return `<div class="ofu-help" style="font-size:0.75rem;color:${color || 'var(--text-muted)'};margin:0 0 6px;line-height:1.45">${text}</div>`;
+  }
+
+  function ofuBtn(cls, label, attrs) {
+    return `<button type="button" class="btn btn-ghost btn-sm ${cls}" ${attrs || ''} style="font-size:0.68rem;padding:3px 10px">${label}</button>`;
+  }
+
+  // One line under a row: its note, and until when (and by whom) it was snoozed.
+  function followUpNoteHtml(fu) {
+    if (!fu || (!fu.note && !fu.snoozed_until)) return '';
+    const bits = [];
+    if (fu.note) bits.push('Note: ' + escapeHtml(fu.note));
+    if (fu.snoozed_until) {
+      const by = (['snoozed', 'woken'].includes(fu.last_action) && fu.last_action_by)
+        ? ' by ' + escapeHtml(profileMap[fu.last_action_by] || 'an admin') : '';
+      bits.push(`snoozed until ${formatDate(fu.snoozed_until)}${by}`);
+    }
+    return `<div class="ofu-note" style="font-size:0.72rem;color:var(--text-secondary);margin-top:4px">${bits.join(' · ')}</div>`;
+  }
+
   function renderBackorderRiskPanel() {
     const panel = document.getElementById('backorder-risk-panel');
     if (!panel) return;
 
-    const { neverArrived, backordered, atRisk } = computeBackorderRisk();
+    // A re-render after Snooze / Wake must not snap the Backordered / At risk
+    // disclosure shut under the admin's hand.
+    const detailsWasOpen = !!panel.querySelector('#ofu-details')?.open;
 
-    if (!neverArrived.length && !backordered.length && !atRisk.length) {
+    const { turnedUp, neverArrived, backordered, atRisk, snoozed } = followUpView();
+    ofuEntries = new Map();
+
+    if (!turnedUp.length && !neverArrived.length && !backordered.length && !atRisk.length && !snoozed.length) {
       panel.style.display = 'none';
       panel.innerHTML = '';
       return;
@@ -2045,47 +2286,46 @@
     };
 
     const STATES = {
+      turnedUp:     { label: 'On an invoice', text: 'var(--success,#22c55e)', bg: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.4)' },
       neverArrived: { label: 'Never arrived', text: '#ff5f4a', bg: 'rgba(232,50,28,0.14)', border: 'rgba(232,50,28,0.55)' },
       backordered:  { label: 'Backordered',   text: '#ff8070', bg: 'rgba(232,50,28,0.08)', border: 'rgba(232,50,28,0.3)'  },
       atRisk:       { label: 'At risk',       text: 'var(--warning)', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)' },
     };
+    const canFollowUp = !followUpsError;
 
     // F134 Part 2b — admin-only resolve control, Never Arrived rows only.
-    // Writes arrival_outcome and nothing else; any value other than 'unknown'
-    // clears the row from this panel.
-    //
-    // ⚠ CORRECTED — this comment used to read "…drops the row out of
+    // Writes arrival_outcome; any value other than 'unknown' clears the row
+    // from this panel. (Its old wording, "drops the row out of
     // neverArrivedFromFulfilled()'s filter, so no additional clearing logic is
-    // needed here (plan § 4.2)". True as written under F134, and FALSE from
-    // F155 S3(b) onward: that filter governs only the FULFILLED path, while
-    // S3(b) added an unfulfilled producer that read arrival_outcome nowhere.
-    // The clearing logic it said was unnecessary is now the settled-outcome
-    // exit at the head of computeBackorderRisk()'s forEach — see the comment
-    // there. The old wording is kept above rather than deleted so the
-    // correction is visible. One title-level
-    // judgement applies to every customer who reserved it — data-ids carries
-    // every underlying preorder id the group collapsed (groupByExportCode's
-    // `rows`, F134), not just the first.
-    const rowHtml = (entries, stateKey) => entries.map(({ catalog: c, qty, customers, rows }) => {
-      const s = STATES[stateKey];
+    // needed", was falsified by F155 S3(b); the clearing logic is the
+    // settled-outcome exit at the head of computeBackorderRisk()'s forEach.)
+    // One title-level judgement applies to every customer who reserved it —
+    // data-ids carries every underlying preorder id the group collapsed.
+    //
+    // 2026-11-09 additions (docs/order-follow-up-redesign.md): Snooze on every
+    // section (D1); Mark Ordered and Can't get it on Backordered / At risk
+    // (D2); Turned up after all at the top of Never arrived (D6). Every row is
+    // registered in ofuEntries under data-key so the buttons can find it.
+    const rowHtml = (entries, stateKey, opts) => entries.map(entry => {
+      const snoozedRow = !!(opts && opts.snoozedRow);
+      const { catalog: c, qty, customers, rows } = entry;
+      const s   = STATES[stateKey];
+      const key = `${stateKey}:${followUpKey(c) || c.id}`;
+      ofuEntries.set(key, entry);
       const ids = (rows || []).map(p => p.id).join(',');
-      // F143 — a fourth option, alongside the three F134 buttons, for a
-      // rejection discovered from THIS panel rather than corrected in a
-      // different tab. It does NOT share wireArrivalResolveActions()'s
-      // code path: it writes order_submissions (the ledger), not
-      // arrival_outcome (§ 13 F143 — they are different statements, and
-      // writing both would let them disagree).
-      //
-      // Rick, 2026-08-27 (§ 5.1 PAUSE): only offered when there is an
-      // actual order to negate — ledgerNetQty > 0. A title with no ledger
-      // rows has nothing to reject; "Didn't arrive" stays the honest
-      // control there. Measured live the same day: 0 of production's
-      // Never Arrived rows currently have net === 0 (the panel itself was
-      // empty), so this is the recommended v1 shipped as-is, not a
-      // guess — see this session's own status update for the count.
-      const rejectCode   = exportCode(c, c.distributor);
-      const rejectNetQty = ledgerNetQty(c.distributor, rejectCode);
-      const rejectBtn = (stateKey === 'neverArrived' && rejectNetQty > 0) ? `
+      const fu  = followUpFor(c);
+      const keyAttr   = `data-key="${escapeHtml(key)}"`;
+      const snoozeBtn = (canFollowUp && !snoozedRow && stateKey !== 'turnedUp') ? ofuBtn('ofu-snooze-btn', 'Snooze…', keyAttr) : '';
+      const wakeBtn   = snoozedRow ? ofuBtn('ofu-wake-btn', 'Wake now', keyAttr) : '';
+
+      let actions = '';
+      if (stateKey === 'neverArrived' || stateKey === 'turnedUp') {
+        // F143 — Rejected by supplier, only when there is an order on record to
+        // negate (ledgerNetQty > 0, Rick 2026-08-27). It writes the ledger, not
+        // arrival_outcome (§ 13 F143: different statements).
+        const rejectCode   = exportCode(c, c.distributor);
+        const rejectNetQty = ledgerNetQty(c.distributor, rejectCode);
+        const rejectBtn = (stateKey === 'neverArrived' && rejectNetQty > 0) ? `
           <button type="button" class="btn btn-ghost btn-sm arrival-reject-btn"
                   data-distributor="${escapeHtml(c.distributor || '')}"
                   data-code="${escapeHtml(rejectCode)}"
@@ -2094,15 +2334,30 @@
                   data-foc="${escapeHtml(c.foc_date || '')}"
                   data-catalog-month="${escapeHtml(c.catalog_month || '')}"
                   style="font-size:0.68rem;padding:3px 10px">Rejected by supplier</button>` : '';
-      const resolveRow = stateKey === 'neverArrived' ? `
-        <div class="arrival-resolve-actions" data-ids="${ids}" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="arrived" style="font-size:0.68rem;padding:3px 10px">Received</button>
-          <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="not_arrived" style="font-size:0.68rem;padding:3px 10px">Didn't arrive</button>
-          <button type="button" class="btn btn-ghost btn-sm arrival-resolve-btn" data-outcome="damaged" style="font-size:0.68rem;padding:3px 10px">Damaged</button>
-          ${rejectBtn}
-        </div>` : '';
+        const choices = stateKey === 'turnedUp'
+          ? [['arrived', 'Received'], ['not_arrived', "Didn't arrive (keep)"]]
+          : [['arrived', 'Received'], ['not_arrived', "Didn't arrive"], ['damaged', 'Damaged']];
+        actions = `
+        <div class="arrival-resolve-actions" data-ids="${ids}" ${keyAttr} style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          ${choices.map(([outcome, label]) => ofuBtn('arrival-resolve-btn', label, `data-outcome="${outcome}"`)).join('')}
+          ${rejectBtn}${snoozeBtn}${wakeBtn}
+        </div>`;
+      } else {
+        const markId = primaryCatalogId(rows);
+        actions = `
+        <div class="ofu-order-actions" ${keyAttr} style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          ${markId ? ofuBtn('ofu-mark-ordered-btn', 'Mark Ordered', `data-catalog-id="${escapeHtml(markId)}"`) : ''}
+          ${ofuBtn('ofu-cant-get-btn', "Can't get it", keyAttr)}
+          ${snoozeBtn}${wakeBtn}
+        </div>`;
+      }
+
+      const turnedUpLine = (stateKey === 'turnedUp' && fu && fu.last_action_at)
+        ? `<div style="font-size:0.72rem;color:var(--text-secondary);margin-top:2px">Marked Didn't arrive ${formatDate(fu.last_action_at.split('T')[0])}; an invoice imported since lists it.</div>`
+        : '';
+
       return `
-        <div class="backorder-risk-row" data-state="${stateKey}" style="padding:10px 12px;
+        <div class="backorder-risk-row${snoozedRow ? ' ofu-snoozed-row' : ''}" data-state="${stateKey}" style="padding:10px 12px;
              border-radius:var(--radius);background:${s.bg};border:1px solid ${s.border}">
           <div style="display:flex;align-items:center;gap:12px">
             <div style="flex:1;min-width:0">
@@ -2113,19 +2368,25 @@
               <div style="font-size:0.75rem;color:var(--text-muted)">
                 ${onSaleLabel(c)} · FOC ${formatDate(c.foc_date)} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
               </div>
+              ${turnedUpLine}
+              ${followUpNoteHtml(fu)}
             </div>
             <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;
                          color:${s.text};white-space:nowrap">${s.label}</span>
           </div>
-          ${resolveRow}
+          ${actions}
         </div>`;
     }).join('');
 
     const counts = [
+      turnedUp.length     ? `${turnedUp.length} on a later invoice` : '',
       neverArrived.length ? `${neverArrived.length} never arrived` : '',
       backordered.length  ? `${backordered.length} backordered`    : '',
       atRisk.length       ? `${atRisk.length} at risk`             : '',
+      snoozed.length      ? `${snoozed.length} snoozed`            : '',
     ].filter(Boolean).join(' · ');
+
+    const topCount = turnedUp.length + neverArrived.length;
 
     panel.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap">
@@ -2134,28 +2395,43 @@
         </h3>
         <span style="font-size:0.75rem;color:var(--text-muted)">${counts}</span>
       </div>
-      ${neverArrived.length ? `<div style="font-size:0.75rem;color:#ff5f4a;margin-bottom:6px">
-        Released with nothing showing they arrived — ordering can no longer help; contact the distributor or the customer.
-      </div>
+      ${followUpsError ? `<div class="ofu-unavailable" style="font-size:0.72rem;color:var(--warning);margin-bottom:8px">
+        Snooze, notes and Acknowledge are unavailable right now (the follow-up records could not be read). Everything else works.
+      </div>` : ''}
+      ${topCount ? `
+      ${turnedUp.length ? ofuHelpLine("Marked Didn't arrive, but a later invoice lists it. Check, then mark Received.", 'var(--success,#22c55e)') : ''}
+      ${neverArrived.length ? ofuHelpLine('On sale, but no invoice shows it came. Check the shelf and the boxes, then mark what happened.', '#ff5f4a') : ''}
       <div class="ofu-never-scroll">
+        ${rowHtml(turnedUp, 'turnedUp')}
         ${rowHtml(neverArrived, 'neverArrived')}
       </div>
-      ${neverArrived.length > 3 ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">
-        ${neverArrived.length} titles — scroll the list to reach the rest.
+      ${topCount > 3 ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">
+        ${topCount} titles — scroll the list to reach the rest.
       </div>` : ''}` : ''}
       ${(backordered.length || atRisk.length) ? `
-      <details id="ofu-details" class="ofu-details" style="margin-top:${neverArrived.length ? '10px' : '0'}">
+      <details id="ofu-details" class="ofu-details" style="margin-top:${topCount ? '10px' : '0'}"${detailsWasOpen ? ' open' : ''}>
         <summary class="ofu-summary">Show ${[
           backordered.length ? `${backordered.length} backordered` : '',
           atRisk.length      ? `${atRisk.length} at risk`          : '',
         ].filter(Boolean).join(' · ')}</summary>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          ${backordered.length ? ofuHelpLine("Backordered: its order cutoff has passed and it was never ordered. Order it late if the distributor allows, or mark Can't get it.") : ''}
           ${rowHtml(backordered, 'backordered')}
+          ${atRisk.length ? ofuHelpLine("At risk: not ordered yet, and its order cutoff is before this cycle's Order Deadline. Order it, or mark Can't get it.") : ''}
           ${rowHtml(atRisk, 'atRisk')}
         </div>
       </details>` : ''}
+      ${snoozed.length ? `
+      <div class="ofu-snoozed-line" style="margin-top:10px;font-size:0.75rem;color:var(--text-muted)">
+        ${snoozed.length} snoozed —
+        <button type="button" class="ofu-show-snoozed" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:0.75rem;font-weight:600">${ofuShowSnoozed ? 'Hide them' : 'Show them'}</button>
+      </div>
+      ${ofuShowSnoozed ? `<div class="ofu-snoozed-list" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+        ${snoozed.map(({ entry, state }) => rowHtml([entry], state, { snoozedRow: true })).join('')}
+      </div>` : ''}` : ''}
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
         Titles already ordered, or with a shipment record, are cleared automatically.
+        <a href="help-order-follow-up.html" target="_blank" rel="noopener" class="ofu-help-link" style="color:var(--accent);white-space:nowrap">How to handle these</a>
       </div>
     `;
 
@@ -2173,14 +2449,24 @@
   // (Mark Ordered, Order Builder record save) — simplest way to guarantee the
   // row's disappearance reflects a real server read, not a client-side patch
   // that could drift from a concurrent change.
+  //
+  // 2026-11-09 (plan C1, after Rick's correction that the system tracks only
+  // fulfilled orders, not pickup): Received ALSO marks the still-open
+  // reservations fulfilled, exactly what the import does when an invoice line
+  // shows a title arrived. Didn't arrive and Damaged leave them open (spec 21
+  // V7 asserts that, and the 14-day auto-close handles them). Every mark is
+  // stamped in order_follow_ups with who and when (D6 needs the time).
+  // The import no longer overwrites any of these marks (F180, scripts repo
+  // 271e824).
   function wireArrivalResolveActions(panel) {
     panel.querySelectorAll('.arrival-resolve-actions').forEach(container => {
       const ids = (container.dataset.ids || '').split(',').filter(Boolean);
+      const entry = ofuEntries.get(container.dataset.key);
       container.querySelectorAll('.arrival-resolve-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
           if (!ids.length) return;
           const outcome = btn.dataset.outcome; // 'arrived' | 'not_arrived' | 'damaged'
-          container.querySelectorAll('.arrival-resolve-btn').forEach(b => b.disabled = true);
+          container.querySelectorAll('button').forEach(b => b.disabled = true);
 
           const { error } = await db.from('preorders')
             .update({ arrival_outcome: outcome })
@@ -2188,15 +2474,183 @@
 
           if (error) {
             toast(`Failed to resolve: ${error.message}`, 'error');
-            container.querySelectorAll('.arrival-resolve-btn').forEach(b => b.disabled = false);
+            container.querySelectorAll('button').forEach(b => b.disabled = false);
             return;
           }
+
+          let closeError = null;
+          if (outcome === 'arrived') {
+            const idSet = new Set(ids);
+            const openIds = ((entry && entry.rows) || []).filter(p => idSet.has(p.id) && !p.fulfilled).map(p => p.id);
+            if (openIds.length) {
+              const res = await db.from('preorders')
+                .update({ fulfilled: true, fulfilled_at: new Date().toISOString() })
+                .in('id', openIds)
+                .eq('fulfilled', false);
+              closeError = res.error;
+            }
+          }
+
+          const stamp = entry ? await stampFollowUp(entry.catalog, followUpStamp(outcome)) : { error: null };
+
           toast(outcome === 'arrived' ? 'Marked received'
               : outcome === 'damaged' ? 'Marked damaged'
               : "Marked didn't arrive");
+          if (closeError) toast(`Marked received, but closing the reservation failed: ${closeError.message}`, 'error');
+          if (stamp.error) toast(`Marked, but the follow-up history was not saved: ${stamp.error.message}`, 'error');
           await loadData();
         });
       });
+    });
+  }
+
+  // ── Order Follow-Up and Withdrawn panel buttons (2026-11-09) ──
+  // Delegated, attached once to each panel element (see the follow-up state
+  // block), because both panels replace their contents on every render. The
+  // resolve and reject buttons keep their own per-render listeners above.
+  async function onFollowUpPanelClick(e) {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.classList.contains('ofu-show-snoozed')) {
+      ofuShowSnoozed = !ofuShowSnoozed;
+      renderBackorderRiskPanel();
+      return;
+    }
+    if (t.classList.contains('ofu-mark-ordered-btn')) { openMarkOrderedModal(t.dataset.catalogId); return; }
+    if (t.classList.contains('ofu-move-btn'))         { openMoveResModal(t.dataset.catalogId); return; }
+
+    const entry = t.dataset.key ? (ofuEntries.get(t.dataset.key) || wdEntries.get(t.dataset.key)) : null;
+    if (!entry) return;
+    if (t.classList.contains('ofu-snooze-btn'))   { openSnoozeModal(entry); return; }
+    if (t.classList.contains('ofu-wake-btn'))     { await wakeFollowUp(entry, t); return; }
+    if (t.classList.contains('ofu-cant-get-btn')) { await markCantGetIt(entry, t); return; }
+    if (t.classList.contains('ofu-ack-btn'))      { await acknowledgeWithdrawn(entry, t); return; }
+  }
+
+  // D2 + D5: the store will not get a title it never ordered. Writes
+  // arrival_outcome = 'not_available' on every open reservation the row
+  // collapsed (no order entry, so it never reads as a supplier rejection);
+  // the settled-outcome exit in computeBackorderRisk() clears it, and My List
+  // shows "Not available — the store could not get this title." with Remove.
+  // Confirmed first, like Rejected by supplier (plan C3): customers see it at
+  // once and the app has no undo.
+  async function markCantGetIt(entry, btn) {
+    const c = entry.catalog;
+    const ids = (entry.rows || []).filter(p => !p.fulfilled).map(p => p.id);
+    if (!ids.length) return;
+    const n = entry.customers ? entry.customers.size : ids.length;
+    const ok = confirm(`Mark "${c.title || 'this title'}" as Can't get it?
+
+${n === 1 ? 'Its customer sees' : `Its ${n} customers see`} "Not available — the store could not get this title." on My List straight away, and can remove it.
+
+There is no undo in the app.`);
+    if (!ok) return;
+
+    btn.disabled = true;
+    const { error } = await db.from('preorders')
+      .update({ arrival_outcome: 'not_available' })
+      .in('id', ids);
+    if (error) {
+      toast(`Failed to mark: ${error.message}`, 'error');
+      btn.disabled = false;
+      return;
+    }
+    const stamp = await stampFollowUp(c, followUpStamp('not_available'));
+    toast("Marked can't get it");
+    if (stamp.error) toast(`Marked, but the follow-up history was not saved: ${stamp.error.message}`, 'error');
+    await loadData();
+  }
+
+  async function wakeFollowUp(entry, btn) {
+    btn.disabled = true;
+    const { error } = await stampFollowUp(entry.catalog, { snoozed_until: null, ...followUpStamp('woken') });
+    if (error) {
+      toast(`Could not wake it: ${error.message}`, 'error');
+      btn.disabled = false;
+      return;
+    }
+    toast('Back on the list');
+    renderBackorderRiskPanel();
+    updateModeDots();
+  }
+
+  // D7: the admin has read or acted on a withdrawn title. Writes nothing a
+  // customer sees and deletes no reservation; it only hides the row, until
+  // the title is marked withdrawn again or a reservation is added after this
+  // (isAcknowledged()).
+  async function acknowledgeWithdrawn(entry, btn) {
+    btn.disabled = true;
+    const { error } = await stampFollowUp(entry.catalog, followUpStamp('acknowledged'));
+    if (error) {
+      toast(`Could not acknowledge: ${error.message}`, 'error');
+      btn.disabled = false;
+      return;
+    }
+    toast('Acknowledged');
+    renderWithdrawnPanel();
+    updateModeDots();
+  }
+
+  // ── Snooze dialog (D1) ─────────────────────────────────────
+  function addDaysLocal(n) {
+    const [y, m, d] = DateUtils.todayLocal().split('-').map(Number);
+    return DateUtils.fmtLocal(new Date(y, m - 1, d + n));
+  }
+
+  function openSnoozeModal(entry) {
+    const overlay = document.getElementById('ofu-snooze-overlay');
+    if (!overlay) return;
+    snoozeTarget = entry;
+    const c  = entry.catalog;
+    const fu = followUpFor(c);
+    const n  = entry.customers ? entry.customers.size : 0;
+    document.getElementById('ofu-snooze-title').textContent =
+      `${c.title || 'This title'} (${n} customer${n === 1 ? '' : 's'})`;
+    const dateEl = document.getElementById('ofu-snooze-date');
+    dateEl.min   = addDaysLocal(1);
+    dateEl.value = addDaysLocal(7);
+    document.getElementById('ofu-snooze-note').value = (fu && fu.note) || '';
+    const res = document.getElementById('ofu-snooze-result');
+    res.style.display = 'none';
+    res.textContent = '';
+    const save = document.getElementById('ofu-snooze-save');
+    save.disabled = false;
+    save.textContent = 'Snooze';
+    overlay.style.display = 'flex';
+    setTimeout(() => dateEl.focus(), 50);
+  }
+
+  function setupSnoozeModal() {
+    const overlay = document.getElementById('ofu-snooze-overlay');
+    if (!overlay) return;
+    const close = () => { overlay.style.display = 'none'; snoozeTarget = null; };
+    document.getElementById('ofu-snooze-close').addEventListener('click', close);
+    document.getElementById('ofu-snooze-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    overlay.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    overlay.querySelectorAll('.ofu-snooze-quick').forEach(b => b.addEventListener('click', () => {
+      document.getElementById('ofu-snooze-date').value = addDaysLocal(Number(b.dataset.days));
+    }));
+    document.getElementById('ofu-snooze-save').addEventListener('click', async () => {
+      if (!snoozeTarget) return;
+      const until = document.getElementById('ofu-snooze-date').value;
+      const note  = document.getElementById('ofu-snooze-note').value.trim();
+      const res   = document.getElementById('ofu-snooze-result');
+      const save  = document.getElementById('ofu-snooze-save');
+      const fail  = (msg) => { res.textContent = msg; res.style.display = 'block'; };
+      if (!until || until <= DateUtils.todayLocal()) { fail('Pick a date after today.'); return; }
+      if (note.length > 300) { fail('Keep the note to 300 characters.'); return; }
+      save.disabled = true;
+      save.textContent = 'Saving…';
+      const { error } = await stampFollowUp(snoozeTarget.catalog,
+        { snoozed_until: until, note: note || null, ...followUpStamp('snoozed') });
+      save.disabled = false;
+      save.textContent = 'Snooze';
+      if (error) { fail(`Could not snooze: ${error.message}`); return; }
+      close();
+      toast(`Snoozed until ${formatDate(until)}`);
+      renderBackorderRiskPanel();
+      updateModeDots();
     });
   }
 
@@ -2278,6 +2732,7 @@
     await loadOrderLedger();
     renderByDistributor();
     renderBackorderRiskPanel();
+    renderWithdrawnPanel();   // its "already submitted" line reads the ledger too (2026-11-09: it now offers this button)
     toast('Recorded as rejected — order corrected', 'success');
   }
 
@@ -2302,7 +2757,12 @@
     const panel = document.getElementById('withdrawn-panel');
     if (!panel) return;
 
-    const withdrawn = computeWithdrawnTitles();
+    // D7 (Rick, 2026-11-09): acknowledged titles leave this list. The panel
+    // stays its own grey panel, separate from Order Follow-Up, because
+    // Withdrawn and Backordered must never look interchangeable (F110 § 2.1;
+    // spec 15 asserts it).
+    const withdrawn = visibleWithdrawn();
+    wdEntries = new Map();
 
     if (!withdrawn.length) {
       panel.style.display = 'none';
@@ -2311,27 +2771,51 @@
     }
     panel.style.display = '';
 
-    const rowHtml = withdrawn.map(({ catalog: c, qty, customers }) => {
+    const canAck = !followUpsError;
+
+    const rowHtml = withdrawn.map(entry => {
+      const { catalog: c, qty, customers, rows } = entry;
+      const key        = `withdrawn:${followUpKey(c) || c.id}`;
+      wdEntries.set(key, entry);
       const code       = exportCode(c, c.distributor);
-      const ordered     = ledgerMatchesFor(c.distributor, code);
-      const orderedQty  = ordered.reduce((s, m) => s + (m.quantity || 0), 0);
+      const ordered    = ledgerMatchesFor(c.distributor, code);
+      const orderedQty = ordered.reduce((s, m) => s + (m.quantity || 0), 0);
+      const moveId     = primaryCatalogId(rows);
+      // The same writer as Order Follow-Up's button (recordSupplierRejection,
+      // F143), offered only when an order is on record to settle.
+      const rejectBtn = orderedQty > 0 ? `
+            <button type="button" class="btn btn-ghost btn-sm arrival-reject-btn"
+                    data-distributor="${escapeHtml(c.distributor || '')}"
+                    data-code="${escapeHtml(code || '')}"
+                    data-item-code="${escapeHtml(c.item_code || '')}"
+                    data-title="${escapeHtml(c.title || '')}"
+                    data-foc="${escapeHtml(c.foc_date || '')}"
+                    data-catalog-month="${escapeHtml(c.catalog_month || '')}"
+                    style="font-size:0.68rem;padding:3px 10px">Rejected by supplier</button>` : '';
       return `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+        <div class="withdrawn-ofu-row" style="padding:10px 12px;
              border-radius:var(--radius);background:rgba(136,136,136,0.1);
              border:1px solid rgba(136,136,136,0.35)">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${escapeHtml(c.title || '')}
-              <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                ${escapeHtml(c.title || '')}
+                <span style="font-family:monospace;font-weight:400;color:var(--text-muted);font-size:0.72rem">${escapeHtml(c.item_code || '')}</span>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text-muted)">
+                Last seen ${escapeHtml(c.withdrawn_last_seen_month || '—')} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
+                ${orderedQty ? ` · ⚠ ${orderedQty} already submitted to ${escapeHtml(c.distributor || '')} — reconcile with the distributor` : ''}
+              </div>
             </div>
-            <div style="font-size:0.75rem;color:var(--text-muted)">
-              Last seen ${escapeHtml(c.withdrawn_last_seen_month || '—')} · ${customers.size} customer${customers.size===1?'':'s'} · ${qty} cop${qty===1?'y':'ies'}
-              ${orderedQty ? ` · ⚠ ${orderedQty} already submitted to ${escapeHtml(c.distributor || '')} — reconcile with the distributor` : ''}
-            </div>
+            <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#999">
+              Withdrawn
+            </span>
           </div>
-          <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#999">
-            Withdrawn
-          </span>
+          <div class="ofu-withdrawn-actions" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            ${canAck ? ofuBtn('ofu-ack-btn', 'Acknowledge', `data-key="${escapeHtml(key)}"`) : ''}
+            ${moveId ? ofuBtn('ofu-move-btn', 'Move reservations…', `data-catalog-id="${escapeHtml(moveId)}"`) : ''}
+            ${rejectBtn}
+          </div>
         </div>`;
     }).join('');
 
@@ -2342,10 +2826,35 @@
         </h3>
         <span style="font-size:0.75rem;color:var(--text-muted)">${withdrawn.length} title${withdrawn.length===1?'':'s'}</span>
       </div>
+      ${ofuHelpLine('The distributor dropped this code, so it cannot be ordered. Customers already see it as withdrawn. Move the reservations if it was relisted, then Acknowledge.')}
+      ${followUpsError ? `<div class="ofu-unavailable" style="font-size:0.72rem;color:var(--warning);margin-bottom:8px">
+        Acknowledge is unavailable right now (the follow-up records could not be read).
+      </div>` : ''}
       <div style="display:flex;flex-direction:column;gap:6px">
         ${rowHtml}
       </div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:10px">
+        <a href="help-order-follow-up.html#withdrawn" target="_blank" rel="noopener" class="ofu-help-link" style="color:var(--accent)">How to handle these</a>
+      </div>
     `;
+
+    wireArrivalRejectActions(panel);
+  }
+
+  // D7: acknowledged, and nothing has happened to the title since. A newer
+  // withdrawal mark, or a reservation created after the acknowledgement,
+  // brings the row back.
+  function isAcknowledged(entry) {
+    const fu = followUpFor(entry.catalog);
+    if (!fu || fu.last_action !== 'acknowledged' || !fu.last_action_at) return false;
+    const ackAt = Date.parse(fu.last_action_at) || 0;
+    return !(entry.rows || []).some(p =>
+      (p.created_at && Date.parse(p.created_at) > ackAt) ||
+      (p.catalog && p.catalog.withdrawn_at && Date.parse(p.catalog.withdrawn_at) > ackAt));
+  }
+
+  function visibleWithdrawn() {
+    return computeWithdrawnTitles().filter(e => !isAcknowledged(e));
   }
 
   // ── By Customer ───────────────────────────────────────────
@@ -4357,7 +4866,7 @@
     for (let from = 0; from < weekTotal; from += 1000) {
       const batch = await applyWeekFilters(
         db.from('preorders').select(`
-          id, user_id, quantity, fulfilled, fulfilled_at,
+          id, user_id, quantity, fulfilled, fulfilled_at, arrival_outcome,
           catalog!inner(
             id, distributor, item_code, isbn, upc, title, series_name, publisher,
             price_usd, on_sale_date, cover_url, variant_type, catalog_month, withdrawn_at
@@ -4382,15 +4891,30 @@
     // My List badge reuses. Computed once per row here, read by both the
     // header totals (excluded) and the row renderer (flagged, not dropped —
     // "surface, never silently drop" is this whole session's throughline).
+    //
+    // 2026-11-09 (Order Follow-Up redesign): an admin's mark is a statement
+    // about this physical book too. Can't get it ('not_available'), Didn't
+    // arrive and Damaged put the title under "Not arriving this week" so
+    // nobody hunts for it; 'arrived' (Received) wins over a ledger rejection,
+    // matching My List (mylist.html, the No longer coming filter).
+    const NOT_COMING = {
+      not_available: 'The store could not get this title',
+      not_arrived:   'Did not arrive',
+      damaged:       'Arrived damaged',
+    };
     const arriving = (data || []).map(p => {
       const c = p.catalog || {};
       const isWithdrawn = !!c.withdrawn_at;
-      const isRejected  = !isWithdrawn && ledgerRejected(c.distributor, exportCode(c, c.distributor));
+      const isRejected  = !isWithdrawn && p.arrival_outcome !== 'arrived'
+                          && ledgerRejected(c.distributor, exportCode(c, c.distributor));
+      const markedReason = (!isWithdrawn && !isRejected) ? (NOT_COMING[p.arrival_outcome] || null) : null;
       return {
         ...p,
         customer_name: profileMap[p.user_id] || 'Unknown',
-        isUnavailable: isWithdrawn || isRejected,
-        unavailableReason: isWithdrawn ? 'Withdrawn by the distributor' : isRejected ? 'Rejected by the supplier' : null,
+        isUnavailable: isWithdrawn || isRejected || !!markedReason,
+        unavailableReason: isWithdrawn ? 'Withdrawn by the distributor'
+                         : isRejected  ? 'Rejected by the supplier'
+                         : markedReason,
       };
     });
 
