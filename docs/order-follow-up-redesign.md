@@ -1,6 +1,6 @@
 # Order Follow-Up — marks that survive imports, actions for every section, and an SOP
 
-**STATUS:** NOT STARTED (planned 2026-11-09) · staging: — · prod: — · PR: — · findings: F180 (filed 2026-11-09, open)
+**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); Query 2 and S1-S5 not started · staging: — · prod: — · PR: — · findings: F180 (filed 2026-11-09, open)
 
 Owner of the defect record: `docs/technical-reference.md` § 13 F180. This doc is the plan.
 
@@ -148,6 +148,22 @@ FROM o;
 ```
 
 If `would_clear_with_isbn_key` is above 0, file the second cause as **F181** and add S6.
+
+**Query 1 result (Rick, production, 2026-11-09):**
+
+| listings | reservations | invoice_lines | order_lines |
+|---|---|---|---|
+| one: PRH `2026-08`, `item_code` and `isbn` both `9781603096270`, `upc` null, on sale 2026-10-27 | one: qty 1, `fulfilled` false, `fulfilled_at` null, **`arrival_outcome` `unknown`** | **none** | one `monthly`, qty 1, 2026-08-26 |
+
+- **F180 confirmed:** marked Received, reads `unknown`, still open. On sale 10-27, so the 14-day window
+  ends 11-10; the Fri 2026-11-13 import overwrites any new mark once more and then closes the reservation
+  (ticks "Picked up") with `unknown`, which puts it back on Never arrived. **A mark made after that
+  import sticks even without S1**, because the import no longer selects closed rows.
+- **The second cause is ruled out for this title:** `item_code` already holds the ISBN, so the existing
+  match would have found an invoice line under it, and none exists. The book was ordered (monthly, 1)
+  and Rick has it in hand, but no delivery line was recorded under that code. Why is not established
+  (a delivery file not imported, or the line carried another code). Query 2 still decides S6 for other
+  titles.
 
 ### S1 — the F180 import fix (scripts repo), before Fri 2026-11-13's weekly run
 
@@ -361,5 +377,5 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 
 ## 8. Open before building
 
-- S0's two results (Rick).
+- S0 Query 2's result (Rick). Query 1 is done (§ 4 S0).
 - Rick's read of the § 6 wording.
