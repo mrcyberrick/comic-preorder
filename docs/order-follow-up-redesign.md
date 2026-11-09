@@ -46,6 +46,7 @@ would read as never arrived after it shipped. S0 checks this.
 | D4 | Where the SOP lives | **One line under each section in the panel, plus a "How to handle these" help page.** |
 | D5 | What a customer reads after Can't get it | **A new neutral line: "Not available — the store could not get this title."** Customer can remove it. Not "Rejected by the supplier", which blames the supplier when the store missed the cutoff. |
 | D6 | A title marked Didn't arrive that later appears on an invoice | **Bring it back once**, labelled "On an invoice after it was marked Didn't arrive", with a Received button. |
+| D7 | The "Withdrawn by Distributor — cannot be ordered" list (Rick's follow-up message, same day) | **Make it acknowledgeable on Order Follow-Up**, so a title can be cleared once it has been read or acted on. **This reverses Rick's 2026-10-05 call to leave that panel read-only** (recorded in `docs/f163-never-arrived-customer-surface.md`, F110's original design). |
 
 **Calls made in planning (Rick can overturn any of them):**
 
@@ -78,11 +79,14 @@ would read as never arrived after it shipped. S0 checks this.
 | **Backordered** | Its FOC has passed, it was never ordered, and it is not on sale yet | **Mark Ordered** · **Can't get it** · Snooze | Same as At risk |
 | **Never arrived** | Its on-sale date has passed and no invoice line shows it came (ordered or not) | Received · Didn't arrive · Damaged · Rejected by supplier (only when an order is on record) · Snooze | Received: nothing changes. Didn't arrive / Damaged: "No longer coming", "Store is handling this" (cannot remove). Rejected: "Rejected by the supplier" (can remove) |
 | **Turned up after all** *(new, inside Never arrived)* | Marked Didn't arrive, then an invoice line imported after the mark lists it | Received · Didn't arrive (keep) | Received clears "No longer coming"; keeping it records a new mark time, so it does not come back again |
+| **Withdrawn by the distributor** *(moved in from its own panel; stays grey)* | An open reservation sits on a title the distributor has withdrawn (the code no longer exists to order) | **Acknowledge** · **Move reservations…** (to a replacement listing, the F173 dialog) · Rejected by supplier (only when an order is on record, to settle it) · Snooze | Nothing changes from Acknowledge: customers keep seeing "Withdrawn — cannot be ordered" and can remove it. Move: the reservation moves to the new listing |
 | **Snoozed** *(hidden; "N snoozed — Show them")* | You snoozed it and the date has not come | Wake now · the section's own actions | Nothing changes |
 
 Bold = new. A row also clears by itself when it is ordered (At risk / Backordered), an invoice line
 matches, a supplier rejection is recorded, or the distributor withdraws the title (it moves to the
-Withdrawn panel, which stays read-only by F110's design).
+Withdrawn section). An acknowledged withdrawn title comes back only if something new happens to it: the
+title is marked withdrawn again after the acknowledgement, or a reservation is added to it after the
+acknowledgement.
 
 ## 4. Sessions
 
@@ -184,7 +188,8 @@ CREATE TABLE public.order_follow_ups (
   snoozed_until  date,
   note           text CHECK (note IS NULL OR char_length(note) <= 300),
   last_action    text CHECK (last_action IN ('arrived','not_arrived','damaged','rejected',
-                                             'not_available','ordered','snoozed','woken')),
+                                             'not_available','ordered','snoozed','woken',
+                                             'acknowledged','moved')),
   last_action_at timestamptz,
   last_action_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   updated_at     timestamptz NOT NULL DEFAULT now(),
@@ -221,6 +226,16 @@ same `exportCode()` value the panel groups by.
 - **Turned up after all:** a title whose stamp says `not_arrived`, with an invoice line whose
   `created_at` is later than the stamp, returns once at the top of Never arrived. The shipment load gains
   `created_at`. Marks made before S3 have no stamp and never resurface.
+- **Withdrawn becomes a section of Order Follow-Up** (D7). `renderWithdrawnPanel()` (`admin.html:2301`)
+  stops drawing its own panel; its rows render as the last section, still grey (F110: never to look like
+  Backordered), keeping the "Last seen" month and the "⚠ N already submitted — reconcile" line. Actions:
+  **Acknowledge** (no confirm; stamps `last_action = 'acknowledged'`; writes nothing customers see),
+  **Move reservations…** (`openMoveResModal()`, `:3761`; stamps `moved` after a successful move), the
+  existing **Rejected by supplier** writer when an order is on record (`ledgerNetQty > 0`), and Snooze.
+  An acknowledged title stays hidden unless `catalog.withdrawn_at` or a reservation's `created_at` is
+  later than the stamp. `#withdrawn-panel` stays in the markup, empty and hidden, so nothing that looks it
+  up breaks; sweep the specs for it first (`grep -rn withdrawn-panel` in the Playwright folder) and the
+  print rule in `style.css` that hides it.
 - **Section help:** one plain line under each section (the § 6 wording) and a "How to handle these" link
   to the help page (new tab). Replaces the current single footer line.
 - **Bagging list:** a `not_available` title moves to "Not arriving this week" with the reason "The store
@@ -259,7 +274,7 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 | V2 | S1 | Staging: a seeded open, past-on-sale reservation marked `arrived` is reported as kept by `node import-staging.js --no-write`, and a direct PATCH with the new filter changes 0 rows; teardown re-read 0 |
 | V3 | S1 | Production, Rick's next weekly run: prints `N admin mark(s) kept`; afterwards the example still reads `arrived` |
 | V4 | S2 | Post-checks above, both environments |
-| V5 | S3/S4 | Local harness on the deployed staging bytes: snooze hides and returns with its note; Show them / Wake now; dot not lit by a snoozed row; Mark Ordered opens for a row from another month; Can't get it: Cancel writes nothing, OK writes `not_available` on every collapsed reservation; customer sees the new line and can remove an open and a closed row; Turned up after all appears once and leaves after either action; a mark survives the S1 pre-flight run against staging; bagging list shows the reason; no horizontal scroll at 390 px. Each new check seen red first |
+| V5 | S3/S4 | Local harness on the deployed staging bytes: snooze hides and returns with its note; Show them / Wake now; dot not lit by a snoozed row; Mark Ordered opens for a row from another month; Can't get it: Cancel writes nothing, OK writes `not_available` on every collapsed reservation; customer sees the new line and can remove an open and a closed row; Turned up after all appears once and leaves after either action; a mark survives the S1 pre-flight run against staging; bagging list shows the reason; Withdrawn: Acknowledge hides the row and the customer's My List is unchanged, a reservation added after the acknowledgement brings it back, Move reservations opens for that title, Rejected by supplier appears only with an order on record; no horizontal scroll at 390 px. Each new check seen red first |
 | V6 | S3/S4 | Specs that touch this path re-run (sweep with `grep -rn` in the Playwright folder; at least 06, 15, 21, 22, 25), then the full suite once on the deployed bytes |
 | V7 | S5 | Served bytes on both production hostnames equal `origin/main`; write-smoke (reserve, cancel) observed |
 
@@ -277,12 +292,15 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
   allows, or mark Can't get it.
 - **At risk:** Not ordered yet, and its order cutoff is before this cycle's Order Deadline. Order it, or
   mark Can't get it.
+- **Withdrawn by the distributor:** The distributor dropped this code, so it cannot be ordered. Customers
+  already see it as withdrawn. Move the reservations if it was relisted, then Acknowledge.
 
 **Help page: "Order Follow-Up — how to handle these"**
 
 > **What this list is for.** It shows reserved titles that need a decision, at the point where the
-> decision still helps: before the order cutoff (At risk), after a missed cutoff (Backordered) and after
-> the on-sale date (Never arrived). Handle a row and it leaves the list. Your choice stays put; the weekly
+> decision still helps: before the order cutoff (At risk), after a missed cutoff (Backordered), after
+> the on-sale date (Never arrived) and when a distributor withdraws a title (Withdrawn). Handle a row and
+> it leaves the list. Your choice stays put; the weekly
 > import does not undo it.
 >
 > **At risk** — reserved, not ordered, and the order cutoff falls before this cycle's Order Deadline.
@@ -309,12 +327,21 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 > **Turned up after all** — you marked it Didn't arrive, then a later invoice listed it. If it is here,
 > mark **Received** so customers stop reading "No longer coming". If not, mark **Didn't arrive** again.
 >
+> **Withdrawn by the distributor** — the distributor dropped the code, so it can no longer be ordered.
+> Customers already see "Withdrawn — cannot be ordered" on My List and can remove it themselves.
+> 1. Check the distributor's site for the same book under a new code. If it is there, use **Move
+>    reservations…** to move everyone's reservation to the new listing.
+> 2. If a "⚠ already submitted" line shows, an order is on record for the old code. Confirm with the
+>    distributor, then **Rejected by supplier** to settle it.
+> 3. **Acknowledge** when you have read it or acted on it. It leaves the list and customers see no change.
+>    It comes back only if the title is marked withdrawn again or someone new reserves it.
+>
 > **Still finding out?** Use **Snooze**: pick a date and add a note ("emailed PRH 11/9"). The row hides
 > until that date, then comes back with your note if it is still open. Customers see nothing change.
 > **Show them** lists snoozed rows; **Wake now** brings one back early.
 >
 > **Rows that clear themselves:** a title that gets ordered, shows up on an invoice, has a supplier
-> rejection recorded, or is withdrawn by the distributor (it moves to the Withdrawn panel).
+> rejection recorded, or is withdrawn by the distributor (it moves to the Withdrawn section).
 >
 > **Mistakes.** Received, Didn't arrive and Damaged take effect at once and have no undo in the app. If you
 > mark the wrong one, ask your PULLLIST operator to correct it. Can't get it and Rejected by supplier ask
