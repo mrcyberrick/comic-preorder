@@ -1,8 +1,12 @@
--- STATUS: staging=APPLIED 2026-11-09 | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-09 | prod=APPLIED 2026-11-09
 --         Staging verified live (Rick, SQL Editor, 2026-11-09): pre-check read the four-value CHECK and no
 --         table (tenants demoshop,raysandjudys,riverside-comics); verdict after the block read
 --         check_has_not_available true, rls_enabled true, policies 1, anon_grants 0,
 --         authenticated_grants DELETE,INSERT,SELECT,UPDATE, tenants demoshop,raysandjudys,riverside-comics.
+--         Production verified live (Rick, SQL Editor, 2026-11-09): verdict read check_has_not_available
+--         true, rls_enabled true, policies 1, anon_grants 0, authenticated_grants
+--         DELETE,INSERT,SELECT,UPDATE, tenants comicstore,rjbookstop (the production project). Only the
+--         verdict was pasted; the pre-check result was not shown.
 -- ============================================================================
 -- Order Follow-Up redesign, S2 (docs/order-follow-up-redesign.md § 4 S2)
 -- Prepared 2026-11-09. Operator: Rick (Supabase SQL Editor, runs as postgres).
