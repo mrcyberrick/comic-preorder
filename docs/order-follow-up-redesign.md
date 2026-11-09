@@ -1,6 +1,6 @@
 # Order Follow-Up — marks that survive imports, actions for every section, and an SOP
 
-**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); Query 2 and S1-S5 not started · staging: — · prod: — · PR: — · findings: F180 (filed 2026-11-09, open)
+**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); **S1 DONE 2026-11-09 (scripts repo `main` `271e824`; V1 + V2 green; V3 = Rick's next weekly run, Fri 2026-11-13)**; Query 2 and S2-S5 not started · staging: S1 V2 only · prod: — · PR: — · findings: F180 (filed 2026-11-09, open until V3)
 
 Owner of the defect record: `docs/technical-reference.md` § 13 F180. This doc is the plan.
 
@@ -164,7 +164,9 @@ If `would_clear_with_isbn_key` is above 0, file the second cause as **F181** and
 - **F180 confirmed:** marked Received, reads `unknown`, still open. On sale 10-27, so the 14-day window
   ends 11-10; the Fri 2026-11-13 import overwrites any new mark once more and then closes the reservation
   (marks it fulfilled) with `unknown`, which puts it back on Never arrived. **A mark made after that
-  import sticks even without S1**, because the import no longer selects closed rows.
+  import sticks even without S1**, because the import no longer selects closed rows. *(Superseded the
+  same day: S1 landed, so a Received made now is kept by Friday's import and the reservation then closes
+  as `arrived`, off the list.)*
 - **The second cause is ruled out for this title:** `item_code` already holds the ISBN, so the existing
   match would have found an invoice line under it, and none exists. The book was ordered (monthly, 1)
   and Rick has it in hand, but no delivery line was recorded under that code. Why is not established
@@ -172,6 +174,24 @@ If `would_clear_with_isbn_key` is above 0, file the second cause as **F181** and
   titles.
 
 ### S1 — the F180 import fix (scripts repo), before Fri 2026-11-13's weekly run
+
+**DONE 2026-11-09 (Rick: "go on S1"): scripts repo `main` `271e824`, pushed and in sync with origin.**
+`planArrivalOutcomeWrites()` and `arrivalOutcomePatchUrl()` in both scripts (the edited region is
+byte-identical between them); the read selects `arrival_outcome`; the write returns the ids it changed
+and logs any row marked since the read; kept rows leave the "nothing showing they arrived" report and get
+one line, `N already marked (arrived N, ...), kept as marked (F180).`
+- **V1 green:** `test/arrival-outcome-keep.test.mjs`, 36 tests (18 per script), including the live
+  example's shape; **12 red on `import.js` with the keep rule and the filter removed** (restored and
+  checked byte-identical); export parity holds; **suite 449/449** (was 413).
+- **V2 green, 9/9, staging, changed from the plan's wording:** instead of a `--no-write` run of the whole
+  import (two catalog files and interactive prompts), a harness required `import-staging.js` and drove its
+  real functions against the real database. Two throwaway reservations on PRH titles on sale in the last
+  13 days with no order or invoice line: A marked `arrived`, B unjudged. The pre-flight's own read
+  returned both with `arrival_outcome`; both classified `unknown`; the plan kept A and wrote only B; a
+  PATCH of `unknown` to BOTH ids through the new URL changed B only; a fresh read showed A `arrived`, B
+  `unknown`. Teardown: 0 reservations, 0 profiles, auth user 404. Harness local-only (scratchpad).
+- **Not verified:** the `main()` wiring around these functions (only exercised when an import runs);
+  that is V3, Rick's Fri 2026-11-13 run.
 
 The minimum change that fixes Rick's report. No schema, no app change.
 
@@ -383,8 +403,9 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 - No pickup tracking: `fulfilled` means the order is fulfilled, not that the customer collected it
   (Rick, 2026-11-09; a future point-of-sale integration would add that).
 - Marks made before S3 carry no stamp, so they never trigger "Turned up after all".
-- **Interim until S1 lands:** a mark on a title less than 14 days past on-sale can be undone by the next
-  import. Check the list after each import and re-mark if needed.
+- ~~**Interim until S1 lands:** a mark on a title less than 14 days past on-sale can be undone by the next
+  import. Check the list after each import and re-mark if needed.~~ *(Retired 2026-11-09: S1 landed.
+  Marks undone by imports before then stay undone; re-mark those once.)*
 
 ## 8. Open before building
 
