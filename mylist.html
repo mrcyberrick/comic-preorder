@@ -1086,7 +1086,9 @@ function confirmDialog(message, okLabel = 'Remove') {
           // accounts) read both; telling a customer "Rejected by the supplier" about a book on the shelf is false.
           || (isCodeRejected(c) && i.arrival_outcome !== 'arrived')
           || i.arrival_outcome === 'not_arrived'
-          || i.arrival_outcome === 'damaged';
+          || i.arrival_outcome === 'damaged'
+          // Order Follow-Up "Can't get it" (2026-11-09, D5): the store could not get a title it never ordered.
+          || i.arrival_outcome === 'not_available';
     });
     // These two stay adjacent and SYNCHRONOUS. An `await` between them would let the browser paint the list before
     // the section exists, and the section would then appear as its own layout shift (F161 / F163 § 7).
@@ -1250,6 +1252,8 @@ function confirmDialog(message, okLabel = 'Remove') {
             // the import (f134-arrival-resolution.md § 4.4 OUT-of-scope).
             const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
             const isDamaged    = !isWithdrawn && !isRejected && item.arrival_outcome === 'damaged';
+            // Order Follow-Up "Can't get it" (2026-11-09, D5). Removable, like withdrawn: the store never ordered it.
+            const isNotAvailable = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_available';
             const focLocked  = isFocLocked(c.foc_date);
             const isFulfilled = !!item.fulfilled;
             const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -1260,7 +1264,7 @@ function confirmDialog(message, okLabel = 'Remove') {
               ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
               : `<div style="width:36px;height:54px;background:var(--bg-elevated);border-radius:2px"></div>`;
             return `
-              <tr${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
+              <tr${(isWithdrawn || isRejected || isNotArrived || isDamaged || isNotAvailable) ? ' class="withdrawn-row"' : focLocked ? ' class="foc-locked-row"' : ''}>
                 <td class="td-cover">${cover}</td>
                 <td>
                   <div class="col-title">${escapeHtml(c.title)}</div>
@@ -1275,6 +1279,8 @@ function confirmDialog(message, okLabel = 'Remove') {
                         ? `<div class="col-sub withdrawn-notice">\u26A0 Did not arrive &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
                         : isDamaged
                           ? `<div class="col-sub withdrawn-notice">\u26A0 Arrived damaged &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
+                        : isNotAvailable
+                          ? `<div class="col-sub withdrawn-notice">\u26A0 Not available &mdash; the store could not get this title.</div>`
                       : isOrdered
                         ? `<div class="col-sub" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
                             ? ' &middot; arriving ' + formatDate(arrivingOn)
@@ -1298,7 +1304,7 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <td style="font-weight:600">${formatPrice(c.price_usd)}</td>
                 <td style="font-weight:600;color:var(--accent)">$${((parseFloat(c.price_usd)||0)*(item.quantity||1)).toFixed(2)}</td>
                 <td>
-                  ${isWithdrawn
+                  ${(isWithdrawn || isNotAvailable)
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
                     : isNotArrived
                       ? `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do.">⚠ Didn't arrive</span>`
@@ -1326,6 +1332,7 @@ function confirmDialog(message, okLabel = 'Remove') {
           // F134 \u00A7 4.3 -- same settled rule as the desktop table above.
           const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
           const isDamaged    = !isWithdrawn && !isRejected && item.arrival_outcome === 'damaged';
+          const isNotAvailable = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_available'; // D5, 2026-11-09
           const focLocked  = isFocLocked(c.foc_date);
           const isFulfilled = !!item.fulfilled;
           const isOrdered  = isFulfilled || isCodeOrdered(c);
@@ -1337,7 +1344,7 @@ function confirmDialog(message, okLabel = 'Remove') {
             ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
             : `<img src="${COVER_PLACEHOLDER}" alt="">`;
           return `
-            <div class="mobile-card${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
+            <div class="mobile-card${(isWithdrawn || isRejected || isNotArrived || isDamaged || isNotAvailable) ? ' withdrawn-row' : focLocked ? ' foc-locked-row' : ''}" data-preorder-id="${item.id}">
               <div class="mobile-card-cover">${cover}</div>
               <div class="mobile-card-body">
                 <div class="mobile-card-title">${escapeHtml(c.title)}</div>
@@ -1350,6 +1357,8 @@ function confirmDialog(message, okLabel = 'Remove') {
                       ? `<div class="mobile-card-series withdrawn-notice" style="white-space:normal">\u26A0 Did not arrive &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
                       : isDamaged
                         ? `<div class="mobile-card-series withdrawn-notice" style="white-space:normal">\u26A0 Arrived damaged &mdash; the store already knows and handles it with the supplier. Any replacement may take longer.</div>`
+                      : isNotAvailable
+                        ? `<div class="mobile-card-series withdrawn-notice" style="white-space:normal">\u26A0 Not available &mdash; the store could not get this title.</div>`
                     : isOrdered
                       ? `<div class="mobile-card-series" style="color:var(--success,#22c55e)">\u2713 Order placed${arrivingOn
                           ? ' &middot; arriving ' + formatDate(arrivingOn)
@@ -1371,7 +1380,7 @@ function confirmDialog(message, okLabel = 'Remove') {
                     <span class="qty-display" style="min-width:24px;text-align:center;font-weight:600;font-size:0.9rem">${qty}</span>
                     <button class="qty-btn qty-plus-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}" style="width:28px;height:28px" ${isLocked ? 'disabled' : ''}${stepperTitle}>+</button>
                   </div>
-                  ${isWithdrawn
+                  ${(isWithdrawn || isNotAvailable)
                     ? `<button class="btn btn-danger btn-sm cancel-btn" data-preorder-id="${item.id}" data-catalog-id="${c.id}">Remove</button>`
                     : isNotArrived
                       ? `<span class="foc-locked-chip" title="The store already knows about this and handles it with the supplier. Any replacement may take longer. Nothing for you to do.">⚠ Didn't arrive</span>`
@@ -1656,6 +1665,7 @@ function confirmDialog(message, okLabel = 'Remove') {
       // rejected -> not_arrived/damaged. Kept identical deliberately, so a
       // row cannot describe itself one way here and another way there.
       const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
+      const isNotAvailable = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_available'; // D5, 2026-11-09
       // SHORT labels, matching .month-arrival-card's own existing convention —
       // not the long sentences the desktop TABLE uses. These cards are 100px
       // wide, so the table wording rendered as five lines of near-identical
@@ -1667,13 +1677,16 @@ function confirmDialog(message, okLabel = 'Remove') {
           ? '⚠ Rejected by the supplier'
           : isNotArrived
             ? '⚠ Did not arrive'
-            : '⚠ Arrived damaged';
+            : isNotAvailable
+              ? '⚠ Not available'
+              : '⚠ Arrived damaged';
       // == what the SERVER and Preorders.cancel() permit: F109 allows withdrawn or ledger net <= 0, and cancel() (app.js)
       // refuses a fulfilled row unless it is withdrawn OR supplier-rejected-and-not-arrived (F163, Rick 2026-10-05). Every
       // card in this section that is `isRejected` is by construction not 'arrived' (that case is filtered out above), so
       // the two agree. Superseded forms: `isWithdrawn || isRejected` (open rows only, 2026-09-21), then
       // `isWithdrawn || (isRejected && !item.fulfilled)` (2026-10-04, the "no Remove on closed rows" decision).
-      const canRemove = isWithdrawn || isRejected;
+      // + isNotAvailable (2026-11-09, D5): Preorders.cancel() allows it open or closed; F109 permits the delete.
+      const canRemove = isWithdrawn || isRejected || isNotAvailable;
       const cover = c.cover_url
         // onerror MUST also add .loaded — see the fade-in loop below for why.
         // COVER_PLACEHOLDER is a .webp file, not a data: URI, so the
@@ -1844,6 +1857,7 @@ function confirmDialog(message, okLabel = 'Remove') {
         // ABOVE the ordered branch (arrivingOn), below withdrawn/rejected.
         const isNotArrived = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_arrived';
         const isDamaged    = !isWithdrawn && !isRejected && item.arrival_outcome === 'damaged';
+        const isNotAvailable = !isWithdrawn && !isRejected && item.arrival_outcome === 'not_available'; // D5, 2026-11-09
         // F108 § 4.6 — SCOPE CALL, flagged for review (2026-08-11). The plan
         // does not enumerate surfaces; the obvious reading is "the two places
         // that already say Order placed", i.e. the current-month table above.
@@ -1869,7 +1883,7 @@ function confirmDialog(message, okLabel = 'Remove') {
           ? `<img src="${escapeHtml(c.cover_url)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src=COVER_PLACEHOLDER;this.onerror=null;">`
           : `<img src="${COVER_PLACEHOLDER}" class="loaded" alt="">`;
         return `
-          <div class="month-arrival-card${(isWithdrawn || isRejected || isNotArrived || isDamaged) ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
+          <div class="month-arrival-card${(isWithdrawn || isRejected || isNotArrived || isDamaged || isNotAvailable) ? ' withdrawn-row' : ''}" data-preorder-id="${item.id}">
             <div class="month-arrival-cover">
               <span class="distributor-badge badge-${c.distributor?.toLowerCase()}" style="font-size:0.55rem;padding:1px 5px">${escapeHtml(c.distributor||'')}</span>
               ${cover}
@@ -1887,6 +1901,10 @@ function confirmDialog(message, okLabel = 'Remove') {
                 <div class="withdrawn-notice">⚠ Did not arrive</div>
               ` : isDamaged ? `
                 <div class="withdrawn-notice">⚠ Arrived damaged</div>
+              ` : isNotAvailable ? `
+                <div class="withdrawn-notice">⚠ Not available</div>
+                <button class="btn btn-danger btn-sm cancel-btn-arrival" data-preorder-id="${item.id}" data-catalog-id="${c.id}"
+                        style="width:100%;margin-top:4px;font-size:0.68rem;padding:3px 0">Remove</button>
               ` : arrivingOn ? `
                 <div style="color:var(--success,#22c55e);font-size:0.72rem;margin-top:2px">✓ Order placed</div>
               ` : ''}
@@ -1914,9 +1932,13 @@ function confirmDialog(message, okLabel = 'Remove') {
     // exception must reach this grid too or it never becomes cancellable.
     grid.querySelectorAll('.cancel-btn-arrival').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!(await confirmDialog('Remove this reservation? This title was withdrawn by the distributor.'))) return;
-        btn.disabled = true;
         const item = allUpcoming.find(i => i.id === btn.dataset.preorderId);
+        // Since 2026-11-09 this button also appears on a "Not available" title (D5), so the wording follows the row.
+        const why = item?.catalog?.withdrawn_at
+          ? 'This title was withdrawn by the distributor.'
+          : 'The store could not get this title.';
+        if (!(await confirmDialog(`Remove this reservation? ${why}`))) return;
+        btn.disabled = true;
         const { error } = await Preorders.cancel(AdminContext.resolveUserId(user.id), btn.dataset.catalogId);
         if (error) {
           toast('Failed to remove reservation', 'error');

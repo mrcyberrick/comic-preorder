@@ -559,6 +559,9 @@ title is not yet fulfilled, an admin can only close it by impersonating each cus
 withdrawn, and production last read 0 marks (2026-09-27), so the panel is empty there. **Rick: leave it as is.** A title-level
 "remove these reservations" action, if ever wanted, belongs with F165 S3's confirm-to-mark design, because a false mark
 (F165's 7) plus a bulk delete cannot be undone.
+*(Superseded 2026-11-09: Rick asked for the Withdrawn rows to be acknowledgeable on Order Follow-Up so they can be cleared once
+read or acted on; planned in `docs/order-follow-up-redesign.md` D7 / S3. The acknowledgement hides the admin row only and deletes
+no reservation, so the bulk-delete concern above does not apply to it.)*
 
 
 ## 17. Production (2026-10-05): V12 recorded

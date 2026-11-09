@@ -2025,8 +2025,15 @@ const Preorders = {
     // keeps it refused: that book is on the shelf, whatever the ledger says. Withdrawn titles are handled above.
     const rejectedAndNotArrived = !isWithdrawn && orderState === 'unavailable' && existing.arrival_outcome !== 'arrived';
 
-    // Guard: refuse to cancel a fulfilled row (unless withdrawn, or supplier-rejected as above).
-    if (!isWithdrawn && existing.fulfilled && !rejectedAndNotArrived) {
+    // Order Follow-Up redesign (Rick, 2026-11-09, D5): "Can't get it" marks a title the store never ordered as
+    // arrival_outcome 'not_available', and the customer is told "Not available — the store could not get this title."
+    // with Remove allowed, open or closed. Refused if the code has since been ordered (the ordered guard below still
+    // applies). F109's trigger permits the delete: no order nets > 0 for such a code.
+    const notAvailable = !isWithdrawn && existing.arrival_outcome === 'not_available' && orderState !== 'ordered';
+    const removableWhenClosed = rejectedAndNotArrived || notAvailable;
+
+    // Guard: refuse to cancel a fulfilled row (unless withdrawn, supplier-rejected or not available, as above).
+    if (!isWithdrawn && existing.fulfilled && !removableWhenClosed) {
       return { error: { message: "Can't cancel — the order for this item has already been placed. Ask the store to revert fulfillment first." } };
     }
 
@@ -2036,8 +2043,9 @@ const Preorders = {
 
     let deleteQuery = db.from('preorders').delete().eq('user_id', userId).eq('catalog_id', catalogId);
     // Defensive race guard — skipped for withdrawn rows since a withdrawn reservation is cancellable even if it has
-    // since become fulfilled, and for a supplier-rejected one for the same reason (F163, 2026-10-05).
-    if (!isWithdrawn && !rejectedAndNotArrived) deleteQuery = deleteQuery.eq('fulfilled', false);
+    // since become fulfilled, and for a supplier-rejected one for the same reason (F163, 2026-10-05), and for a
+    // not-available one (2026-11-09).
+    if (!isWithdrawn && !removableWhenClosed) deleteQuery = deleteQuery.eq('fulfilled', false);
     const { error } = await deleteQuery;
     return { error };
   },
