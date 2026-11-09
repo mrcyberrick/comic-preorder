@@ -1,4 +1,8 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-09 | prod=PENDING
+--         Staging verified live (Rick, SQL Editor, 2026-11-09): pre-check read the four-value CHECK and no
+--         table (tenants demoshop,raysandjudys,riverside-comics); verdict after the block read
+--         check_has_not_available true, rls_enabled true, policies 1, anon_grants 0,
+--         authenticated_grants DELETE,INSERT,SELECT,UPDATE, tenants demoshop,raysandjudys,riverside-comics.
 -- ============================================================================
 -- Order Follow-Up redesign, S2 (docs/order-follow-up-redesign.md § 4 S2)
 -- Prepared 2026-11-09. Operator: Rick (Supabase SQL Editor, runs as postgres).
@@ -38,7 +42,9 @@ SELECT
 -- Expected: current_check = CHECK ((arrival_outcome = ANY (ARRAY['arrived'::text,
 --   'not_arrived'::text, 'damaged'::text, 'unknown'::text])))
 -- table_already_exists = false
--- tenants_here: staging = demoshop,raysandjudys ; production = comicstore,rjbookstop
+-- tenants_here: staging = demoshop,raysandjudys,riverside-comics ; production = comicstore,rjbookstop
+--   (riverside-comics is a staging test shop from 2026-09-03; this line first omitted it, corrected
+--   2026-11-09 from Rick's staging pre-check. Production may also list later real shops.)
 -- STOP if current_check differs or the table already exists.
 
 -- ── THE CHANGE (run as one block) ──────────────────────────────────────────
