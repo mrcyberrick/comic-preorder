@@ -50,9 +50,15 @@ would read as never arrived after it shipped. S0 checks this.
 
 **Calls made in planning (Rick can overturn any of them):**
 
-- **C1. Received still writes only the arrival status.** It must not tick the reservation closed:
-  `fulfilled` is the bagging list's "Picked up" checkbox (`admin.html:4505`). The 14-day auto-close runs
-  as today.
+- **C1 (revised 2026-11-09 after Rick's correction). Received also marks the reservation fulfilled**
+  (`fulfilled = true`, `fulfilled_at = now()`), which is exactly what the import does when an invoice
+  line shows a title arrived. **The system does not track pickup** (Rick: only fulfilled orders; a
+  point-of-sale integration, future, would close that gap). The bagging list's checkbox only carries
+  a "Picked up" screen-reader label and is pre-ticked when the reservation is fulfilled; nothing records a
+  pickup. Didn't arrive, Damaged and Can't get it leave the reservation open, and the 14-day auto-close
+  runs as today. S1 is still needed: it protects those three marks, and a Received made before S3 ships.
+  *(This item first read "Received still writes only the arrival status. It must not tick the
+  reservation closed: `fulfilled` is the bagging list's 'Picked up' checkbox", which was wrong.)*
 - **C2. Snooze, notes and "who did what, when" live in a new admin-only table, `order_follow_ups`, one row
   per title** (tenant, distributor, order code). Not on `preorders`: customers can update their own
   reservation rows (`users manage own preorders` is an ALL policy, `technical-reference.md` § 7.1), and a
@@ -157,7 +163,7 @@ If `would_clear_with_isbn_key` is above 0, file the second cause as **F181** and
 
 - **F180 confirmed:** marked Received, reads `unknown`, still open. On sale 10-27, so the 14-day window
   ends 11-10; the Fri 2026-11-13 import overwrites any new mark once more and then closes the reservation
-  (ticks "Picked up") with `unknown`, which puts it back on Never arrived. **A mark made after that
+  (marks it fulfilled) with `unknown`, which puts it back on Never arrived. **A mark made after that
   import sticks even without S1**, because the import no longer selects closed rows.
 - **The second cause is ruled out for this title:** `item_code` already holds the ISBN, so the existing
   match would have found an invoice line under it, and none exists. The book was ordered (monthly, 1)
@@ -181,7 +187,8 @@ The minimum change that fixes Rick's report. No schema, no app change.
 - Same change in `import.js` and `import-staging.js`; the parity test keeps them identical.
 - Unit tests: each kept value; NULL classified; `unknown` raised to `arrived`; `unknown` left alone with
   no write. **Negative control:** remove the filter, see the keep tests go red, restore.
-- **Not changed:** `auto_fulfill_past_on_sale()` (C1). A marked row still closes on the usual schedule.
+- **Not changed:** `auto_fulfill_past_on_sale()`. A Didn't arrive / Damaged / Can't get it row still closes
+  on the usual schedule; from S3 a Received row is closed by the panel itself (C1).
 
 ### S2 — schema (Rick-run SQL, staging then production)
 
@@ -228,6 +235,8 @@ same `exportCode()` value the panel groups by.
 
 ### S3 — the panel (staging, `admin.html`)
 
+- **Received also writes `fulfilled = true, fulfilled_at = now()`** on every reservation the row collapsed
+  (C1), in the same update as `arrival_outcome = 'arrived'`.
 - **Every panel action stamps `order_follow_ups`** (upsert on tenant, distributor, order code; explicit
   `tenant_id`): `last_action`, `last_action_at`, `last_action_by`. Loaded once in `loadData()`.
 - **Snooze…** on every row: a small dialog with a date (quick picks 3, 7 and 14 days; default 7) and an
@@ -290,7 +299,7 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 | V2 | S1 | Staging: a seeded open, past-on-sale reservation marked `arrived` is reported as kept by `node import-staging.js --no-write`, and a direct PATCH with the new filter changes 0 rows; teardown re-read 0 |
 | V3 | S1 | Production, Rick's next weekly run: prints `N admin mark(s) kept`; afterwards the example still reads `arrived` |
 | V4 | S2 | Post-checks above, both environments |
-| V5 | S3/S4 | Local harness on the deployed staging bytes: snooze hides and returns with its note; Show them / Wake now; dot not lit by a snoozed row; Mark Ordered opens for a row from another month; Can't get it: Cancel writes nothing, OK writes `not_available` on every collapsed reservation; customer sees the new line and can remove an open and a closed row; Turned up after all appears once and leaves after either action; a mark survives the S1 pre-flight run against staging; bagging list shows the reason; Withdrawn: Acknowledge hides the row and the customer's My List is unchanged, a reservation added after the acknowledgement brings it back, Move reservations opens for that title, Rejected by supplier appears only with an order on record; no horizontal scroll at 390 px. Each new check seen red first |
+| V5 | S3/S4 | Local harness on the deployed staging bytes: Received leaves every collapsed reservation `arrived` and fulfilled, and the others open; snooze hides and returns with its note; Show them / Wake now; dot not lit by a snoozed row; Mark Ordered opens for a row from another month; Can't get it: Cancel writes nothing, OK writes `not_available` on every collapsed reservation; customer sees the new line and can remove an open and a closed row; Turned up after all appears once and leaves after either action; a mark survives the S1 pre-flight run against staging; bagging list shows the reason; Withdrawn: Acknowledge hides the row and the customer's My List is unchanged, a reservation added after the acknowledgement brings it back, Move reservations opens for that title, Rejected by supplier appears only with an order on record; no horizontal scroll at 390 px. Each new check seen red first |
 | V6 | S3/S4 | Specs that touch this path re-run (sweep with `grep -rn` in the Playwright folder; at least 06, 15, 21, 22, 25), then the full suite once on the deployed bytes |
 | V7 | S5 | Served bytes on both production hostnames equal `origin/main`; write-smoke (reserve, cancel) observed |
 
@@ -370,7 +379,9 @@ Add the ISBN key (`catalog.isbn` = invoice `upc` or `item_code`) to the arrival 
 - No email to customers (D3).
 - No partial arrivals: a mark applies to every customer of the title (the known out-of-scope item).
 - No undo for Received / Didn't arrive / Damaged (Rick, 2026-10-04).
-- No change to when auto-close happens (C1) or to the Withdrawn panel.
+- No change to when auto-close happens. (Received now closes its own reservations, C1.)
+- No pickup tracking: `fulfilled` means the order is fulfilled, not that the customer collected it
+  (Rick, 2026-11-09; a future point-of-sale integration would add that).
 - Marks made before S3 carry no stamp, so they never trigger "Turned up after all".
 - **Interim until S1 lands:** a mark on a title less than 14 days past on-sale can be undone by the next
   import. Check the list after each import and re-mark if needed.
