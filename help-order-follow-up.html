@@ -11,6 +11,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* style.css indents .legal ul (20px) but not ol: the policy pages have no numbered lists. Without this the
+       numbers sat flush against the screen edge at phone width. Page-local so style.css is untouched. */
+    .legal ol { padding-left: 24px; }
+  </style>
 </head>
 <body>
 <!-- Order Follow-Up help (the SOP). Static, no app.js, no app nav, so it is not
