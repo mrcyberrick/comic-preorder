@@ -1,6 +1,6 @@
 # Store contact details and store colors in Settings
 
-**STATUS:** NOT STARTED — planned 2026-11-10 (Rick: "Go with Recommended"); D1-D4 need Rick's answers before S4 · staging=— · prod=— · PR=— · findings=— (no ID consumed; F181 next free)
+**STATUS:** NOT STARTED — planned 2026-11-10 (Rick: "Go with Recommended"); D1-D4 ANSWERED 2026-11-10 (Rick: "defaults"); next is S0 · staging=— · prod=— · PR=— · findings=— (no ID consumed; F181 next free)
 
 Replaces the Settings rail's **Email Templates "Soon"** entry. Since F72 G-F (2026-11-07) every
 email already uses each shop's own name, so there is no template left to unblock. What is missing
@@ -85,6 +85,8 @@ no `location` gets **422, nothing sent**, and no screen lets the shop fix it.
 ---
 
 ## 2. Decisions
+
+**All four ANSWERED 2026-11-10: Rick said "defaults", so each takes the recommended column.**
 
 | # | Question | Recommended (default if Rick says "defaults") |
 |---|---|---|
