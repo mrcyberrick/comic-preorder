@@ -144,6 +144,16 @@ SELECT pg_get_functiondef('public.resolve_tenant_by_slug(text)'::regprocedure);
 
 Stop if Q2 returns any row.
 
+**S0 results.** *Staging, 2026-11-10 (Rick-run; Q1 and Q2 as one combined query):* names free (0 / 0 on
+every row). `raysandjudys` `pro`, phone `973-586-9182`, town `Rockaway, NJ`, branding keys
+`promo_banner`, no color. `demoshop` `free`, `555-0100`, `Springfield, IL`, no branding.
+`riverside-comics` and the four `pw-*` fixtures `free`; **`pw-2d3c4d60` and `pw-fc2e3fc7` carry
+`primary_color` `#123456`** (Playwright fixtures; **at S4, check whether the local branding spec asserts
+a FREE fixture's color applies, since D2 makes that false**; `#123456` also fails the 3:1 card floor).
+Q3 body: `SELECT t.id, t.slug, t.display_name, t.branding FROM public.tenants t WHERE t.slug = p_slug`
+(matches § 6.9). An unlabelled paste of the same Q3 output arrived too; it may be production's.
+*Production:* not yet received.
+
 ### S1 — Columns, the contact RPC, the Store contact panel, data fill (staging, then production)
 
 **SQL** (file `docs/sql/<date>-store-contact.sql` at build time, STATUS line per F105; staging first):
@@ -191,10 +201,20 @@ columns present) that prints FAIL when the function or a column is missing, not 
    per-field note of where it appears on this shop's plan, and a read-only preview of the page footer
    and the email footer as they will read. All rendering via `textContent` / `escapeHtml`.
    Client-side: phone accepts digits, spaces and `()+-.` only; website is stored without `https://`.
-3. `TenantContext`'s select (`app.js:145`) gains `contact_phone, location, postal_address, website`.
-   Nothing else reads them yet (S3 does), so no page changes.
-4. **Separate commit:** remove the stale preview warning and its comment (`settings.html:264-272`) and set
-   `ROWS_PER_PAGE = 44` with the label to match.
+3. ~~`TenantContext`'s select (`app.js:145`) gains `contact_phone, location, postal_address, website`.~~
+   **MOVED TO S3 (decided while building, 2026-11-10).** The panel reads the four columns itself, so
+   S1 does not touch `app.js` at all. Widening `TenantContext` in S1 would have made EVERY signed-in
+   page's tenant read fail on any environment where the S1 SQL had not yet run (a missing column is
+   a 400), whereas the panel alone fails closed: it shows "could not be read" and disables Save.
+4. **Separate commit:** remove the stale preview warning and its comment (`settings.html:264-272`) and fix
+   the page estimate. ~~`ROWS_PER_PAGE = 44`~~ **44.5, not 44:** `ceil(rows / 44)` still gets four of the
+   six measured prints wrong; any value from 44.31 to 44.95 matches all six, and the old 46 matched none.
+   Label: "pages · about 44 rows each".
+
+**Built 2026-11-10 on `feature/store-contact-s1`** (`6e1ab7c` the warning and estimate, `d1c64ac` the
+panel and the SQL file). Local harness `playwright/store-contact-verify.mjs` (local-only): pre-SQL mode
+11/11 on the working tree; negative control `emptyonfail` red on its three checks. The full V1/V2 run
+waits for the SQL on staging.
 
 **Data fill, before anything reads the fields:** Rick enters Ray & Judy's values through the new
 panel on each environment (this is also the panel's real test): phone `(973) 586-9182`, street
@@ -219,6 +239,12 @@ back through the service role.
 
 ### S3 — Web pages and prints read the fields (staging, then production)
 
+- `TenantContext`'s select (`app.js:145`) gains `contact_phone, location, postal_address, website`
+  (moved here from S1). Only after the S1 SQL is applied on that environment: a missing column makes
+  every signed-in page's tenant read fail. `app.js` carries `merge=ours`, so assert its merge RESULT
+  at promotion.
+- Remove the Store contact panel's "Saved now, used soon" notice (`#sc-rollout-note`) in the same
+  change, or it becomes the next stale claim.
 - Footers: the `· Rockaway, NJ` span becomes a `[data-tenant-town]` hook filled by
   `Branding.apply()` (hidden when empty), keeping today's text as the default markup like
   `[data-tenant-name]`. **Change all seven footers in one commit and run the seven-page footer
