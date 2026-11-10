@@ -261,16 +261,6 @@
     <p>Store configuration — applies to every customer in this tenant</p>
   </div>
 
-  <!-- Filters are not live until S4 of
-       docs/admin-settings-catalog-visibility.md. Saying so plainly beats
-       shipping a screen that looks functional and is not. -->
-  <div class="set-notice set-notice-warn" id="preview-banner">
-    <svg width="15" height="15" fill="none" stroke="var(--warning)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v5M12 17h.01"/><path d="M12 3 2 20h20L12 3z"/></svg>
-    <span><strong>Preview — these filters are not applied yet.</strong> Saving stores your choice and
-    the numbers below predict its effect, but the customer catalog and the printed sheet do not read
-    this configuration until the next deploy step. Nothing you do here changes what anyone sees today.</span>
-  </div>
-
   <div id="load-state" class="loading-reserve">
     <p style="color:var(--text-secondary);font-size:0.9rem">Loading catalog…</p>
   </div>
@@ -327,7 +317,7 @@
         <div class="set-impact-metric">
           <div class="set-impact-label">Printed sheet</div>
           <div class="set-impact-value" id="imp-pages">—</div>
-          <div class="set-impact-sub">pages · 46 rows per page</div>
+          <div class="set-impact-sub">pages · about 44 rows each</div>
         </div>
         <div class="set-impact-metric" style="min-width:210px">
           <div class="set-impact-label">Change</div>
@@ -661,7 +651,13 @@
   if (navAnalytics) navAnalytics.style.display = 'block';
 
   const CONFIG_KEY    = CatalogFilters.KEY;
-  const ROWS_PER_PAGE = 46;   // must match admin.html's print geometry (:5438)
+  // FITTED to real prints, not derived from the print CSS. Six measured Print
+  // Catalog runs (docs/admin-settings-catalog-visibility.md § 5.2, rendered to
+  // PDF): 2,302 rows = 52 pages, 2,068 = 47, 2,038 = 46, 1,546 = 35, 2,215 = 50,
+  // 1,534 = 35. ceil(rows / x) matches all six only for 44.31 <= x < 44.95, so
+  // 44.5. This read 46 until 2026-11-10 (admin.html's nominal geometry), which
+  // got all six wrong; a plain 44 still gets four wrong.
+  const ROWS_PER_PAGE = 44.5;
 
   // ⚠️ The shape and its defaults come from CatalogFilters (app.js), NOT from a
   // copy here. This file carried its own defaultConfig() literal until
