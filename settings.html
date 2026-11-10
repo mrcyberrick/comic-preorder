@@ -204,6 +204,22 @@
     .set-row-static .btn { flex-shrink: 0; }
     @media (max-width: 560px) { .set-field-pair { grid-template-columns: minmax(0, 1fr); } }
 
+    /* Store contact ▸ "How it will read". Plain text rows (textContent only), not
+       the real footers: those are rendered by each page, and from S3 by Branding.apply(). */
+    .sc-preview { border: 1px dashed var(--border); border-radius: var(--radius); background: var(--bg); padding: 2px 14px; }
+    .sc-preview-row {
+      display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #222; font-size: 0.8rem;
+    }
+    .sc-preview-row:last-child { border-bottom: 0; }
+    .sc-preview-label {
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-secondary); padding-top: 2px;
+    }
+    .sc-preview-row > span:last-child { overflow-wrap: anywhere; min-width: 0; }
+    .sc-preview-row > span.sc-preview-none { color: var(--text-secondary); font-style: italic; }
+    @media (max-width: 560px) { .sc-preview-row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
     /* Mobile: rail becomes a plain list above the content, panels stay full width */
     @media (max-width: 860px) {
       .set-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -282,10 +298,10 @@
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
           Branding
         </a>
-        <div class="set-rail-item">
-          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14"/><path d="m3 6 9 7 9-7"/></svg>
-          Email Templates <span class="set-soon">Soon</span>
-        </div>
+        <a class="set-rail-item" href="#store-contact">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          Store contact
+        </a>
       </div>
       <div>
         <div class="set-rail-group-label">Ordering cycle</div>
@@ -621,6 +637,80 @@
           <span class="set-banner-status" id="pb-status">Loading…</span>
           <button class="btn btn-secondary btn-sm" id="pb-discard" type="button">Discard</button>
           <button class="btn btn-primary btn-sm" id="pb-save" type="button">Save banner</button>
+        </div>
+      </section>
+
+      <!-- ── Store contact ──────────────────────────────────────
+           docs/store-contact-and-colors.md S1. Replaces the "Email Templates · Soon"
+           placeholder: since F72 G-F every email already uses the shop's own name, so
+           what was left to edit is the shop's contact details. Four columns on the
+           shop's OWN tenants row, written ONLY through admin_set_store_contact()
+           (never a whole-row tenants UPDATE, which could touch plan or slug). Its own Save. -->
+      <div id="store-contact" style="margin:34px 0 14px;scroll-margin-top:76px">
+        <h2 style="margin:0;font-family:var(--font-display);font-size:1.7rem;letter-spacing:0.03em;line-height:1.1">Store contact</h2>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:var(--text-secondary);max-width:760px">
+          Your shop's phone, address and website, as customers see them on emails, pages and printed
+          sheets. Emails already use your store's own name automatically.
+        </p>
+      </div>
+
+      <section class="set-panel" id="contact-panel">
+        <div class="set-panel-head">
+          <h3>Contact details</h3>
+          <p id="sc-plan-line">&nbsp;</p>
+        </div>
+
+        <!-- REMOVE at S3 of docs/store-contact-and-colors.md, when the emails, pages and prints
+             read these fields. Until then it is true; after S3 it would be a stale claim, the
+             way the catalog filters' "not applied yet" warning was. -->
+        <div class="set-notice set-notice-info" id="sc-rollout-note" style="margin:14px 18px 0">
+          <svg width="15" height="15" fill="none" stroke="var(--text-secondary)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>
+          <span><strong>Saved now, used soon.</strong> Your emails, pages and printed sheets switch to
+          these details in the next updates. Until then they keep showing the details built into the
+          app. <span id="sc-rollout-free"></span></span>
+        </div>
+        <div class="set-notice set-notice-warn" id="sc-load-error" style="display:none;margin:14px 18px 0">
+          <svg width="15" height="15" fill="none" stroke="var(--warning)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v5M12 17h.01"/><path d="M12 3 2 20h20L12 3z"/></svg>
+          <span><strong>The contact details could not be read,</strong> so saving is turned off rather than
+          risk overwriting them. Reload the page to try again.</span>
+        </div>
+
+        <div class="set-field-pair" style="padding-top:14px">
+          <div class="set-field">
+            <label class="set-field-label" for="sc-phone" style="margin-bottom:6px">Phone</label>
+            <input type="tel" id="sc-phone" class="set-input" maxlength="40" autocomplete="off" placeholder="(555) 555-0100">
+            <div class="set-url-hint" id="sc-phone-hint"></div>
+          </div>
+          <div class="set-field">
+            <label class="set-field-label" for="sc-town" style="margin-bottom:6px">Town</label>
+            <input type="text" id="sc-town" class="set-input" maxlength="80" autocomplete="off" placeholder="Springfield, IL">
+            <div class="set-url-hint" id="sc-town-hint"></div>
+          </div>
+        </div>
+        <div class="set-field">
+          <label class="set-field-label" for="sc-address" style="margin-bottom:6px">Street address</label>
+          <input type="text" id="sc-address" class="set-input" maxlength="200" autocomplete="off" placeholder="123 Main St. Springfield, IL 62701">
+          <div class="set-url-hint" id="sc-address-hint"></div>
+        </div>
+        <div class="set-field">
+          <label class="set-field-label" for="sc-website" style="margin-bottom:6px">Website</label>
+          <input type="text" id="sc-website" class="set-input" maxlength="120" autocomplete="off" spellcheck="false" placeholder="yourshop.com">
+          <div class="set-url-hint" id="sc-website-hint"></div>
+        </div>
+
+        <div class="set-field">
+          <div class="set-field-label" style="margin-bottom:6px">How it will read</div>
+          <div class="sc-preview">
+            <div class="sc-preview-row"><span class="sc-preview-label">Page footer</span><span id="sc-prev-footer"></span></div>
+            <div class="sc-preview-row"><span class="sc-preview-label">Email footer</span><span id="sc-prev-email"></span></div>
+            <div class="sc-preview-row"><span class="sc-preview-label">Catalog email</span><span id="sc-prev-catalog"></span></div>
+          </div>
+        </div>
+
+        <div class="set-banner-actions">
+          <span class="set-banner-status" id="sc-status">Loading…</span>
+          <button class="btn btn-secondary btn-sm" id="sc-discard" type="button">Discard</button>
+          <button class="btn btn-primary btn-sm" id="sc-save" type="button">Save contact details</button>
         </div>
       </section>
 
@@ -1429,6 +1519,195 @@
 
   pbApply(pbBaseline());
   pbRender();
+
+  // ══ Store contact ═══════════════════════════════════════════
+  // docs/store-contact-and-colors.md S1. Four columns on the shop's OWN tenants
+  // row: contact_phone, postal_address, location (shown as "Town") and website.
+  // Read here directly (RLS limits a user to their own tenant row) and written
+  // ONLY through admin_set_store_contact(), which updates those four and nothing
+  // else, for the caller's own shop.
+  //
+  // Wrapped as a whole: a failure here (for instance the S1 SQL not yet applied,
+  // so the new columns do not exist and the read errors) must disable THIS panel
+  // and nothing else. Without the wrapper an exception would stop the page before
+  // its reveal below, leaving every section on "Loading catalog…".
+  try {
+    const scTenant = TenantContext.current();
+    const scPaid   = Tier.isPaid(scTenant);
+    const scName   = (scTenant && scTenant.display_name) || 'Your store';
+    const SC_FIELDS = ['phone', 'town', 'address', 'website'];
+
+    const scTrim = s => String(s || '').replace(/\s+/g, ' ').trim();
+    const scCleanWebsite = s => scTrim(s).replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    const scNorm = v => ({
+      phone: scTrim(v.phone), town: scTrim(v.town),
+      address: scTrim(v.address), website: scCleanWebsite(v.website),
+    });
+    const scFromRow = r => ({
+      phone: r.contact_phone || '', town: r.location || '',
+      address: r.postal_address || '', website: r.website || '',
+    });
+    const scCurrent = () => scNorm({
+      phone: el('sc-phone').value, town: el('sc-town').value,
+      address: el('sc-address').value, website: el('sc-website').value,
+    });
+    const scApply = v => {
+      el('sc-phone').value = v.phone; el('sc-town').value = v.town;
+      el('sc-address').value = v.address; el('sc-website').value = v.website;
+    };
+    const scSame = (a, b) => SC_FIELDS.every(f => a[f] === b[f]);
+    const scDate = iso => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    async function scRead() {
+      if (!scTenant || !scTenant.id) throw new Error('no resolved tenant');
+      const { data, error } = await db.from('tenants')
+        .select('contact_phone, location, postal_address, website, updated_at')
+        .eq('id', scTenant.id).maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('tenant row not readable');
+      return data;
+    }
+
+    // Where each field appears on THIS shop's plan. The tier rule is F72's
+    // (docs/f72-multi-tenant-branding.md § 0.1): a free shop shows its name
+    // only; the one exception is the postal address the catalog email must carry.
+    const SC_NOTES = scPaid ? {
+      phone:   'Shown on your emails, the pending and paused messages, the pickup notice and printed sheets.',
+      town:    'Shown in the page footer, after your store name.',
+      address: 'Shown in email footers and on printed sheets.',
+      website: 'Printed on the paper catalog and the bagging list.',
+    } : {
+      phone:   'Not shown on the free plan.',
+      town:    'Not shown on the free plan. The monthly catalog email uses it as your address if there is no street address.',
+      address: 'Used only as the postal address the monthly catalog email must carry.',
+      website: 'Not shown on the free plan.',
+    };
+
+    function scProblems(c) {
+      const p = {};
+      if (c.phone && !/^[0-9 ()+.\-]+$/.test(c.phone)) p.phone = 'Use digits, spaces and ( ) + - . only.';
+      else if (c.phone && (c.phone.match(/\d/g) || []).length < 7) p.phone = 'That looks too short for a phone number.';
+      if (c.website && !/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(c.website)) p.website = 'Enter a web address such as yourshop.com.';
+      return p;
+    }
+
+    let scSaved = null;        // normalised stored values
+    let scSavedAt = null;
+    let scLoadOk = false;
+
+    function scRenderPreview(c) {
+      const join = parts => parts.filter(Boolean).join(' · ');
+      const put = (id, text, none) => {
+        const n = el(id);
+        n.textContent = text || none;
+        n.classList.toggle('sc-preview-none', !text);
+      };
+      const postal = c.address || c.town;
+      put('sc-prev-footer', 'Service provided by ' + (scPaid ? join([scName, c.town]) : scName));
+      put('sc-prev-email', scPaid ? join([scName, c.address, c.phone]) : scName);
+      put('sc-prev-catalog',
+        postal ? join(scPaid ? [scName, postal, c.phone] : [scName, postal]) : '',
+        'Not sent: the catalog email needs a street address or a town.');
+    }
+
+    function scRender() {
+      const c = scCurrent();
+      const probs = scProblems(c);
+      SC_FIELDS.forEach(f => {
+        const h = el('sc-' + f + '-hint');
+        h.className = 'set-url-hint' + (probs[f] ? ' is-bad' : '');
+        h.textContent = probs[f] || SC_NOTES[f];
+      });
+      const bad = Object.keys(probs).length > 0;
+      const dirty = scLoadOk && !scSame(c, scSaved);
+      el('sc-save').disabled = !dirty || bad;
+      el('sc-discard').disabled = !dirty;
+      el('sc-status').textContent = !scLoadOk
+        ? 'Saving is off: the details could not be read'
+        : dirty
+          ? (bad ? 'Fix the highlighted field to save' : 'Unsaved changes')
+          : (SC_FIELDS.some(f => scSaved[f])
+              ? (scSavedAt ? 'Store record last updated ' + scDate(scSavedAt) : 'Saved')
+              : 'Nothing entered yet');
+      scRenderPreview(c);
+    }
+
+    el('sc-plan-line').textContent = scPaid
+      ? 'Branded plan: your phone, address, town and website all show to customers.'
+      : 'Free plan: customers see your store name only. The street address is used for the monthly catalog email.';
+    if (!scPaid) el('sc-rollout-free').textContent = 'The monthly catalog email already uses the Town as your address.';
+
+    try {
+      const row = await scRead();
+      scSaved = scNorm(scFromRow(row));
+      scSavedAt = row.updated_at || null;
+      scLoadOk = true;
+      scApply(scFromRow(row));
+    } catch (err) {
+      console.warn('store contact read failed', err);
+      scSaved = scNorm({});
+      el('sc-load-error').style.display = 'flex';
+      SC_FIELDS.forEach(f => { el('sc-' + f).disabled = true; });
+    }
+
+    SC_FIELDS.forEach(f => el('sc-' + f).addEventListener('input', scRender));
+
+    el('sc-discard').addEventListener('click', () => {
+      scApply(scSaved);
+      scRender();
+      toast('Changes discarded');
+    });
+
+    el('sc-save').addEventListener('click', async () => {
+      const btn = el('sc-save');
+      const orig = btn.textContent;
+      const c = scCurrent();
+      if (!scLoadOk || Object.keys(scProblems(c)).length) return;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      const { error } = await db.rpc('admin_set_store_contact', {
+        p_phone: c.phone, p_postal_address: c.address, p_town: c.town, p_website: c.website,
+      });
+      if (error) {
+        console.error('store contact save failed', error);
+        toast('Could not save — ' + (error.message || 'unknown error'), 'error');
+        btn.textContent = orig;
+        scRender();
+        return;
+      }
+      // Read back rather than trust the call: what customers will get is what is
+      // stored, and a write that silently changed nothing must not read as saved.
+      let row = null;
+      try { row = await scRead(); } catch (err) { console.warn('store contact read-back failed', err); }
+      btn.textContent = orig;
+      if (!row) {
+        scSaved = c;
+        scSavedAt = new Date().toISOString();
+        scRender();
+        toast('Saved, but the details could not be read back. Reload the page to check them.', 'error');
+        return;
+      }
+      scSaved = scNorm(scFromRow(row));
+      scSavedAt = row.updated_at || null;
+      scApply(scFromRow(row));
+      scRender();
+      if (!scSame(scSaved, c)) {
+        toast('The stored details read back differently from what you entered. Reload the page and check them.', 'error');
+        return;
+      }
+      toast('Contact details saved');
+    });
+
+    scRender();
+  } catch (err) {
+    console.error('Store contact panel failed to start', err);
+    try {
+      el('sc-load-error').style.display = 'flex';
+      el('sc-save').disabled = true;
+      el('sc-discard').disabled = true;
+      el('sc-status').textContent = 'Saving is off: the details could not be read';
+    } catch (_) { /* the panel markup itself is missing; nothing to disable */ }
+  }
 
   // ── Reveal ───────────────────────────────────────────────────
   el('load-state').style.display = 'none';
