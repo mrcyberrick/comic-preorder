@@ -1,6 +1,6 @@
 # Order Follow-Up — marks that survive imports, actions for every section, and an SOP
 
-**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); **S1 DONE 2026-11-09 (scripts repo `main` `271e824`; V1 + V2 green; V3 = Rick's next weekly run, Fri 2026-11-13)**; **S2 APPLIED ON STAGING, S3 + S4 BUILT ON STAGING 2026-11-09 (`48c3c75`, help fix `1ea2172`; V5 8/8 seen red first, V6 full suite 169/0)**; S2 production SQL, Query 2 and S5 (promotion) not started · staging: 2026-11-09 · prod: — · PR: — · findings: F180 (filed 2026-11-09, open until V3)
+**STATUS:** IN PROGRESS — S0 Query 1 DONE 2026-11-09 (V0: F180 confirmed on the example; second cause ruled out for it); **S1 DONE 2026-11-09 (scripts repo `main` `271e824`; V1 + V2 green; V3 = Rick's next weekly run, Fri 2026-11-13)**; **S2 APPLIED ON BOTH, S3 + S4 BUILT ON STAGING 2026-11-09 (`48c3c75`, help fix `1ea2172`; V5 8/8 seen red first, V6 full suite 169/0)**; **S5 DONE: PROMOTED TO PRODUCTION 2026-11-09, PR #184 (merge `427df642`), served bytes on both hostnames == `origin/main` (V7), Rick's write-smoke reported green**; Query 2 not run · staging: 2026-11-09 · prod: 2026-11-09 · PR: #184 · findings: F180 (filed 2026-11-09, open until V3)
 
 Owner of the defect record: `docs/technical-reference.md` § 13 F180. This doc is the plan.
 
@@ -324,6 +324,13 @@ allowance), `help-order-follow-up.html`.
   name, readable at 390 px. Signed-out access is fine: it holds process, not data.
 
 ### S5 — promotion
+
+**DONE 2026-11-09: PR #184, merge `427df642` (Rick's `/promote-prod`).** The SQL ran on production first.
+Gates and post-deploy verification are recorded in CLAUDE.md's PROMOTED entry: served bytes on both
+hostnames == `origin/main` and equal to the tested staging bytes; markers present; `config.js` prod ref
+only. Rick reported clearing the Follow-Up screen, marking `9781603096270` Received, and a green
+write-smoke (his report; production rows not read here). His own staging look before the PR was not
+reported.
 
 Rick checks it on staging, then `/promote-prod`. `app.js` carries `merge=ours`: assert its merge RESULT
 equals staging's copy. A write-smoke is warranted (`app.js` and `mylist.html` are on the cancel path).

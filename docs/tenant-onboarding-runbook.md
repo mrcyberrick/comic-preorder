@@ -126,6 +126,13 @@ above.
 > **Order matters:** provision the hostname *before* setting `plan = 'pro'`, or before the
 > tenant's first print/email run if the plan was set at create.
 
+> ⛔ **Do not set `plan = 'pro'` on any shop other than Ray & Judy's yet** (added 2026-11-10).
+> A paid shop's address, phone, town and website are still hardcoded to Ray & Judy's: all six mail
+> functions (`PAID_CONTACT_HTML`, decision Q14 in `docs/f72-g-f-mail-and-signup-gate.md`) and about
+> 20 page and print spots. A second paid shop would email and print **Ray & Judy's** details to its
+> own customers. This lifts when S2 and S3 of `docs/store-contact-and-colors.md` are on production.
+> Free shops are unaffected.
+
 **Rick — Cloudflare dashboard (Pages project for `pulllist.app`):**
 
 1. Go to the Pages project → **Custom domains** → **Set up a custom domain**
