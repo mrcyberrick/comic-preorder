@@ -1,4 +1,9 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-10 | prod=PENDING
+--         STAGING: applied by Rick 2026-11-10; his pasted verdict read 'OK - columns present and
+--         readable, 1 definition, SECURITY DEFINER, search_path pinned, S1 body, authenticated only'.
+--         Behaviour checked the same day by playwright/store-contact-verify.mjs (local-only): anon
+--         refused (401), signed-in non-admin refused (403, 42501), admin write read back, another
+--         shop's row untouched, over-cap value refused (22001).
 -- (F105) This line is the applied-state record. Update it the moment you run this file, with the REAL
 -- state and no qualifier the regex cannot see: /promote-prod step 0 matches prod=(APPLIED|N/A).
 -- ============================================================================
