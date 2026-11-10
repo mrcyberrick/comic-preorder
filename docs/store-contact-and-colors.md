@@ -213,8 +213,30 @@ columns present) that prints FAIL when the function or a column is missing, not 
 
 **Built 2026-11-10 on `feature/store-contact-s1`** (`6e1ab7c` the warning and estimate, `d1c64ac` the
 panel and the SQL file). Local harness `playwright/store-contact-verify.mjs` (local-only): pre-SQL mode
-11/11 on the working tree; negative control `emptyonfail` red on its three checks. The full V1/V2 run
-waits for the SQL on staging.
+11/11 on the working tree; negative control `emptyonfail` red on its three checks. ~~The full V1/V2 run
+waits for the SQL on staging.~~
+
+**S1 ON STAGING 2026-11-10 (merged `--ff-only`, staging tip `330af30`; NOT promoted).** The SQL was
+applied by Rick (verdict OK; file STATUS `staging=APPLIED`). V1 + V2: harness **45/45 on the working tree
+and 45/45 on the deployed bytes** (served `settings.html` equal to the committed blob on 3 consecutive
+polls first): anon refused 401, signed-in non-admin refused 403 / 42501, admin write read back, plan /
+slug / name untouched, the other shop's row untouched, over-cap refused 22001, blank stores NULL,
+invalid phone / website block Save, Discard, hostile text shown as text, reload persists, the free-plan
+view at 390 px with no horizontal scroll, both shops' fields and `updated_at` restored exactly, users
+gone. **Negative controls, each red on its own gate:** `emptyonfail` (3), `innerhtml` (the injected
+image was actually requested), `ignoreproblems` (2), `noclean` (red because an unclean
+`https://…/` website then fails validation, so Save stays off and the run stopped early; teardown
+re-read clean). A screenshot showed the "How it will read" heading at body size (the label rule
+matched only `<label>`); fixed in `330af30`. **Full suite on the deployed bytes: 169 passed, 1 skipped,
+0 failed, 28.4 min, `EXIT=0`** (the log's own summary line). **Not yet done:** Rick's staging data fill
+through the panel; production SQL and promotion.
+
+**Observed during S1, staging only, NOT changed (Rick's call pending):** the prints' "View Online"
+reads `raysandjudys.pulllist.app` on staging, which does not resolve. `Tier.publicUrl()` is
+`<slug>.pulllist.app`; production's slug is `rjbookstop`, which resolves (HTTP 200), and the print code
+is identical on both branches, so production prints the right address. Pre-existing since F72 S3
+(2026-09-04); F72 S0 had said "decide at S3 whether staging gets a provisioned hostname or is an
+explicit exception", and no decision was recorded.
 
 **Data fill, before anything reads the fields:** Rick enters Ray & Judy's values through the new
 panel on each environment (this is also the panel's real test): phone `(973) 586-9182`, street
