@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** LIVE 2026-11-04, **FIXED 2026-11-11: non-expiring Page token saved (13:44Z, Debugger: Type Page, Page ID 218209818226021, Expires Never) and this week posted by hand (run `43032194163`); the next automatic post is Tue 2026-11-17 evening.** Was: BROKEN 2026-11-10: the first automatic post to Ray & Judy's real Page (run `42936326810`) was refused, HTTP 401 code 190, `Session has expired on Wednesday, 04-Nov-26 10:00:00 PST`. The Page token saved 2026-11-04 was short-lived (taken from `me/accounts` before the user token was extended), so it died about 70 minutes after the hand post. Nothing posted, no record saved. Fix: a non-expiring Page token (§ 8, 2026-11-11).** Was: LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** LIVE 2026-11-04, **FIXED 2026-11-11: non-expiring Page token saved (13:44Z, Debugger: Type Page, Page ID 218209818226021, Expires Never) and this week posted by hand (run `43032194163`); Rick: visible on the Page; every run now checks the token first (`weekly-pull-feed` `27e945a3`); data access ends Tue 2027-02-09 (renewal reminder Tue 2027-02-02); the next automatic post is Tue 2026-11-17 evening.** Was: BROKEN 2026-11-10: the first automatic post to Ray & Judy's real Page (run `42936326810`) was refused, HTTP 401 code 190, `Session has expired on Wednesday, 04-Nov-26 10:00:00 PST`. The Page token saved 2026-11-04 was short-lived (taken from `me/accounts` before the user token was extended), so it died about 70 minutes after the hand post. Nothing posted, no record saved. Fix: a non-expiring Page token (§ 8, 2026-11-11).** Was: LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -724,9 +724,33 @@ check read Type Page, Page ID 218209818226021, Expires Never. Hand run `43032194
 green: `Cache not found` for `fb-posted-218209818226021-2026-11-09`, week 2026-11-09 -> 11-15, same
 spotlight and "New comics this Wednesday, Nov 11! 118 new arrivals", `Posted:
 https://www.facebook.com/1786816593453288/posts/1795201532614794`, cache key saved. Posted on in-store
-day morning (about 08:47 ET) instead of the evening before. **Not verified:** the token's data-access
+day morning (about 08:47 ET) instead of the evening before. ~~**Not verified:** the token's data-access
 expiry date (needed for the renewal reminder); that a follower who is not an admin can see the post;
-the next automatic run (Tue 11-17).
+the next automatic run (Tue 11-17).~~ *(The first two answered below; the third is gated.)*
+**Rick, same day:** Debugger "Data Access Expires 1802180175 (in about 3 months)" = **Tue 2027-02-09
+13:36Z (08:36 ET)**; "It is now visible on Page" (his words; whether he looked signed out or as a
+non-admin is not stated, so the Development-mode visibility question is answered only as far as that).
+**TOKEN CHECK BUILT (Rick: "self-check = yes"), `weekly-pull-feed` `main` `27e945a3`.** Every run with
+a token, dry runs included, first asks `GET /debug_token?input_token=...` (Authorization header, the
+token also in that one query string, which the endpoint requires; never printed). **Stops before
+posting** (red, nothing built): not valid (the 11-10 failure), type not PAGE (a user token), `profile_id`
+not `FACEBOOK_PAGE_ID`, or data access already ended. **Posts, then ends red** so GitHub emails Rick:
+a short-lived token (`expires_at` > 0, the 11-04 token) or data access ending within 14 days (so the
+Tue 2027-01-26 run goes red). A dry run no longer "never calls Facebook" when a token is set: it makes
+this one read. Tests 34 -> 44; three older tests that asserted no Facebook call at all on a stale news
+page now exclude this read (their point, nothing posted, is kept); two negative controls (check
+removed: 9 red; a warning never turns the run red: 3 red), script restored byte-identical; newsletter
+tests 78/78. **Real check on Facebook from a branch dry run** (`43033493262`, before the fast-forward):
+`Token: the Page's own token, never expires, data access until 2027-02-09`, matching Rick's Debugger,
+then `Already posted` for this week (correct). So `debug_token` answers with a Page token as its own
+access token. **Not verified:** a real red from the check (only the fakes exercised the stop and warn
+paths); that `profile_id` is present for this Page (the check skips it when absent).
+Gate scheduled (2026-11-11): first automatic post with the new token and the check, Tue 2026-11-17
+evening; reminder: routine `trig_01W8E8qxfLdokDT6ZbwrnDA1` + calendar `cfo5qigbavhthoot7ln4s4ubhc`,
+Wed 2026-11-18 8:00 AM ET.
+Gate scheduled (2026-11-11): token data access ends Tue 2027-02-09 08:36 ET; renew the week before;
+reminder: routine `trig_01X4oEhe77TFx9AjWqmpXJxN` + calendar `6tbia23ul69g13b9q8ne88h0ts`, Tue
+2027-02-02 8:00 AM ET (both routines remind only; their default-attached connectors were removed).
 
 ## References
 
