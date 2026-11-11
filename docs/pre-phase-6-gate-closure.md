@@ -655,6 +655,14 @@ staging import cannot misfire.)
 > S2 the trigger; adds an owner-tenant check as decision D1; the `claim-paper-customer` tenant gap it found is
 > filed as F181). Approved 2026-11-11 (Rick: "Defaults"); date gates apply to production steps only. The design
 > below stands; that doc is what a CLI session runs.
+>
+> **2026-11-11, later: S1 (the import's tenant reads, item 1 below) is BUILT AND VERIFIED ON STAGING, NOT MERGED.**
+> Scripts repo branch `feature/f164-import-tenant-reads` (`124b59b` export, `f226552` the fix and tests), pushed;
+> scripts `main` is untouched, so Rick's Fri 2026-11-13 import runs unchanged code and the merge waits for his read of
+> it. The audit item 1 asked for found exactly the two reads and nothing else; unit suite 471/471 with three negative
+> controls seen red; the staging harness reproduced the old cross-shop matching on the old code and showed none on the
+> fix, teardown re-read 0. **Item 2 (the trigger, S2) is not started; F164 and gate G8 stay OPEN.** Evidence and the
+> one correction to the plan's control table: `docs/f164-g-i-same-shop-guard.md` § 9.
 
 1. **Import scripts first (scripts repo, both `import.js` and `import-staging.js`).** Add
    `tenant_id=eq.${TENANT_ID}` to the subscriptions read and the catalog read in `autoReserveSubscriptions()`;

@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults"), NOT STARTED · plan written 2026-11-11 · staging: — · prod: — · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164, F181 (filed while planning)
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552`, pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -139,6 +139,14 @@ gitignored, requires `import-staging.js`; refuses to run unless `SUPABASE_URL` i
 | F2 | commit B | founding row only | `--no-write` | Matched 1, To insert 1 |
 | F3 | commit B | both rows | **write** | exactly 1 preorder lands: the founding customer, the founding row, the founding `tenant_id`; none for the demoshop customer; none on the demoshop row (read back with the service role) |
 | F4 | commit B | both rows | write | Already reserved 1, To insert 0 (idempotent) |
+
+  **Corrected 2026-11-11 (S1 execution): the C1 and C2 counts in the table are wrong for the fixture this same step
+  specifies.** With one customer per shop both subscribed to the same series, the OLD code matches BOTH subscribers
+  against the one listing whichever shop owns it, so C1 and C2 both read **Matched 2, To insert 2** (observed, § 9).
+  The table's "Matched 1, To insert 1" for C1 would need the demoshop customer not to match the demoshop listing,
+  which no unfiltered read can do. The control's purpose (the old reads cross shops) holds, and it is stronger than
+  the table said: with ONLY the demoshop listing in the month, a founding import still matched two subscribers where
+  the correct answer is 0 (F1). F1-F4 were right as tabled. *(The original wording is kept above and in the table.)*
 
   Also record `Found N subscription(s)` on commit A (every shop's) against commit B (founding only; must equal a
   service-role count of the founding tenant's subscriptions). **If C1 or C2 does not reproduce, halt: the gate
@@ -529,3 +537,87 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
   - Each routine is one-shot, reminds only (PushNotification / Read / Grep / Glob), with every connector removed;
     each calendar event has a popup at 8:00 and an email an hour before. Delete stale ones at
     https://claude.ai/code/routines if the plan changes.
+- **2026-11-11, S1 session (a delegated CLI session, Sonnet 5.5; scripts repo + staging only). S1 BUILT AND VERIFIED ON
+  STAGING; the branch is pushed and NOT merged; F164 stays OPEN; no finding ID consumed (F182 is the next free ID,
+  F181 having been filed while planning).** Rick's answer to the Step 7 question, given to the session in advance:
+  the Fri 2026-11-13 import has not happened, so the "not yet" path ran. Rick also said staging work is not date-gated.
+  - **Step 0.** Scripts repo `main` clean and equal to `origin/main` at `271e824`; `node` v24.13.1; the `.env` variable
+    names the scripts need are present (names only, no values read into the log). **`/preflight` was not invoked as a
+    skill; these checks were done by hand.** Unit baseline re-measured: **449/449**. Feature branch
+    `feature/f164-import-tenant-reads`.
+  - **Step 1, gate 1: audit result equals § 1.** All `rest/v1/` call lines of both scripts read (32 each; the two
+    scripts' call lines are identical once line numbers are ignored). Exactly two unfiltered reads
+    (`import.js` 999 / 1021, `import-staging.js` 998 / 1020); every other read filters on `tenant_id=eq.${TENANT_ID}` or
+    takes its ids from a read that does (the two `preorders ... catalog_id=in.(...)` reads at 1044 / 1081 take theirs
+    from the catalog reads, so the fix covers them); every RPC body carries `p_tenant_id`; every insert / upsert body
+    carries `tenant_id`.
+  - **Step 2, commit A `124b59b` (export only).** `autoReserveSubscriptions` added to `module.exports` in both scripts,
+    nothing else. `node --check` clean, `npm test` still 449/449.
+  - **Step 3-4, commit B `f226552` (the fix and its tests, one commit so `npm test` is green at every commit).**
+    Both reads carry `tenant_id=eq.${TENANT_ID}` and select `tenant_id`; a subscription or catalog row without
+    `tenant_id` prints `Subscription rows arrived without tenant_id` / `Catalog rows arrived without tenant_id ...
+    skipping auto-reserve (F164).` and returns; `matchSubscriptions()` filters both inputs to `tenant_id === tenantId`
+    first (missing counts as another shop) and returns `ignoredSubscriptions` / `ignoredItems`; the caller prints
+    `Ignored N subscription(s) and M catalog row(s) from other shops (F164).` only when either is above 0. A diff of the
+    two scripts' changed hunks on the branch is byte-identical; both files kept their CRLF working-tree endings.
+  - **Gate 2: tests.** With the fix in and the three old `matchSubscriptions` fixtures untouched, **6 tests went red**
+    (3 per script: their rows had no `tenant_id`, which now counts as another shop's: the guard working); fixtures
+    updated with `tenant_id: 'tenant-1'`. **471/471 green** (449 + 22 new: per script 6 `matchSubscriptions` tests,
+    the other shop's row listed first wherever it matters, and 5 `autoReserveSubscriptions` tests with `fetch` stubbed:
+    both reads scoped and selecting `tenant_id`, a subscription row without `tenant_id` stops it before the catalog
+    read, a catalog row without one stops it, a read that returns another shop's rows is ignored out loud and only
+    this shop's pair is written, clean reads never print "Ignored"). **Three negative controls, each restored
+    byte-identical by sha256 and each seen red:** (a) the matcher's two `.filter(...)` lines made pass-through: **12 red**
+    (per script: the 5 matcher tests "same series ... other shop first", "only another shop has", "another shop's
+    subscriber", "no tenant_id counts as another shop", "carry-forward" plus the "a read ever returns another shop's
+    rows" test); (b) the two read filters removed: **2 red** ("both reads are scoped ... select tenant_id", one per
+    script); (c) the two missing-`tenant_id` aborts disabled: **4 red** (the two abort tests per script).
+  - **Step 5, gate 3: the staging harness** (`playwright/f164-autoreserve-verify.mjs`, local-only, gitignored; refuses to
+    run unless `SUPABASE_URL` is the staging ref and `IMPORT_TENANT_ID` is the staging founding tenant; loads only
+    `import-staging.js`; one process per phase). Fixture month `2000-01`: **preflight read 0 catalog rows for every one
+    of the 7 staging tenants** before anything was created; one dry-fit catalog row inserted and removed first; then
+    one throwaway customer per shop (founding, demoshop; `pw-f164-<run>-*@example.test`, run id `2dbbc050`) each
+    subscribed to series `ZZTEST164 2dbbc050` (Lunar, format null). Staging's 5 real subscriptions are all the
+    founding shop's. The real function's own output, verbatim (counts only; `--no-write` phases print the write as
+    `[no-write] would POST n row(s)`):
+
+    | Phase | Code | Rows in `2000-01` | Mode | Observed |
+    |---|---|---|---|---|
+    | C1 control | `124b59b` (A, old reads) | demoshop row | `--no-write` | `Found 7 subscription(s)`, `Catalog rows fetched: 1`, `Matched: 2 \| Already reserved: 0 \| Carried forward: 0 \| To insert: 2` |
+    | C2 control | `124b59b` (A) | founding row | `--no-write` | `Found 7`, `Catalog rows fetched: 1`, `Matched: 2 \| Already reserved: 0 \| Carried forward: 0 \| To insert: 2` |
+    | F1 | `f226552` (B, fixed) | demoshop row | `--no-write` | `Found 6`, `Catalog rows fetched: 0`, `Matched: 0 \| ... \| To insert: 0`, `No new auto-reserves needed.` |
+    | F2 | `f226552` (B) | founding row | `--no-write` | `Found 6`, `Catalog rows fetched: 1`, `Matched: 1 \| Already reserved: 0 \| Carried forward: 0 \| To insert: 1` |
+    | F3 | `f226552` (B) | both | **write** | `Found 6`, `Catalog rows fetched: 1`, `Matched: 1 \| ... \| To insert: 1`, `Auto-reserved 1 item(s) for subscribers`; service-role read-back: exactly 1 fixture preorder, the founding customer on the founding row with the founding `tenant_id`; none for the demoshop customer; none on the demoshop row |
+    | F4 | `f226552` (B) | both | write | `Found 6`, `Matched: 1 \| Already reserved: 1 \| Carried forward: 0 \| To insert: 0`, `No new auto-reserves needed.`; read-back unchanged (still exactly 1) |
+
+    **`Found N` on A versus B:** 7 on commit A (every shop's: the 5 real founding subscriptions plus the 2 fixture ones),
+    6 on commit B (founding shop only: 5 plus 1); each equalled the harness's own service-role count in the same run
+    (all shops 7, founding 6). No `Ignored ...`, no `arrived without tenant_id` and no `Auto-reserve batch failed` line
+    in any phase. **C1 and C2 are the old cross-shop behaviour reproduced, and their counts differ from the plan's table
+    (Matched 1 for C1); see the correction under the Step 5 table.** The stamped `tenant_id` of C1's extra insert is read
+    from the code (`toInsert` always carries the import tenant), not observed: those phases were `--no-write`.
+  - **Teardown, re-read fresh after the harness's own deletes:** catalog rows with the `ZZTEST164-` prefix 0; catalog rows
+    in `2000-01` for any tenant 0; preorders on the fixture rows or users 0; subscriptions in the fixture series 0;
+    `pw-f164-` profiles 0; both auth users **404**. A second preflight afterwards read `2000-01` empty for all 7 tenants
+    and staging subscriptions back at 5 (all founding). Deleted only by id / the prefix / the month.
+  - **Step 6, SKIPPED, stated plainly.** Staging's current month is `2026-10` (read-only read); the only catalog pair on
+    disk is `2026-11` (production's, from the 10-28 import). Running that pair on staging would be a new-month dry run
+    with 0 staging rows for 2026-11 (a vacuous 0 = 0 comparison) and interactive month prompts, so it was not run.
+  - **Step 7, "not yet" path.** `node --check` clean on both scripts; branch pushed to the private scripts repo's `origin`;
+    the scripts folder switched back to **`main`: clean, equal to `origin/main` (`271e824`), `npm test` 449/449 there**,
+    so Rick's next import runs unchanged code. **The merge is a later two-command step once Rick has read the Fri
+    2026-11-13 import (F180 V3):** `git merge --ff-only feature/f164-import-tenant-reads`, then `git push origin main`
+    (from the scripts folder, which must end on `main` and clean). Gate 4's "`main` == `origin/main`, both scripts carry
+    identical changed regions" is met for `main` (unchanged) and for the branch (identical hunks); the merge itself is
+    pending.
+  - **Not verified (S1):** production never ran (the production script `import.js` got `node --check`, the unit suite and
+    a byte-identical changed region; only `import-staging.js` executed); the CLI path (`main()`, prompts, the real call
+    order around Step 5) was not exercised, because Step 6 was skipped and the harness calls the function directly; the
+    row bodies of C1's would-be writes; a staging or production import after S2's trigger (S2a / T3 reruns F3 / F4).
+    **Out of scope, observed, not fixed:** the catalog read pages with `order=series_name` plus `limit` / `offset`;
+    `series_name` is not a total order, so rows tied on it could in principle straddle a page boundary and be skipped or
+    repeated between two page requests (the F162 shape, on a different read). Not measured; the F82 comment says the
+    page loop was built for size, not for tie order.
+  - **Next:** Rick's read of the Fri 2026-11-13 import, then the merge (two commands above); S1's merge then enables
+    the 2026-11-20 read (§ 5). S2a (staging SQL) may start any day: plan § 2's staging caution applies while S1 is
+    unmerged (run the § 2e interim queries before any staging import).
