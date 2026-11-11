@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** LIVE 2026-11-04, **BROKEN 2026-11-10: the first automatic post to Ray & Judy's real Page (run `42936326810`) was refused, HTTP 401 code 190, `Session has expired on Wednesday, 04-Nov-26 10:00:00 PST`. The Page token saved 2026-11-04 was short-lived (taken from `me/accounts` before the user token was extended), so it died about 70 minutes after the hand post. Nothing posted, no record saved. Fix: a non-expiring Page token (§ 8, 2026-11-11).** Was: LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** LIVE 2026-11-04, **FIXED 2026-11-11: non-expiring Page token saved (13:44Z, Debugger: Type Page, Page ID 218209818226021, Expires Never) and this week posted by hand (run `43032194163`); the next automatic post is Tue 2026-11-17 evening.** Was: BROKEN 2026-11-10: the first automatic post to Ray & Judy's real Page (run `42936326810`) was refused, HTTP 401 code 190, `Session has expired on Wednesday, 04-Nov-26 10:00:00 PST`. The Page token saved 2026-11-04 was short-lived (taken from `me/accounts` before the user token was extended), so it died about 70 minutes after the hand post. Nothing posted, no record saved. Fix: a non-expiring Page token (§ 8, 2026-11-11).** Was: LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -714,6 +714,19 @@ long-lived token, `GET me/accounts`, take the `access_token` from the entry whos
 `218209818226021`; (4) **Debugger on THAT token: Type Page, Page ID 218209818226021, Expires Never**
 (any expiry time means the wrong token); (5) save it to `FACEBOOK_PAGE_TOKEN`; (6) run "Post to
 Facebook" by hand with dry_run off to post this week.
+**Two traps hit doing it:** `me/accounts` returned `(#100) Tried accessing nonexisting field
+(accounts)`, which means the token in the box was a Page token (`me` is then the Page), so the token
+extended in step 2 must be checked to read **Type: User** first; and "Ray & Judy's Page ticked" means the
+Facebook pop-up after Generate Access Token ("Edit settings" shows the Pages with checkboxes), not the
+"User or Page" drop-down, which stays on User Token.
+**Fixed 2026-11-11 (Rick).** New token saved 13:44:55Z (read back with `gh secret list`); Rick's Debugger
+check read Type Page, Page ID 218209818226021, Expires Never. Hand run `43032194163` (dry_run off)
+green: `Cache not found` for `fb-posted-218209818226021-2026-11-09`, week 2026-11-09 -> 11-15, same
+spotlight and "New comics this Wednesday, Nov 11! 118 new arrivals", `Posted:
+https://www.facebook.com/1786816593453288/posts/1795201532614794`, cache key saved. Posted on in-store
+day morning (about 08:47 ET) instead of the evening before. **Not verified:** the token's data-access
+expiry date (needed for the renewal reminder); that a follower who is not an admin can see the post;
+the next automatic run (Tue 11-17).
 
 ## References
 
