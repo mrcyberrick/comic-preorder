@@ -657,7 +657,8 @@ staging import cannot misfire.)
 > below stands; that doc is what a CLI session runs.
 >
 > **2026-11-11, later: S1 (the import's tenant reads, item 1 below) is BUILT AND VERIFIED ON STAGING, NOT MERGED.**
-> Scripts repo branch `feature/f164-import-tenant-reads` (`124b59b` export, `f226552` the fix and tests), pushed;
+> Scripts repo branch `feature/f164-import-tenant-reads` (`124b59b` export, `f226552` the fix and tests, `e73e2ef`
+> the `(series_name, id)` sort on the paged catalog read), pushed;
 > scripts `main` is untouched, so Rick's Fri 2026-11-13 import runs unchanged code and the merge waits for his read of
 > it. The audit item 1 asked for found exactly the two reads and nothing else; unit suite 471/471 with three negative
 > controls seen red; the staging harness reproduced the old cross-shop matching on the old code and showed none on the

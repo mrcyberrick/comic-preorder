@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552`, pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -614,10 +614,29 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
     a byte-identical changed region; only `import-staging.js` executed); the CLI path (`main()`, prompts, the real call
     order around Step 5) was not exercised, because Step 6 was skipped and the harness calls the function directly; the
     row bodies of C1's would-be writes; a staging or production import after S2's trigger (S2a / T3 reruns F3 / F4).
-    **Out of scope, observed, not fixed:** the catalog read pages with `order=series_name` plus `limit` / `offset`;
+    *(Superseded the same day: Rick chose "add id as a second sort key"; fixed on the branch as `e73e2ef`, see the
+    entry below. The observation as first recorded:)* **Out of scope, observed, not fixed:** the catalog read pages with `order=series_name` plus `limit` / `offset`;
     `series_name` is not a total order, so rows tied on it could in principle straddle a page boundary and be skipped or
     repeated between two page requests (the F162 shape, on a different read). Not measured; the F82 comment says the
     page loop was built for size, not for tie order.
   - **Next:** Rick's read of the Fri 2026-11-13 import, then the merge (two commands above); S1's merge then enables
     the 2026-11-20 read (§ 5). S2a (staging SQL) may start any day: plan § 2's staging caution applies while S1 is
     unmerged (run the § 2e interim queries before any staging import).
+- **2026-11-11, S1 review and one addition (main session).** The S1 report was re-checked rather than taken as given:
+  scripts folder on `main` `271e824` == `origin/main`, clean; the branch suite **471/471** run in place (the scripts
+  refuse to load without `.env`, so not in a scratch worktree); a fresh staging read found 0 `2000-01` rows, 0
+  `ZZTEST164-` listings, 0 `pw-f164-` profiles, 0 fixture subscriptions, 5 subscriptions in all. **The C1 table
+  correction above is right:** with both fixture customers subscribed, the old code matches both, so 2 / 2 was the
+  correct expectation and the plan's 1 / 1 was my error.
+  **Rick, 2026-11-11: "add id as a second sort key".** Commit `e73e2ef` on the branch, pushed: both scripts' month
+  catalog read is now `order=series_name,id` (identical lines, a comment naming the F162 shape), plus one test per
+  script asserting the read orders by `series_name, id` and still pages at 1000. Suite **473/473**. Negative control:
+  dropping `,id` from both scripts turned exactly the two new tests red (52 pass / 2 fail in `builders.test.mjs`);
+  restored byte-identical by sha256; 473/473 again. Both scripts `node --check`; every line of both still CRLF.
+  Folder back on `main` `271e824`, clean. **Not live-checked on staging** (a sort-key change; the harness's month
+  holds 1-2 rows, so it could not show a page boundary either way). The merge is still the same two commands.
+  **Observed, not fixed, not filed:** the import's other paged reads go through `pageAllRows()` with **no** `order=`
+  at all (`import.js` 750, 764, 1474, 1497, 1614, 1632, 2122 on the branch), so their page order is unspecified too;
+  none of them feeds auto-reserve. And `matchSubscriptions()` takes the **first** matching standard listing per
+  subscription, so a series with two standard issues in one month (a twice-monthly title) gets one auto-reserve, not
+  two; read from code, not measured, possibly by design.
