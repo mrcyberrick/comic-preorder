@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -635,8 +635,32 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
   restored byte-identical by sha256; 473/473 again. Both scripts `node --check`; every line of both still CRLF.
   Folder back on `main` `271e824`, clean. **Not live-checked on staging** (a sort-key change; the harness's month
   holds 1-2 rows, so it could not show a page boundary either way). The merge is still the same two commands.
-  **Observed, not fixed, not filed:** the import's other paged reads go through `pageAllRows()` with **no** `order=`
+  *(Superseded the same day for the first half: Rick chose "do the fix"; see the entry below. The observation as first
+  recorded:)* **Observed, not fixed, not filed:** the import's other paged reads go through `pageAllRows()` with **no** `order=`
   at all (`import.js` 750, 764, 1474, 1497, 1614, 1632, 2122 on the branch), so their page order is unspecified too;
   none of them feeds auto-reserve. And `matchSubscriptions()` takes the **first** matching standard listing per
   subscription, so a series with two standard issues in one month (a twice-monthly title) gets one auto-reserve, not
-  two; read from code, not measured, possibly by design.
+  two; read from code, not measured, possibly by design. *(This second half is still observed, not fixed, not filed.)*
+- **2026-11-11, the other seven paged reads sorted (main session; not F164, but it rides the same Saturday merge).**
+  Rick asked the impact, then: "do the fix". **Impact, read from code:** only the closing-cycle confirm's
+  `order_submissions` read could write a wrong value (a skipped row offers an already-recorded code again, and pressing
+  Enter writes a second monthly order line); a skipped `weekly_shipment` row marks a delivered title `unknown` (a false
+  Never Arrived entry, staff only); the rest feed console reports. Never observed. **Fix:** a new scripts branch
+  `feature/import-paged-read-order`, **built on S1's tip** (`e73e2ef`), one commit `e437c4f`, pushed, NOT merged: all
+  seven reads in both scripts now page with `order=id` (the primary key on `preorders`, `catalog`, `order_submissions`
+  and `weekly_shipment`, checked in `technical-reference.md` § 4); `pageAllRows()` documents the rule; new
+  `test/paged-read-order.test.mjs` scans both scripts and fails on any paged fetcher whose sort does not end in `id`
+  (so it also catches the next one added). **Verified:** suite **477/477** (473 + 4); negative control: removing two of
+  the sorts (one per script) turned exactly the two scan tests red, files restored byte-identical by sha256; both
+  scripts `node --check`, every line still CRLF; the two scripts' diffs identical. **Live, read-only on staging:** all
+  seven sorted reads returned 200, each paged total equal to PostgREST's exact count, no duplicate ids where `id` is
+  selected, and a second full pass identical in rows and order; three span more than one page there (this month's
+  catalog 2,234 rows / 3 pages, delivered titles 1,396 / 2, other months' catalog 6,511 / 7). Folder back on `main`
+  `271e824` == `origin/main`, clean. **Not covered:** a reservation added or cancelled between two page requests still
+  shifts the offsets by one (keyset paging would fix that); production never ran; `check-dates.js`'s own `fetchAll()`
+  pager was not reviewed. **Saturday 2026-11-14, after the Fri 11-13 import is read, three commands from the scripts
+  folder:** `git merge --ff-only feature/f164-import-tenant-reads`, then `git merge --ff-only
+  feature/import-paged-read-order`, then `git push origin main`. The Sat 11-14 reminders were updated to list all
+  three (routine `trig_01BYubBzX9uVvmCRvYWC9Z6m` and calendar event `10r4rjgo2k38gglf3n015noca0`, still 8:00 AM ET).
+  No finding ID consumed (a latent defect, fixed the
+  session it was found, nothing left open); **F182 remains the next free finding ID.**
