@@ -651,6 +651,10 @@ staging import cannot misfire.)
 
 ### G-I — the F164 guard (PLANNED, NOT STARTED; its own session; order matters)
 
+> **2026-11-11: execution plan written, `docs/f164-g-i-same-shop-guard.md`** (no blockers; S1 the import reads,
+> S2 the trigger; adds an owner-tenant check as decision D1 and records an unfiled `claim-paper-customer` tenant
+> gap as D4). The design below stands; that doc is what a CLI session runs.
+
 1. **Import scripts first (scripts repo, both `import.js` and `import-staging.js`).** Add
    `tenant_id=eq.${TENANT_ID}` to the subscriptions read and the catalog read in `autoReserveSubscriptions()`;
    select `tenant_id` and make `matchSubscriptions()` skip any subscription or catalog row whose tenant differs
