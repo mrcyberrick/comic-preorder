@@ -1,6 +1,6 @@
 # Weekly Facebook post for Ray & Judy's Book Stop (PLAN + RUNBOOK DRAFT)
 
-**STATUS:** LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
+**STATUS:** LIVE 2026-11-04, **BROKEN 2026-11-10: the first automatic post to Ray & Judy's real Page (run `42936326810`) was refused, HTTP 401 code 190, `Session has expired on Wednesday, 04-Nov-26 10:00:00 PST`. The Page token saved 2026-11-04 was short-lived (taken from `me/accounts` before the user token was extended), so it died about 70 minutes after the hand post. Nothing posted, no record saved. Fix: a non-expiring Page token (§ 8, 2026-11-11).** Was: LIVE 2026-11-04 — **posting to Ray & Judy's REAL Page (`218209818226021`) since 2026-11-04 (first post run `41871121394`); follower visibility while the app is in Development mode not yet checked.** Was: **LIVE on `weekly-pull-feed` `main` (`0b8ed69f`), ON for the TEST Page; since 2026-10-28 it posts right after the scheduled Tuesday newsletter run (`workflow_run`), not on its own Wednesday cron, which GitHub never started on 10-28 (posted by hand that day, Rick checked it); first automatic run Tue 2026-11-03 evening (T6)**; **T1-T5 GREEN 2026-10-21 on the test Page** (first real post made, rerun posted nothing, both forced failures red); Rick confirmed the post, both links and both failure emails; owed: T6 (schedule on, test Page) and R5 | staging=— | prod=— | findings=none consumed
 **Owner:** Rick. **Planning:** this doc. **Execution:** one Sonnet CLI session after sign-off, Meta steps Rick-in-the-loop.
 **Repo touched by execution:** `mrcyberrick/weekly-pull-feed` only (public; where the newsletter runs). **No change to this repo's app code, no SQL, no Supabase change, no `config.js`.**
 **Last verified against live:** 2026-10-14, read-only: `weekly-pull-feed` `origin/main` at `c0a423c5` (both workflows, `check-stamp.js`, `preflight-week.js`, the builder's exports), the live `rss.xml` and `newsletter.html` on GitHub Pages.
@@ -693,6 +693,27 @@ cache key `fb-posted-218209818226021-2026-11-02` saved. Each refusal posted noth
 user token, not the Page's token. Use the `id` AND the `access_token` from the SAME `me/accounts` entry.
 **Not verified:** how the post looks to a follower who is not an admin of the app or the Page (the app is
 still in Development mode); Rick to open it signed out or from another account.
+
+**2026-11-10, FIRST AUTOMATIC POST TO THE REAL PAGE FAILED (Rick: "Facebook post was not delivered").**
+The trigger worked: scheduled newsletter run `42935592075` (started 00:59Z Wed 11-11, green) started
+"Post to Facebook" run `42936326810` at 01:05Z, which built the picture (week 2026-11-09 -> 11-15, 118
+arrivals, spotlight AMAZING SPIDER-MAN #1003 | CAPTAIN AMERICA #17 | SUPERGIRL #19 CVR A SOPHIE CAMPBELL)
+and was refused by Facebook: `HTTP 401 code 190 Error validating access token: Session has expired on
+Wednesday, 04-Nov-26 10:00:00 PST`. Red run, nothing posted, no posted record saved, picture attached.
+**Cause: the token saved 2026-11-04 16:47Z was a SHORT-LIVED Page token.** A Page token copied from
+`me/accounts` while Graph API Explorer holds the short-lived user token expires with that user token
+(about 1-2 hours); only one taken AFTER extending the user token (Access Token Debugger, "Extend Access
+Token") reads Expires Never. The 2026-11-04 entry above says "Rick's Debugger check read Type Page /
+Expires Never", and the final token was never debugged; **my wrap-up then said "the Page token never
+expires", which was wrong for the token actually saved.** The test Page's token (2026-10-21) was made
+with the extend step and did not expire.
+**Fix steps (Rick, about 5 minutes):** (1) Graph API Explorer, app Weekly Post, User Token, the three
+permissions (§ 4.5), Generate Access Token, Ray & Judy's Page ticked; (2) Access Token Debugger: paste
+it, **Extend Access Token**, copy the long-lived user token; (3) Graph API Explorer: paste the
+long-lived token, `GET me/accounts`, take the `access_token` from the entry whose `id` is
+`218209818226021`; (4) **Debugger on THAT token: Type Page, Page ID 218209818226021, Expires Never**
+(any expiry time means the wrong token); (5) save it to `FACEBOOK_PAGE_TOKEN`; (6) run "Post to
+Facebook" by hand with dry_run off to post this week.
 
 ## References
 
