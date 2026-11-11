@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** NOT STARTED · plan written 2026-11-11 · staging: — · prod: — · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults"), NOT STARTED · plan written 2026-11-11 · staging: — · prod: — · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164, F181 (filed while planning)
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -14,6 +14,11 @@ sessions, adds what the 2026-11-11 code read found, and records the blocker chec
   `import-staging.js`. No app, SQL or production write.
 - **S2 (one SQL migration, both environments, Rick-run):** a `BEFORE INSERT OR UPDATE` trigger on `preorders` that
   refuses a reservation whose listing, or (D1) whose customer, belongs to another shop. No app or script change.
+  Two sittings: **S2a staging**, **S2b production**.
+
+**Date gates apply to production steps only (Rick, 2026-11-11: "Reminders apply to Production scripts but staging
+can be managed outside these restrictions").** Staging work runs whenever it is ready. What waits for a date:
+merging S1 to the scripts repo's `main` (that changes the production `import.js`) and S2b.
 
 **Why the order matters** (§ 2e item 3, unchanged): with the trigger first, the importer's batched `POST` fails as a
 whole on any environment holding a second shop's matching rows, and the script prints "Auto-reserve batch failed"
@@ -40,16 +45,22 @@ edits the same files and is not started; it goes after G-I.
 
 ---
 
-## 2. Decisions (recommendations; Rick to answer before the session each one gates)
+## 2. Decisions (ANSWERED 2026-11-11, Rick: "Defaults", plus the production-only date rule above)
 
-| # | Question | Recommendation | Gates |
-|---|---|---|---|
-| D1 | Should the trigger also refuse a reservation whose **customer** belongs to another shop, not only one whose listing does? | **Yes.** The same unfiltered subscriptions read that produced F164's rows also produces this shape (another shop's subscriber matched against our listing, stamped with our tenant), and so does `claim-paper-customer` (§ 2.1). G-D's own method note says the sweep had to compare the owner's tenant too. The cost is one primary-key lookup per row and `user_id` in the column list. Without it, the trigger catches one of the two shapes the bug produces. **This extends § 2e's design**, which checked the listing only. | S2 |
-| D2 | When does S1 run? | **On or after Sat 2026-11-14, once Rick has read the Fri 2026-11-13 import's output (F180 V3).** That keeps F180's first real run on code changed only by F180. No urgency: production cannot misfire today. | S1 |
-| D3 | When does S2 run? | **On or after Sat 2026-11-21, after the first production weekly import on S1's code (expected Fri 2026-11-20) reads normal (§ 5).** Staging and production applied in the same sitting (see § 6.0 on why). | S2 |
-| D4 | `claim-paper-customer` checks neither account's shop (§ 2.1). File it? | **File it as F181, do not fix it in G-I.** D1's trigger closes only its `preorders` half. | none |
+| # | Question | Answer |
+|---|---|---|
+| D1 | Should the trigger also refuse a reservation whose **customer** belongs to another shop, not only one whose listing does? | **Yes.** The same unfiltered subscriptions read that produced F164's rows also produces this shape (another shop's subscriber matched against our listing, stamped with our tenant), and so does `claim-paper-customer` (§ 2.1, F181). G-D's own method note says the sweep had to compare the owner's tenant too. The cost is one primary-key lookup per row and `user_id` in the column list. **This extends § 2e's design**, which checked the listing only. |
+| D2 | When does S1 run? | **Now (staging is not date-gated).** Steps 1-6 (code, tests, the staging harness) run any day. **Step 7, the merge to scripts `main`, waits until Rick has read the Fri 2026-11-13 import's output (F180 V3)**, so F180's first real run uses code changed only by F180. If S1 finishes earlier, the branch is pushed and left unmerged, and the folder goes back to `main`. |
+| D3 | When does S2 run? | **S2a (staging) once S1's staging gates are green.** **S2b (production) on or after Sat 2026-11-21, after the first production weekly import on S1's merged code (expected Fri 2026-11-20) reads normal (§ 5).** |
+| D4 | `claim-paper-customer` checks neither account's shop (§ 2.1). File it? | **Filed as F181 (2026-11-11), not fixed in G-I.** D1's trigger closes only its `preorders` half. |
 
-### 2.1 Found while planning, NOT filed (Rick's call, D4)
+**One staging caution that follows from D2 + D3.** S2a can land on staging before S1 is merged, while scripts
+`main` still holds the old `import-staging.js`. A staging import run from `main` in that window could match another
+shop's rows and lose a whole auto-reserve batch to the trigger. So **until S1 is merged, run the § 2e interim
+queries before any staging import too** (on 2026-10-06 demoshop held catalog rows for 2026-09 only, so a
+current-month staging import cannot match them; re-read rather than assume).
+
+### 2.1 Found while planning: FILED as F181 (2026-11-11, D4)
 
 `supabase/functions/claim-paper-customer/index.ts` verifies the caller is an admin and reads the caller's tenant,
 then reads `paper_user_id` (`:71`) and `real_user_id` (`:97`) from `user_profiles` by id with the service role and **no tenant filter**.
@@ -71,9 +82,9 @@ The scripts folder is **the working tree Rick runs imports from**. Do the work o
 session on `main`, clean, and pushed (or, if anything fails, back on `main` with the branch left unmerged). Never
 leave the folder on a feature branch: the next import would run that branch's code.
 
-**Step 0.** `/preflight`. Ask Rick whether the Fri 2026-11-13 import ran and its output was read (D2); if not, stop.
-Confirm the scripts repo is on `main`, clean, equal to `origin/main` (HEAD `271e824` or later). Re-measure the unit
-baseline (`npm test`; 449/449 at F180, 2026-11-09). Branch: `feature/f164-import-tenant-reads`.
+**Step 0.** `/preflight`. Confirm the scripts repo is on `main`, clean, equal to `origin/main` (HEAD `271e824` or
+later). Re-measure the unit baseline (`npm test`; 449/449 at F180, 2026-11-09). Branch:
+`feature/f164-import-tenant-reads`. Steps 1-6 are staging-only and run any day (D2).
 
 **Step 1. Re-run the audit** in § 1 (grep every `rest/v1/` line in both scripts; diff the two lists). Expected:
 exactly the two unfiltered reads. Anything else is halt-and-report.
@@ -139,7 +150,11 @@ gitignored, requires `import-staging.js`; refuses to run unless `SUPABASE_URL` i
 `node import-staging.js <lunar> <prh> --no-write` on commit A then commit B: the auto-reserve counts must be equal
 (demoshop holds no current-month rows). If the files are not on disk, skip it and say so.
 
-**Step 7.** `node --check` both scripts; merge `--ff-only` to `main`; push; confirm on `origin/main`; tree on `main`, clean.
+**Step 7 (the production step, date-gated, D2).** `node --check` both scripts. **Ask Rick whether the Fri 2026-11-13
+import ran and its output was read.** If yes: merge `--ff-only` to `main`, push, confirm on `origin/main`. If not
+yet: push the feature branch to `origin` (a backup, the scripts repo is private), switch the folder back to `main`,
+and leave the merge as a later two-command step (`git merge --ff-only feature/f164-import-tenant-reads`, push).
+Either way the session ends with the folder on `main`, clean.
 
 **Step 8. Records** (doc-only commit to the app repo's `staging`, pushed): this doc's STATUS and § 9 log;
 `pre-phase-6-gate-closure.md` § 2e G-I line ("S1 done"); `technical-reference.md` § 13 F164 bullet; CLAUDE.md F164
@@ -178,12 +193,14 @@ open until S2). Paste the Step 5 block to the next session.
 
 ### 6.0 Before the session
 
-- Rick has answered D1. The SQL below is the D1 = yes form; for D1 = no, delete the second `IF` and `user_id` from
-  the column list, and probe 3.
-- **Create `docs/sql/2026-11-DD-f164-preorders-same-shop-trigger.sql` (the session's date) only at the start of the
-  sitting that applies it to both environments.** `/promote-prod` step 0 halts while any `docs/sql` file reads
-  `prod=PENDING`, so a file left pending would block unrelated promotions (store contact S2 / S3). STATUS line:
-  `-- STATUS: staging=PENDING | prod=PENDING`, updated after each apply.
+- D1 = yes (answered 2026-11-11), so the SQL below is final as written.
+- **Create `docs/sql/2026-11-DD-f164-preorders-same-shop-trigger.sql` (S2a's date) at the start of S2a**, STATUS
+  `-- STATUS: staging=PENDING | prod=PENDING`, then `staging=APPLIED <date> | prod=PENDING (deliberately: production
+  sitting S2b, on or after 2026-11-21)` after the staging apply. Between S2a and S2b, `/promote-prod` step 0 will
+  list this file on every promotion. **It is not a hard blocker** (step 0b greps the client for the identifiers a
+  migration adds, and no page or `app.js` references `preorders_require_same_tenant`), but each promotion in the
+  window must say out loud that it is deliberately staging-only until S2b. *(This bullet first said a pending file
+  "would block unrelated promotions"; the skill's own text makes it a stated decision, not a block.)*
 
 ### 6.1 Pre-checks (read-only, BOTH environments, before applying)
 
@@ -367,9 +384,10 @@ V3 = P1 again (still all 0). V4 = the probe in § 6.2 (`F164 PASS`).
 
 ### 6.5 S2 steps and gates
 
-**Staging first (the agent runs the REST checks; Rick runs the SQL in the SQL Editor):**
+**S2a, staging (any day once S1's staging gates are green; the agent runs the REST checks; Rick runs the SQL in the
+SQL Editor):**
 
-- **T0.** P1 and P2 on staging and production: PASS. The probe on staging reads `F164 FAIL 1` (seen red).
+- **T0.** P1 and P2 on staging: PASS. The probe on staging reads `F164 FAIL 1` (seen red).
 - **T1.** Rick applies § 6.3 on staging. V1, V2, V3 pass; the probe reads `F164 PASS: checks 1 2 3 4 passed`.
 - **T2. API boundary re-run** (G-D Step 4's shape; local harness `playwright/f164-trigger-verify.mjs`, staging only,
   throwaway users by password grant): a founding **customer** JWT: `POST preorders` with a demoshop `catalog_id`
@@ -389,8 +407,9 @@ V3 = P1 again (still all 0). V4 = the probe in § 6.2 (`F164 PASS`).
 - **T6.** Full Playwright suite on staging (no deploy is needed; the trigger is live the moment it applies): baseline
   **169 passed, 1 skipped** (2026-11-09). Read the log's own summary line, not an exit notice.
 
-**Then production, the same sitting:**
+**S2b, production (on or after Sat 2026-11-21, once § 5's read is normal; D3):**
 
+- **T6b.** P1 and P2 on production: PASS. The probe on production reads `F164 FAIL 1` (seen red; it writes nothing).
 - **T7.** Rick applies § 6.3 on production; pastes V1, V2, V3 and the probe (`F164 PASS`; `1 2 4` is expected if
   no second-shop customer exists, and is recorded as "owner check not exercised on production").
 - **T8. Write-smoke (Rick):** reserve one title on production through the app and cancel it. Every reserve now passes
@@ -425,10 +444,11 @@ F164; consumes none (F181 only if D4 files § 2.1).
 
 ## 8. Execution handoffs
 
-### 8.1 S1 (paste into a fresh CLI session on or after Sat 2026-11-14)
+### 8.1 S1 (paste into a fresh CLI session; any day, the merge in Step 7 is date-gated)
 
 ```
-SESSION: F164 guard G-I, S1 = the import's tenant reads (scripts repo). Plan: docs/f164-g-i-same-shop-guard.md.
+SESSION: F164 guard G-I, S1 = the import's tenant reads (scripts repo). Plan: docs/f164-g-i-same-shop-guard.md
+(APPROVED 2026-11-11, Rick: "Defaults"; date gates apply to production steps only).
 
 READ FIRST, from disk: CLAUDE.md (check `git branch --show-current` is staging first), the plan in full,
 docs/pre-phase-6-gate-closure.md § 2e, docs/technical-reference.md § 13 F164, then import.js,
@@ -436,13 +456,13 @@ import-staging.js and test/builders.test.mjs in the scripts repo
 (C:\Users\richa\OneDrive\Documents\(Work)\BookStop\catalogs\scripts, branch main).
 
 BEFORE ANY EDIT:
- - Ask Rick whether the Fri 2026-11-13 import ran and its output was read (plan D2). If not, stop.
  - Scripts repo on main, clean, == origin/main. Re-measure npm test (449/449 at F180).
  - Rick imports from this working tree: work on feature/f164-import-tenant-reads and END ON main.
 
 DO, in order: plan § 3 Steps 1-8 (audit; commit A export only; commit B the fix in both scripts; unit tests with
 negative control; staging harness phases C1, C2 on commit A then F1-F4 on commit B, teardown re-read 0;
-optional Step 6; merge --ff-only, push, confirm on origin/main; doc records).
+optional Step 6; Step 7 = ask Rick whether the Fri 2026-11-13 import was read: if yes merge --ff-only, push,
+confirm on origin/main; if not, push the branch unmerged and return the folder to main; doc records).
 GATES: plan § 3 "S1 gates", each with its own evidence. A failed gate is halt-and-report.
 NEVER: production writes or runs (Rick's next weekly import is the first, plan § 5), SQL, app code, the
 trigger (that is S2), G-G, claim-paper-customer.
@@ -451,30 +471,61 @@ Doc updates go doc-only to the app repo's staging branch, pushed.
 END: /wrap-up.
 ```
 
-### 8.2 S2 (paste into a fresh CLI session on or after Sat 2026-11-21)
+### 8.2 S2a, staging (paste into a fresh CLI session once S1's staging gates are green)
 
 ```
-SESSION: F164 guard G-I, S2 = the same-shop trigger on preorders (SQL, both environments, Rick-run).
-Plan: docs/f164-g-i-same-shop-guard.md § 6.
+SESSION: F164 guard G-I, S2a = the same-shop trigger on preorders, STAGING only (SQL Rick-run).
+Plan: docs/f164-g-i-same-shop-guard.md § 6 (D1 = yes, answered 2026-11-11).
 
 READ FIRST, from disk: CLAUDE.md (branch staging), the plan in full, docs/sql/f109-ordered-cancel-trigger.sql
-(the convention), docs/technical-reference.md § 7.1 and § 13 F164.
+(the convention), docs/technical-reference.md § 7.1 and § 13 F164 / F181.
 
 BEFORE ANY SQL:
- - Confirm S1 is DONE (plan STATUS) and that Rick read his first production import on S1's code (plan § 5).
- - Confirm Rick's D1 answer; if "no", use the plan's D1 = no form.
- - Confirm both applies happen this sitting (plan § 6.0); only then create the docs/sql file, STATUS PENDING/PENDING.
+ - Confirm S1's staging gates are green (plan § 9 log). If S1 is not yet merged, note plan § 2's staging
+   caution (interim queries before any staging import) in the session record.
+ - Create the docs/sql file per plan § 6.0, STATUS staging=PENDING | prod=PENDING.
 
-DO, in order: plan § 6.5 T0-T9. Rick runs every SQL block in the SQL Editor and pastes results; the agent runs the
-REST harnesses on staging only.
-GATES: § 6.5, each with its own evidence; the probe must be seen red (F164 FAIL 1) before it is seen green.
-NEVER: agent writes to production; any app, script or Edge Function change; fixing claim-paper-customer.
+DO, in order: plan § 6.5 S2a, T0-T6. Rick runs every SQL block in the SQL Editor and pastes results; the agent
+runs the REST harnesses on staging only.
+GATES: each with its own evidence; the probe must be seen red (F164 FAIL 1) before it is seen green.
+NEVER: anything on production; any app, script or Edge Function change; fixing claim-paper-customer (F181).
+END: STATUS staging=APPLIED <date> | prod=PENDING (deliberately, S2b); plan § 9 log; doc-only commit to
+staging, pushed; /wrap-up. F164 stays OPEN until S2b.
+```
+
+### 8.3 S2b, production (paste into a fresh CLI session on or after Sat 2026-11-21)
+
+```
+SESSION: F164 guard G-I, S2b = the same-shop trigger on PRODUCTION (SQL Rick-run; the agent never writes).
+Plan: docs/f164-g-i-same-shop-guard.md § 6.5 S2b.
+
+READ FIRST, from disk: CLAUDE.md (branch staging), the plan in full (§ 9 log for S1 and S2a), the docs/sql
+f164 file.
+
+BEFORE ANY SQL:
+ - Confirm S2a is APPLIED on staging and S1 is merged to scripts main.
+ - Confirm Rick read the first production import on S1's merged code (plan § 5) and it was normal.
+
+DO, in order: T6b (P1, P2, probe seen red), T7 (apply, V1-V3, probe green), T8 (Rick's write-smoke),
+T9 (the next production import, read later).
 ON A PRODUCTION FAILURE: Rick runs the § 6.3 rollback; stop and report.
-END: plan § 6.6 records, doc-only commit to staging, pushed; /wrap-up.
+END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to staging, pushed; /wrap-up.
 ```
 
 ---
 
 ## 9. Execution log
 
-*(empty: not started)*
+- **2026-11-11, planning session.** Plan written (`78242ac`). Rick: "Defaults" (D1 yes, F181 filed as `ad5a11d`),
+  plus "Reminders apply to Production scripts but staging can be managed outside these restrictions", so D2 / D3
+  now gate only the production steps.
+- **Gates scheduled (2026-11-11), production steps only, 8:00 AM ET (13:00 UTC; Eastern is on standard time):**
+  - Sat 2026-11-14: S1's merge to scripts `main` allowed once the Fri 11-13 import is read. Routine
+    `trig_01BYubBzX9uVvmCRvYWC9Z6m`; Google Calendar event `10r4rjgo2k38gglf3n015noca0`.
+  - Fri 2026-11-20: read Step 5 of that day's import (§ 5); retire the interim queries if clean. Routine
+    `trig_019SkmsYsRguzwMQdfP5BzGw`; calendar `8t7b5m6gmarmab0ettmn958n2o`.
+  - Sat 2026-11-21: S2b allowed if § 5 read normal and S2a is on staging. Routine
+    `trig_01SLUTLShf5fSCrQabDQAjHd`; calendar `hnfv1msur4o2n8uvm5k8e64e1c`.
+  - Each routine is one-shot, reminds only (PushNotification / Read / Grep / Glob), with every connector removed;
+    each calendar event has a popup at 8:00 and an email an hour before. Delete stale ones at
+    https://claude.ai/code/routines if the plan changes.
