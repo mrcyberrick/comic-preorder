@@ -1,6 +1,6 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-11-12 (added "A note on using the dashboard while an import runs"; a note, not a rule) · earlier: 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
@@ -837,6 +837,23 @@ Re-running is safe. Specifically:
 
 If a notification email errors, the catalog import still succeeded — re-run with the same files
 and answer the email prompt again.
+
+---
+
+## A note on using the dashboard while an import runs
+
+A note, not a rule. The script reads some tables 1,000 rows at a time, one request per page. If a
+reservation or the order record changes between two of those requests, one row can be read twice
+or missed. That is unlikely, and the harm is small: one wrong line in a printed report, one
+reservation missing its arrival label, or, in Run A only, one already-recorded code offered again
+at the "Confirming ... open orders" prompt (answer `n` if the dashboard already shows it ordered).
+
+Maintenance Mode does not fully prevent it. It only hides the customer pages when they load, it
+never blocks an admin, and the database does not enforce it. Run B runs with it off.
+
+So, while the script is running, it is best to avoid the dashboard's order and arrival actions
+(Mark Ordered, Rejected by supplier, Move reservations, Received) and not to run `check-dates.js` at the
+same time. It matters most during Run A's closing-cycle step, which reads the whole order record.
 
 ---
 
