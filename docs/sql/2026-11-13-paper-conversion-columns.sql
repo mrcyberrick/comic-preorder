@@ -3,9 +3,9 @@
 --         code that reads these columns merged (docs/customer-engagement-paper-to-app.md S1, "SQL
 --         sequencing"). Both pasted result rows read verdict 'OK - 2 nullable columns present, no
 --         default, authenticated can read them', authenticated_can_update_new_columns = true, and no
---         triggers on user_profiles. The own-profile UPDATE policy read live as documented in
---         technical-reference.md section 7.1 (row-level, USING auth.uid() = id), so a customer can
---         write these two columns on their OWN row; low stakes, not narrowed. Production's
+--         triggers on user_profiles. Whether a customer may write these two columns on their own row
+--         is the question the result row below was built to answer; the answer is recorded in the
+--         operator's local security notes (F182), and this file does not narrow it. Production's
 --         `admins manage tenant profiles` carries an explicit WITH CHECK, staging's does not
 --         (the benign divergence already recorded in section 13).
 -- (F105) /promote-prod step 0 matches prod=(APPLIED|N/A): while this reads PENDING it blocks every
@@ -31,13 +31,11 @@
 --   already covers every column), no grant change (the phone column was added the same way,
 --   2026-08-26, with none), no function, no data change.
 --
--- ONE THING TO READ FROM THE RESULT (the plan's "check at execution" item): the existing
---   `users update own profile` policy is documented as UPDATE where auth.uid() = id, with no column
---   restriction. If that is true, a customer can write these two columns on THEIR OWN row. The stakes
---   are low (it can only falsify their own conversion stamp and source), and it is NOT narrowed here.
---   The result row below prints the live UPDATE-capable policies, the triggers on the table and the
---   column-level UPDATE privilege, so the question is answered from the live database and not from
---   the doc's snapshot. (This file was written before that live read; the doc was the only source.)
+-- ONE THING TO READ FROM THE RESULT (the plan's "check at execution" item): whether a customer may
+--   write these two columns on their own row. The result row below prints the live UPDATE-capable
+--   policies, the triggers on the table and the column-level UPDATE privilege, so the question is
+--   answered from the live database and not from the doc's snapshot. It was answered on 2026-11-13;
+--   the answer is held in the operator's local security notes (F182), and nothing is narrowed here.
 -- ============================================================================
 
 BEGIN;
@@ -102,5 +100,5 @@ SELECT
 -- ── SMOKE ───────────────────────────────────────────────────────────────────
 -- Not runnable here: the Editor runs as postgres and bypasses RLS. Behavioural checks run as real
 -- signed-in users outside the Editor, from the local harness convert-paper-s1-verify.mjs: an admin
--- converts a paper customer and both columns read back; a customer's own-row write of the two
--- columns is tried and its result recorded in the plan's section 6.
+-- converts a paper customer and both columns read back. (A customer's own write of the two columns was
+-- also tried there; that result is held in the operator's local security notes, F182.)

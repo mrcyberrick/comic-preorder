@@ -7041,7 +7041,12 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Found** planning G-I, 2026-11-11 (`docs/f164-g-i-same-shop-guard.md` § 2.1), while listing every writer of `preorders.user_id`.
 - **Related:** **F164** (the same cross-shop shape; its trigger closes this function's `preorders` half), **F50** (this function's tenant-scoped PATCHes), **F126** / **F179** (the account-lifecycle functions that would share a fix pattern). Different from the unfiled note that a claim silently orphans data on a `user_id` overlap.
 
-Next free finding ID: **F182**.
+#### F182 — Reserved: security-sensitive, details held locally
+
+- **Status:** filed 2026-11-13 (Rick: "do both"). **OPEN: confirmed on staging by a live probe with a throwaway account; production was not probed.** A fix is drafted and not yet applied. Details, the measurement, the fix and its gate are in the operator's local-only security notes, not in this public repo (the F75 / F176 pattern). A sanitized past-tense entry replaces this placeholder once both environments are fixed.
+- **Scope:** an authorization question on a tenant-scoped table; found while building customer engagement S1 (`docs/customer-engagement-paper-to-app.md`), which does not depend on it.
+
+Next free finding ID: **F183**.
 
 ---
 

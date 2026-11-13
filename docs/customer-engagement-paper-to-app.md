@@ -110,7 +110,7 @@ The account they open already holds their reservations, subscriptions and histor
    `docs/sql/2026-11-xx-paper-conversion-columns.sql`: `user_profiles.converted_from_paper_at
    timestamptz NULL` and `user_profiles.signup_source text NULL`. No RLS change (covered by `admins
    manage tenant profiles`). Check at execution whether a customer's own-profile UPDATE policy lets
-   them write these two; if so, note it (low stakes) or narrow it.
+   them write these two, and record the answer (done 2026-11-13: see § 6 and F182).
 2. **New Edge Function `convert-paper-customer`** (admin only, in-body auth as in
    `create-paper-customer`; deploy `--no-verify-jwt`, stated explicitly per F93):
    - caller must be an admin; the paper profile is read **with the caller's `tenant_id` and
@@ -345,6 +345,73 @@ Local probe `convert-paper-s1-probe.mjs` (scripts repo playwright folder, never 
 **Not verified at this step:** a delivered email (that is step 10); the set-password page itself (the link was followed at the
 GoTrue level only, not through a browser); production (never touched).
 
+### S1, steps 3 to 8: SQL applied, function and screens built and verified on STAGING (2026-11-13)
+
+**Not promoted. Production has the two columns (Rick ran the SQL) and nothing else.** Code `5980dc5` on `staging`; docs
+`b5125f9`, `3469996`. **F182 was filed during this work** (security-sensitive, found by the check in step 3 below, not caused by S1's
+code; details held locally); **F183 is next free.**
+
+- **Step 3, SQL.** Rick ran `docs/sql/2026-11-13-paper-conversion-columns.sql` on staging, then production, the same sitting.
+  Both pasted rows read `OK - 2 nullable columns present, no default, authenticated can read them`,
+  `authenticated_can_update_new_columns = true`, no triggers on `user_profiles`. STATUS now `staging=APPLIED | prod=APPLIED`.
+  The result row also printed the live policies and privileges on `user_profiles`, which answered the plan's "can a customer write
+  these two columns?" check. **That answer led to F182, which is security-sensitive: its details are held in the operator's local
+  security notes, not in this repo.** Nothing about those two columns is narrowed by S1.
+- **Step 4, the function** `supabase/functions/convert-paper-customer/index.ts` (new; convert and resend modes). Built from the
+  probe above. Checks: the shared tenant-identity block hashes `5dfc44bc878611bb` in **six** files (the G-F gate's own method:
+  marker lines included, trailing newline, LF; a one-byte change to the new copy hashes differently). **`deno` is not installed
+  here**, so TypeScript was checked with Node's own TS parser plus a compile of the stripped output (both a JS-grammar and a
+  TS-grammar break are caught); that is a syntax check, **not** a Deno type-check.
+- **Step 5, deploy** to staging only (`--project-ref puoaiyezsreowpwxzxhj --no-verify-jwt`; Docker not running, so the CLI bundled
+  through the API). Before: `NOT_FOUND`. After: an unauthenticated POST returns the function's own `{"error":"Unauthorized"}`; a
+  garbage bearer token also reaches the function, while `approve-customer` (known `verify_jwt` ON) answers the same token with the
+  gateway's `UNAUTHORIZED_INVALID_JWT_FORMAT`, so `verify_jwt` is OFF by behaviour. **Downloaded source == the working-tree file
+  byte for byte (`32ab0d60a596847b`) and == the committed blob modulo CRLF** (Windows checks out CRLF, git stores LF).
+- **Step 6, screens.** `app.js` `PaperCustomers.convert()` and `resendInvite()`; `admin.html` Invite… button and modal on paper rows,
+  Resend invite on a converted account that has never signed in (read through its **own non-fatal query** of
+  `converted_from_paper_at`, so a missing column can never break the Accounts tab), and the Claim UUID `prompt()` replaced by a
+  pick-list of the shop's own non-paper, non-admin accounts (D2). An Invite on an address that belongs to a same-shop account
+  names it and offers "Merge into <name>…", which opens the picker with it chosen. Syntax of `app.js` and every inline script
+  checked, with a control that fails; nav and footer blocks unchanged against `HEAD` on all seven pages.
+- **Step 7, deploy.** `ff-only` merge, pushed; served `admin.html` and `app.js` equal the commit on **five consecutive polls** of
+  the plain URLs (poll 1 still served the old bytes, `796e093f…` and `85b25bbb…`, the hashes recorded for production).
+- **Step 8, evidence.**
+  - **Logic harness** `convert-paper-s1-logic.mjs` (fake `Deno` and fake network; local-only): **64/64**, and **six deliberate
+    source breakages each turned the intended assertion red**: no LIKE escaping, no compensation, events attributed to the
+    customer, the link logged, no shop filter on the paper read, no same-shop test. It covers what cannot be provoked live: a
+    profile update failing after the auth email changed (the auth email is put back), Resend failing or its key missing
+    (`invite_sent: false`, the account stays converted, no `invite_sent` event), the sign-in link failing, nothing token-shaped
+    in the logs, no founding-tenant fallback.
+  - **Live harness** `convert-paper-s1-verify.mjs` against the deployed function and the deployed `admin.html`, throwaway users in
+    `demoshop` and the founding shop: **81/81**, teardown re-read 0 profiles, 0 auth users, 0 events, 0 rows (12 users). It
+    covers: 401, 403 (a signed-in customer), 400s, **404 for another shop's paper customer (who is left untouched), an app
+    customer and an unknown id**; **409 for a same-shop account (case-insensitive, with its id and name), another shop's
+    account (no name leaked) and an auth user with no profile (GoTrue's live 500/23505 recognised)**; an underscore in the typed
+    address is not a wildcard; the conversion keeping the **same auth user id** and the **reservation, subscription and history
+    counts unchanged**, `is_paper` false, the stamp set, both events with the right `tenant_id`; the converted customer signing
+    in with the new address and seeing their own 2 reservations and subscription through RLS while the old address no longer
+    works; resend (200, and 404 or 403 where it must); the Invite and Claim modals in a real browser including the confirm text,
+    the same-shop duplicate leading to the merge, a real claim through the new picker, no `prompt()` anywhere, and a 390 px
+    fit check. **Every address that was actually emailed is a Resend test inbox (`delivered+label@resend.dev`)**, so no
+    made-up domain reached the sender (F152).
+  - **"Seen red" for the live harness, stated exactly:** the state assertions (14) are each shown able to fail by corrupting an
+    in-memory snapshot (`SELFTEST=1`, no network); every status-code assertion is paired in the same run with the opposite case
+    returning 200; the function's own logic is the six mutations above. **No assertion was seen red against the DEPLOYED function
+    with a deliberately broken build**, and I did not deploy a broken copy.
+  - **Three runs, two of my own errors, both in the harness, neither a product defect:** run 1 passed all 52 API checks and then
+    stopped because my first click on the Accounts tab landed before the page's own init had wired the tab (fixed by clicking
+    until the panel shows); run 2 failed two of my expectations (a customer I had signed in myself cannot be "never signed in",
+    and a customer converted earlier is rightly in the Claim picker), both rewritten to read the truth from the database.
+  - A scan of all 989 auth users and all profiles for anything the harnesses made found none left (989 before and after).
+- **Decision beyond the plan, for Rick to overrule:** the two events are attributed to the **admin who acted**, with the
+  customer's id in `metadata.target_user_id`. Attributed to the customer, Analytics (which tallies every non-promo event per
+  user) and Accounts' "Last seen" (the newest event) would show a just-invited customer as active today.
+- **Observed, deliberately not fixed or filed:** the sign-in page's recovery landing reads "Reset your password" for someone who
+  never had one (`index.html`, out of scope; same as F153's admin invite); the identity block's own comment still says "five
+  copies" in all six files (fixing it means editing five other functions); a debug load of `admin.html` as a fresh throwaway admin
+  printed three HTTP 406 console errors (not investigated; the cause was not this change's new query, which does not use
+  `.single()`, and the full harness run recorded no uncaught page errors).
+
 ## 7. Not verified when this plan was written
 
 - Production and staging were not read: the number of paper customers, how many hold open
@@ -354,6 +421,6 @@ GoTrue level only, not through a browser); production (never touched).
 - Whether `pg_cron` and `pg_net` are available and enabled on the production project (S3b).
 - How `auto_fulfill_past_on_sale()` matches a reservation to a shipment row; S3b must read it, not
   assume it.
-- Whether a customer can write the two new profile columns through their own-profile policy.
+- Whether a customer can write the two new profile columns through their own-profile policy. *(Answered 2026-11-13; see § 6 and F182.)*
 - Whether any admin view drops pending accounts' reservations (S5's check).
 - The QR library choice, its size and its licence.
