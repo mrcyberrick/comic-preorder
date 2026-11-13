@@ -7043,8 +7043,8 @@ reasoning — only the disposition changed, not the diagnosis.
 
 #### F182 — Reserved: security-sensitive, details held locally
 
-- **Status:** filed 2026-11-13 (Rick: "do both"). **OPEN: confirmed on staging by a live probe with a throwaway account; production was not probed.** A fix is drafted and not yet applied. Details, the measurement, the fix and its gate are in the operator's local-only security notes, not in this public repo (the F75 / F176 pattern). A sanitized past-tense entry replaces this placeholder once both environments are fixed.
-- **Scope:** an authorization question on a tenant-scoped table; found while building customer engagement S1 (`docs/customer-engagement-paper-to-app.md`), which does not depend on it.
+- **Status:** filed 2026-11-13. **RESOLVED on BOTH environments 2026-11-13:** confirmed by a live probe with a throwaway account on staging (before and after a Rick-run SQL fix), then fixed the same way on production and confirmed there too by a second live probe, scoped to the tenant that holds no real customer data. No client or Edge Function change. Details are in the operator's local-only security notes, not in this public repo (the F75 pattern).
+- **Scope:** an authorization question on a tenant-scoped table; no cross-tenant read or write is involved. Found while building customer engagement S1 (`docs/customer-engagement-paper-to-app.md`), which does not depend on it.
 
 Next free finding ID: **F183**.
 
