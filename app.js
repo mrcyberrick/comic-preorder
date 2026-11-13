@@ -2296,6 +2296,9 @@ const Users = {
 //      that reassigns all preorders/subscriptions and deletes the paper user.
 //   4. The notify-customers Edge Function must skip emails ending in
 //      '@paper.pulllist.local'.
+// A paper customer can later go digital two ways: convert() gives the SAME account
+// a real email and a sign-in link (the account, its reservations and its history
+// stay put); claim() merges it into a second account the customer already made.
 const PaperCustomers = {
   // Generate a unique placeholder email from a display name.
   // The timestamp suffix prevents collisions between customers with the same name.
@@ -2353,6 +2356,55 @@ const PaperCustomers = {
     const result = await resp.json().catch(() => ({}));
     if (!resp.ok) return { error: { message: result.error || `HTTP ${resp.status}` } };
     return { data: result };
+  },
+
+  // Turn a paper customer into an app customer IN PLACE and email them a sign-in
+  // link (customer engagement S1, docs/customer-engagement-paper-to-app.md).
+  // Calls the convert-paper-customer Edge Function, which changes the auth email
+  // and the profile on the SAME user id, so reservations, subscriptions and history
+  // stay exactly where they are (unlike claim(), which moves rows and deletes).
+  //   ok:    { data: { success, user_id, email, invite_sent } }
+  //   error: { error: { message, status, sameShop, existing } }
+  // A 409 means the address already belongs to an account: `sameShop` says whether
+  // it is one of THIS shop's (then `existing` = { id, full_name }, so the page can
+  // offer Claim); an account in another shop is never named.
+  async convert(paperUserId, { email, phone } = {}, sessionToken) {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/convert-paper-customer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${sessionToken}`,
+        'apikey':        SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ paper_user_id: paperUserId, email, phone: phone || undefined }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return { error: {
+        message: result.error || `HTTP ${resp.status}`,
+        status: resp.status,
+        sameShop: !!result.same_shop,
+        existing: result.existing || null,
+      } };
+    }
+    return { data: result };
+  },
+
+  // Send the sign-in link again to a customer this flow already converted.
+  // Used when the first email failed (invite_sent false) or never arrived.
+  async resendInvite(userId, sessionToken) {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/convert-paper-customer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${sessionToken}`,
+        'apikey':        SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ resend: true, user_id: userId }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { error: { message: result.error || `HTTP ${resp.status}`, status: resp.status } };
+    return { data: result }; // { success, user_id, invite_sent }
   },
 };
 
