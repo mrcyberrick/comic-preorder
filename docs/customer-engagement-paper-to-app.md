@@ -1,6 +1,6 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** NOT STARTED · planned 2026-11-13 · staging=— · prod=— · PR=— · findings=F89 (closes at S2); no new ID consumed (F182 next free)
+**STATUS:** NOT STARTED · planned 2026-11-13, decisions D1-D9 answered the same day · staging=— · prod=— · PR=— · findings=F89 (closes at S2); no new ID consumed (F182 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -54,14 +54,19 @@ code on the bag slip, **#13** QR codes on the store poster and shelf tags for ne
 - **`rjbookstop.com/news`** (fetched 2026-11-13): a "Pull List" nav link to `rjbookstop.pulllist.app`,
   a newsletter sign-up form, and the weekly feed loaded by script. No change planned here.
 
-## 3. Decisions (defaults in bold; Rick can answer "defaults")
+## 3. Decisions — ANSWERED 2026-11-13
 
-| # | Question | Default |
+Rick: "Defaults - except #5, omit the email everyone button and allow individual's email buttons to
+be active in past weeks. Include a Tuesday schedule." So D1-D3 and D5-D9 stand as written and **D4 is
+replaced** (the row below shows the new answer; the first draft's default was "an Email everyone
+button first, a Tuesday schedule after two clean weeks").
+
+| # | Question | Answer |
 |---|---|---|
 | D1 | What state is a paper customer in after the admin invites them (S1)? | **Active.** The admin typed the address at the counter, same trust as today's Invite. |
 | D2 | The typed email already belongs to an account in this shop | **Offer the existing Claim, with a pick-list of the shop's accounts in place of the UUID prompt** (client-only change in S1). |
 | D3 | `claim-paper-customer` is redeployed in S2 to log its event. Fix F181 in the same deploy? | **Yes, as its own commit** (read both profiles with the caller's shop, tenant-filter the deletes). |
-| D4 | How does the weekly email go out (S3)? | **First a "Email everyone" button on the Bagging list ("your books are in"). After two clean weeks, add a Tuesday schedule limited to titles on that week's invoice.** |
+| D4 | How does the weekly email go out (S3)? | **A Tuesday schedule, limited to titles on that week's invoice. No "Email everyone" button. The existing per-customer Email button on the Bagging list also works for past weeks** (Rick, 2026-11-13). |
 | D5 | Can a customer turn the weekly email off? | **Yes: a toggle on My List, on by default for everyone.** No one-click unsubscribe link (that needs a public endpoint). |
 | D6 | A customer claims their list from a bag slip (S5). Active at once, or approved first? | **Pending, then the admin approves** in the existing Pending Accounts panel. A slip can be picked up by someone else. |
 | D7 | How long does a slip code last? | **60 days, one live code per paper customer, reprinted on each slip until used.** |
@@ -157,32 +162,73 @@ once after the push. Rick reads one delivered invite (headers only, link replace
   numbers reconcile against a service-role count; spec 18 still green.
 - F90 (monthly rollup) stays open; the column covers conversions only.
 
-### S3. "Your books this week" for everyone (#5)
+### S3. "Your books this week", sent every Tuesday (#5)
 
-- **New Edge Function `notify-arrivals`**, modelled on `notify-customers` (admin JWT or service role).
-  For the Mon-Sun week of a given date: open reservations whose `on_sale_date` is in the week, grouped
-  by customer. Skips paper, pending and paused accounts and anyone who turned it off. Titles that will
-  not arrive (withdrawn, supplier-rejected, marked didn't arrive, damaged or can't get it) go in a
-  short "Not arriving this week" note, the same split the Bagging list makes. One email per customer,
-  reusing `send-my-list`'s table, with a **See my list** link to `mylist.html`.
+Two parts (D4): a scheduled Tuesday email, and the existing per-customer Email button opened up to
+past weeks. There is no send-to-everyone button.
+
+**S3a. The per-customer Email button works for past weeks** (`admin.html` only)
+
+- Today the button is disabled unless the Bagging list shows the current week (`admin.html:4821`,
+  `:5067`). Change: enabled for the current week and any past week; still disabled for a future week,
+  with the tooltip saying why.
+- The confirm names the week ("Send <name> their list for the week of <dates>?"), so a past-week send
+  is never mistaken for this week's.
+- It keeps calling `send-my-list` in week mode, unchanged. **Known limits of that email, not changed
+  here:** it lists every title the customer reserved for that week, including ones already collected
+  (`fulfilled` cannot tell "collected" from "closed by the import"), and it does not leave out titles
+  marked as not arriving. The confirm says so in one line.
+- Local spec 06 asserts the button is visible and enabled on the current week (lines 61-62); nothing
+  asserts the disabled state. Add one check each for a past week (enabled) and a future week (disabled).
+
+**S3b. The Tuesday schedule**
+
+- **New Edge Function `notify-arrivals`** (deploy `--no-verify-jwt`; the caller must present a
+  dedicated `ARRIVALS_CRON_SECRET` header or be a signed-in admin, in which case it runs for that
+  admin's shop only). For the Mon-Sun week containing the run date, per shop:
+  - **only titles on that week's invoice:** open reservations whose title has a `weekly_shipment` row
+    in the week, matched the way `auto_fulfill_past_on_sale()` matches (read
+    `docs/sql/auto_fulfill_past_on_sale.sql` and reuse its three keys). Wording: "on this week's
+    shipment, ready from Wednesday";
+  - **a shop with no `weekly_shipment` rows for the week gets nothing sent**, and the response says so
+    (the shipment import has not run; an email built from dates alone would repeat F115's false
+    "it's here");
+  - skips paper, pending and paused accounts, customers who turned it off, and customers with nothing
+    on the invoice;
+  - titles the customer reserved for the week that will not arrive (withdrawn, supplier-rejected,
+    marked didn't arrive, damaged or can't get it) go in a short "Not arriving this week" note;
+  - one email per customer through Resend, reusing `send-my-list`'s table, with a **See my list** link
+    to `mylist.html` and a line saying where to turn the email off;
+  - `dry_run: true` returns who would be emailed and with how many titles, and sends nothing.
 - **No double sends:** new table `arrival_notices (tenant_id, user_id, week_start, sent_at)`, unique
-  on the first three; a second run sends only to customers not yet sent. Admin-read only.
+  on the first three; a second run in the same week sends only to customers not yet sent. Admin-read
+  only.
 - **Opt-out (D5):** `user_profiles.email_arrivals boolean NOT NULL DEFAULT true`, a toggle on My List
-  beside Email My List, and a line in the email saying where to turn it off. Read fail-open in its own
-  small query so a missing column never breaks My List.
-- **S3a, the button (D4):** "Email everyone whose books are in" on the Bagging list, current week
-  only, with a confirm that states the count. Result toast: sent, skipped, failed.
-- **S3b, the schedule (D4, after two clean weeks of S3a):** a Tuesday run that includes only titles
-  with a `weekly_shipment` row for that week, worded "on this week's shipment". Trigger is a step in
-  the `weekly-pull-feed` Tuesday workflow or `pg_cron`; decide at S3b. One run per shop.
+  beside Email My List. Read fail-open in its own small query so a missing column never breaks My List.
+- **The trigger: Tuesday 15:00 UTC (10 or 11 AM Eastern), production only.** Recommended: `pg_cron`
+  with `pg_net` inside the production Supabase project, one job that posts to `notify-arrivals` with
+  the secret header and covers every shop in one run. **Neither extension has been used in this
+  project; confirm both are available on the free plan and enabled before building on them.**
+  Fallback: a scheduled GitHub Actions workflow holding the secret (GitHub's cron has started up to
+  3h20m late here, which is acceptable for this email).
+- **Staging gets the function but never the schedule.** Staging accounts are test fixtures with
+  made-up addresses; a weekly send there would bounce and hurt the `pulllist.app` sender (F152).
+  Staging is exercised by hand, with `dry_run` and with Resend stubbed.
 - **Limits:** Resend's free tier is 100 emails a day and the function sends one request per customer
-  (F148). The function refuses to start above 90 recipients and says why.
+  (F148). The function refuses to start above 90 recipients across all shops and says why.
 - **Also in this step:** `privacy.html:42` gains "and a weekly note when your reserved books arrive".
-- **SQL** (`docs/sql/`, staging then production, before the code): the column and the table.
-- **Gates:** harness with three throwaway customers (one with arrivals, one without, one opted out)
-  and one unavailable title: exactly one email request, the right titles, the unavailable title in the
-  note; second run sends 0; paper and paused skipped; Resend stubbed for counts, then one real send
-  read by Rick.
+- **SQL** (`docs/sql/`, staging then production, before the code): the column, the table, and (production
+  only, last) the cron job. The cron statement goes in its own file so step 0 of `/promote-prod` is not
+  blocked by a staging `N/A`.
+- **Gates:** harness on staging with four throwaway customers (titles on the invoice; reserved but not
+  on the invoice; opted out; paused) and one unavailable title: `dry_run` names exactly the first
+  customer; the real call makes exactly one email request with the right titles and the unavailable
+  one in the note; a second run sends 0; a week with no shipment rows sends 0 and says why; a call
+  with no secret and no admin session is refused. Then on production: one `dry_run` read by Rick
+  before the first Tuesday, and the first scheduled run read from the function's response and one
+  delivered email (headers only).
+- **Two weeks after the first scheduled send:** compare Visits on Tuesday and Wednesday with the two
+  weeks before (Analytics), and record it in § 6.
 
 ### S4. QR on the store poster, shelf tags and Print Catalog (#13)
 
@@ -250,6 +296,9 @@ Paper customers only. Needs S1 (conversion) and S4 (QR library).
   reservations, and the newsletter list size are unknown until S0.
 - The admin update-user call and the `recovery` link for a converted account were not tried.
 - The poster's bare `pulllist.app` leading to a page with no sign-up was read from code only.
+- Whether `pg_cron` and `pg_net` are available and enabled on the production project (S3b).
+- How `auto_fulfill_past_on_sale()` matches a reservation to a shipment row; S3b must read it, not
+  assume it.
 - Whether a customer can write the two new profile columns through their own-profile policy.
 - Whether any admin view drops pending accounts' reservations (S5's check).
 - The QR library choice, its size and its licence.
