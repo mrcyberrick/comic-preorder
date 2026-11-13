@@ -308,6 +308,43 @@ Paper customers only. Needs S1 (conversion) and S4 (QR library).
 
 *(S0 output goes here, then one line per step as it ships.)*
 
+### S1, gated step 1: the two GoTrue calls, tried live on staging (2026-11-13)
+
+Local probe `convert-paper-s1-probe.mjs` (scripts repo playwright folder, never committed), staging only
+(`puoaiyezsreowpwxzxhj`), throwaway users in the `demoshop` shop. Nothing secret is printed: tokens,
+`hashed_token`, `email_otp` and `action_link` are replaced by markers. **Final run 36 passed, 0 failed.**
+
+| Call | What came back |
+|---|---|
+| `PUT /auth/v1/admin/users/<id>` body `{ email, email_confirm: true }` on a paper user | **200.** Same `id`; `email` is the new address; `email_confirmed_at` set; no pending `new_email`; `user_metadata.full_name` kept. A fresh `GET` agrees. |
+| `POST /auth/v1/admin/generate_link` body `{ type: 'recovery', email: <new>, redirect_to }` | **200**, same user id, `verification_type: 'recovery'`, an `action_link` of the form `<project>/auth/v1/verify?token=…&type=recovery&redirect_to=…`. Following it once (no redirect) gave **303** to the redirect URL with a session in the fragment (`access_token`, `refresh_token`, `type=recovery`). |
+| the same link with `redirect_to = https://staging.pulllist.pages.dev/index.html` | **Lands on `/index.html`** (not GoTrue's Site URL), so the function's own redirect target is on the allow-list. Staging's `APP_BASE_URL` secret digest equals `sha256("https://staging.pulllist.pages.dev")`. |
+| **email already taken:** `PUT` the same user's email to another user's address | **HTTP 500**, body `{ code: "23505", message: "duplicate key value violates unique constraint \"users_email_partial_key\"", detail }`. The user is left unchanged. The same address **upper-cased** is refused the same way, so uniqueness is case-insensitive. |
+
+**What this changed in the build (S1 item 2):**
+
+1. **My first guess was wrong, and the first probe run failed on it.** I asserted a 4xx, expecting F153's `422 email_exists`.
+   The real answer is a 500 with a Postgres code. The function therefore must not key on a 4xx or on `error_code`: it
+   recognises `code === '23505'` or a message naming `users_email_partial_key` / "duplicate" as "email taken" (409), and
+   treats any other failure as a real error. A second, earlier check looks for the address in `user_profiles` (case-insensitive,
+   wildcards escaped) so the same-shop case can return the existing account's id and name for D2; an account in another shop
+   is answered with a bare 409 and no name.
+2. **The change is atomic for the user.** A refused update leaves the auth user as it was (read back), so the function can
+   change the auth email first and the profile second.
+3. **The profile copy does not move by itself** (F25: no trigger). The profile still read the paper address after the auth
+   change, so the function must write `user_profiles.email` itself.
+4. **`auth.identities` keeps the old address.** After the update `identities[].identity_data.email` still held the paper
+   placeholder. It does not break sign-in: with the **new** address a magic link gave a session and a password grant returned
+   200 for the same user id; with the **old** placeholder the password grant was refused. Not verified: anything else that reads
+   `identity_data.email` (this app uses only email-and-password and magic links).
+5. **Trap, not used here:** a `magiclink` request for an address that has no user **creates** one. The probe's first full run
+   leaked such a user (the old placeholder address); found by a scan of all 990 auth users, classified by its `probe.paper.<stamp>`
+   name and this run's stamp, deleted, fresh read 404. The probe now deletes it itself (re-run: 989 users before and after).
+   The function must only ever use `recovery` for an existing user.
+
+**Not verified at this step:** a delivered email (that is step 10); the set-password page itself (the link was followed at the
+GoTrue level only, not through a browser); production (never touched).
+
 ## 7. Not verified when this plan was written
 
 - Production and staging were not read: the number of paper customers, how many hold open
