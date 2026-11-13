@@ -147,6 +147,23 @@ once after the push. Rick reads one delivered invite (headers only, link replace
 
 **Tell the counter staff:** the invite may land in spam for Outlook addresses (F152).
 
+**SQL sequencing:** the two columns are nullable and nothing reads them until this step's code, so
+Rick applies the file on staging **and production** in the same sitting, before the code merges. The
+file is then never left `prod=PENDING`, which would block every other `/promote-prod` at step 0.
+
+**S1 completion criteria**
+
+- [ ] The live staging check of the admin update-user call and the `recovery` link is recorded in § 6
+- [ ] `docs/sql/` file for the two columns written, with a verdict query whose output differs when it has failed
+- [ ] SQL applied by Rick on staging and on production; STATUS line reads `APPLIED` for both
+- [ ] `convert-paper-customer` deployed to staging with `--no-verify-jwt`; deployed source downloaded and hashed equal to the commit
+- [ ] `PaperCustomers.convert` in `app.js`; Invite… button and modal in `admin.html`; Claim uses a pick-list (D2)
+- [ ] Harness gates green on the deployed staging bytes, each new assertion seen red once, teardown re-read 0
+- [ ] Full Playwright suite run once after the push; its own `N passed` line recorded
+- [ ] Rick has read one delivered invite (headers only) and used the button once on staging
+- [ ] § 6 of this plan, the STATUS line and `CLAUDE.md` § Current Migration Phase updated
+- [ ] Production: NOT part of S1's session. It needs Rick's `/promote-prod`, then the function deployed to production from a worktree of `origin/main`
+
 ### S2. Measure it (#4; closes F89)
 
 - **`signup_source`:** the sign-in page keeps a `?ref=` value (allowlist: `poster`, `shelf`, `slip`,
@@ -177,7 +194,8 @@ past weeks. There is no send-to-everyone button.
 - It keeps calling `send-my-list` in week mode, unchanged. **Known limits of that email, not changed
   here:** it lists every title the customer reserved for that week, including ones already collected
   (`fulfilled` cannot tell "collected" from "closed by the import"), and it does not leave out titles
-  marked as not arriving. The confirm says so in one line.
+  marked as not arriving. The confirm says so in one line. **Rick, 2026-11-13: "Past-week button can
+  reuse email for now."**
 - Local spec 06 asserts the button is visible and enabled on the current week (lines 61-62); nothing
   asserts the disabled state. Add one check each for a past week (enabled) and a future week (disabled).
 
