@@ -1,8 +1,13 @@
--- STATUS: staging=PENDING | prod=PENDING
---         Prepared 2026-11-13, NOT yet run on either environment. Rick runs it on STAGING and on
---         PRODUCTION in the same sitting, before any code that reads these columns merges
---         (docs/customer-engagement-paper-to-app.md S1, "SQL sequencing"). Update this line the
---         moment it is run, with the REAL state and no qualifier the regex cannot see.
+-- STATUS: staging=APPLIED 2026-11-13 | prod=APPLIED 2026-11-13
+--         Applied by Rick on STAGING and then PRODUCTION in the same sitting, 2026-11-13, before any
+--         code that reads these columns merged (docs/customer-engagement-paper-to-app.md S1, "SQL
+--         sequencing"). Both pasted result rows read verdict 'OK - 2 nullable columns present, no
+--         default, authenticated can read them', authenticated_can_update_new_columns = true, and no
+--         triggers on user_profiles. The own-profile UPDATE policy read live as documented in
+--         technical-reference.md section 7.1 (row-level, USING auth.uid() = id), so a customer can
+--         write these two columns on their OWN row; low stakes, not narrowed. Production's
+--         `admins manage tenant profiles` carries an explicit WITH CHECK, staging's does not
+--         (the benign divergence already recorded in section 13).
 -- (F105) /promote-prod step 0 matches prod=(APPLIED|N/A): while this reads PENDING it blocks every
 -- production promotion, so do not leave it that way.
 -- ============================================================================
