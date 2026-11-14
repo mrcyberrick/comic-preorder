@@ -6,11 +6,16 @@ staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`
 (the Email button works for a past week) and S3b (the Tuesday notify-arrivals email + opt-out, SQL applied on both
 environments ahead of the code, `notify-arrivals` + the three other touched Edge Functions deployed to staging then
 production) all built, verified end to end on staging, and promoted to production together **2026-11-14 (PR #187,
-merge `cd10a2d`)**. **Only S3b's cron remains**: `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own
-`pg_cron`/`pg_net` pre-check (genuinely unverified on this project), the cron itself, and Rick's own `dry_run` on
-production before the first Tuesday · staging=S1 complete 2026-11-13, S2 complete 2026-11-14, S3a complete 2026-11-14,
-S3b complete 2026-11-14 · prod=S1 complete 2026-11-14; S2+S3a+S3b's client code complete 2026-11-14 (PR #187); S3b's
-cron not started · PR=#186 (S1), #187 (S2+S3a+S3b) · findings=F89 (RESOLVED on both environments 2026-11-14, S2),
+merge `cd10a2d`)**. A same-day review of `notify-arrivals`'s eligibility logic (Rick: confirm it only emails when
+preorders are expected, the customer has a valid email, and paper accounts are excluded) surfaced a real gap — a
+customer whose only match was unavailable was still emailed — fixed and promoted the same day
+**(PR #188, merge `2c17265`)**. **Only S3b's cron remains**: `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own
+`pg_cron`/`pg_net` pre-check (genuinely unverified on this project), setting `ARRIVALS_CRON_SECRET` on production, the
+cron itself, and Rick's own `dry_run` on production before the first Tuesday · staging=S1 complete 2026-11-13, S2
+complete 2026-11-14, S3a complete 2026-11-14, S3b complete 2026-11-14 · prod=S1 complete 2026-11-14; S2+S3a+S3b's
+client code complete 2026-11-14 (PR #187); the unavailable-only-skip refinement complete 2026-11-14 (PR #188); S3b's
+cron not started · PR=#186 (S1), #187 (S2+S3a+S3b), #188 (S3b refinement) · findings=F89 (RESOLVED on both
+environments 2026-11-14, S2),
 F181 (RESOLVED on both environments 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own
 scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building S1,
 unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free)
@@ -635,6 +640,23 @@ SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
   source. The My List toggle and `privacy.html` served byte-identical on both production hostnames. `notify-arrivals`
   is live and callable on production today (confirmed `verify_jwt` OFF by behaviour) but only via a signed-in admin's
   own session — `ARRIVALS_CRON_SECRET` is not yet set there, so the cron path cannot activate until it is.
+- **✅ BEHAVIOR REFINEMENT, PROMOTED 2026-11-14 (PR #188, merge `2c17265`): a customer whose only match is
+  unavailable is no longer emailed at all.** Rick's question, after reviewing the eligibility logic: confirm emails
+  only go out when preorders are actually expected AND the customer has a valid email AND paper accounts are
+  excluded. All three held, but reviewing it surfaced a real gap: a customer whose ONLY matching reservation this
+  week was withdrawn, rejected by the supplier, or otherwise marked unavailable was still emailed — correctly
+  classified by the digest RPC, but still included as a recipient, with an empty main table and just a "Not arriving
+  this week" note. Rick's direction: only email when there's an actual reason to come to the store. `recipients` now
+  requires at least one available title; a tenant where every matching customer falls into this case skips with its
+  own distinct reason ("nothing worth a trip"), separate from the "shipment import has not run" skip. **Gate harness
+  extended with two new cases** (a rejected-only customer on the founding tenant excluded from both `dry_run` and the
+  real send; a second tenant where the only matching customer is rejected-only skips with the new, distinct reason) —
+  **40/40, full teardown clean.** Deployed to staging then production the same day; `verify_jwt` re-confirmed OFF by
+  behaviour both times, artifact hash-equal to committed source. **Read-only spot-check of real production data: 0
+  matching rows for either real tenant this week (shipment hasn't landed yet), so this change currently has zero
+  real-world effect either way — informational only, not part of the verification.** No finding ID consumed (caught
+  and fixed before the cron exists and before `ARRIVALS_CRON_SECRET` is even set on production, so no real customer
+  was ever exposed to the old behaviour).
 - **Not yet done:** `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own pre-check (confirming `pg_cron`/`pg_net`
   availability; genuinely unverified on this project — stop and use the documented GitHub Actions fallback if either
   is unavailable), setting `ARRIVALS_CRON_SECRET` on production, the cron itself, Rick's own `dry_run` on production
