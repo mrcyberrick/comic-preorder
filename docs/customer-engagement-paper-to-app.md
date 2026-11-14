@@ -1,18 +1,21 @@
 # Customer engagement: paper customers to app users
 
 **STATUS:** IN PROGRESS (S1 COMPLETE BOTH ENVIRONMENTS; S2 COMPLETE ON STAGING, NOT YET PROMOTED; S3a COMPLETE ON STAGING,
-NOT YET PROMOTED; S3b COMPLETE ON STAGING — SQL applied, `notify-arrivals` deployed, 33/33 gates green — NOT YET STARTED
-ON PRODUCTION) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on staging
-2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and verified end to end on staging
-2026-11-14; S3a (the Email button works for a past week) built and verified end to end on staging 2026-11-14; S3b (the
-Tuesday notify-arrivals email + opt-out) built, its SQL applied on staging (both the main migration and a same-day
-null-safety fix the gate harness caught), `notify-arrivals` deployed to staging, and the plan's own Gates run 33/33 green
-— production SQL, cron pre-check/setup and Rick's pre-launch dry_run are still ahead · staging=S1 complete 2026-11-13, S2
-complete 2026-11-14, S3a complete 2026-11-14, S3b complete 2026-11-14 · prod=S1 complete 2026-11-14 (client merged +
-`convert-paper-customer` deployed, verified); S2/S3a/S3b NOT promoted · PR=#186 (S1 only; S2/S3a/S3b have no PR yet) ·
-findings=F89 (CLOSED on staging 2026-11-14, S2), F181 (CLOSED on staging 2026-11-14, S2 — found separately while planning
-G-I, not part of this plan's own scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day,
-found while building S1, unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free)
+NOT YET PROMOTED; S3b COMPLETE ON STAGING — SQL applied, `notify-arrivals` deployed, 33/33 gates green; **S3b's SQL (both
+the main migration and the null-safety fix) ALSO APPLIED ON PRODUCTION 2026-11-14**, ahead of any client-code promotion
+— client code (the Edge Function, the toggle), the cron and Rick's pre-launch dry_run are still ahead) · planned
+2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on staging 2026-11-13, promoted to
+production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and verified end to end on staging 2026-11-14; S3a (the Email
+button works for a past week) built and verified end to end on staging 2026-11-14; S3b (the Tuesday notify-arrivals email
++ opt-out) built, its SQL applied on BOTH environments (the main migration and a same-day null-safety fix the gate
+harness caught, both run on staging first then production), `notify-arrivals` deployed to staging only, and the plan's
+own Gates run 33/33 green there — client-code promotion, cron pre-check/setup and Rick's pre-launch dry_run are still
+ahead · staging=S1 complete 2026-11-13, S2 complete 2026-11-14, S3a complete 2026-11-14, S3b complete 2026-11-14 ·
+prod=S1 complete 2026-11-14 (client merged + `convert-paper-customer` deployed, verified); S3b's SQL applied 2026-11-14
+(client code not yet); S2/S3a NOT promoted · PR=#186 (S1 only; S2/S3a/S3b have no PR yet) · findings=F89 (CLOSED on
+staging 2026-11-14, S2), F181 (CLOSED on staging 2026-11-14, S2 — found separately while planning G-I, not part of this
+plan's own scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building
+S1, unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -610,11 +613,24 @@ SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
   skipped with the stated reason, not silently; the real call sends exactly 1 (Arlene), 0 failed, and the skip reason
   carries through to the real response too; `arrival_notices` gets exactly one row, for Arlene; a second identical real
   call sends 0 (no double send — the dedup excludes already-notified users from the plan entirely, `dry_run` included).
-- **Not yet done:** promotion to production — the SQL (same two files), `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s
-  own pre-check (confirming `pg_cron`/`pg_net` availability; genuinely unverified on this project — stop and use the
-  documented GitHub Actions fallback if either is unavailable), the cron itself, Rick's own `dry_run` on production
-  before the first Tuesday, reading back the first scheduled run's response and one delivered email (headers only), and
-  — two weeks after the first scheduled send — a Visits comparison against the two prior weeks (Analytics).
+- **✅ BOTH PRODUCTION SQL FILES APPLIED 2026-11-14, Rick, ahead of any client-code promotion** (safe sequencing — SQL
+  before anything that reads it, same discipline as every prior migration in this project). The main migration's verdict
+  matched exactly, with `tenants_here=comicstore,rjbookstop` confirming it ran on production, not staging. **That file's
+  own `arrivals_this_week_digest()` body is the unfixed one** (the null-safety fix was a separate follow-up file, never
+  folded back in), so production briefly carried the same NULL-vs-false bug staging had before its fix — caught before
+  asking for the verdict, not after, by reading the file's own RPC body text directly rather than assuming "applied"
+  meant "applied correctly." `docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql` ran on production the same day;
+  verdict `now_coalesced=true, rpc_anon_authenticated_grants=0`, matching staging's own verdict exactly. **Not
+  independently re-probed with throwaway production data** (deliberately — unlike the staging functional gates, this is
+  a pure function-source-text check with no environment-dependent data, and the underlying `CREATE OR REPLACE` is
+  byte-identical to what already passed full functional verification on staging), but the regex it relies on was
+  validated locally against both body shapes before it ever ran anywhere. Both files now read `prod=APPLIED 2026-11-14`.
+- **Not yet done:** promotion of the client code (`notify-arrivals`, the My List toggle, `privacy.html`) to production,
+  `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own pre-check (confirming `pg_cron`/`pg_net` availability;
+  genuinely unverified on this project — stop and use the documented GitHub Actions fallback if either is unavailable),
+  the cron itself, Rick's own `dry_run` on production before the first Tuesday, reading back the first scheduled run's
+  response and one delivered email (headers only), and — two weeks after the first scheduled send — a Visits comparison
+  against the two prior weeks (Analytics).
 
 **Finding-ID disposition, in words: no finding ID consumed.** The three-valued-logic defect was caught and fixed in the
 same build session, before any promotion and before any real customer could be exposed to it — the same disposition this

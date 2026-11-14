@@ -1,13 +1,11 @@
--- STATUS: staging=APPLIED 2026-11-14 | prod=PENDING
--- ⚠️ Originally written prod=N/A because notify-arrivals had not reached
--- production yet. That reasoning no longer holds: the main migration this
--- file corrects (2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql) was
--- applied to PRODUCTION on 2026-11-14, and that file's own RPC body is the
--- UNFIXED one (this file was never folded back into it — see that file's
--- own note). So production's arrivals_this_week_digest() has the same
--- NULL-vs-false bug staging had before this file ran there. Not yet
--- customer-visible (nothing on production calls the RPC — notify-arrivals
--- isn't deployed there), but run this file now, before it is.
+-- STATUS: staging=APPLIED 2026-11-14 | prod=APPLIED 2026-11-14
+-- Originally written prod=N/A because notify-arrivals had not reached
+-- production yet; that reasoning no longer held once the main migration
+-- (2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql, whose own RPC body
+-- is the unfixed one) landed there first. Ran on production the same day,
+-- verdict now_coalesced=true, rpc_anon_authenticated_grants=0 — matching
+-- staging's own verdict exactly, against the same corrected regex already
+-- validated (locally, against both body shapes) before it ran anywhere.
 -- ============================================================================
 -- Customer engagement S3b — same-day follow-up fix (docs/customer-engagement-paper-to-app.md § S3b).
 -- Prepared 2026-11-14, same day as the S3b migration this corrects. Operator:

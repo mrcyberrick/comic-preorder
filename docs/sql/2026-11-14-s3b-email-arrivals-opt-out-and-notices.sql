@@ -1,8 +1,8 @@
 -- STATUS: staging=APPLIED 2026-11-14 | prod=APPLIED 2026-11-14
 -- ⚠️ This file's own arrivals_this_week_digest() body has the is_unavailable
--- NULL-vs-false bug (see docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql).
--- Run that file on production too, right after this one — it was written
--- as a separate follow-up, not folded back in here, per this project's
+-- NULL-vs-false bug — see docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql,
+-- which is ALSO now APPLIED on both environments. It was written as a
+-- separate follow-up rather than folded back in here, per this project's
 -- convention of never retroactively editing an already-applied SQL file's
 -- historical record.
 -- ============================================================================

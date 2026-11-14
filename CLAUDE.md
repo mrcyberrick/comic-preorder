@@ -107,10 +107,19 @@ and writes nothing; a tenant with 0 shipment rows this week is skipped with the 
 call sends exactly 1, 0 failed, writes exactly 1 `arrival_notices` row; a second identical call sends 0 (no double
 send — the dedup excludes already-notified users from the plan entirely, `dry_run` included). FK-ordered teardown
 re-read 0 throughout. **Both SQL files APPLIED on staging 2026-11-14, confirmed live, not from their own verdict alone**
-(an independent throwaway-row probe against the deployed RPC, both before and after the null-safety fix). **Not yet
-done:** the production SQL (same two files), `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own pre-check
-(`pg_cron`/`pg_net` availability — genuinely unverified on this project; stop and use the documented GitHub Actions
-fallback if either is unavailable), the cron itself, Rick's own `dry_run` on production before the first Tuesday, and a
+(an independent throwaway-row probe against the deployed RPC, both before and after the null-safety fix). **✅ BOTH
+FILES ALSO APPLIED ON PRODUCTION 2026-11-14, Rick, ahead of any client-code promotion** (SQL first, before anything
+reads it — this project's standard sequencing). The main migration's verdict matched exactly
+(`tenants_here=comicstore,rjbookstop` confirmed it was production); **its own RPC body is the unfixed one** (the
+null-safety fix was a deliberate separate follow-up, never folded back in), so production briefly carried the same
+NULL-vs-false bug staging had — caught by reading the file's own text rather than assuming "applied" meant "applied
+correctly," before any further verdict was requested. The follow-up ran on production the same day, verdict matching
+staging's exactly; not re-probed with throwaway production data (a pure source-text check against an already
+functionally-verified `CREATE OR REPLACE`, unlike the data-dependent staging gates). **Not yet done:** promotion of
+`notify-arrivals`, the My List toggle and `privacy.html` to production, `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s
+own pre-check (`pg_cron`/`pg_net` availability — genuinely unverified on this project; stop and use the documented
+GitHub Actions fallback if either is unavailable), the cron itself, Rick's own `dry_run` on production before the first
+Tuesday, and a
 Visits comparison two weeks after the first scheduled send. **Finding-ID disposition, in words: No finding ID
 consumed** — both defects above were caught and fixed in the same build session, before any promotion and before any
 real customer was exposed to either. **F183 remains the next free finding ID.**
