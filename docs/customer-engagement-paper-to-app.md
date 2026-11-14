@@ -1,13 +1,17 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1 COMPLETE BOTH ENVIRONMENTS; S2 COMPLETE ON STAGING, NOT YET PROMOTED) · planned 2026-11-13,
-decisions D1-D9 answered the same day, S1 built and verified end to end on staging 2026-11-13, promoted to production
-2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and verified end to end on staging 2026-11-14 · staging=S1 complete
-2026-11-13, S2 complete 2026-11-14 · prod=S1 complete 2026-11-14 (client merged + `convert-paper-customer` deployed,
-verified); S2 NOT promoted · PR=#186 (S1 only; S2 has no PR yet) · findings=F89 (CLOSED on staging 2026-11-14, S2), F181
-(CLOSED on staging 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own scope, fixed here per
-D3), F182 (filed and RESOLVED on both environments the same day, found while building S1, unrelated to S1's own code); no
-new ID consumed for either S1 or S2 (F183 next free)
+**STATUS:** IN PROGRESS (S1 COMPLETE BOTH ENVIRONMENTS; S2 COMPLETE ON STAGING, NOT YET PROMOTED; S3a COMPLETE ON STAGING,
+NOT YET PROMOTED; S3b CODE WRITTEN, BLOCKED ON SQL) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built
+and verified end to end on staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and
+verified end to end on staging 2026-11-14; S3a (the Email button works for a past week) built and verified end to end on
+staging 2026-11-14; S3b (the Tuesday notify-arrivals email + opt-out) has its SQL, Edge Function and client toggle written
+and pushed to staging 2026-11-14 but NOT YET RUNNABLE — the companion SQL (two columns/tables/one RPC) needs Rick to run it
+on staging before the function can be deployed and tested · staging=S1 complete 2026-11-13, S2 complete 2026-11-14, S3a
+complete 2026-11-14, S3b code pushed 2026-11-14 pending SQL · prod=S1 complete 2026-11-14 (client merged +
+`convert-paper-customer` deployed, verified); S2/S3a/S3b NOT promoted · PR=#186 (S1 only; S2/S3a/S3b have no PR yet) ·
+findings=F89 (CLOSED on staging 2026-11-14, S2), F181 (CLOSED on staging 2026-11-14, S2 — found separately while planning
+G-I, not part of this plan's own scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day,
+found while building S1, unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -510,6 +514,79 @@ code; details held locally); **F183 is next free.**
 - **Gates:** spec 18 (nav/footer sync) 13/13; full Playwright suite **169 passed, 1 skipped, 0 failed, 28.5 min**.
 - **Not verified:** a real production signup carrying a `?ref=` (none exists yet — `?ref=` has no producer until S4/S5
   build the QR codes and poster links that set it); the F181 fix on production (staging only so far).
+
+### S3a: the This Week Email button works for a past week (2026-11-14). Built and verified on staging.
+
+`admin.html` only, `b153701`. `isCurrentWeek` kept; a new `canEmailWeek = weekAnchorMonday <= currentMon` (ISO Mon strings
+compare lexically) replaces the old current-week-only guard on the Email button; a future week is still disabled, now with
+a tooltip saying why ("has not arrived yet"). The confirm names the week and, for a past week only, adds the one known
+limit Rick accepted ("Past-week button can reuse email for now"): it lists everything reserved that week, already-picked-up
+and not-arriving titles included.
+
+**Verified:** spec 06 gained a new test seeding a real past-week and future-week customer (not `.first()` against whatever
+the bagging list happens to render — a vacuous "no card" skip would have proven nothing), targeting each by `data-user-id`:
+past week's button enabled with no "has not arrived yet" tooltip, future week's disabled with it. **4/4 passed** against the
+deployed staging bytes. This is a genuine regression check without needing a negative-control redeploy: the pre-fix code
+disabled the button for ANY non-current week, past or future alike, so the "past week enabled" assertion would have failed
+against it — confirmed from the diff, not assumed.
+
+**No finding ID consumed** (feature build, not a defect — the old button not working for a past week was the specified
+behaviour before this step, not a miscalculation). **Not yet promoted to production.**
+
+### S3b: "Your books this week", the Tuesday email (2026-11-14). Code written and pushed; BLOCKED on SQL.
+
+Three commits on `staging`: `d7191ef` (SQL, prepared, PENDING on both environments), `3c1a801` (the `notify-arrivals` Edge
+Function), `53c396f` (the My List opt-out toggle + `privacy.html`'s sentence).
+
+- **SQL** (`docs/sql/2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql`): `user_profiles.email_arrivals boolean NOT
+  NULL DEFAULT true` (D5); `arrival_notices (tenant_id, user_id, week_start, sent_at)`, UNIQUE on the first three, SELECT
+  for admins only, written only by the service role; a new `arrivals_this_week_digest(tenant, week_start, week_end)` RPC
+  that matches open reservations to the week's `weekly_shipment` rows the SAME three-key way `auto_fulfill_past_on_sale()`
+  does, and classifies each matched row withdrawn / ledger-rejected / admin-marked the same way `admin.html`'s
+  `renderThisWeek()` and `app.js`'s `exportCode()`/`ledgerRejected()` already do — moved server-side so the Edge Function
+  does not re-derive that logic in TypeScript. `c.tenant_id` is checked again even though `catalog_id` implies it, as a
+  second guard against F164's cross-tenant `catalog_id` shape.
+- **⚠️ A real interaction with F182 found and fixed in the same file, not left for later.** The security-sensitive
+  self-update guard trigger added by F182 (`user_profiles_guard_self_update`, details in the operator's local-only
+  security notes) default-denies any column a customer tries to change on their OWN profile except an explicit allowlist
+  — today just `has_seen_welcome`. Adding `email_arrivals` as a customer-toggleable column WITHOUT widening that allowlist
+  would have made every customer's own toggle write fail `42501`, silently — the client's `UPDATE` would look entirely
+  correct, the column would exist, and the write would simply be refused. The same SQL file widens the allowlist to
+  `{has_seen_welcome, email_arrivals}` and nothing else — `is_admin`/`status`/`tenant_id`/`id` stay admin-only.
+- **The cron** (`docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`, production only, its own file so staging's N/A never
+  blocks `/promote-prod` step 0): a pre-check reading `pg_available_extensions` for `pg_cron` and `pg_net` BEFORE anything
+  is created — neither extension has been used anywhere in this project, and the file says explicitly to stop and use the
+  documented GitHub Actions fallback if either comes back unavailable on this plan, rather than attempting to force it.
+- **`notify-arrivals`** (`supabase/functions/notify-arrivals/index.ts`): two callers — the `ARRIVALS_CRON_SECRET` header
+  (every shop, one call) or a signed-in admin (scoped to their own tenant only — Rick's `dry_run` check before the first
+  Tuesday). `dry_run: true` computes and returns the send plan, writes nothing. Per tenant: 0 `weekly_shipment` rows for
+  the week → skip with the reason stated (not "nothing is arriving" — the shipment import has not run, F115's own
+  distinction); otherwise call the digest RPC, drop paper/pending/paused/opted-out/already-sent (via `arrival_notices`)
+  customers, group by customer into arriving + "Not arriving this week". Refuses to send at all above 90 total recipients
+  across every shop (F148). The email's table reuses `send-my-list`'s own HTML/CSS table convention (not its data path —
+  that filters by `catalog.on_sale_date`, exactly the date-only match this step exists to avoid), adds a "Not arriving
+  this week" note and a line saying where to turn the email off. The F72 G-F shared tenant-identity block is copied in
+  verbatim (byte-identical to the other six copies, including their own already-stale "five copies" comment — S1's own
+  precedent for this exact situation, kept consistent rather than fixed in isolation).
+- **The opt-out toggle** (`mylist.html`): "Email me weekly arrivals" beside Email My List, hidden during impersonation.
+  **Fails open by construction, verified live**: with the column not yet existing on staging, `typeof
+  profile?.email_arrivals !== 'boolean'`, so the toggle stays hidden rather than breaking the page or showing a wrong
+  state — confirmed in a real browser against the deployed bytes (a throwaway customer, two consecutive loads, toggle
+  invisible both times, zero page errors), which is what makes it safe to have deployed this BEFORE the SQL ran.
+- **`privacy.html`** gains "and a weekly note when your reserved books arrive" in the account-emails bullet.
+- **BLOCKED: `arrivals_this_week_digest()`, `arrival_notices` and `email_arrivals` do not exist on staging yet.**
+  `notify-arrivals` cannot be deployed and exercised, and the opt-out toggle cannot actually be used, until Rick runs
+  `docs/sql/2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql` on staging (pre-check, the block, the verdict). Once
+  that lands: deploy `notify-arrivals` to staging (`--no-verify-jwt`, a brand-new function, no live setting to preserve),
+  run the plan's own Gates (four throwaway customers — titles on the invoice, reserved but not on the invoice, opted out,
+  paused — plus one unavailable title; `dry_run` names exactly the first customer; the real call makes exactly one email
+  request with the right titles and the unavailable one in the note; a second run sends 0; a week with no shipment rows
+  sends 0 and says why; a call with no secret and no admin session is refused), then the full suite once.
+- **Not started:** the production SQL run, the cron file's pre-check and the cron itself (all Rick's, in that order, each
+  gated on the step before it), and the two-weeks-after-first-send Visits comparison.
+
+**No finding ID consumed so far** (feature build; the F182 interaction above is a correctness fix WITHIN this step's own
+new column, not a defect in anything that shipped before it, so it does not consume a separate ID).
 
 ## 7. Not verified when this plan was written
 
