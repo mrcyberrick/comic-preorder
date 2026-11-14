@@ -573,6 +573,10 @@
   await TenantContext.resolve();
   Branding.apply(TenantContext.current());
 
+  // Customer engagement S2: capture ?ref= (poster/shelf/slip/etc.) before
+  // anything else touches the URL — see SignupSource in app.js.
+  SignupSource.capture();
+
   // ── Native signup — every store's own hostname (F72 G-F S3, 2026-11-05).
   //    The mail is tenant-branded since S2a / G-F S2, so the old
   //    founding-only gate is gone. Reveal "Create one" only when the
@@ -969,6 +973,7 @@
           name, email, honeypot,
           slug:           TenantContext.current().slug,
           turnstileToken: token,
+          signup_source:  SignupSource.get(),
         }),
       });
       const result = await resp.json().catch(() => ({}));
