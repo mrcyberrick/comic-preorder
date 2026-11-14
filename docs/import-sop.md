@@ -1,6 +1,6 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-11-12 (added "A note on using the dashboard while an import runs"; a note, not a rule) · earlier: 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-11-14 (Run B gains "Late file: one or two titles after the weekly run", the way to load one extra PRH delivery file without redoing the week; its first use was 2026-11-14) · earlier: 2026-11-12 (added "A note on using the dashboard while an import runs"; a note, not a rule) · earlier: 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
@@ -51,7 +51,7 @@ monthly distributor order, which is done in the website rather than with a scrip
 | # | Run | When | Script | Manual steps |
 |---|---|---|---|---|
 | A | Monthly catalog refresh | Once a month, when both new CSVs land | `import.js` | **9** |
-| B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (cron 21:00 UTC)** | `import.js` | **3** |
+| B | Weekly shipment import | Every shipment week, once its invoices are out (lately Fridays) and **before the Tuesday newsletter send (cron 21:00 UTC)**. A late PRH delivery file after that (one or two titles): see Run B, **Late file** | `import.js` | **3** |
 | C | Weekly date re-check | Fri or Sat | `check-dates.js` | **3** |
 | D | A product code changed (Lunar recode) | When Run C or the Never Arrived panel shows a reserved code that the distributor replaced | store admin: screens only (D0 to D3); operator: one SQL block to carry the reservation across (D4) | **4 per customer** (UI) |
 | E | **Place the monthly distributor order** | Once a month, after the customer Order Deadline passes, before the FOC dates you are ordering, and **before** Run A (Run A's new-month import closes the month) | none: the website only (admin dashboard + each distributor's retailer site) | **12** |
@@ -300,6 +300,8 @@ catalog files. That re-upserts the catalog in place, which is safe and expected.
 > code invoice deletes that on-sale date's rows and re-inserts them). A title split across two
 > deliveries is only right if both files go in the same run — a later run with just one of them
 > overwrites the other's quantity instead of adding to it. Titles in only one file are unaffected.
+> **One late PRH file after the week is already loaded** is a different case, and has its own
+> recipe: see **Late file** at the end of this run.
 
 ### 2. Run the import: the two catalog files, then every shipment file
 ```powershell
@@ -343,6 +345,63 @@ node .\reconcile-shipment.js
 node .\reconcile-shipment.js --week=2026-07-08 --out=reconcile.csv
 ```
 Read-only, never writes.
+
+### Late file: one or two titles after the weekly run (added 2026-11-14)
+
+Use this when a **PRH delivery file** turns up after you already ran Run B for the week (an extra or
+late delivery, often one or two titles) and you want to load just that file. You do **not** redo the
+week, and you do **not** pass the Lunar invoice or the week's other files, with one exception: the
+overlap check in step 1.
+
+**1. Check whether the title is already loaded.** Supabase → SQL Editor, on the environment you are
+importing to. Use the date in the file's `On Sale` column:
+```sql
+SELECT * FROM weekly_shipment WHERE on_sale_date = 'YYYY-MM-DD' ORDER BY distributor;
+```
+- The file's title (look for its title or ISBN) is **not in the result:** go to step 2 as written.
+- It **is** in the result: the new file would **replace** that row's quantity, not add to it. Put
+  that week's earlier delivery file in the same run, so the quantities add (Step 1's rule above).
+
+Also do the **second-tenant check** at the top of this document (the F164 check applies to every
+import), and load the file **before Tuesday's newsletter send**, as for any Run B.
+
+**2. Dry run, then the real run.** Pass the current month's two catalog files (the script needs them,
+there is no shipment-only mode), then **only** the late file:
+```powershell
+node .\import.js "..\Lunar_Product_Data_MMYY.csv" "..\YYYY_MM_PRH_metadata_full_active.csv" "..\<late-delivery-file>.csv" --no-write
+node .\import.js "..\Lunar_Product_Data_MMYY.csv" "..\YYYY_MM_PRH_metadata_full_active.csv" "..\<late-delivery-file>.csv"
+```
+Press Enter on the current month and answer **`n`** to the notification email. Reuse the catalog
+files you already imported this month. On the dry run, the `Auto-fulfilled  preorder(s)` and
+`Purged  usage_events row(s)` lines show no number; that is normal (Run A, Step 5).
+
+**3. Check it landed.** In the real run, look for `Format A (PRH delivery): N rows`, `N/N matched to
+catalog`, `N rows upserted` and no `❌` line. A file that `contributed 0 rows` is usually the wrong
+download. Then run the step 1 query again: every row that was there before is unchanged, and the new
+row is added.
+
+**Why it leaves the rest of the shipment data alone**
+
+| Data | What happens |
+|---|---|
+| Other PRH shipment rows | PRH delivery rows are upserted on (tenant, distributor, UPC, on-sale date), so only a row with the **same UPC and on-sale date** is touched. That is the overlap case in step 1. |
+| Lunar shipment rows | A Lunar code invoice **deletes every Lunar row for its on-sale date and re-inserts**. With no Lunar invoice in the run, nothing is deleted. **Do not use this recipe for a Lunar file:** a Lunar invoice always goes in with the week's full Lunar invoice (Step 1). |
+
+**What the run does besides the shipment row** (the same as any Run B; none of it is new, but read it):
+- **It re-upserts the current month's catalog** from the two CSVs, overwriting `on_sale_date` in place
+  on that month's rows. The line to read is `No in-store-date changes on reserved titles`. If it lists
+  changes instead, compare them with your last Run C: a date Run C corrected from a fresher source
+  can be put back by an older CSV, so run Run C again afterwards.
+- **It may add subscriber reservations** for newly listed titles (`To insert: N`).
+- **It prints the "about to be marked fulfilled" list and runs the fulfil step.** That list overstates
+  what is fulfilled (see Run A, Step 6): anything with no arrival record is held back until 14 days
+  after its on-sale date. On the 2026-11-14 dry run it named 28 titles, all 3 to 10 days past
+  on-sale, so none of them would have been fulfilled.
+
+*First used 2026-11-14: one PRH delivery (one title, 2 units, on sale 2026-11-17) loaded after that
+day's Lunar import. The step 1 query returned two Lunar rows and nothing for that title, and the dry
+run printed `1 rows` and `1/1 matched to catalog`. The real run's console output was not shown to
+whoever wrote this section.*
 
 ---
 
@@ -833,7 +892,8 @@ Re-running is safe. Specifically:
 - **New-month sequence** fires only when the import month is *greater* than what's in the DB.
 - **Shipment import** is safe to re-run for the same week — **with all of that week's files.** A
   later run holding only some of them replaces a shared title's stored quantity instead of adding
-  to it (Run B, Step 1).
+  to it (Run B, Step 1). A single late PRH file is safe when its titles are not already loaded
+  for that on-sale date (Run B, **Late file**).
 
 If a notification email errors, the catalog import still succeeded — re-run with the same files
 and answer the email prompt again.
