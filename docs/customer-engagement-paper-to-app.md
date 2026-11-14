@@ -1,7 +1,7 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b ALL COMPLETE AND PROMOTED TO PRODUCTION, cron included; S4 and S5 not
-started) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
+**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b ALL COMPLETE AND PROMOTED TO PRODUCTION, cron included; S4 and S5 BUILT
+ON STAGING 2026-11-14, NOT YET PUSHED, NOT PROMOTED — see § 6) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
 staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 (closes F89, closes F181), S3a
 (the Email button works for a past week) and S3b (the Tuesday notify-arrivals email + opt-out, SQL applied on both
 environments ahead of the code, `notify-arrivals` + the three other touched Edge Functions deployed to staging then
@@ -22,7 +22,11 @@ cron live 2026-11-14 (jobid 1) · PR=#186 (S1), #187 (S2+S3a+S3b), #188 (S3b ref
 environments 2026-11-14, S2),
 F181 (RESOLVED on both environments 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own
 scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building S1,
-unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free)
+unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free). **S4 (QR codes on
+the poster, shelf tags and Print Catalog) and S5 (bag-slip claim code) BUILT 2026-11-14, not yet pushed, not yet
+verified against a deployed anything** — S5's own SQL (`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) has not been
+run on either environment, so `admin_get_paper_claim_codes` does not exist yet anywhere; see § 6 for exactly what
+that blocks and what fails open regardless.
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -691,6 +695,162 @@ project's history records for a pre-ship catch (e.g. the F156-adjacent and F182-
 this plan). The F182 self-update-guard interaction above is likewise a correctness fix within this step's own new
 column, not a defect in anything that shipped before it. **F183 remains the next free finding ID.**
 
+### S4 + S5: QR codes on the poster, shelf tags, Print Catalog and the bag-slip claim code (2026-11-14). BUILT ON STAGING, NOT PUSHED, NOT RUN, NOT PROMOTED.
+
+**One session, both steps together** (Rick: "Proceed to the next, S4 & S5 steps"). Code written and reviewed, on
+`feature/customer-engagement-s4-s5`; **nothing in this entry has been exercised against a live, deployed anything** —
+no SQL has been run, no Edge Function redeployed, no page loaded in a real browser. Stated this plainly because every
+other step in this plan reached at least a deployed-staging check before its own write-up; this one has not.
+
+**Library:** vendored `vendor/qrcode-generator.js` — Kazuhiko Arase's `qrcode-generator` (MIT), pinned at the npm
+`1.4.4` release, fetched unminified (license header intact) from jsDelivr, `_headers` documents the source/pin/licence
+and gives it the same `no-cache` posture as `app.js` (no `-vN` filename — this project has no build step to rename a
+reference automatically, and the file is small enough that a 304 revalidation costs nothing). `app.js` gets a thin `QR`
+helper: one URL-builder per print surface (`posterUrl`, `shelfTagUrl`, `catalogPrintUrl`, `claimUrl`, each a one-line
+template literal) plus `QR.svg(text, altText)`, which calls the library and returns a viewBox-scaled `<svg>` string a
+caller sizes purely in CSS (`.qr-code` rule in `style.css`; the two standalone `document.write()` print windows — Print
+Catalog and the new shelf-tags sheet — carry their own copy of that one rule, since they load no stylesheet at all).
+
+**S4a, the store poster (`arrivals.html`):** the hardcoded "Reserve online at **pulllist.app**" / "Start now →
+pulllist.app" literals are replaced with `Tier.publicUrl(tenant)` (the shop's own address, never the bare apex, which
+has no sign-up for a store hostname) and a QR to `?ref=poster` is added beside the CTA text, filled once in
+`runStoreManagerView()` since the tenant doesn't change mid-session.
+
+**S4b, "Print #1 Shelf Tags" (`arrivals.html`, admin store view):** a new button beside Print Store Report. One tag per
+series where a shipment row for the SELECTED week links (`catalog_id`) to a catalog row with `issue_number === '1'`
+and a standard cover (`isStandardCoverType()`, never a variant #1), deduped by series name so a second printing of the
+same new #1 (a second cover) doesn't double the tag count. Each tag: "NEW SERIES · #1", the series name, "Never miss
+an issue.", a QR to `subscriptions.html?series=<name>&ref=shelf` on the shop's address, "Scan to subscribe". **D9: 8
+per letter page**, a 2×4 grid with dashed cut lines, its own standalone `document.write()` print window (the same
+pattern Print Catalog already uses) rather than printing in place — this page already has two existing print modes
+(`.print-store`, the personal list) and a third CSS-toggled mode risked exactly the kind of collision F119 already
+scarred this file with once. A shipment row with no catalog match (`catalog_id` null — the normal shape for an
+unmatched invoice line, F76) cannot be judged "new #1 or not" and is **skipped and counted on screen**, per the plan's
+own requirement — the toast names how many, both on a successful print and on "no new #1s found".
+
+**S4c, Print Catalog (`admin.html`, D8):** the same store QR added beside "View Online" in the sheet's page-1 header
+(`?ref=catalog-print`), no new wording. **Not** added to the repeating `@page` footer margin box — CSS page-margin
+`content` is text/counter-only and cannot embed an `<svg>` at all, so the footer keeps its existing text-only "View
+Online" line and the QR lives on page 1 only, which is where a customer taking the sheet home would see it anyway.
+
+**S4's own known limit, read from code, not tested:** a brand-new signup via any of these three QR codes still waits
+for admin approval and has its series search disabled until then (the existing, unrelated `isBlocked` pattern) — a
+shelf-tag scan by a genuine newcomer ends at "account pending", same as any other native signup today.
+
+**S2's `signup_source` wiring reaches S4 correctly, with one gap found and fixed in the same session:** `SignupSource`
+already allowlisted `poster`/`shelf`/`catalog-print` (S2 anticipated these three names ahead of time) and `index.html`
+already calls `SignupSource.capture()` on load, so the poster and Print Catalog links (both target `/`, the sign-in
+page) attribute correctly with no further change. The shelf tag link targets `subscriptions.html` directly, which a
+signed-out visitor never reaches — `initNav()` bounces them to sign-in before anything else on that page runs — so
+`?ref=shelf` would have been silently lost for exactly the new-customer case the tag exists for. Fixed by calling
+`SignupSource.capture()` as the very first line of `subscriptions.html`'s own init script, ahead of `initNav()`
+(mirroring S6c's `PostAuthRedirect.stash()`, which runs ahead of its own redirect for the identical reason);
+`SignupSource.capture()` has no tenant/auth dependency, so this is safe regardless of what `initNav()` does next. **No
+finding ID consumed — caught and fixed before any push, nothing shipped broken.**
+
+**S5, the bag-slip claim code.** New table `public.paper_claim_codes` (code PK, 12 characters from a 31-symbol
+unambiguous alphabet — 0/1/I/O/L dropped, ~59 bits of entropy — tenant_id, paper_user_id, created_at, expires_at,
+used_at). **RLS on, ZERO policies** — not an oversight: the only two legitimate readers are the new admin RPC
+(`SECURITY DEFINER`, bypasses RLS) and `convert-paper-customer`'s service-role key (also bypasses RLS), so nothing
+needs a policy and a bare PostgREST call from any role, admin included, sees zero rows. New admin-only
+`admin_get_paper_claim_codes(user_ids uuid[])`: shop derived from `current_tenant_id()`, never a parameter; returns
+each paper customer's live (unused, unexpired) code, generating one on first call and **reusing** it on every later
+call until used or expired (D7's "one live code, reprinted until used" — enforced as an invariant of the RPC's own
+logic, read-then-insert-if-missing, the same single-writer reasoning F143/F156 already use elsewhere, not a DB
+constraint — a `WHERE expires_at > now()` partial unique index isn't possible at all, since `now()` isn't IMMUTABLE).
+A passed id that isn't a paper customer in the caller's own shop is silently skipped, not errored, since the caller
+passes a whole batch (every paper row on screen) and some may not qualify. SQL file:
+`docs/sql/2026-11-14-s5-paper-claim-codes.sql`, **STATUS PENDING on both environments — not run anywhere yet.**
+
+**`admin.html`'s Bagging List (`renderThisWeek()`) now fetches, once per render, which of this week's customers are
+still paper accounts and each one's live code** (batched, scoped to just the user ids on screen, not every paper
+customer the shop has). A paper customer's printed card gains a banner between the header and the pick list: a QR to
+`?claim=<code>` and "Your pull list is online. Scan to claim it." — print-only, same hidden-until-`body.printing-this-week`
+treatment as the existing header. **Fails open by construction, the F115 lesson applied deliberately:** the RPC call
+is wrapped in its own error check, so if the SQL above hasn't run yet (true right now, on both environments) the whole
+Bagging List still renders normally — the claim banner just never appears, nothing else breaks. The shelf-tags and
+poster QR code paths have no dependency on this migration at all (pre-existing columns only), so pushing this branch
+is safe in any order relative to Rick running the SQL; running the SQL first is still the right sequencing to actually
+exercise the feature.
+
+**`convert-paper-customer` gains a third, PUBLIC mode: `{ code, email, turnstileToken, honeypot }`.** Dispatch on
+`body.code` now happens **before** the admin-auth check (a claim request often carries no Authorization header at all;
+the function is already deployed `--no-verify-jwt`, which is what makes adding a genuinely public mode to an otherwise
+admin-only function possible without any platform-level change). Order of checks, each chosen for a reason stated
+inline in the code: honeypot (absorb silently, same convention as `register-customer`) → field validation → Turnstile
+→ **read** the code (unused, unexpired) → confirm the account is still a paper customer in that shop → confirm the
+email isn't already taken by another account → **only then** the atomic single-use spend (`UPDATE ... WHERE
+used_at IS NULL ... RETURNING`, filtered again at write time, not trusted from the earlier read) → change the auth
+email → `PATCH user_profiles` to `is_paper=false, status='pending'` (D6 — not active; same gate a native signup goes
+through), `signup_source='slip'` → log `paper_converted` with `via: 'slip_code'`, **attributed to the customer's own
+id** (the one case in this file with no admin to credit — the customer genuinely is the actor here). **No email is
+sent by this function** — the admin approves from the existing Pending Accounts panel and `approve-customer` (already
+generic, no change needed, confirmed by reading it) sends the sign-in link from there. Every distinguishable failure —
+unknown code, already used, expired, taken email — returns the identical generic "That code is not valid. Please ask
+at the counter." denial, so a public caller submitting arbitrary codes can never tell a used-but-real code from a fake
+one, or probe whether an address already has an account. **Caught and corrected while writing this, before any push:**
+the first draft spent the code BEFORE checking the email, which would have burned a customer's one-time code on the
+single most likely real mistake (typing an address that already has an account); reordered to read-check-check-spend,
+with the final spend still the sole correctness guard against a genuine double-submit race (reading first is a UX
+improvement, not a security dependency).
+
+**Sign-in page (`index.html`):** `?claim=<code>` opens a new, dedicated panel ("Claim your pull list" — email +
+Turnstile only, no name field, since the account already has one) ahead of the normal sign-in/invite branches, the
+same way `hasInvite` already does — it also suppresses the "already signed in" redirect (the code claims a SPECIFIC
+other account, unrelated to whatever session a shared household device might already hold) and forces the apex
+overlay open immediately. `TURNSTILE_SITE_KEY` was moved earlier in the script (it used to be declared only where
+signup's click-triggered widget needed it) so the claim panel's own eagerly-loaded widget has no load-order dependency
+on where that constant happens to sit later in the file. Submits to `convert-paper-customer`'s new claim mode;
+success shows "Almost there — the shop will review and send you a sign-in link shortly," matching D6.
+
+**Check from the plan's own S5 step, run before writing any of this (not assumed):** read `renderThisWeek()`'s
+Bagging List query and `fetchAllPreorders()` (the order export's source) directly — **neither joins or filters on
+`user_profiles.status` at all**, and the global `profileMap` feeding customer names is built from `select('id,
+full_name')` with no status filter either. So a `pending` account's reservations already stay on both surfaces with
+no code change needed; D6 stands exactly as decided, and `approve-customer` was confirmed generic (reads any pending
+profile by id, no `is_paper` dependency) the same way.
+
+**Not verified, stated plainly — this is a long list because nothing here has touched a live system yet:**
+- The SQL has not been run on staging or production. `admin_get_paper_claim_codes` does not exist anywhere yet.
+- `convert-paper-customer`'s new claim mode has not been deployed; its live `verify_jwt` setting was not re-read
+  (F93 still applies — read it live before deploying, same as every other function in this project, and preserve
+  whatever it is, even though the function already runs `--no-verify-jwt` by design).
+- `TURNSTILE_SECRET_KEY` was assumed already set on both projects (it must be, for native signup to work at all) but
+  was not independently re-confirmed this session.
+- No branch has been pushed; nothing has been loaded in a real browser, Chromium or otherwise.
+- The QR encoder was read in full and matches the documented, decades-used public usage pattern for this exact
+  library, but was never actually EXECUTED in this session (a sandboxed-tool-execution restriction, not a design
+  choice) — correctness of the *text handed to it* was checked directly (a standalone string-equality harness,
+  7/7, confirming the exact URL each print surface builds); correctness of the *encoding itself* rests on the
+  library's own long public track record, not on anything run here.
+- No decode-and-compare harness ran against a rendered QR image (the plan's own gate for S4); no print preview was
+  inspected at letter size; **Rick has not scanned a real print of anything** — the poster, a shelf tag, the Print
+  Catalog, or a bag slip. This is the step the plan itself calls "the test that counts" (recalling the 2026-08-24
+  barcode trial, which failed on the shop's own scanner for a different, unrelated reason — resolution against a
+  laser print, not an encoding defect; QR codes and a phone camera are a different technology and that trial's
+  finding does not transfer, but it is still untested here).
+- The Bagging List's new per-render query and RPC call add real cost (one extra `user_profiles` read plus, for any
+  shop with paper customers on screen, one RPC round trip) that was reasoned about, not measured.
+- `paper_claim_codes` has no retention/cleanup story — an expired, unused code just sits there forever. Not raised
+  by the plan, not addressed here; worth a look if the table ever grows large.
+
+**§ 7's two open items this answers:** the QR library choice, its size (vendored unminified, ~57 KB, no-cache) and its
+licence (MIT, Kazuhiko Arase, pinned `qrcode-generator@1.4.4`) — now decided and recorded above, not merely
+researched. Whether any admin view drops pending accounts' reservations (S5's own check) — read directly from
+`renderThisWeek()` and `fetchAllPreorders()`, confirmed neither does; see the check paragraph above.
+
+**Finding-ID disposition, in words: no finding ID consumed.** Both the `SignupSource.capture()` gap on
+`subscriptions.html` and the spend-before-checking-email ordering in `convert-paper-customer` were caught and
+corrected while writing this code, before any push and before any real customer could reach either path — the same
+"pre-ship catch" disposition this plan's own S3b entry records for its three-valued-logic defect. **F183 remains the
+next free finding ID.**
+
+**Next, before this can be called done, roughly in order:** push the branch to staging; Rick runs the SQL on staging
+(then production, once staging is proven); deploy `convert-paper-customer` with `verify_jwt` read live first; a real
+browser pass through all four surfaces; the full Playwright suite once, against the deployed bytes (not run this
+session); Rick's own print-and-scan of a poster, a shelf tag, the catalog and a bag slip; then the SQL and deploy
+repeat on production before `/promote-prod`.
+
 ## 7. Not verified when this plan was written
 
 - Production and staging were not read: the number of paper customers, how many hold open
@@ -701,5 +861,7 @@ column, not a defect in anything that shipped before it. **F183 remains the next
 - How `auto_fulfill_past_on_sale()` matches a reservation to a shipment row; S3b must read it, not
   assume it.
 - Whether a customer can write the two new profile columns through their own-profile policy. *(Answered 2026-11-13; see § 6 and F182.)*
-- Whether any admin view drops pending accounts' reservations (S5's check).
-- The QR library choice, its size and its licence.
+- Whether any admin view drops pending accounts' reservations (S5's check). *(Answered 2026-11-14; neither
+  `renderThisWeek()` nor `fetchAllPreorders()` filters on status — see § 6.)*
+- The QR library choice, its size and its licence. *(Answered 2026-11-14: `qrcode-generator@1.4.4`, Kazuhiko Arase,
+  MIT, ~57 KB unminified — see § 6.)*

@@ -1068,6 +1068,7 @@
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="vendor/qrcode-generator.js"></script>
 <script>
 (async () => {
   const navData = await Auth.requireAdmin();
@@ -5371,6 +5372,33 @@ There is no undo in the app.`);
               <div style="font-weight:700">View Online: ${escapeHtml(Tier.publicUrl(printTenant))}</div>`
       : `<div style="font-weight:700">View Online: ${escapeHtml(Tier.publicUrl(printTenant))}</div>`;
 
+    // Customer engagement S5: which of this week's customers are still paper
+    // accounts, and each one's live claim code (admin_get_paper_claim_codes
+    // reuses an unused/unexpired code or makes one — D7). Scoped to only the
+    // user ids actually on screen this week, not every paper customer the
+    // shop has, and fetched once here rather than per card for the same
+    // reason printStoreLine is: plan/name/codes don't change mid-render.
+    const weekUserIds = Object.values(grouped).map(g => g.user_id);
+    let paperUserIds = new Set();
+    let claimCodeByUserId = new Map();
+    if (weekUserIds.length) {
+      const { data: profileRows } = await db
+        .from('user_profiles')
+        .select('id, is_paper')
+        .in('id', weekUserIds);
+      paperUserIds = new Set((profileRows || []).filter(r => r.is_paper).map(r => r.id));
+      if (paperUserIds.size) {
+        const { data: codeRows, error: codeErr } = await db.rpc('admin_get_paper_claim_codes', {
+          user_ids: [...paperUserIds],
+        });
+        if (codeErr) {
+          console.error('admin_get_paper_claim_codes failed:', codeErr.message);
+        } else {
+          claimCodeByUserId = new Map((codeRows || []).map(r => [r.paper_user_id, r.code]));
+        }
+      }
+    }
+
     container.innerHTML = Object.entries(grouped)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, group]) => {
@@ -5423,6 +5451,17 @@ There is no undo in the app.`);
             </ul>
           </div>` : '';
 
+        // Customer engagement S5: paper customers only, print-only — a QR
+        // straight to the "Claim your pull list" panel (?claim=<code>, S5's
+        // own code mode), the only print surface that names an individual
+        // customer rather than the shop in general.
+        const claimCode = claimCodeByUserId.get(group.user_id);
+        const claimHtml = (paperUserIds.has(group.user_id) && claimCode) ? `
+          <div class="bagging-claim-banner">
+            <div class="qr-code" style="width:0.7in;height:0.7in">${QR.svg(QR.claimUrl(printTenant, claimCode), 'Scan to claim your pull list')}</div>
+            <div class="bagging-claim-text">Your pull list is online.<br>Scan to claim it.</div>
+          </div>` : '';
+
         return `
           <div class="customer-group bagging-customer-card" data-user-id="${group.user_id}">
             <div class="bagging-print-header">
@@ -5431,6 +5470,7 @@ There is no undo in the app.`);
                 ${printStoreLine}
               </div>
             </div>
+            ${claimHtml}
             <div class="customer-group-header" style="cursor:default">
               <div>
                 <div class="customer-group-name">${escapeHtml(name)}</div>
@@ -6750,6 +6790,13 @@ There is no undo in the app.`);
     const printTenant = TenantContext.current();
     const printIsPaid = Tier.isPaid(printTenant);
     const printViewOnline = Tier.publicUrl(printTenant);
+    // D8 (customer engagement S4): the same store QR beside View Online, no
+    // new wording. Generated HERE, in the opener window (which has
+    // vendor/qrcode-generator.js loaded), and spliced into the print
+    // window's markup as a plain string — the print window itself is a
+    // standalone document.write() page with no script tags and no access
+    // to the opener's scripts, so the SVG has to arrive pre-rendered.
+    const printQrSvg = QR.svg(QR.catalogPrintUrl(printTenant), 'Scan to reserve online');
 
     const total = groups.reduce((n, g) => n + g.items.length, 0);
 
@@ -6852,12 +6899,18 @@ There is no undo in the app.`);
       font-weight: 600;
       color: #333;
     }
+    .ph-right-group { display: flex; align-items: center; gap: 6px; }
     .ph-right {
       font-size: 6.5pt;
       color: #666;
       text-align: right;
       line-height: 1.5;
     }
+    /* D8: the SVG this print window's own markup carries no viewBox-scaling
+       rule by default — this is a standalone document.write() page, not
+       style.css's document, so the shared .qr-code rule there does not
+       apply here and has to be re-stated. */
+    .ph-qr, .ph-qr svg { display: block; width: 100%; height: 100%; }
 
     /* ── Table ── */
     table {
@@ -6981,9 +7034,12 @@ There is no undo in the app.`);
       <div class="ph-logo">PULL<span>LIST</span></div>
       <div class="ph-dist">Catalog &mdash; ${escapeHtml(monthLabel)}</div>
     </div>
-    <div class="ph-right">
-      <div>${total.toLocaleString()} titles</div>
-      <div style="font-weight:700">View Online: ${printViewOnline}</div>
+    <div class="ph-right-group">
+      <div class="ph-right">
+        <div>${total.toLocaleString()} titles</div>
+        <div style="font-weight:700">View Online: ${printViewOnline}</div>
+      </div>
+      <div class="ph-qr" style="width:34px;height:34px">${printQrSvg}</div>
     </div>
   </div>
 

@@ -9,18 +9,41 @@
  * so F13 (history lost when an account is deleted) and F181 (claim-paper-customer
  * never checks the shop) do not apply to this path.
  *
- * Two modes, one endpoint:
- *   convert  { paper_user_id, email, phone? }
- *   resend   { resend: true, user_id }       the link again, for an account this
- *                                            function already converted
+ * Three modes, one endpoint:
+ *   convert  { paper_user_id, email, phone? }                 admin only
+ *   resend   { resend: true, user_id }                        admin only — the
+ *                                                              link again, for an
+ *                                                              account this
+ *                                                              function already
+ *                                                              converted
+ *   claim    { code, email, turnstileToken, honeypot }        PUBLIC (S5) — a
+ *                                                              bag-slip QR code,
+ *                                                              gated by Turnstile
+ *                                                              + a honeypot, not
+ *                                                              an admin session
  *
- * Auth: in-body, as create-paper-customer does. The caller's own token is checked
- * against /auth/v1/user, then their profile must be an admin. Deployed with
- * --no-verify-jwt (a brand-new function, so there is no live setting to preserve;
- * F93 asks that the flag be stated explicitly). Unlike create-paper-customer there
- * is NO fallback to FOUNDING_TENANT_ID: an admin whose profile has no tenant is
- * refused, because a fallback here would let the shop check below pass against
- * the wrong shop.
+ * Auth: in-body, as create-paper-customer does, for convert/resend. The caller's
+ * own token is checked against /auth/v1/user, then their profile must be an
+ * admin. Deployed with --no-verify-jwt (a brand-new function, so there is no
+ * live setting to preserve; F93 asks that the flag be stated explicitly) — this
+ * is also what makes the public claim mode possible on the SAME function: the
+ * platform gateway requires no Authorization header at all, and the body
+ * dispatch below (customer engagement S5) runs BEFORE the admin lookup, so a
+ * claim request with no token in no way touches that check. Unlike
+ * create-paper-customer there is NO fallback to FOUNDING_TENANT_ID on the admin
+ * paths: an admin whose profile has no tenant is refused, because a fallback
+ * here would let the shop check below pass against the wrong shop.
+ *
+ * claim mode (S5, docs/customer-engagement-paper-to-app.md § S5) spends a row
+ * from public.paper_claim_codes (docs/sql/2026-11-14-s5-paper-claim-codes.sql) —
+ * a 60-day, one-per-paper-customer code an admin generates via
+ * admin_get_paper_claim_codes() and prints on the bag slip (D7). A valid code
+ * converts the SAME account in place, same as the admin's convert mode, but to
+ * status = 'pending' (D6) with signup_source = 'slip' — no email is sent here;
+ * the admin approves from the existing Pending Accounts panel and
+ * approve-customer sends the sign-in link from there. Every failure (unknown
+ * code, used, expired, taken email) answers with the same generic denial — see
+ * claimDenied() below for why.
  *
  * What the live staging probe showed about GoTrue (plan section 6, 2026-11-13):
  *   - admin update-user with { email, email_confirm: true } keeps the user id.
@@ -33,7 +56,9 @@
  *
  * Required env vars: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
  *   RESEND_API_KEY, MAIL_FROM_EMAIL, APP_BASE_URL (optional; defaults to
- *   https://pulllist.app).
+ *   https://pulllist.app), TURNSTILE_SECRET_KEY (claim mode only — convert/resend
+ *   never read it; its absence 503s claim requests but leaves the admin paths
+ *   untouched).
  */
 
 const APP_BASE_URL  = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
@@ -120,10 +145,11 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_ANON    = Deno.env.get('SUPABASE_ANON_KEY')
-    const SUPABASE_SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const RESEND_API_KEY   = Deno.env.get('RESEND_API_KEY')
+    const SUPABASE_URL        = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_ANON       = Deno.env.get('SUPABASE_ANON_KEY')
+    const SUPABASE_SERVICE    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const RESEND_API_KEY      = Deno.env.get('RESEND_API_KEY')
+    const TURNSTILE_SECRET_KEY = Deno.env.get('TURNSTILE_SECRET_KEY')
 
     if (!SUPABASE_URL || !SUPABASE_ANON || !SUPABASE_SERVICE) {
       console.error('convert-paper-customer: missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY')
@@ -135,7 +161,25 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     }
 
-    // ── Who is calling? An admin, with a shop ────────────────
+    // ── Body FIRST, before any auth check ─────────────────────
+    // The S5 claim mode below is PUBLIC (a bag-slip code + Turnstile, no
+    // admin session, and often no Authorization header at all) — the
+    // caller's token can only be checked once the mode is known, so
+    // dispatching on the parsed body has to happen ahead of the admin
+    // lookup that every other mode still requires.
+    let body: Record<string, unknown>
+    try {
+      body = await req.json()
+    } catch {
+      return json({ error: 'Invalid request body' }, 400)
+    }
+
+    // ── CLAIM (S5, public): a bag-slip code converts its own account ──
+    if (typeof body.code === 'string' && body.code.trim() !== '') {
+      return await handleClaim(SUPABASE_URL, svc, TURNSTILE_SECRET_KEY, body)
+    }
+
+    // ── Everything below requires an admin, with a shop ───────
     const authHeader = req.headers.get('Authorization') || ''
     const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { Authorization: authHeader, apikey: SUPABASE_ANON },
@@ -154,13 +198,6 @@ Deno.serve(async (req) => {
     if (!callerTenantId) return json({ error: 'Forbidden — no shop on this admin profile' }, 403)
     const actorId: string = userData.id
 
-    // ── Body ─────────────────────────────────────────────────
-    let body: Record<string, unknown>
-    try {
-      body = await req.json()
-    } catch {
-      return json({ error: 'Invalid request body' }, 400)
-    }
     const isResend = body.resend === true
 
     // ── RESEND: the link again, for an account this function converted ──
@@ -277,6 +314,173 @@ Deno.serve(async (req) => {
     return json({ error: String(err) }, 500)
   }
 })
+
+// ── CLAIM (customer engagement S5): a bag-slip code, public ────────────────
+//
+// { code, email, turnstileToken, honeypot }. Unlike the admin CONVERT mode
+// above, this never emails a sign-in link itself — D6 puts the account at
+// status = 'pending', same as a native sign-up, and the admin's existing
+// Pending Accounts panel + approve-customer send it from there. So this
+// function's only job is: spend the code exactly once, change the address,
+// and log who did it.
+//
+// Every distinguishable failure — unknown code, already used, expired,
+// taken email — returns the SAME generic denial (the plan's own "ask at the
+// counter" design). A public caller who can submit arbitrary codes must not
+// be able to tell a used-but-real code from a fake one, or probe whether an
+// address already has an account.
+function claimDenied(): Response {
+  return json({ error: 'That code is not valid. Please ask at the counter.' }, 400)
+}
+
+async function handleClaim(
+  supabaseUrl: string,
+  svc: Hdrs,
+  turnstileSecretKey: string | undefined,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const honeypot = (typeof body.honeypot === 'string' ? body.honeypot : '').trim()
+  if (honeypot !== '') {
+    // Same convention as register-customer: absorb silently, no tell.
+    console.log('convert-paper-customer: claim honeypot triggered, absorbing silently')
+    return json({ success: true })
+  }
+
+  const code  = typeof body.code  === 'string' ? body.code.trim().toUpperCase() : ''
+  const email = typeof body.email === 'string' ? body.email.trim() : ''
+  const turnstileToken = typeof body.turnstileToken === 'string' ? body.turnstileToken : ''
+
+  if (!code || code.length > 32) return claimDenied()
+  if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
+    return json({ error: 'A valid email address is required' }, 400)
+  }
+
+  if (!turnstileSecretKey) {
+    console.error('convert-paper-customer: TURNSTILE_SECRET_KEY not set — refusing claim')
+    return json({ error: 'Claiming is temporarily unavailable' }, 503)
+  }
+  if (!turnstileToken) return json({ error: 'Verification required' }, 400)
+  if (!(await verifyTurnstile(turnstileToken, turnstileSecretKey))) {
+    return json({ error: 'Verification failed, please try again' }, 400)
+  }
+
+  // READ first, unused/unexpired only — a plain SELECT, not yet spending
+  // anything, so a request that is going to fail the email check below
+  // (the common real mistake: fat-fingering an address that already has an
+  // account) does not burn the customer's one code on it. Correctness
+  // against a double-submit race does not depend on reading before writing
+  // — see the atomic UPDATE further down, which is the actual guard.
+  const nowIso = new Date().toISOString()
+  const lookupRes = await fetch(
+    `${supabaseUrl}/rest/v1/paper_claim_codes?code=eq.${encodeURIComponent(code)}` +
+    `&used_at=is.null&expires_at=gt.${encodeURIComponent(nowIso)}&select=paper_user_id,tenant_id`,
+    { headers: svc },
+  )
+  const lookedUp = lookupRes.ok ? await lookupRes.json().catch(() => null) : null
+  const codeRow = Array.isArray(lookedUp) && lookedUp.length === 1 ? lookedUp[0] as { paper_user_id: string; tenant_id: string } : null
+  if (!codeRow) return claimDenied()
+
+  const paperId  = codeRow.paper_user_id
+  const tenantId = codeRow.tenant_id
+
+  // Still a paper account in that same shop — covers a stale row or a race
+  // with some other path converting the same customer.
+  const paperRows = await readProfiles(supabaseUrl, svc,
+    `id=eq.${paperId}&tenant_id=eq.${tenantId}&is_paper=eq.true`,
+    'id,full_name,email')
+  const paper = paperRows?.[0]
+  if (!paper) return claimDenied()
+
+  // Taken email — same generic denial as a bad code. No pick-list, no
+  // which-shop detail: D2's pick-list is an admin-only convenience: a
+  // public caller gets nothing that could let them enumerate accounts.
+  const dupRows = await readProfiles(supabaseUrl, svc,
+    `email=ilike.${encodeURIComponent(likeEscape(email))}&id=neq.${paperId}`, 'id', 1)
+  if (dupRows && dupRows.length) return claimDenied()
+
+  // NOW the atomic single-use spend — filtered on used_at IS NULL AND
+  // expires_at > now() again (not trusting the read above, which could be
+  // stale by the time we get here), so whichever request actually wins a
+  // double-submit race (two tabs, a network retry) is the only one that
+  // proceeds; the loser gets the same generic denial as a genuinely bad
+  // code, because by the time it reads the row back there is nothing left
+  // to tell them apart on cleanly.
+  const claimRes = await fetch(
+    `${supabaseUrl}/rest/v1/paper_claim_codes?code=eq.${encodeURIComponent(code)}` +
+    `&used_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}`,
+    { method: 'PATCH', headers: { ...svc, Prefer: 'return=representation' }, body: JSON.stringify({ used_at: new Date().toISOString() }) },
+  )
+  const claimed = claimRes.ok ? await claimRes.json().catch(() => null) : null
+  const spent = Array.isArray(claimed) && claimed.length === 1 ? claimed[0] as { paper_user_id: string; tenant_id: string } : null
+  if (!spent || spent.paper_user_id !== paperId) return claimDenied()
+
+  const updRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${paperId}`, {
+    method: 'PUT',
+    headers: svc,
+    body: JSON.stringify({ email, email_confirm: true }),
+  })
+  if (!updRes.ok) {
+    const e = await updRes.json().catch(() => ({}))
+    if (isEmailTaken(e)) return claimDenied()
+    console.error('convert-paper-customer: claim auth email update failed', updRes.status, JSON.stringify({ code: e.code, error_code: e.error_code }))
+    return json({ error: 'Something went wrong. Please ask at the counter.' }, 500)
+  }
+
+  // D6: pending, not active — the admin approves from the existing Pending
+  // Accounts panel, same gate a native sign-up goes through.
+  const patch = {
+    email,
+    is_paper: false,
+    status: 'pending',
+    signup_source: 'slip',
+    converted_from_paper_at: nowIso,
+  }
+  const patchRes = await fetch(
+    `${supabaseUrl}/rest/v1/user_profiles?id=eq.${paperId}&tenant_id=eq.${tenantId}&is_paper=eq.true`,
+    { method: 'PATCH', headers: { ...svc, Prefer: 'return=representation' }, body: JSON.stringify(patch) },
+  )
+  const patched = patchRes.ok ? await patchRes.json().catch(() => null) : null
+  if (!Array.isArray(patched) || patched.length !== 1) {
+    console.error('convert-paper-customer: claim profile update failed', patchRes.status, '- restoring the auth email')
+    const back = await fetch(`${supabaseUrl}/auth/v1/admin/users/${paperId}`, {
+      method: 'PUT',
+      headers: svc,
+      body: JSON.stringify({ email: paper.email, email_confirm: true }),
+    })
+    if (!back.ok) console.error('convert-paper-customer: COULD NOT restore the auth email for', paperId)
+    return json({ error: 'Something went wrong. Please ask at the counter.' }, 500)
+  }
+
+  // Attributed to the CUSTOMER's own id — unlike every other paper_converted
+  // event in this file, there is no admin in this path to credit, and the
+  // customer genuinely is the one who acted (a public, self-service submit).
+  await logEvents(supabaseUrl, svc, [
+    eventRow('paper_converted', paperId, tenantId, { via: 'slip_code' }),
+  ])
+
+  return json({ success: true, status: 'pending' })
+}
+
+// register-customer's own server-side Turnstile check, duplicated rather
+// than imported — this project has no cross-function shared module (F72 Q11
+// made that an explicit decision, not an oversight).
+async function verifyTurnstile(token: string, secretKey: string): Promise<boolean> {
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret: secretKey, response: token }),
+    })
+    const data = await res.json()
+    if (!data?.success) {
+      console.warn('convert-paper-customer: Turnstile verification failed', JSON.stringify(data))
+    }
+    return data?.success === true
+  } catch (err) {
+    console.error('convert-paper-customer: Turnstile verify request failed', String(err))
+    return false
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

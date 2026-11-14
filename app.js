@@ -309,6 +309,54 @@ const Tier = {
 };
 window.Tier = Tier;
 
+// ============================================================================
+// QR — thin wrapper over vendor/qrcode-generator.js (Kazuhiko Arase, MIT;
+// customer engagement S4/S5, 2026-11-14). A page that renders a QR loads that
+// vendor script AFTER app.js, before its own page-specific <script> (see
+// arrivals.html / admin.html) — QR.svg() is only ever called from a click
+// handler or a render pass, never at parse time, so defining this object is
+// safe even on a page that never loads the vendor script at all.
+//
+// Each print surface's URL is built by its own small method below rather
+// than assembled inline at the call site, so a harness can assert the exact
+// string handed to the encoder — the thing that actually determines whether
+// the printed code is right — without decoding a rendered image back to
+// text. The encoding algorithm itself is the vendored library's job,
+// already proven by wide public use; ours is only "did we hand it the right
+// text," which a plain string comparison answers directly.
+const QR = {
+  // ?ref= values; S2's signup_source allowlist already names poster/shelf/
+  // catalog-print, this just builds the matching URL for each print surface.
+  posterUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=poster`;
+  },
+  shelfTagUrl(tenant, seriesName) {
+    return `https://${Tier.publicUrl(tenant)}/subscriptions.html?series=${encodeURIComponent(seriesName || '')}&ref=shelf`;
+  },
+  catalogPrintUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=catalog-print`;
+  },
+  // A code on a bag slip (S5): claim="+code, no ?ref= (the sign-in page's
+  // ?claim= panel is its own funnel, distinct from signup_source).
+  claimUrl(tenant, code) {
+    return `https://${Tier.publicUrl(tenant)}/?claim=${encodeURIComponent(code)}`;
+  },
+  // Renders `text` as a self-contained <svg> string with its own viewBox, so
+  // a caller sizes it purely in CSS (wrap in a container with an explicit
+  // width/height — see the .qr-code rule in style.css — rather than reading
+  // the svg's own width/height attributes, which this never bothers to set
+  // to the final print size). 'M' error correction (~15% recovery) suits a
+  // short URL that will pick up handling wear on paper; typeNumber 0 lets
+  // the library auto-pick the smallest symbol version that fits the data.
+  svg(text, altText) {
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 8, alt: altText || undefined });
+  },
+};
+window.QR = QR;
+
 // ── Post-auth return path (S6c) ──────────────────────────────
 // initNav() redirects a signed-out visitor to index.html and, until 2026-09-08,
 // threw the requested URL away — there was no ?next=. So a newsletter or social
