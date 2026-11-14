@@ -1,9 +1,10 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1 COMPLETE ON STAGING) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built, SQL applied
-on both environments, verified end to end on staging including a real admin click 2026-11-13 · staging=S1 complete 2026-11-13 ·
-prod=not yet promoted · PR=— · findings=F89 (closes at S2), F182 (filed and RESOLVED on both environments the same day, found
-while building S1, unrelated to S1's own code); no new ID consumed for S1 itself (F183 next free)
+**STATUS:** IN PROGRESS (S1 COMPLETE, BOTH ENVIRONMENTS) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built
+and verified end to end on staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`) · staging=S1
+complete 2026-11-13 · prod=S1 complete 2026-11-14 (client merged + `convert-paper-customer` deployed, verified) · PR=#186 ·
+findings=F89 (closes at S2), F182 (filed and RESOLVED on both environments the same day, found while building S1, unrelated
+to S1's own code); no new ID consumed for S1 itself (F183 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -166,7 +167,11 @@ file is then never left `prod=PENDING`, which would block every other `/promote-
 - [x] Rick has read one delivered invite (not redacted to headers-only, his own live token both times — consistent with the
   session's established pattern) and used the button once on staging; confirmed end to end from the database (§ 6)
 - [x] § 6 of this plan, the STATUS line and `CLAUDE.md` § Current Migration Phase updated
-- [ ] Production: NOT part of S1's session. It needs Rick's `/promote-prod`, then the function deployed to production from a worktree of `origin/main`
+- [x] Production: `/promote-prod` 2026-11-14 (PR #186, merge `a6a6b0b4`); `convert-paper-customer` deployed from a worktree of
+  `origin/main`, ACTIVE v1, `verify_jwt` OFF confirmed by behaviour, artifact hash equal to `origin/main` and to staging's
+  deployed copy. Served `app.js`/`admin.html` on both production hostnames confirmed byte-identical to `origin/main`.
+  Write-smoke skipped (confirmed from the diff: neither file mentions `Preorders` or `toggleReserve`). Not yet done: a real
+  admin click on PRODUCTION (staging's step 10 is the only live-click evidence so far)
 
 ### S2. Measure it (#4; closes F89)
 

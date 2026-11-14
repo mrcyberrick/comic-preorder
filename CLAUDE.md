@@ -75,30 +75,45 @@ decision." until G-D ran, and before that "G-B (engine to production) and G-D (F
 **✅ NOVEMBER NEW-MONTH IMPORT RAN ON PRODUCTION 2026-10-28 (Rick; `node import.js` with `Lunar_Product_Data_1126.csv` + `2026_11_PRH_metadata_full_active.csv`, dry run first). This is the import that "revisit D1 after the November import", G-I's scripts half (F164) and G-G (F169/F157) were waiting on: all three are now unblocked, none started.** Read back from the database, not the console: `catalog` 2026-11 = **Lunar 1,283 / PRH 761**, all founding tenant (= raw rows, 0 rejected); 33 subscriber auto-reserves, all founding-tenant rows on 2026-11 titles; archived 342, purged 1,894, deduped 18; auto-fulfilled 2 (the one title over 14 days past on-sale; the "36 titles" warning ignores the 14-day hold). **F164 interim check passed first** (66 subscriptions, one tenant; `comicstore` holds only 2 rows in 2026-06). **F165 S1's first real exercise: the "Withdrawal marking is retired" line printed and no mark was written.** October's order (Run E, 10-27: 257 Lunar + 204 PRH lines) left nothing to confirm at the closing-cycle prompt. Afterwards: Maintenance Mode OFF (10-29 15:47Z), Order Deadline **2026-11-23** (set 10-29). Run A Step 3's revision sweep was skipped (Run C had run 10-23). **Not established:** whether the catalog notification email went out (`n` was answered at the prompt during the real run; a re-run was offered; `notify-customers` logs nothing to read). `docs/import-sop.md` brought current with the scripts the same session (`94746be`: Run B 5 to 3 steps since the import no longer publishes the feed; Run C's 2026-10-19 sections; Order Deadline location). No finding ID consumed; **F179 remains next free**.
 **✅ PROMOTED TO PRODUCTION 2026-11-10 -- Store contact S1: Settings ▸ Store contact replaces the "Email Templates · Soon" placeholder (PR #185, merge `cd264bd`, merged 22:13:50Z by Rick; promotion parents `427df64` main + `5edc04b` staging tip; staging code `c333b3d` the warning removal and page estimate, `53575ae` the panel, `330af30` a heading-size fix).** Rick's `/promote-prod`. **What shipped:** a panel with phone, street address, town and website, saved through the new admin-only `admin_set_store_contact()` (tenant derived inside, admin only, length caps, blank stores NULL) into `tenants.contact_phone` / `postal_address` (new) / `location` / `website` (new), with a live preview and a tier note; plus the stale "filters are not applied yet" warning removed and the print estimate at 44.5 rows per page (fits all six measured prints; 46 matched none). **Nothing reads the new fields yet**: emails (S2) and pages and prints (S3) still show Ray & Judy's hardcoded text, so no customer sees a change. **`settings.html` is the only code file; no `app.js`, `config.js`, Edge Function or RLS change** (the `TenantContext` widening moved to S3 so a missing column can never break every page). **SQL `docs/sql/2026-11-10-store-contact.sql` applied on BOTH environments (Rick), production FIRST: verdict OK; an anonymous probe found the four-argument function refused by the grant (401, 42501).** The production names check ran after the file and read 2 / 1, so it proved nothing on its own; the body marker in the verdict and staging's 0 / 0 rule out a pre-existing object. **Gates:** step 0 empty; merge result `settings.html` == staging, every other page identical on both branches, `config.js` == `origin/main` (prod ref x1, staging ref x0), `supabase/migrations/` 2 files; PR file list on GitHub 7 files, MERGEABLE. **Staging evidence:** harness `store-contact-verify.mjs` (local-only) 45/45 on the working tree and the deployed bytes, four negative controls each red; full suite 169 passed, 1 skipped, 0 failed, 28.4 min. **Verified post-deploy:** on BOTH `pulllist.app` and `rjbookstop.pulllist.app`, `settings.html` (`2a733af7093cf612`, the bytes the harness ran against on staging), `app.js`, `config.js`, `catalog`, `mylist`, `admin`, `analytics`, `style.css` byte-identical to `origin/main`; markers `admin_set_store_contact` x3, `id="contact-panel"` x1, `ROWS_PER_PAGE = 44.5` x1, `preview-banner` x0 (the one "Email Templates" left is a code comment). **Write-smoke skipped:** admin-only page, the diff never touches `Preorders` or the reserve path. **Not verified:** no save through the panel on production yet; Chromium only. **Still owed (Rick):** the production data fill through the panel, then a service-role read-back; his phone format choice (`(973) 586-9182` keeps S2's emails byte-identical; staging holds `973-586-9182`); and whether staging's "View Online: raysandjudys.pulllist.app" on prints is just noted (production prints `rjbookstop.pulllist.app`, which resolves). **Finding-ID disposition, in words: No finding ID consumed (feature build, not a defect).** **F181 remains the next free finding ID.** Next: S2 (the six mail functions read the fields). Plan: `docs/store-contact-and-colors.md`.
 
-**✅ S1 BUILT, SQL APPLIED ON BOTH ENVIRONMENTS, AND VERIFIED END TO END ON STAGING 2026-11-13 -- customer engagement: an Invite…
-button converts a paper customer in place (`docs/customer-engagement-paper-to-app.md`; ~~STATUS was NOT STARTED~~ now IN
-PROGRESS, S1 COMPLETE on staging).** New admin-only Edge Function `convert-paper-customer` (convert + resend modes): changes
-the SAME auth user's email and profile (nothing moves, unlike Claim), emails a `type: 'recovery'` sign-in link through the F72
-G-F shared tenant-identity block (now six byte-identical copies), writes `paper_converted` / `invite_sent` usage events
-attributed to the ADMIN (not the customer). `app.js` `PaperCustomers.convert()` / `resendInvite()`; `admin.html` gets the
-**Invite…** button + modal on paper rows, a **Resend invite** button on a converted customer who has never signed in, and
-Claim's old UUID `prompt()` is now a pick-list of the shop's own accounts (decision D2) that also offers "Merge into…" when an
-Invite targets an address already in the same shop. New columns `user_profiles.converted_from_paper_at` / `signup_source`
-(`docs/sql/2026-11-13-paper-conversion-columns.sql`, **APPLIED on both staging and production** the same sitting, before any
-code read them). **Deployed to staging only** (`--no-verify-jwt`; downloaded source byte-equal to the commit). **Verified:** a
-fake-network logic harness 64/64 (six deliberate source mutations each seen red); a live staging harness against the deployed
-function and the deployed `admin.html`, 81/81, teardown re-read 0; full Playwright suite 169 passed / 1 skipped / exit 0,
-twice. **Step 10 (a real admin click, a real delivered email) took three tries, recorded in the plan § 6 for the pattern:**
-two false starts pressed the WRONG pre-existing button (the sidebar's "Invite Customer," which created an ordinary account via
-`invite-customer`; then a paper row's "Claim…," which genuinely merged via `claim-paper-customer`) -- both are existing,
-correct functions, so neither is a defect, and both throwaway accounts were torn down after reading what each had actually
-done. The third, on a fixture named "ZZZ CLICK INVITE HERE," used the real **Invite…** button and worked: delivered email
-subject "...pull list is online," `type=recovery`, `dkim`/`spf`/`dmarc` pass, the paid-tier contact line present (confirms the
-tier gate); read back from the database, not assumed from the email: same user id, `is_paper` now false, both events logged
-correctly. **Found while building this, unrelated to its own code: F182** (filed and RESOLVED on both environments the same
-day -- see the F182 entry in the open-findings table). **Not yet done: production** (needs Rick's `/promote-prod`, then the
-function deployed from a worktree of `origin/main`); S2-S5 of the plan remain NOT STARTED. **No finding ID consumed by S1
-itself; F183 remains the next free finding ID.** *(This paragraph previously read "PLANNED ... NOT STARTED," true until S1
+**✅ PROMOTED TO PRODUCTION 2026-11-14 -- customer engagement S1: an Invite… button converts a paper customer in place (PR #186,
+merge `a6a6b0b4`; staging code `5980dc5`; plan `docs/customer-engagement-paper-to-app.md`, ~~STATUS was NOT STARTED~~ now S1
+COMPLETE, both environments).** Rick's `/promote-prod`. New admin-only Edge Function `convert-paper-customer` (convert + resend
+modes): changes the SAME auth user's email and profile (nothing moves, unlike Claim), emails a `type: 'recovery'` sign-in link
+through the F72 G-F shared tenant-identity block (now six byte-identical copies), writes `paper_converted` / `invite_sent`
+usage events attributed to the ADMIN (not the customer). `app.js` `PaperCustomers.convert()` / `resendInvite()`; `admin.html`
+gets the **Invite…** button + modal on paper rows, a **Resend invite** button on a converted customer who has never signed
+in, and Claim's old UUID `prompt()` is now a pick-list of the shop's own accounts (decision D2) that also offers "Merge
+into…" when an Invite targets an address already in the same shop. New columns `user_profiles.converted_from_paper_at` /
+`signup_source` (`docs/sql/2026-11-13-paper-conversion-columns.sql`, **APPLIED on both staging and production**, before any
+code read them; step 0 of this promotion found it and nothing else pending). **Gates:** merge-result check on `app.js` /
+`mylist.html` / `arrivals.html` / `admin.html` all == staging's copy (the `merge=ours` driver did not fire); `supabase/migrations/`
+still 2 files; `config.js` restored == `origin/main`, absent from the PR diff; PR file list re-read on GitHub itself, 12 files,
+MERGEABLE/CLEAN. **Staging evidence that earned it:** a fake-network logic harness 64/64 (six deliberate source mutations each
+seen red); a live staging harness against the deployed function and the deployed `admin.html`, 81/81, teardown re-read 0; full
+Playwright suite 169 passed / 1 skipped / exit 0, three times. **Step 10 (a real admin click, a real delivered email) took
+three tries on staging, recorded in the plan § 6 for the pattern:** two false starts pressed the WRONG pre-existing button
+(the sidebar's "Invite Customer," which created an ordinary account via `invite-customer`; then a paper row's "Claim…," which
+genuinely merged via `claim-paper-customer`) -- both are existing, correct functions, so neither is a defect, and both
+throwaway accounts were torn down after reading what each had actually done. The third, on a fixture named "ZZZ CLICK INVITE
+HERE," used the real **Invite…** button and worked: delivered email subject "...pull list is online," `type=recovery`,
+`dkim`/`spf`/`dmarc` pass, the paid-tier contact line present (confirms the tier gate); read back from the database, not
+assumed from the email: same user id, `is_paper` now false, both events logged correctly. **Verified post-deploy, and how:**
+on BOTH `pulllist.app` and `rjbookstop.pulllist.app`, served `app.js` and `admin.html` byte-identical to `origin/main`,
+confirmed on 5 consecutive polls of the plain URLs. The new function was deployed to production separately (Edge Functions
+deploy from the working tree, not from the merge) from a worktree of `origin/main`: `convert-paper-customer` is now ACTIVE on
+production (v1); `verify_jwt` confirmed OFF by behaviour (an unauthenticated POST and a garbage bearer token both return the
+function's own `{"error":"Unauthorized"}`, not the gateway's `UNAUTHORIZED_INVALID_JWT_FORMAT`, which a known-ON control,
+`approve-customer`, does return for the same garbage token); downloaded artifact hash equal to `origin/main`'s source (and to
+staging's deployed copy -- identical bytes on both environments); the F72 G-F identity-block gate still reads six copies, one
+hash, on `origin/main`. **Write-smoke deliberately skipped:** confirmed from the diff that neither `app.js` (54 changed lines,
+confined to the two new `PaperCustomers` methods) nor `admin.html` mentions `Preorders` or `toggleReserve` anywhere -- this
+diff is account-management only and never touches the reserve path. **Found while building this, unrelated to its own code
+and not part of this PR's diff: F182** (filed and RESOLVED on both environments the same day via a Rick-run SQL trigger, kept
+in the local-only security notes per the F75 pattern -- see the F182 entry in the open-findings table). **Not yet started:
+S2-S5 of the plan.** **Finding-ID disposition, in words: No finding ID consumed (feature build, not a defect).** The old
+Claim UUID prompt was not miscalculating or hiding anything -- it worked as designed, just needed Supabase dashboard access a
+shop owner does not have -- so replacing it is different behaviour Rick wanted, not a fix; S1 does not close F89 (that is S2,
+not yet built). **F183 remains the next free finding ID.** *(This paragraph previously read "PLANNED ... NOT STARTED," true until S1
 shipped the same day.)* Rick chose five ideas from a brainstorm: S1 (done above), S2 conversion measurement (closes F89), S3 a
 "your books this week" email on a Tuesday schedule (production only, titles on that week's invoice only) plus the Bagging
 list's per-customer Email button enabled for past weeks, S4 QR codes on the store poster, new-#1 shelf tags and the Print
