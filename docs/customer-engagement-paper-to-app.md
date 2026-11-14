@@ -1,7 +1,7 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b'S CLIENT CODE ALL COMPLETE AND PROMOTED TO PRODUCTION; S3b's cron is the
-only thing left) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
+**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b ALL COMPLETE AND PROMOTED TO PRODUCTION, cron included; S4 and S5 not
+started) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
 staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 (closes F89, closes F181), S3a
 (the Email button works for a past week) and S3b (the Tuesday notify-arrivals email + opt-out, SQL applied on both
 environments ahead of the code, `notify-arrivals` + the three other touched Edge Functions deployed to staging then
@@ -9,12 +9,16 @@ production) all built, verified end to end on staging, and promoted to productio
 merge `cd10a2d`)**. A same-day review of `notify-arrivals`'s eligibility logic (Rick: confirm it only emails when
 preorders are expected, the customer has a valid email, and paper accounts are excluded) surfaced a real gap — a
 customer whose only match was unavailable was still emailed — fixed and promoted the same day
-**(PR #188, merge `2c17265`)**. **Only S3b's cron remains**: `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own
-`pg_cron`/`pg_net` pre-check (genuinely unverified on this project), setting `ARRIVALS_CRON_SECRET` on production, the
-cron itself, and Rick's own `dry_run` on production before the first Tuesday · staging=S1 complete 2026-11-13, S2
+**(PR #188, merge `2c17265`)**. **S3b's cron is now live on production** (`docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`,
+jobid 1, Tuesday 15:00 UTC, `active=true`), walked through step by step with Rick 2026-11-14 — the pre-check caught and
+fixed a genuine `42P01` parse-time bug in its own existence check, `ARRIVALS_CRON_SECRET` was set on production, and
+Rick's own `dry_run` rehearsal (real secret, real function, read-only) was run and accepted: auth refused a wrong
+secret and the real one returned a real plan (`would_email: 0` for both tenants, because this week's shipment data
+hasn't landed — informational, not a defect). **Only the first real Tuesday fire's own read-back, and the two-week
+Visits comparison, remain** · staging=S1 complete 2026-11-13, S2
 complete 2026-11-14, S3a complete 2026-11-14, S3b complete 2026-11-14 · prod=S1 complete 2026-11-14; S2+S3a+S3b's
 client code complete 2026-11-14 (PR #187); the unavailable-only-skip refinement complete 2026-11-14 (PR #188); S3b's
-cron not started · PR=#186 (S1), #187 (S2+S3a+S3b), #188 (S3b refinement) · findings=F89 (RESOLVED on both
+cron live 2026-11-14 (jobid 1) · PR=#186 (S1), #187 (S2+S3a+S3b), #188 (S3b refinement) · findings=F89 (RESOLVED on both
 environments 2026-11-14, S2),
 F181 (RESOLVED on both environments 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own
 scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building S1,
@@ -657,11 +661,29 @@ SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
   real-world effect either way — informational only, not part of the verification.** No finding ID consumed (caught
   and fixed before the cron exists and before `ARRIVALS_CRON_SECRET` is even set on production, so no real customer
   was ever exposed to the old behaviour).
-- **Not yet done:** `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own pre-check (confirming `pg_cron`/`pg_net`
-  availability; genuinely unverified on this project — stop and use the documented GitHub Actions fallback if either
-  is unavailable), setting `ARRIVALS_CRON_SECRET` on production, the cron itself, Rick's own `dry_run` on production
-  before the first Tuesday, reading back the first scheduled run's response and one delivered email (headers only),
-  and — two weeks after the first scheduled send — a Visits comparison against the two prior weeks (Analytics).
+- **✅ CRON FULLY SET UP ON PRODUCTION 2026-11-14, Rick, walked through step by step (first use of `pg_cron`/`pg_net`
+  anywhere in this project).** Pre-check: `pg_cron_available=true, pg_cron_installed=false, pg_net_available=true,
+  pg_net_installed=false, cron_job_table_exists=false` — both extensions available on the plan, neither installed yet,
+  no prior job (the GitHub Actions fallback was not needed). **A real defect in the pre-check's own first version was
+  caught here, not in advance**: its `cron_job_table_exists` check used `EXISTS (SELECT 1 FROM cron.job WHERE ...)`,
+  which Postgres must resolve at plan time regardless of how conditionally it looks wrapped — with the `cron` schema
+  not yet existing, the statement failed to parse (`42P01`) before any availability check even ran. Fixed in the SQL
+  file to `to_regclass('cron.job') IS NOT NULL` (the same null-safe pattern already used elsewhere in this plan's own
+  S3b pre-check for `arrival_notices`, inconsistently missed here the first time). `ARRIVALS_CRON_SECRET` set on
+  production via the CLI; both `CREATE EXTENSION IF NOT EXISTS` statements and `cron.schedule('notify-arrivals-weekly',
+  '0 15 * * 2', ...)` run one at a time. **Verdict, read from `cron.job` directly, not assumed:** `jobid=1,
+  schedule='0 15 * * 2', active=true`, command text matching the intended URL/headers/body exactly. The job is live;
+  the first real fire is the next Tuesday 15:00 UTC.
+- **✅ RICK'S `dry_run` REHEARSAL DONE 2026-11-14, same real auth path the cron itself uses** (the cron secret header,
+  the real deployed function, read-only). A wrong secret still correctly refused with `401 Unauthorized` (confirms the
+  cron's own auth will work exactly as intended); the correct secret with `dry_run: true` returned `200` with
+  `would_email: 0` for both real tenants — `comicstore` ("no weekly_shipment rows for this week yet"), `rjbookstop`
+  ("no reservations match this week's shipment") — because this week's shipment data had not landed yet at the time of
+  the check, the same state every earlier read-only check this session found. **Accepted by Rick as sufficient**: the
+  mechanism (auth, response shape, skip reasons) is proven; the first real Tuesday run is the actual first content
+  check.
+- **Not yet done:** reading back the first scheduled run's response and one delivered email (headers only), and — two
+  weeks after the first scheduled send — a Visits comparison against the two prior weeks (Analytics).
 
 **Finding-ID disposition, in words: no finding ID consumed.** The three-valued-logic defect was caught and fixed in the
 same build session, before any promotion and before any real customer could be exposed to it — the same disposition this
