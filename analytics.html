@@ -485,6 +485,12 @@
         <span class="hint">Paper customers never log in — they're invite-to-app candidates, not lapses.</span>
       </div>
     </div>
+
+    <div class="card" id="paper-app-card" style="margin-top:18px">
+      <h3>Paper to App</h3>
+      <p class="sub">Converting paper customers to app accounts (customer engagement S1/S2)</p>
+      <div id="paper-app-body"><p class="loading-row">Loading…</p></div>
+    </div>
   </section>
 
   <details class="defs">
@@ -717,7 +723,7 @@
     // cap shape as usage_events already handles below (F82), just not yet
     // applied here. Low risk today for a single-shop customer count, but the
     // same helpers already exist in this file, so routed through them.
-    const profilesSelect = 'id, full_name, email, is_admin, is_paper, status, created_at';
+    const profilesSelect = 'id, full_name, email, is_admin, is_paper, status, created_at, converted_from_paper_at, signup_source';
     const [profilesTotal, ueTotal, orderDeadline, cycleStart, prevStart, promoCfg, signIns] = await Promise.all([
       countRows('user_profiles'),
       countRows('usage_events', ueFilter),
@@ -1984,6 +1990,67 @@
     </table>`;
   }
 
+  // ── Customer engagement S2: paper-to-app conversion (closes F89) ───────
+  // "Converted" reads converted_from_paper_at on the PROFILE, not the
+  // paper_converted event — usage_events purge at 90 days (F90), the
+  // profile stamp does not, so this is the only count that survives it.
+  const SIGNUP_SOURCE_LABELS = {
+    poster:         'Store poster',
+    shelf:          'Shelf tag',
+    slip:           'Bag slip',
+    'catalog-print': 'Print catalog',
+    newsletter:     'Newsletter',
+    news:           'News page',
+  };
+
+  function renderPaperToApp() {
+    const body = document.getElementById('paper-app-body');
+    if (!body) return;
+
+    let paperNow = 0, converted = 0;
+    const convertedProfiles = [];
+    const bySource = new Map();
+    state.profiles.forEach(p => {
+      if (p.is_admin) return;
+      if (p.is_paper) { paperNow++; return; }
+      if (p.converted_from_paper_at) { converted++; convertedProfiles.push(p); }
+      if (p.signup_source) bySource.set(p.signup_source, (bySource.get(p.signup_source) || 0) + 1);
+    });
+
+    // Never signed in: the later-of-sign-in-and-event rule the Win-back list
+    // uses (line ~1933), applied only to the converted population. A customer
+    // with no event in the trailing 90 days AND no sign-in on record reads as
+    // never signed in — the same fail-open posture as the rest of this page
+    // (an unavailable RPC undercounts rather than flags an active customer).
+    const lastSeen = new Map();
+    state.events.forEach(e => {
+      const t = e._t;
+      if (!lastSeen.has(e.user_id) || t > lastSeen.get(e.user_id)) lastSeen.set(e.user_id, t);
+    });
+    const neverSignedIn = convertedProfiles.filter(p => {
+      const ls = Math.max(lastSeen.get(p.id) || 0, state.signInById.get(p.id) || 0);
+      return !ls;
+    }).length;
+
+    const sourceRows = [...bySource.entries()].sort((a, b) => b[1] - a[1]);
+    const sourceHtml = sourceRows.length
+      ? `<div class="promo-recent-h">Native sign-ups by source</div>
+         <div class="tbl-wrap"><table class="tbl" id="paper-app-sources">
+           <thead><tr><th>Source</th><th class="r">Sign-ups</th></tr></thead>
+           <tbody>${sourceRows.map(([src, n]) => `<tr><td class="name">${escapeHtml(SIGNUP_SOURCE_LABELS[src] || src)}</td><td class="r strong">${n}</td></tr>`).join('')}</tbody>
+         </table></div>`
+      : '<div class="promo-recent-h">Native sign-ups by source</div><p class="kpi-note" style="margin-top:0">No tracked source yet (S4/S5 add the QR and poster links that carry one).</p>';
+
+    body.innerHTML = `
+      <div class="promo-stats">
+        <div class="promo-stat"><div class="kpi-label">Paper customers now</div><div class="kpi-value" id="paper-app-now">${paperNow}</div><div class="kpi-note">not yet invited, or declined</div></div>
+        <div class="promo-stat"><div class="kpi-label">Converted</div><div class="kpi-value" id="paper-app-converted">${converted}</div><div class="kpi-note">ever, survives the 90-day event purge</div></div>
+        <div class="promo-stat"><div class="kpi-label">Invited, never signed in</div><div class="kpi-value" id="paper-app-never">${neverSignedIn}</div><div class="kpi-note">of ${converted} converted</div></div>
+      </div>
+      ${sourceHtml}
+      <p class="note">Admins excluded. "Converted" and "Invited, never signed in" count every paper-to-app conversion ever made (Invite… or a claimed slip code), not only the last 90 days.</p>`;
+  }
+
   // ── Render everything from cached state (no refetch) ───────────
   function renderAll() {
     document.getElementById('analytics-subtitle').textContent = state.cycle
@@ -2014,6 +2081,7 @@
     renderSegments();
     renderCohorts();
     renderWinback();
+    renderPaperToApp();
   }
 
   async function loadAll() {

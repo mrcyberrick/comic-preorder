@@ -47,6 +47,12 @@ const APP_INDEX_URL = `${APP_BASE_URL}/index.html`
 const MAIL_FROM_EMAIL = Deno.env.get('MAIL_FROM_EMAIL') ?? 'noreply@mrcyberrick.us'
 const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book Stop"
 
+// Customer engagement S2 (closes F89): where the sign-up came from. The same
+// allowlist as app.js's SignupSource — re-checked here because the client
+// list is a convenience, not a boundary; a posted value outside it is
+// silently dropped (stored as null), never trusted as-is.
+const SIGNUP_SOURCE_ALLOWED = new Set(['poster', 'shelf', 'slip', 'catalog-print', 'newsletter', 'news'])
+
 // F72 S2 (free-tier slice): a tenant's display_name is admin-set, not
 // user-submitted, but it is interpolated into HTML mail — escape it before
 // use, same as any DB-sourced string reaching an HTML template.
@@ -70,8 +76,9 @@ async function provisionPendingCustomer(opts: {
   email: string
   storeName: string
   isPaid: boolean
+  signupSource: string | null
 }): Promise<Response> {
-  const { SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY, tenantId, fullName, email, storeName, isPaid } = opts
+  const { SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY, tenantId, fullName, email, storeName, isPaid, signupSource } = opts
 
   // ── Create Supabase auth user (no password, email pre-confirmed) ──
   const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -115,12 +122,13 @@ async function provisionPendingCustomer(opts: {
       'Prefer':        'resolution=merge-duplicates',
     },
     body: JSON.stringify({
-      id:        userId,
-      full_name: fullName,
+      id:            userId,
+      full_name:     fullName,
       email,
-      status:    'pending',
-      is_admin:  false,
-      tenant_id: tenantId,
+      status:        'pending',
+      is_admin:      false,
+      tenant_id:     tenantId,
+      signup_source: signupSource,
     }),
   })
   if (!profileRes.ok) {
@@ -235,6 +243,8 @@ Deno.serve(async (req) => {
     const name  = ((nativeBody.name  as string | undefined) || '').trim()
     const slug  = ((nativeBody.slug  as string | undefined) || '').trim()
     const turnstileToken = (nativeBody.turnstileToken as string | undefined) || ''
+    const rawSignupSource = ((nativeBody.signup_source as string | undefined) || '').trim()
+    const signupSource = SIGNUP_SOURCE_ALLOWED.has(rawSignupSource) ? rawSignupSource : null
 
     if (!email || !email.includes('@') || !name || !slug) {
       return Response.json({ error: 'email, name, and slug are required' }, { status: 400, headers: corsHeaders })
@@ -287,7 +297,7 @@ Deno.serve(async (req) => {
 
     return await provisionPendingCustomer({
       SUPABASE_URL, SUPABASE_SERVICE, RESEND_API_KEY,
-      tenantId, fullName: name, email, storeName, isPaid,
+      tenantId, fullName: name, email, storeName, isPaid, signupSource,
     })
 
   } catch (err) {

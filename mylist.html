@@ -620,6 +620,11 @@
     <button class="btn btn-secondary btn-sm" id="btn-email-list" title="Send your current pull list to your email">
       ✉ Email My List
     </button>
+    <label id="email-arrivals-toggle" style="display:none;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);white-space:nowrap;cursor:pointer"
+           title="A short weekly note when your reserved books are on that week's shipment">
+      <input type="checkbox" id="chk-email-arrivals">
+      Email me weekly arrivals
+    </label>
     <button class="btn btn-secondary btn-sm" id="btn-print">
       ⎙ Print / Save PDF
     </button>
@@ -2017,6 +2022,31 @@ function confirmDialog(message, okLabel = 'Remove') {
         btnEmail.style.opacity = '0.6';
         toast('Your pull list has been emailed to you!');
         // Button stays disabled — intentional per session design decision
+      }
+    });
+  }
+
+  // ── Email me weekly arrivals (customer engagement S3b, D5) ──────────
+  // Fails open in its own read: a missing/unreadable column must never
+  // break the page the opt-out toggle lives on, the same rule every other
+  // optional-column read in this project follows (F115, get_account_activity,
+  // etc.). Hidden during impersonation, same reasoning as Email My List above
+  // — this is the signed-in account's own preference, not the admin's.
+  const emailArrivalsToggle = document.getElementById('email-arrivals-toggle');
+  const chkEmailArrivals    = document.getElementById('chk-email-arrivals');
+  if (!AdminContext.isActive() && typeof profile?.email_arrivals === 'boolean') {
+    emailArrivalsToggle.style.display = 'flex';
+    chkEmailArrivals.checked = profile.email_arrivals;
+    chkEmailArrivals.addEventListener('change', async () => {
+      const next = chkEmailArrivals.checked;
+      chkEmailArrivals.disabled = true;
+      const { error } = await db.from('user_profiles').update({ email_arrivals: next }).eq('id', user.id);
+      chkEmailArrivals.disabled = false;
+      if (error) {
+        chkEmailArrivals.checked = !next; // revert the UI to match what actually saved
+        toast('Could not save — please try again', 'error');
+      } else {
+        toast(next ? 'Weekly arrivals email turned on' : 'Weekly arrivals email turned off');
       }
     });
   }

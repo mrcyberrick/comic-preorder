@@ -1,9 +1,21 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1 COMPLETE ON STAGING) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built, SQL applied
-on both environments, verified end to end on staging including a real admin click 2026-11-13 · staging=S1 complete 2026-11-13 ·
-prod=not yet promoted · PR=— · findings=F89 (closes at S2), F182 (filed and RESOLVED on both environments the same day, found
-while building S1, unrelated to S1's own code); no new ID consumed for S1 itself (F183 next free)
+**STATUS:** IN PROGRESS (S1 COMPLETE BOTH ENVIRONMENTS; S2 COMPLETE ON STAGING, NOT YET PROMOTED; S3a COMPLETE ON STAGING,
+NOT YET PROMOTED; S3b COMPLETE ON STAGING — SQL applied, `notify-arrivals` deployed, 33/33 gates green; **S3b's SQL (both
+the main migration and the null-safety fix) ALSO APPLIED ON PRODUCTION 2026-11-14**, ahead of any client-code promotion
+— client code (the Edge Function, the toggle), the cron and Rick's pre-launch dry_run are still ahead) · planned
+2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on staging 2026-11-13, promoted to
+production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and verified end to end on staging 2026-11-14; S3a (the Email
+button works for a past week) built and verified end to end on staging 2026-11-14; S3b (the Tuesday notify-arrivals email
++ opt-out) built, its SQL applied on BOTH environments (the main migration and a same-day null-safety fix the gate
+harness caught, both run on staging first then production), `notify-arrivals` deployed to staging only, and the plan's
+own Gates run 33/33 green there — client-code promotion, cron pre-check/setup and Rick's pre-launch dry_run are still
+ahead · staging=S1 complete 2026-11-13, S2 complete 2026-11-14, S3a complete 2026-11-14, S3b complete 2026-11-14 ·
+prod=S1 complete 2026-11-14 (client merged + `convert-paper-customer` deployed, verified); S3b's SQL applied 2026-11-14
+(client code not yet); S2/S3a NOT promoted · PR=#186 (S1 only; S2/S3a/S3b have no PR yet) · findings=F89 (CLOSED on
+staging 2026-11-14, S2), F181 (CLOSED on staging 2026-11-14, S2 — found separately while planning G-I, not part of this
+plan's own scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building
+S1, unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -166,7 +178,15 @@ file is then never left `prod=PENDING`, which would block every other `/promote-
 - [x] Rick has read one delivered invite (not redacted to headers-only, his own live token both times — consistent with the
   session's established pattern) and used the button once on staging; confirmed end to end from the database (§ 6)
 - [x] § 6 of this plan, the STATUS line and `CLAUDE.md` § Current Migration Phase updated
-- [ ] Production: NOT part of S1's session. It needs Rick's `/promote-prod`, then the function deployed to production from a worktree of `origin/main`
+- [x] Production: `/promote-prod` 2026-11-14 (PR #186, merge `a6a6b0b4`); `convert-paper-customer` deployed from a worktree of
+  `origin/main`, ACTIVE v1, `verify_jwt` OFF confirmed by behaviour, artifact hash equal to `origin/main` and to staging's
+  deployed copy. Served `app.js`/`admin.html` on both production hostnames confirmed byte-identical to `origin/main`.
+  Write-smoke skipped (confirmed from the diff: neither file mentions `Preorders` or `toggleReserve`). **Real admin click on
+  PRODUCTION itself done 2026-11-14 (Rick, fixture "Paper Tiger" on `rjbookstop`):** delivered email read (From `Ray & Judy's
+  Book Stop <noreply@pulllist.app>`, `type=recovery`, paid-tier footer present, dkim/spf/dmarc pass), then read back from the
+  production database, not assumed from the email — `is_paper` false, `converted_from_paper_at` set one second before the
+  email timestamp, `status` active, one `paper_converted` + one `invite_sent` event both attributed to the admin's `user_id`
+  (zero logged under the customer's own id). Production verification is complete.
 
 ### S2. Measure it (#4; closes F89)
 
@@ -439,6 +459,184 @@ code; details held locally); **F183 is next free.**
   copies" in all six files (fixing it means editing five other functions); a debug load of `admin.html` as a fresh throwaway admin
   printed three HTTP 406 console errors (not investigated; the cause was not this change's new query, which does not use
   `.single()`, and the full harness run recorded no uncaught page errors).
+
+### S2: measurement built and verified on STAGING (2026-11-14). Closes F89. Closes F181 on staging.
+
+**Not promoted.** Five commits on `staging`: `948d575` (F181 fix, its own commit per D3), `fc9e5c9` (`paper_claimed`),
+`2234db6` (`invite_sent`), `2d3963f` (`signup_source`, client + server), `266d6fd` (the Analytics card).
+
+- **F181, fixed as its own commit (`948d575`), ahead of the event logging per D3.** `claim-paper-customer`'s paper-profile
+  read, real-account read and the profile delete all gained `tenant_id=eq.<callerTenantId>`; a cross-shop id now reads 404,
+  worded identically to an unknown id (no name or existence leaked). The auth-user delete stays unfiltered — GoTrue's
+  `users` table carries no `tenant_id`, and by the time it runs the profile read above has already proved the id belongs
+  to the caller's shop. **Found while planning G-I 2026-11-11, not part of this plan's own scope** (`docs/f164-g-i-same-shop-guard.md`
+  § 2.1); fixed here because D3 asked for it in the same deploy as the event logging.
+- **Events.** `claim-paper-customer` now logs `paper_claimed` on a successful merge (`fc9e5c9`); `invite-customer` now
+  logs `invite_sent` (`2234db6`). Both attributed to the ACTING ADMIN with the customer's id in `metadata` — the same
+  convention S1's `convert-paper-customer` already uses, and for the same reason: attributing to the customer would read
+  as their own activity in Analytics' tally and Accounts' "last seen" column.
+- **`signup_source` (`2d3963f`).** A new `SignupSource` object in `app.js`, built the same way `PostAuthRedirect` keeps
+  the post-auth return path: `capture()` reads `?ref=` once at page load and stores it in `localStorage` (1h TTL, same
+  window as `PostAuthRedirect`), `get()` reads it back. Deliberately **not one-shot** — a failed Turnstile attempt and a
+  retry must not lose the source. `index.html` calls `capture()` in the same init block that resolves `?t=`, and
+  `doSignup()` sends `signup_source: SignupSource.get()`. `register-customer` re-validates the posted value against the
+  same six-entry allowlist server-side (the client's list is a convenience, not a boundary) and stores it on the new
+  profile — silently `null` on anything unlisted, never the raw string.
+- **Analytics card (`266d6fd`).** `analytics.html`'s Customer Intelligence tab gains **Paper to App**: paper customers
+  now, converted ever (read from `user_profiles.converted_from_paper_at`, not from `usage_events`, so the count survives
+  the 90-day purge — F90 is untouched and stays open), invited-but-never-signed-in (the later-of-sign-in-and-event rule
+  `computeWinback()` already uses, applied only to the converted population), and native sign-ups broken down by
+  `signup_source`. Admins excluded, matching the page's existing rule everywhere else.
+- **Deploy.** All three functions' live `verify_jwt` read BEFORE deploying, per F93: `invite-customer` and
+  `register-customer` measured OFF (unchanged, deployed with `--no-verify-jwt`); `claim-paper-customer` measured **ON**
+  (a real surprise — every one of its five siblings in this plan is OFF, and assuming so would have silently flipped a
+  working admin-only function to public; deployed WITHOUT the flag to preserve it). All three re-probed after deploy,
+  unchanged. Downloaded and hashed: all three byte-identical (modulo CRLF) to the committed source.
+- **Verified live:** `s2-verify.mjs` (scripts repo playwright folder, local-only, never committed) — **25/25.**
+  - T1 (same-shop claim): unaffected by the F181 fix — still 200, still merges, still deletes the paper account, now also
+    logs `paper_claimed` with the right attribution and `tenant_id`.
+  - T2/T3 (F181): a read-only query using the OLD, unfiltered shape is shown to match a cross-shop paper account first —
+    demonstrating the vulnerability existed, without ever redeploying insecure code — then the deployed, fixed function
+    refuses both the cross-shop-paper-id and cross-shop-real-id attempts (404 either way), with a fresh read confirming
+    both accounts fully untouched and no `paper_claimed` event written for either attempt.
+  - T5 (`invite-customer`): 200, and the resulting `invite_sent` event reconciles the same four ways T1's does.
+  - T6 (client, real browser against the deployed bytes): a valid `?ref=` is captured; an unlisted one is rejected
+    (nothing stored); the captured value survives a plain navigation with no `?ref=` (not one-shot). A full click-through
+    of `doSignup()` is untestable here — Turnstile is server-verified and the function returns before ever calling
+    `fetch()` with no token, the same limit `native-customer-signup-verify.mjs` already records for this exact form — so
+    the wiring is confirmed instead as a served-bytes marker: `signup_source: SignupSource.get()` and `SignupSource.capture()`
+    both present in the deployed `index.html`.
+  - **One wrong expectation in the harness itself, caught by SELFTEST, corrected before the live run**: a test case
+    asserted `'  poster  '` (padded) should be rejected; the server actually trims every posted field before validating
+    it (matching `name`/`email`/`slug` elsewhere in the same file), so `'poster'` is the correct, intended result. The
+    code was right; the test's assumption was not.
+  - Zero stray auth users: a fresh scan of all 993 staging auth users, before and after, found none matching the
+    session's fixture prefixes.
+- **Card numbers reconciled against real data, not just harness fixtures.** A throwaway founding-tenant admin loaded the
+  real deployed `analytics.html` in a browser; the on-screen card read **10 paper / 1 converted / 1 invited-never-signed-in**,
+  matching an independent service-role count against the same tenant exactly.
+- **Gates:** spec 18 (nav/footer sync) 13/13; full Playwright suite **169 passed, 1 skipped, 0 failed, 28.5 min**.
+- **Not verified:** a real production signup carrying a `?ref=` (none exists yet — `?ref=` has no producer until S4/S5
+  build the QR codes and poster links that set it); the F181 fix on production (staging only so far).
+
+### S3a: the This Week Email button works for a past week (2026-11-14). Built and verified on staging.
+
+`admin.html` only, `b153701`. `isCurrentWeek` kept; a new `canEmailWeek = weekAnchorMonday <= currentMon` (ISO Mon strings
+compare lexically) replaces the old current-week-only guard on the Email button; a future week is still disabled, now with
+a tooltip saying why ("has not arrived yet"). The confirm names the week and, for a past week only, adds the one known
+limit Rick accepted ("Past-week button can reuse email for now"): it lists everything reserved that week, already-picked-up
+and not-arriving titles included.
+
+**Verified:** spec 06 gained a new test seeding a real past-week and future-week customer (not `.first()` against whatever
+the bagging list happens to render — a vacuous "no card" skip would have proven nothing), targeting each by `data-user-id`:
+past week's button enabled with no "has not arrived yet" tooltip, future week's disabled with it. **4/4 passed** against the
+deployed staging bytes. This is a genuine regression check without needing a negative-control redeploy: the pre-fix code
+disabled the button for ANY non-current week, past or future alike, so the "past week enabled" assertion would have failed
+against it — confirmed from the diff, not assumed.
+
+**No finding ID consumed** (feature build, not a defect — the old button not working for a past week was the specified
+behaviour before this step, not a miscalculation). **Not yet promoted to production.**
+
+### S3b: "Your books this week", the Tuesday email (2026-11-14). BUILT AND VERIFIED ON STAGING. Production not started.
+
+Six commits on `staging`: `d7191ef` (SQL, prepared), `3c1a801` (the `notify-arrivals` Edge Function), `53c396f` (the My
+List opt-out toggle + `privacy.html`'s sentence), `427bf94` (doc record, S3b then still blocked), `00958f0` + `d526fe2`
+(a same-day null-safety fix to the digest RPC, the second commit correcting the fix's own check query), `03c422b` (both
+SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
+
+- **SQL** (`docs/sql/2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql`): `user_profiles.email_arrivals boolean NOT
+  NULL DEFAULT true` (D5); `arrival_notices (tenant_id, user_id, week_start, sent_at)`, UNIQUE on the first three, SELECT
+  for admins only, written only by the service role; a new `arrivals_this_week_digest(tenant, week_start, week_end)` RPC
+  that matches open reservations to the week's `weekly_shipment` rows the SAME three-key way `auto_fulfill_past_on_sale()`
+  does, and classifies each matched row withdrawn / ledger-rejected / admin-marked the same way `admin.html`'s
+  `renderThisWeek()` and `app.js`'s `exportCode()`/`ledgerRejected()` already do — moved server-side so the Edge Function
+  does not re-derive that logic in TypeScript. `c.tenant_id` is checked again even though `catalog_id` implies it, as a
+  second guard against F164's cross-tenant `catalog_id` shape.
+- **⚠️ A real interaction with F182 found and fixed in the same file, not left for later.** The security-sensitive
+  self-update guard trigger added by F182 (`user_profiles_guard_self_update`, details in the operator's local-only
+  security notes) default-denies any column a customer tries to change on their OWN profile except an explicit allowlist
+  — today just `has_seen_welcome`. Adding `email_arrivals` as a customer-toggleable column WITHOUT widening that allowlist
+  would have made every customer's own toggle write fail `42501`, silently — the client's `UPDATE` would look entirely
+  correct, the column would exist, and the write would simply be refused. The same SQL file widens the allowlist to
+  `{has_seen_welcome, email_arrivals}` and nothing else — `is_admin`/`status`/`tenant_id`/`id` stay admin-only.
+- **The cron** (`docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`, production only, its own file so staging's N/A never
+  blocks `/promote-prod` step 0): a pre-check reading `pg_available_extensions` for `pg_cron` and `pg_net` BEFORE anything
+  is created — neither extension has been used anywhere in this project, and the file says explicitly to stop and use the
+  documented GitHub Actions fallback if either comes back unavailable on this plan, rather than attempting to force it.
+- **`notify-arrivals`** (`supabase/functions/notify-arrivals/index.ts`): two callers — the `ARRIVALS_CRON_SECRET` header
+  (every shop, one call) or a signed-in admin (scoped to their own tenant only — Rick's `dry_run` check before the first
+  Tuesday). `dry_run: true` computes and returns the send plan, writes nothing. Per tenant: 0 `weekly_shipment` rows for
+  the week → skip with the reason stated (not "nothing is arriving" — the shipment import has not run, F115's own
+  distinction); otherwise call the digest RPC, drop paper/pending/paused/opted-out/already-sent (via `arrival_notices`)
+  customers, group by customer into arriving + "Not arriving this week". Refuses to send at all above 90 total recipients
+  across every shop (F148). The email's table reuses `send-my-list`'s own HTML/CSS table convention (not its data path —
+  that filters by `catalog.on_sale_date`, exactly the date-only match this step exists to avoid), adds a "Not arriving
+  this week" note and a line saying where to turn the email off. The F72 G-F shared tenant-identity block is copied in
+  verbatim (byte-identical to the other six copies, including their own already-stale "five copies" comment — S1's own
+  precedent for this exact situation, kept consistent rather than fixed in isolation).
+- **The opt-out toggle** (`mylist.html`): "Email me weekly arrivals" beside Email My List, hidden during impersonation.
+  **Fails open by construction, verified live**: with the column not yet existing on staging, `typeof
+  profile?.email_arrivals !== 'boolean'`, so the toggle stays hidden rather than breaking the page or showing a wrong
+  state — confirmed in a real browser against the deployed bytes (a throwaway customer, two consecutive loads, toggle
+  invisible both times, zero page errors), which is what makes it safe to have deployed this BEFORE the SQL ran.
+- **`privacy.html`** gains "and a weekly note when your reserved books arrive" in the account-emails bullet.
+- **SQL ran on staging, Rick, pre-check → block → verdict, 2026-11-14.** Verdict matched expected exactly:
+  `column_now_exists=true`, `non_default_rows=0` (every existing row defaulted to `true`, nobody pre-opted-out),
+  `rls_enabled=true`, `policies=1`, `anon_grants=0`, `authenticated_grants=SELECT`, `guard_widened=true`,
+  `rpc_now_exists=true`, `rpc_anon_authenticated_grants=0`, `tenants_here` named the staging tenants.
+- **`notify-arrivals` deployed to staging** (`--no-verify-jwt`, confirmed live by behaviour both before and after: an
+  unauthenticated POST and a garbage-bearer-token POST both return the function's own `{"error":"Unauthorized"}`, never
+  the gateway's body).
+- **⚠️ A real defect found by the gate harness, before any promotion, before any real customer: `arrivals_this_week_digest()`'s
+  `is_unavailable` column returned NULL instead of `false`.** Classic SQL three-valued logic — `arrival_outcome IN (...)`
+  evaluates to NULL (not false) when `arrival_outcome` is NULL, and `FALSE OR NULL OR FALSE = NULL`, not `FALSE`, when
+  nothing else in the OR chain is definitively true. **Not customer-visible**: `notify-arrivals` buckets with
+  `row.is_unavailable ? unavailable : available`, and JS treats `null` as falsy exactly like `false`, so the row still
+  landed in the right bucket in the harness's own real send (confirmed directly: `title_count=2`, correctly split). Still
+  a genuine contract defect — a column declared `boolean` should never silently read NULL — so it was fixed the same
+  session rather than left for later: `docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql` wraps the expression in
+  `COALESCE(..., false)`, the same pattern the function's own `arrival_outcome IS DISTINCT FROM 'arrived'` clause already
+  uses for this reason. **The fix's own first pre-check query was ALSO wrong** — a `LIKE '%COALESCE(%...%'` pattern that
+  matched on the function's unrelated, pre-existing `COALESCE(` in the `export_code` CASE expression, so it read
+  `already_coalesced=true` before the fix had ever run. Caught by probing the live RPC directly with a throwaway row
+  rather than trusting the query (`is_unavailable` still read `null`); corrected to a regex anchoring `COALESCE(`
+  immediately against the `is_unavailable` clause's own first condition, verified against both body shapes locally
+  before asking for a second SQL round-trip. Both files now read `staging=APPLIED 2026-11-14`.
+- **Gates: 33/33, green, staging, real deployed function + real RPC, FK-ordered teardown re-read 0.** Four throwaway
+  customers (Arlene: reserved an available title AND a ledger-rejected one on this week's shipment; Nora: reserved a
+  title with NO shipment row this week; Oscar: reserved an available title but `email_arrivals=false`; Priya: reserved
+  an available title but `status='suspended'`). Confirmed: a no-secret/no-session call is refused (401, re-confirmed
+  live); the digest RPC classifies the available title `is_unavailable=false` and the rejected one
+  `is_unavailable=true, unavailable_reason='Rejected by the supplier'`, both attributed to Arlene, and the no-shipment
+  title never appears at all (it can't join a shipment row that doesn't exist); `dry_run` names exactly Arlene
+  (`title_count=2`) and nobody else, writes nothing; a tenant with 0 `weekly_shipment` rows this week (`demoshop`) is
+  skipped with the stated reason, not silently; the real call sends exactly 1 (Arlene), 0 failed, and the skip reason
+  carries through to the real response too; `arrival_notices` gets exactly one row, for Arlene; a second identical real
+  call sends 0 (no double send — the dedup excludes already-notified users from the plan entirely, `dry_run` included).
+- **✅ BOTH PRODUCTION SQL FILES APPLIED 2026-11-14, Rick, ahead of any client-code promotion** (safe sequencing — SQL
+  before anything that reads it, same discipline as every prior migration in this project). The main migration's verdict
+  matched exactly, with `tenants_here=comicstore,rjbookstop` confirming it ran on production, not staging. **That file's
+  own `arrivals_this_week_digest()` body is the unfixed one** (the null-safety fix was a separate follow-up file, never
+  folded back in), so production briefly carried the same NULL-vs-false bug staging had before its fix — caught before
+  asking for the verdict, not after, by reading the file's own RPC body text directly rather than assuming "applied"
+  meant "applied correctly." `docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql` ran on production the same day;
+  verdict `now_coalesced=true, rpc_anon_authenticated_grants=0`, matching staging's own verdict exactly. **Not
+  independently re-probed with throwaway production data** (deliberately — unlike the staging functional gates, this is
+  a pure function-source-text check with no environment-dependent data, and the underlying `CREATE OR REPLACE` is
+  byte-identical to what already passed full functional verification on staging), but the regex it relies on was
+  validated locally against both body shapes before it ever ran anywhere. Both files now read `prod=APPLIED 2026-11-14`.
+- **Not yet done:** promotion of the client code (`notify-arrivals`, the My List toggle, `privacy.html`) to production,
+  `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own pre-check (confirming `pg_cron`/`pg_net` availability;
+  genuinely unverified on this project — stop and use the documented GitHub Actions fallback if either is unavailable),
+  the cron itself, Rick's own `dry_run` on production before the first Tuesday, reading back the first scheduled run's
+  response and one delivered email (headers only), and — two weeks after the first scheduled send — a Visits comparison
+  against the two prior weeks (Analytics).
+
+**Finding-ID disposition, in words: no finding ID consumed.** The three-valued-logic defect was caught and fixed in the
+same build session, before any promotion and before any real customer could be exposed to it — the same disposition this
+project's history records for a pre-ship catch (e.g. the F156-adjacent and F182-adjacent in-session fixes elsewhere in
+this plan). The F182 self-update-guard interaction above is likewise a correctness fix within this step's own new
+column, not a defect in anything that shipped before it. **F183 remains the next free finding ID.**
 
 ## 7. Not verified when this plan was written
 
