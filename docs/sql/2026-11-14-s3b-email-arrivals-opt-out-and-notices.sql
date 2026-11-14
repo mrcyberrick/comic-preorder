@@ -1,4 +1,4 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-14 | prod=PENDING
 -- ============================================================================
 -- Customer engagement S3b (docs/customer-engagement-paper-to-app.md § S3b)
 -- Prepared 2026-11-14. Operator: Rick (Supabase SQL Editor, runs as postgres).

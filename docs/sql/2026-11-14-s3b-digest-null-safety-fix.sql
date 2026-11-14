@@ -1,4 +1,4 @@
--- STATUS: staging=PENDING | prod=N/A
+-- STATUS: staging=APPLIED 2026-11-14 | prod=N/A
 -- ============================================================================
 -- Customer engagement S3b — same-day follow-up fix (docs/customer-engagement-paper-to-app.md § S3b).
 -- Prepared 2026-11-14, same day as the S3b migration this corrects. Operator:
