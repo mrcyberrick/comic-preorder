@@ -360,6 +360,38 @@ const PostAuthRedirect = {
 };
 window.PostAuthRedirect = PostAuthRedirect;
 
+// Customer engagement S2 (closes F89): where a native sign-up came from.
+// Kept the same way PostAuthRedirect keeps the return path — a ?ref= value
+// can arrive on a page load well before the sign-up form is submitted (a
+// Turnstile retry, a bounce to the Policy link and back), so it is captured
+// once at page load and read back at submit time rather than read directly
+// off window.location inside doSignup(). Unlike PostAuthRedirect this is
+// NOT one-shot: a failed submit must not lose the source on retry.
+const SignupSource = {
+  _key: 'pulllist.signup_source',
+  _ttlMs: 60 * 60 * 1000,   // 1h — same window as PostAuthRedirect
+  _allowed: ['poster', 'shelf', 'slip', 'catalog-print', 'newsletter', 'news'],
+
+  capture(loc = window.location) {
+    try {
+      const ref = new URLSearchParams(loc.search || '').get('ref');
+      if (!ref || !this._allowed.includes(ref)) return;
+      window.localStorage.setItem(this._key, JSON.stringify({ ref, at: Date.now() }));
+    } catch { /* private mode / storage disabled — signup proceeds with no source */ }
+  },
+
+  get() {
+    try {
+      const raw = window.localStorage.getItem(this._key);
+      if (!raw) return null;
+      const { ref, at } = JSON.parse(raw);
+      if (!ref || !at || Date.now() - at > this._ttlMs) return null;
+      return this._allowed.includes(ref) ? ref : null;
+    } catch { return null; }
+  },
+};
+window.SignupSource = SignupSource;
+
 // ── Auth Helpers ─────────────────────────────────────────────
 const Auth = {
   async getSession() {

@@ -5188,6 +5188,11 @@ There is no undo in the app.`);
     const currentMon = DateUtils.weekRange().start;
     if (!weekAnchorMonday) weekAnchorMonday = currentMon;
     const isCurrentWeek = weekAnchorMonday === currentMon;
+    // Customer engagement S3a: the Email button now also works for any PAST
+    // week (ISO Mon strings compare lexically) — a future week stays disabled,
+    // since nothing has shipped for it yet. YYYY-MM-DD compares correctly as
+    // a plain string.
+    const canEmailWeek = weekAnchorMonday <= currentMon;
 
     const [my, mm, md] = weekAnchorMonday.split('-').map(Number);
     const monday = new Date(my, mm - 1, md);
@@ -5433,7 +5438,7 @@ There is no undo in the app.`);
               </div>
               <button class="btn btn-secondary btn-sm bagging-email-btn no-print"
                       data-user-id="${group.user_id}" data-user-name="${escapeHtml(name)}"
-                      ${isCurrentWeek ? `title='Send "your books are in" reminder email'` : 'disabled title="Email only available for current week"'}>
+                      ${canEmailWeek ? `title='Send "your books are in" reminder email'` : 'disabled title="This week has not arrived yet — email becomes available once it starts"'}>
                 <span style="font-size:0.9rem">&#9993;</span>&nbsp;Email
               </button>
             </div>
@@ -5454,7 +5459,14 @@ There is no undo in the app.`);
       btn.addEventListener('click', async () => {
         const uid  = btn.dataset.userId;
         const name = btn.dataset.userName;
-        if (!confirm(`Send pull-list email to ${name}?`)) return;
+        // S3a: name the week so a past-week send is never mistaken for this
+        // week's, and state the one known limit of reusing send-my-list for
+        // an already-closed week — it lists everything reserved for that
+        // week, titles already picked up and not-arriving titles included.
+        const confirmMsg = isCurrentWeek
+          ? `Send ${name} their list for the week of ${weekDisplay}?`
+          : `Send ${name} their list for the week of ${weekDisplay}? This includes titles already picked up or marked as not arriving.`;
+        if (!confirm(confirmMsg)) return;
         btn.disabled = true;
         btn.textContent = 'Sending…';
         const { data: sess } = await db.auth.getSession();
