@@ -1,6 +1,9 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** NOT STARTED · planned 2026-11-13, decisions D1-D9 answered the same day · staging=— · prod=— · PR=— · findings=F89 (closes at S2); no new ID consumed (F182 next free)
+**STATUS:** IN PROGRESS (S1 COMPLETE ON STAGING) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built, SQL applied
+on both environments, verified end to end on staging including a real admin click 2026-11-13 · staging=S1 complete 2026-11-13 ·
+prod=not yet promoted · PR=— · findings=F89 (closes at S2), F182 (filed and RESOLVED on both environments the same day, found
+while building S1, unrelated to S1's own code); no new ID consumed for S1 itself (F183 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -153,15 +156,16 @@ file is then never left `prod=PENDING`, which would block every other `/promote-
 
 **S1 completion criteria**
 
-- [ ] The live staging check of the admin update-user call and the `recovery` link is recorded in § 6
-- [ ] `docs/sql/` file for the two columns written, with a verdict query whose output differs when it has failed
-- [ ] SQL applied by Rick on staging and on production; STATUS line reads `APPLIED` for both
-- [ ] `convert-paper-customer` deployed to staging with `--no-verify-jwt`; deployed source downloaded and hashed equal to the commit
-- [ ] `PaperCustomers.convert` in `app.js`; Invite… button and modal in `admin.html`; Claim uses a pick-list (D2)
-- [ ] Harness gates green on the deployed staging bytes, each new assertion seen red once, teardown re-read 0
-- [ ] Full Playwright suite run once after the push; its own `N passed` line recorded
-- [ ] Rick has read one delivered invite (headers only) and used the button once on staging
-- [ ] § 6 of this plan, the STATUS line and `CLAUDE.md` § Current Migration Phase updated
+- [x] The live staging check of the admin update-user call and the `recovery` link is recorded in § 6
+- [x] `docs/sql/` file for the two columns written, with a verdict query whose output differs when it has failed
+- [x] SQL applied by Rick on staging and on production; STATUS line reads `APPLIED` for both
+- [x] `convert-paper-customer` deployed to staging with `--no-verify-jwt`; deployed source downloaded and hashed equal to the commit
+- [x] `PaperCustomers.convert` in `app.js`; Invite… button and modal in `admin.html`; Claim uses a pick-list (D2)
+- [x] Harness gates green on the deployed staging bytes, each new assertion seen red once, teardown re-read 0
+- [x] Full Playwright suite run once after the push; its own `N passed` line recorded
+- [x] Rick has read one delivered invite (not redacted to headers-only, his own live token both times — consistent with the
+  session's established pattern) and used the button once on staging; confirmed end to end from the database (§ 6)
+- [x] § 6 of this plan, the STATUS line and `CLAUDE.md` § Current Migration Phase updated
 - [ ] Production: NOT part of S1's session. It needs Rick's `/promote-prod`, then the function deployed to production from a worktree of `origin/main`
 
 ### S2. Measure it (#4; closes F89)
@@ -342,8 +346,32 @@ Local probe `convert-paper-s1-probe.mjs` (scripts repo playwright folder, never 
    name and this run's stamp, deleted, fresh read 404. The probe now deletes it itself (re-run: 989 users before and after).
    The function must only ever use `recovery` for an existing user.
 
-**Not verified at this step:** a delivered email (that is step 10); the set-password page itself (the link was followed at the
-GoTrue level only, not through a browser); production (never touched).
+**Step 10, done 2026-11-13 (same session, after two false starts):** a real admin click on the real deployed button sent a real
+email and converted a real row. Two earlier attempts exercised the WRONG control — the pre-existing "Invite Customer" sidebar
+button (creates a brand-new ordinary account via `invite-customer`, `type=invite`) once, and the pre-existing "Claim…" picker
+(merges via `claim-paper-customer`, the F13 function) once — both torn down by hand after reading what each actually did; see the
+entries below. The third attempt, on a fixture named unmistakably **"ZZZ CLICK INVITE HERE"**, used the row's own **Invite…**
+button and worked: delivered email subject "...pull list is **online**", `type=recovery` in the link, `dkim`/`spf`/`dmarc` all
+pass, the paid-tier contact paragraph present (confirms the tier gate too, since the founding tenant is `pro`). Read back from the
+database, not assumed from the email alone: same auth user id; `is_paper` now false; `email` now the typed address;
+`converted_from_paper_at` set; `paper_converted` (`via: admin`) and `invite_sent` (`via: convert`) both logged, attributed to the
+ADMIN's id with the customer's id in `metadata.target_user_id` (not attributed to the customer, as designed). **S1's own completion
+criteria are now all met; production deploy is next, on Rick's `/promote-prod`.**
+
+**Not verified at this step:** the set-password page itself (the link was followed only at the email level, never clicked through
+in a browser); production (never touched; this entire step ran on staging).
+
+**Two false starts, same session, kept for the record (not an S1 defect — both are pre-existing functions working as designed;
+the confusion was which BUTTON to press, not a bug in anything new):**
+1. **Wrong button #1:** the sidebar's pre-existing "Invite Customer," with an email typed directly (not left blank), created a
+   brand-new ordinary account `testuser1@mrcyberrick.us` via `invite-customer` (`type=invite`). Torn down by hand (profile +
+   auth deleted, re-read 0 / 404) once identified as the wrong flow.
+2. **Wrong button #2:** a paper customer's pre-existing "Claim…" button (next to the new "Invite…"), with an existing account
+   ("Test Merge" / `merge@mrcyberrick.us`, itself created via the sidebar's Invite Customer) chosen from the new picker (D2's UI,
+   confirmed working as a side effect). This genuinely merged via `claim-paper-customer` — the paper row was deleted, its 0 rows
+   of data had nothing to carry over. Both accounts torn down by hand after confirming via the database that the merge had
+   actually happened (no `paper_converted`/`invite_sent` event exists for `claim-paper-customer`, by design — F89 — so the
+   merge itself was confirmed by the paper row's absence and a usage_events read, not by an event naming it).
 
 ### S1, steps 3 to 8: SQL applied, function and screens built and verified on STAGING (2026-11-13)
 
