@@ -32,10 +32,19 @@
 -- ============================================================================
 
 -- ── PRE-CHECK (run on its own first)
+-- ⚠️ v1 of this check used `LIKE '%COALESCE(%cd.c_withdrawn_at IS NOT NULL%'`,
+-- which false-positived on the UNFIXED body too: the function already has an
+-- unrelated COALESCE( earlier (in the export_code CASE), and LIKE's %...% is
+-- satisfied by ANY COALESCE( appearing anywhere before the later text,
+-- however far away. It read already_coalesced=true before this file had ever
+-- run (caught by probing the live RPC directly with a throwaway row, not by
+-- trusting this query). Replaced with a regex anchoring COALESCE( immediately
+-- against the is_unavailable clause's own first condition, which only the
+-- FIXED body contains at that adjacency.
 SELECT
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'arrivals_this_week_digest'
     AND pronamespace = 'public'::regnamespace)                     AS rpc_exists,
-  (SELECT pg_get_functiondef(oid) LIKE '%COALESCE(%cd.c_withdrawn_at IS NOT NULL%'
+  (SELECT pg_get_functiondef(oid) ~ 'COALESCE\s*\(\s*cd\.c_withdrawn_at IS NOT NULL'
      FROM pg_proc WHERE proname = 'arrivals_this_week_digest'
     AND pronamespace = 'public'::regnamespace)                     AS already_coalesced;
 -- Expected: rpc_exists = true, already_coalesced = false (if true, this file
@@ -129,7 +138,7 @@ GRANT EXECUTE ON FUNCTION public.arrivals_this_week_digest(uuid, date, date) TO 
 
 -- ── VERDICT (run on its own after)
 SELECT
-  (SELECT pg_get_functiondef(oid) LIKE '%COALESCE(%cd.c_withdrawn_at IS NOT NULL%'
+  (SELECT pg_get_functiondef(oid) ~ 'COALESCE\s*\(\s*cd\.c_withdrawn_at IS NOT NULL'
      FROM pg_proc WHERE proname = 'arrivals_this_week_digest'
     AND pronamespace = 'public'::regnamespace)                     AS now_coalesced,
   (SELECT count(*) FROM information_schema.role_routine_grants
