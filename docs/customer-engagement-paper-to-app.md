@@ -1,13 +1,14 @@
 # Customer engagement: paper customers to app users
 
 **STATUS:** IN PROGRESS (S1 COMPLETE BOTH ENVIRONMENTS; S2 COMPLETE ON STAGING, NOT YET PROMOTED; S3a COMPLETE ON STAGING,
-NOT YET PROMOTED; S3b CODE WRITTEN, BLOCKED ON SQL) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built
-and verified end to end on staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and
-verified end to end on staging 2026-11-14; S3a (the Email button works for a past week) built and verified end to end on
-staging 2026-11-14; S3b (the Tuesday notify-arrivals email + opt-out) has its SQL, Edge Function and client toggle written
-and pushed to staging 2026-11-14 but NOT YET RUNNABLE — the companion SQL (two columns/tables/one RPC) needs Rick to run it
-on staging before the function can be deployed and tested · staging=S1 complete 2026-11-13, S2 complete 2026-11-14, S3a
-complete 2026-11-14, S3b code pushed 2026-11-14 pending SQL · prod=S1 complete 2026-11-14 (client merged +
+NOT YET PROMOTED; S3b COMPLETE ON STAGING — SQL applied, `notify-arrivals` deployed, 33/33 gates green — NOT YET STARTED
+ON PRODUCTION) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on staging
+2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and verified end to end on staging
+2026-11-14; S3a (the Email button works for a past week) built and verified end to end on staging 2026-11-14; S3b (the
+Tuesday notify-arrivals email + opt-out) built, its SQL applied on staging (both the main migration and a same-day
+null-safety fix the gate harness caught), `notify-arrivals` deployed to staging, and the plan's own Gates run 33/33 green
+— production SQL, cron pre-check/setup and Rick's pre-launch dry_run are still ahead · staging=S1 complete 2026-11-13, S2
+complete 2026-11-14, S3a complete 2026-11-14, S3b complete 2026-11-14 · prod=S1 complete 2026-11-14 (client merged +
 `convert-paper-customer` deployed, verified); S2/S3a/S3b NOT promoted · PR=#186 (S1 only; S2/S3a/S3b have no PR yet) ·
 findings=F89 (CLOSED on staging 2026-11-14, S2), F181 (CLOSED on staging 2026-11-14, S2 — found separately while planning
 G-I, not part of this plan's own scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day,
@@ -533,10 +534,12 @@ against it — confirmed from the diff, not assumed.
 **No finding ID consumed** (feature build, not a defect — the old button not working for a past week was the specified
 behaviour before this step, not a miscalculation). **Not yet promoted to production.**
 
-### S3b: "Your books this week", the Tuesday email (2026-11-14). Code written and pushed; BLOCKED on SQL.
+### S3b: "Your books this week", the Tuesday email (2026-11-14). BUILT AND VERIFIED ON STAGING. Production not started.
 
-Three commits on `staging`: `d7191ef` (SQL, prepared, PENDING on both environments), `3c1a801` (the `notify-arrivals` Edge
-Function), `53c396f` (the My List opt-out toggle + `privacy.html`'s sentence).
+Six commits on `staging`: `d7191ef` (SQL, prepared), `3c1a801` (the `notify-arrivals` Edge Function), `53c396f` (the My
+List opt-out toggle + `privacy.html`'s sentence), `427bf94` (doc record, S3b then still blocked), `00958f0` + `d526fe2`
+(a same-day null-safety fix to the digest RPC, the second commit correcting the fix's own check query), `03c422b` (both
+SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
 
 - **SQL** (`docs/sql/2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql`): `user_profiles.email_arrivals boolean NOT
   NULL DEFAULT true` (D5); `arrival_notices (tenant_id, user_id, week_start, sent_at)`, UNIQUE on the first three, SELECT
@@ -574,19 +577,50 @@ Function), `53c396f` (the My List opt-out toggle + `privacy.html`'s sentence).
   state — confirmed in a real browser against the deployed bytes (a throwaway customer, two consecutive loads, toggle
   invisible both times, zero page errors), which is what makes it safe to have deployed this BEFORE the SQL ran.
 - **`privacy.html`** gains "and a weekly note when your reserved books arrive" in the account-emails bullet.
-- **BLOCKED: `arrivals_this_week_digest()`, `arrival_notices` and `email_arrivals` do not exist on staging yet.**
-  `notify-arrivals` cannot be deployed and exercised, and the opt-out toggle cannot actually be used, until Rick runs
-  `docs/sql/2026-11-14-s3b-email-arrivals-opt-out-and-notices.sql` on staging (pre-check, the block, the verdict). Once
-  that lands: deploy `notify-arrivals` to staging (`--no-verify-jwt`, a brand-new function, no live setting to preserve),
-  run the plan's own Gates (four throwaway customers — titles on the invoice, reserved but not on the invoice, opted out,
-  paused — plus one unavailable title; `dry_run` names exactly the first customer; the real call makes exactly one email
-  request with the right titles and the unavailable one in the note; a second run sends 0; a week with no shipment rows
-  sends 0 and says why; a call with no secret and no admin session is refused), then the full suite once.
-- **Not started:** the production SQL run, the cron file's pre-check and the cron itself (all Rick's, in that order, each
-  gated on the step before it), and the two-weeks-after-first-send Visits comparison.
+- **SQL ran on staging, Rick, pre-check → block → verdict, 2026-11-14.** Verdict matched expected exactly:
+  `column_now_exists=true`, `non_default_rows=0` (every existing row defaulted to `true`, nobody pre-opted-out),
+  `rls_enabled=true`, `policies=1`, `anon_grants=0`, `authenticated_grants=SELECT`, `guard_widened=true`,
+  `rpc_now_exists=true`, `rpc_anon_authenticated_grants=0`, `tenants_here` named the staging tenants.
+- **`notify-arrivals` deployed to staging** (`--no-verify-jwt`, confirmed live by behaviour both before and after: an
+  unauthenticated POST and a garbage-bearer-token POST both return the function's own `{"error":"Unauthorized"}`, never
+  the gateway's body).
+- **⚠️ A real defect found by the gate harness, before any promotion, before any real customer: `arrivals_this_week_digest()`'s
+  `is_unavailable` column returned NULL instead of `false`.** Classic SQL three-valued logic — `arrival_outcome IN (...)`
+  evaluates to NULL (not false) when `arrival_outcome` is NULL, and `FALSE OR NULL OR FALSE = NULL`, not `FALSE`, when
+  nothing else in the OR chain is definitively true. **Not customer-visible**: `notify-arrivals` buckets with
+  `row.is_unavailable ? unavailable : available`, and JS treats `null` as falsy exactly like `false`, so the row still
+  landed in the right bucket in the harness's own real send (confirmed directly: `title_count=2`, correctly split). Still
+  a genuine contract defect — a column declared `boolean` should never silently read NULL — so it was fixed the same
+  session rather than left for later: `docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql` wraps the expression in
+  `COALESCE(..., false)`, the same pattern the function's own `arrival_outcome IS DISTINCT FROM 'arrived'` clause already
+  uses for this reason. **The fix's own first pre-check query was ALSO wrong** — a `LIKE '%COALESCE(%...%'` pattern that
+  matched on the function's unrelated, pre-existing `COALESCE(` in the `export_code` CASE expression, so it read
+  `already_coalesced=true` before the fix had ever run. Caught by probing the live RPC directly with a throwaway row
+  rather than trusting the query (`is_unavailable` still read `null`); corrected to a regex anchoring `COALESCE(`
+  immediately against the `is_unavailable` clause's own first condition, verified against both body shapes locally
+  before asking for a second SQL round-trip. Both files now read `staging=APPLIED 2026-11-14`.
+- **Gates: 33/33, green, staging, real deployed function + real RPC, FK-ordered teardown re-read 0.** Four throwaway
+  customers (Arlene: reserved an available title AND a ledger-rejected one on this week's shipment; Nora: reserved a
+  title with NO shipment row this week; Oscar: reserved an available title but `email_arrivals=false`; Priya: reserved
+  an available title but `status='suspended'`). Confirmed: a no-secret/no-session call is refused (401, re-confirmed
+  live); the digest RPC classifies the available title `is_unavailable=false` and the rejected one
+  `is_unavailable=true, unavailable_reason='Rejected by the supplier'`, both attributed to Arlene, and the no-shipment
+  title never appears at all (it can't join a shipment row that doesn't exist); `dry_run` names exactly Arlene
+  (`title_count=2`) and nobody else, writes nothing; a tenant with 0 `weekly_shipment` rows this week (`demoshop`) is
+  skipped with the stated reason, not silently; the real call sends exactly 1 (Arlene), 0 failed, and the skip reason
+  carries through to the real response too; `arrival_notices` gets exactly one row, for Arlene; a second identical real
+  call sends 0 (no double send — the dedup excludes already-notified users from the plan entirely, `dry_run` included).
+- **Not yet done:** promotion to production — the SQL (same two files), `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s
+  own pre-check (confirming `pg_cron`/`pg_net` availability; genuinely unverified on this project — stop and use the
+  documented GitHub Actions fallback if either is unavailable), the cron itself, Rick's own `dry_run` on production
+  before the first Tuesday, reading back the first scheduled run's response and one delivered email (headers only), and
+  — two weeks after the first scheduled send — a Visits comparison against the two prior weeks (Analytics).
 
-**No finding ID consumed so far** (feature build; the F182 interaction above is a correctness fix WITHIN this step's own
-new column, not a defect in anything that shipped before it, so it does not consume a separate ID).
+**Finding-ID disposition, in words: no finding ID consumed.** The three-valued-logic defect was caught and fixed in the
+same build session, before any promotion and before any real customer could be exposed to it — the same disposition this
+project's history records for a pre-ship catch (e.g. the F156-adjacent and F182-adjacent in-session fixes elsewhere in
+this plan). The F182 self-update-guard interaction above is likewise a correctness fix within this step's own new
+column, not a defect in anything that shipped before it. **F183 remains the next free finding ID.**
 
 ## 7. Not verified when this plan was written
 
