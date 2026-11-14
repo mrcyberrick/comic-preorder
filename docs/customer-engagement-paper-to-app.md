@@ -1,10 +1,13 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1 COMPLETE, BOTH ENVIRONMENTS) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built
-and verified end to end on staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`) · staging=S1
-complete 2026-11-13 · prod=S1 complete 2026-11-14 (client merged + `convert-paper-customer` deployed, verified) · PR=#186 ·
-findings=F89 (closes at S2), F182 (filed and RESOLVED on both environments the same day, found while building S1, unrelated
-to S1's own code); no new ID consumed for S1 itself (F183 next free)
+**STATUS:** IN PROGRESS (S1 COMPLETE BOTH ENVIRONMENTS; S2 COMPLETE ON STAGING, NOT YET PROMOTED) · planned 2026-11-13,
+decisions D1-D9 answered the same day, S1 built and verified end to end on staging 2026-11-13, promoted to production
+2026-11-14 (PR #186, merge `a6a6b0b4`); S2 built and verified end to end on staging 2026-11-14 · staging=S1 complete
+2026-11-13, S2 complete 2026-11-14 · prod=S1 complete 2026-11-14 (client merged + `convert-paper-customer` deployed,
+verified); S2 NOT promoted · PR=#186 (S1 only; S2 has no PR yet) · findings=F89 (CLOSED on staging 2026-11-14, S2), F181
+(CLOSED on staging 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own scope, fixed here per
+D3), F182 (filed and RESOLVED on both environments the same day, found while building S1, unrelated to S1's own code); no
+new ID consumed for either S1 or S2 (F183 next free)
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -448,6 +451,65 @@ code; details held locally); **F183 is next free.**
   copies" in all six files (fixing it means editing five other functions); a debug load of `admin.html` as a fresh throwaway admin
   printed three HTTP 406 console errors (not investigated; the cause was not this change's new query, which does not use
   `.single()`, and the full harness run recorded no uncaught page errors).
+
+### S2: measurement built and verified on STAGING (2026-11-14). Closes F89. Closes F181 on staging.
+
+**Not promoted.** Five commits on `staging`: `948d575` (F181 fix, its own commit per D3), `fc9e5c9` (`paper_claimed`),
+`2234db6` (`invite_sent`), `2d3963f` (`signup_source`, client + server), `266d6fd` (the Analytics card).
+
+- **F181, fixed as its own commit (`948d575`), ahead of the event logging per D3.** `claim-paper-customer`'s paper-profile
+  read, real-account read and the profile delete all gained `tenant_id=eq.<callerTenantId>`; a cross-shop id now reads 404,
+  worded identically to an unknown id (no name or existence leaked). The auth-user delete stays unfiltered — GoTrue's
+  `users` table carries no `tenant_id`, and by the time it runs the profile read above has already proved the id belongs
+  to the caller's shop. **Found while planning G-I 2026-11-11, not part of this plan's own scope** (`docs/f164-g-i-same-shop-guard.md`
+  § 2.1); fixed here because D3 asked for it in the same deploy as the event logging.
+- **Events.** `claim-paper-customer` now logs `paper_claimed` on a successful merge (`fc9e5c9`); `invite-customer` now
+  logs `invite_sent` (`2234db6`). Both attributed to the ACTING ADMIN with the customer's id in `metadata` — the same
+  convention S1's `convert-paper-customer` already uses, and for the same reason: attributing to the customer would read
+  as their own activity in Analytics' tally and Accounts' "last seen" column.
+- **`signup_source` (`2d3963f`).** A new `SignupSource` object in `app.js`, built the same way `PostAuthRedirect` keeps
+  the post-auth return path: `capture()` reads `?ref=` once at page load and stores it in `localStorage` (1h TTL, same
+  window as `PostAuthRedirect`), `get()` reads it back. Deliberately **not one-shot** — a failed Turnstile attempt and a
+  retry must not lose the source. `index.html` calls `capture()` in the same init block that resolves `?t=`, and
+  `doSignup()` sends `signup_source: SignupSource.get()`. `register-customer` re-validates the posted value against the
+  same six-entry allowlist server-side (the client's list is a convenience, not a boundary) and stores it on the new
+  profile — silently `null` on anything unlisted, never the raw string.
+- **Analytics card (`266d6fd`).** `analytics.html`'s Customer Intelligence tab gains **Paper to App**: paper customers
+  now, converted ever (read from `user_profiles.converted_from_paper_at`, not from `usage_events`, so the count survives
+  the 90-day purge — F90 is untouched and stays open), invited-but-never-signed-in (the later-of-sign-in-and-event rule
+  `computeWinback()` already uses, applied only to the converted population), and native sign-ups broken down by
+  `signup_source`. Admins excluded, matching the page's existing rule everywhere else.
+- **Deploy.** All three functions' live `verify_jwt` read BEFORE deploying, per F93: `invite-customer` and
+  `register-customer` measured OFF (unchanged, deployed with `--no-verify-jwt`); `claim-paper-customer` measured **ON**
+  (a real surprise — every one of its five siblings in this plan is OFF, and assuming so would have silently flipped a
+  working admin-only function to public; deployed WITHOUT the flag to preserve it). All three re-probed after deploy,
+  unchanged. Downloaded and hashed: all three byte-identical (modulo CRLF) to the committed source.
+- **Verified live:** `s2-verify.mjs` (scripts repo playwright folder, local-only, never committed) — **25/25.**
+  - T1 (same-shop claim): unaffected by the F181 fix — still 200, still merges, still deletes the paper account, now also
+    logs `paper_claimed` with the right attribution and `tenant_id`.
+  - T2/T3 (F181): a read-only query using the OLD, unfiltered shape is shown to match a cross-shop paper account first —
+    demonstrating the vulnerability existed, without ever redeploying insecure code — then the deployed, fixed function
+    refuses both the cross-shop-paper-id and cross-shop-real-id attempts (404 either way), with a fresh read confirming
+    both accounts fully untouched and no `paper_claimed` event written for either attempt.
+  - T5 (`invite-customer`): 200, and the resulting `invite_sent` event reconciles the same four ways T1's does.
+  - T6 (client, real browser against the deployed bytes): a valid `?ref=` is captured; an unlisted one is rejected
+    (nothing stored); the captured value survives a plain navigation with no `?ref=` (not one-shot). A full click-through
+    of `doSignup()` is untestable here — Turnstile is server-verified and the function returns before ever calling
+    `fetch()` with no token, the same limit `native-customer-signup-verify.mjs` already records for this exact form — so
+    the wiring is confirmed instead as a served-bytes marker: `signup_source: SignupSource.get()` and `SignupSource.capture()`
+    both present in the deployed `index.html`.
+  - **One wrong expectation in the harness itself, caught by SELFTEST, corrected before the live run**: a test case
+    asserted `'  poster  '` (padded) should be rejected; the server actually trims every posted field before validating
+    it (matching `name`/`email`/`slug` elsewhere in the same file), so `'poster'` is the correct, intended result. The
+    code was right; the test's assumption was not.
+  - Zero stray auth users: a fresh scan of all 993 staging auth users, before and after, found none matching the
+    session's fixture prefixes.
+- **Card numbers reconciled against real data, not just harness fixtures.** A throwaway founding-tenant admin loaded the
+  real deployed `analytics.html` in a browser; the on-screen card read **10 paper / 1 converted / 1 invited-never-signed-in**,
+  matching an independent service-role count against the same tenant exactly.
+- **Gates:** spec 18 (nav/footer sync) 13/13; full Playwright suite **169 passed, 1 skipped, 0 failed, 28.5 min**.
+- **Not verified:** a real production signup carrying a `?ref=` (none exists yet — `?ref=` has no producer until S4/S5
+  build the QR codes and poster links that set it); the F181 fix on production (staging only so far).
 
 ## 7. Not verified when this plan was written
 
