@@ -66,10 +66,17 @@ Deno.serve(async (req) => {
     }
     const callerTenantId = profiles[0].tenant_id
 
-    // ── Verify the source account is actually a paper account ─
-    // Prevents accidentally merging two real accounts.
+    // ── Verify the source account is actually a paper account, AND belongs
+    //    to the caller's own shop ─────────────────────────────────────────
+    // F181: without the tenant_id filter, an admin holding another shop's
+    // UUID (any id works — guessed, pasted from a screenshot, a prior
+    // session) could merge or delete rows outside their own tenant. The
+    // service role sees every row regardless of RLS, so this check is the
+    // ONLY thing standing between "any admin, any id" and "this shop's own
+    // paper customer, or nothing". Same id, different shop, reads as if the
+    // id did not exist — no name or existence leaked across tenants.
     const paperProfileRes = await fetch(
-      SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + paper_user_id + '&select=is_paper,full_name',
+      SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + paper_user_id + '&tenant_id=eq.' + callerTenantId + '&select=is_paper,full_name',
       {
         headers: {
           Authorization: 'Bearer ' + SUPABASE_SERVICE,
@@ -93,9 +100,9 @@ Deno.serve(async (req) => {
     }
     const paperName = paperProfiles[0].full_name || 'Unknown'
 
-    // ── Verify the target real account exists ─────────────
+    // ── Verify the target real account exists IN THE SAME SHOP (F181) ─
     const realProfileRes = await fetch(
-      SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + real_user_id + '&select=id,full_name',
+      SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + real_user_id + '&tenant_id=eq.' + callerTenantId + '&select=id,full_name',
       {
         headers: {
           Authorization: 'Bearer ' + SUPABASE_SERVICE,
@@ -222,9 +229,10 @@ Deno.serve(async (req) => {
       console.log('reservation_history: all rows reassigned to ' + real_user_id)
     }
 
-    // ── Delete paper user_profiles row ────────────────────
+    // ── Delete paper user_profiles row (F181: tenant-filtered too, defense
+    //    in depth — the read above already proved it is this shop's row) ──
     const delProfileRes = await fetch(
-      SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + paper_user_id,
+      SUPABASE_URL + '/rest/v1/user_profiles?id=eq.' + paper_user_id + '&tenant_id=eq.' + callerTenantId,
       {
         method: 'DELETE',
         headers: {
