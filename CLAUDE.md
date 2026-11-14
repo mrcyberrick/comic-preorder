@@ -75,6 +75,55 @@ decision." until G-D ran, and before that "G-B (engine to production) and G-D (F
 **✅ NOVEMBER NEW-MONTH IMPORT RAN ON PRODUCTION 2026-10-28 (Rick; `node import.js` with `Lunar_Product_Data_1126.csv` + `2026_11_PRH_metadata_full_active.csv`, dry run first). This is the import that "revisit D1 after the November import", G-I's scripts half (F164) and G-G (F169/F157) were waiting on: all three are now unblocked, none started.** Read back from the database, not the console: `catalog` 2026-11 = **Lunar 1,283 / PRH 761**, all founding tenant (= raw rows, 0 rejected); 33 subscriber auto-reserves, all founding-tenant rows on 2026-11 titles; archived 342, purged 1,894, deduped 18; auto-fulfilled 2 (the one title over 14 days past on-sale; the "36 titles" warning ignores the 14-day hold). **F164 interim check passed first** (66 subscriptions, one tenant; `comicstore` holds only 2 rows in 2026-06). **F165 S1's first real exercise: the "Withdrawal marking is retired" line printed and no mark was written.** October's order (Run E, 10-27: 257 Lunar + 204 PRH lines) left nothing to confirm at the closing-cycle prompt. Afterwards: Maintenance Mode OFF (10-29 15:47Z), Order Deadline **2026-11-23** (set 10-29). Run A Step 3's revision sweep was skipped (Run C had run 10-23). **Not established:** whether the catalog notification email went out (`n` was answered at the prompt during the real run; a re-run was offered; `notify-customers` logs nothing to read). `docs/import-sop.md` brought current with the scripts the same session (`94746be`: Run B 5 to 3 steps since the import no longer publishes the feed; Run C's 2026-10-19 sections; Order Deadline location). No finding ID consumed; **F179 remains next free**.
 **✅ PROMOTED TO PRODUCTION 2026-11-10 -- Store contact S1: Settings ▸ Store contact replaces the "Email Templates · Soon" placeholder (PR #185, merge `cd264bd`, merged 22:13:50Z by Rick; promotion parents `427df64` main + `5edc04b` staging tip; staging code `c333b3d` the warning removal and page estimate, `53575ae` the panel, `330af30` a heading-size fix).** Rick's `/promote-prod`. **What shipped:** a panel with phone, street address, town and website, saved through the new admin-only `admin_set_store_contact()` (tenant derived inside, admin only, length caps, blank stores NULL) into `tenants.contact_phone` / `postal_address` (new) / `location` / `website` (new), with a live preview and a tier note; plus the stale "filters are not applied yet" warning removed and the print estimate at 44.5 rows per page (fits all six measured prints; 46 matched none). **Nothing reads the new fields yet**: emails (S2) and pages and prints (S3) still show Ray & Judy's hardcoded text, so no customer sees a change. **`settings.html` is the only code file; no `app.js`, `config.js`, Edge Function or RLS change** (the `TenantContext` widening moved to S3 so a missing column can never break every page). **SQL `docs/sql/2026-11-10-store-contact.sql` applied on BOTH environments (Rick), production FIRST: verdict OK; an anonymous probe found the four-argument function refused by the grant (401, 42501).** The production names check ran after the file and read 2 / 1, so it proved nothing on its own; the body marker in the verdict and staging's 0 / 0 rule out a pre-existing object. **Gates:** step 0 empty; merge result `settings.html` == staging, every other page identical on both branches, `config.js` == `origin/main` (prod ref x1, staging ref x0), `supabase/migrations/` 2 files; PR file list on GitHub 7 files, MERGEABLE. **Staging evidence:** harness `store-contact-verify.mjs` (local-only) 45/45 on the working tree and the deployed bytes, four negative controls each red; full suite 169 passed, 1 skipped, 0 failed, 28.4 min. **Verified post-deploy:** on BOTH `pulllist.app` and `rjbookstop.pulllist.app`, `settings.html` (`2a733af7093cf612`, the bytes the harness ran against on staging), `app.js`, `config.js`, `catalog`, `mylist`, `admin`, `analytics`, `style.css` byte-identical to `origin/main`; markers `admin_set_store_contact` x3, `id="contact-panel"` x1, `ROWS_PER_PAGE = 44.5` x1, `preview-banner` x0 (the one "Email Templates" left is a code comment). **Write-smoke skipped:** admin-only page, the diff never touches `Preorders` or the reserve path. **Not verified:** no save through the panel on production yet; Chromium only. **Still owed (Rick):** the production data fill through the panel, then a service-role read-back; his phone format choice (`(973) 586-9182` keeps S2's emails byte-identical; staging holds `973-586-9182`); and whether staging's "View Online: raysandjudys.pulllist.app" on prints is just noted (production prints `rjbookstop.pulllist.app`, which resolves). **Finding-ID disposition, in words: No finding ID consumed (feature build, not a defect).** **F181 remains the next free finding ID.** Next: S2 (the six mail functions read the fields). Plan: `docs/store-contact-and-colors.md`.
 
+**✅ customer engagement S3b BUILT AND VERIFIED ON STAGING 2026-11-14 ("Your books this week," a Tuesday email + a My List
+opt-out; `3c1a801` the Edge Function, `d7191ef` + `00958f0` + `d526fe2` + `03c422b` the SQL, `53c396f` the toggle +
+`privacy.html` sentence). NOT YET STARTED ON PRODUCTION.** Plan `docs/customer-engagement-paper-to-app.md` § S3b. New
+`arrivals_this_week_digest(tenant, week_start, week_end)` RPC matches open reservations to the week's `weekly_shipment`
+rows the same three-key way `auto_fulfill_past_on_sale()` does (never by `on_sale_date` alone — F115's own "it's here"
+false), classifying withdrawn / ledger-rejected / admin-marked the same way `admin.html`'s `renderThisWeek()` and
+`app.js`'s `exportCode()`/`ledgerRejected()` already do, moved server-side so the Edge Function doesn't re-derive it in
+TypeScript; a new `arrival_notices` table dedups per (tenant, user, week); `user_profiles.email_arrivals` (default true)
+is the opt-out, toggled on My List next to Email My List. **Found and fixed in the same session, before any promotion:
+the F182 self-update guard trigger only allowlisted `has_seen_welcome` for a customer's own profile, so the new
+customer-toggleable `email_arrivals` column would have silently failed every customer's own write (`42501`) without
+widening it — built into the same SQL file rather than discovered later as a confusing bug report.** `notify-arrivals`
+deployed `--no-verify-jwt` (confirmed live by behaviour: unauthenticated and garbage-token POSTs both return the
+function's own `{"error":"Unauthorized"}`, never the gateway's). **A second defect, also found and fixed the same
+session, before any promotion:** the digest RPC's `is_unavailable` column read NULL instead of `false` for a title with
+no withdrawal, outcome or rejection — classic three-valued logic (`arrival_outcome IN (...)` is NULL, not false, when
+`arrival_outcome` is NULL). **Not customer-visible** (the Edge Function's `row.is_unavailable ? unavailable : available`
+treats JS `null` as falsy same as `false`, confirmed in the harness's real send: `title_count=2`, correctly split), but
+a boolean column should never silently read NULL, so it was fixed the same day: `docs/sql/2026-11-14-s3b-digest-null-safety-fix.sql`
+wraps the expression in `COALESCE(..., false)`. **The fix's own first verification query was ALSO wrong** — a `LIKE`
+pattern that matched the function's unrelated, pre-existing `COALESCE(` in its `export_code` CASE expression, reading
+`already_coalesced=true` before the fix had ever run; caught by probing the live RPC directly with a throwaway row
+(`is_unavailable` still read `null`), not by trusting the query, and corrected to a regex anchored at the clause's own
+first condition before asking for a second SQL round-trip. **Gates: 33/33 green** on the real deployed function and RPC
+with four throwaway customers (one reserving both an available and a ledger-rejected title on the week's shipment, one
+reserving a title with no shipment row this week, one opted out, one suspended): no-auth refused (401); the RPC
+classifies the available title `false`/`null` and the rejected one `true`/`'Rejected by the supplier'`, both attributed
+to the right customer, and the no-shipment title never appears at all; `dry_run` names exactly the one eligible customer
+and writes nothing; a tenant with 0 shipment rows this week is skipped with the stated reason, not silently; the real
+call sends exactly 1, 0 failed, writes exactly 1 `arrival_notices` row; a second identical call sends 0 (no double
+send — the dedup excludes already-notified users from the plan entirely, `dry_run` included). FK-ordered teardown
+re-read 0 throughout. **Both SQL files APPLIED on staging 2026-11-14, confirmed live, not from their own verdict alone**
+(an independent throwaway-row probe against the deployed RPC, both before and after the null-safety fix). **Not yet
+done:** the production SQL (same two files), `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`'s own pre-check
+(`pg_cron`/`pg_net` availability — genuinely unverified on this project; stop and use the documented GitHub Actions
+fallback if either is unavailable), the cron itself, Rick's own `dry_run` on production before the first Tuesday, and a
+Visits comparison two weeks after the first scheduled send. **Finding-ID disposition, in words: No finding ID
+consumed** — both defects above were caught and fixed in the same build session, before any promotion and before any
+real customer was exposed to either. **F183 remains the next free finding ID.**
+
+**✅ customer engagement S3a BUILT AND VERIFIED ON STAGING 2026-11-14 (the This Week Email button works for any past
+week; `b153701`, `admin.html` only). NOT YET PROMOTED TO PRODUCTION.** Plan `docs/customer-engagement-paper-to-app.md`
+§ S3a. `renderThisWeek()`'s Email button was gated on `isCurrentWeek` alone, so it was disabled for every past week —
+`canEmailWeek = weekAnchorMonday <= currentMon` replaces that, with a tooltip explaining a future week ("becomes
+available once it starts") and the confirm dialog naming the week and adding a past-week-only caveat. **Verified**:
+spec 06 extended with seeded past-week and future-week fixtures (`weekStartShiftedBy()`), asserting the enabled/disabled
+state and tooltip on the SEEDED card by `data-user-id`, never `.first()` — 4/4 against deployed staging. **Finding-ID
+disposition, in words: No finding ID consumed (feature build, not a defect).** **F183 remains the next free finding ID.**
+
 **✅ customer engagement S2 BUILT AND VERIFIED ON STAGING 2026-11-14 (closes F89, closes F181 on staging; `948d575`, `fc9e5c9`,
 `2234db6`, `2d3963f`, `266d6fd`). NOT YET PROMOTED TO PRODUCTION.** Plan `docs/customer-engagement-paper-to-app.md` S2. **Five
 commits, each its own concern:** (1) **F181 fix** (`claim-paper-customer`'s two profile reads and the profile delete now carry
