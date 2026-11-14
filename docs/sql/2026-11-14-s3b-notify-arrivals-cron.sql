@@ -1,7 +1,8 @@
 -- STATUS: staging=N/A (staging never gets the schedule — test fixtures with made-up
 --                      addresses would bounce and hurt the pulllist.app sender, F152;
 --                      exercised by hand there with dry_run and a stubbed Resend)
---         prod=PENDING
+--         prod=APPLIED 2026-11-14 (jobid 1, schedule '0 15 * * 2', active true,
+--                      verified by reading cron.job directly, not assumed)
 -- ============================================================================
 -- Customer engagement S3b (docs/customer-engagement-paper-to-app.md § S3b)
 -- Prepared 2026-11-14. Operator: Rick (Supabase SQL Editor, runs as postgres).
