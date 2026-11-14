@@ -263,6 +263,32 @@ Deno.serve(async (req) => {
     }
 
     console.log(`✓ Claim complete: ${paperName} merged into ${real_user_id}`)
+
+    // Customer engagement S2 (closes F89): record the merge. Attributed to
+    // the admin who acted — the paper account is gone by this point, and
+    // the surviving real account should not pick up a phantom event for
+    // something it did not do. Non-fatal: the merge has already completed.
+    try {
+      const evRes = await fetch(SUPABASE_URL + '/rest/v1/usage_events', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + SUPABASE_SERVICE,
+          apikey: SUPABASE_SERVICE,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          event_type: 'paper_claimed',
+          user_id:    userData.id,
+          tenant_id:  callerTenantId,
+          metadata:   { paper_user_id, real_user_id, via: 'claim' },
+        }),
+      })
+      if (!evRes.ok) console.error('claim-paper-customer: usage_events insert failed', evRes.status, await evRes.text())
+    } catch (err) {
+      console.error('claim-paper-customer: usage_events insert threw', String(err))
+    }
+
     return Response.json(
       { success: true, merged: paperName },
       { headers: corsHeaders }
