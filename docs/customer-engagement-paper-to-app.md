@@ -170,8 +170,12 @@ file is then never left `prod=PENDING`, which would block every other `/promote-
 - [x] Production: `/promote-prod` 2026-11-14 (PR #186, merge `a6a6b0b4`); `convert-paper-customer` deployed from a worktree of
   `origin/main`, ACTIVE v1, `verify_jwt` OFF confirmed by behaviour, artifact hash equal to `origin/main` and to staging's
   deployed copy. Served `app.js`/`admin.html` on both production hostnames confirmed byte-identical to `origin/main`.
-  Write-smoke skipped (confirmed from the diff: neither file mentions `Preorders` or `toggleReserve`). Not yet done: a real
-  admin click on PRODUCTION (staging's step 10 is the only live-click evidence so far)
+  Write-smoke skipped (confirmed from the diff: neither file mentions `Preorders` or `toggleReserve`). **Real admin click on
+  PRODUCTION itself done 2026-11-14 (Rick, fixture "Paper Tiger" on `rjbookstop`):** delivered email read (From `Ray & Judy's
+  Book Stop <noreply@pulllist.app>`, `type=recovery`, paid-tier footer present, dkim/spf/dmarc pass), then read back from the
+  production database, not assumed from the email — `is_paper` false, `converted_from_paper_at` set one second before the
+  email timestamp, `status` active, one `paper_converted` + one `invite_sent` event both attributed to the admin's `user_id`
+  (zero logged under the customer's own id). Production verification is complete.
 
 ### S2. Measure it (#4; closes F89)
 

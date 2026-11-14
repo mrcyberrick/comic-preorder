@@ -114,7 +114,14 @@ S2-S5 of the plan.** **Finding-ID disposition, in words: No finding ID consumed 
 Claim UUID prompt was not miscalculating or hiding anything -- it worked as designed, just needed Supabase dashboard access a
 shop owner does not have -- so replacing it is different behaviour Rick wanted, not a fix; S1 does not close F89 (that is S2,
 not yet built). **F183 remains the next free finding ID.** *(This paragraph previously read "PLANNED ... NOT STARTED," true until S1
-shipped the same day.)* Rick chose five ideas from a brainstorm: S1 (done above), S2 conversion measurement (closes F89), S3 a
+shipped the same day.)* **A real admin click on PRODUCTION ITSELF, 2026-11-14, closing the one thing step 10 left unverified:**
+Rick clicked **Invite…** on a real paper row on `rjbookstop` (fixture "Paper Tiger," `PaperTiger@mrcyberrick.us`) and sent the
+screenshot and the delivered email; read back from the production database, not assumed from the email: `is_paper` false,
+`converted_from_paper_at` `2026-11-14T04:19:37Z` (one second before the email's own timestamp), `status` `active`; one
+`paper_converted` and one `invite_sent` event, both `metadata.via` correct, both attributed to the ADMIN's `user_id` (zero
+events logged under the customer's own id, confirming the no-pollution design). Email: `From: Ray & Judy's Book Stop
+<noreply@pulllist.app>`, `type=recovery`, the paid-tier contact footer present (`rjbookstop` is `plan=pro`), `dkim`/`spf`/`dmarc`
+all pass. **Production verification is now complete on both the client and the Edge Function.** Rick chose five ideas from a brainstorm: S1 (done above), S2 conversion measurement (closes F89), S3 a
 "your books this week" email on a Tuesday schedule (production only, titles on that week's invoice only) plus the Bagging
 list's per-customer Email button enabled for past weeks, S4 QR codes on the store poster, new-#1 shelf tags and the Print
 Catalog, S5 a personal claim QR on a paper customer's bag slip. A public "this week" page is out of scope
