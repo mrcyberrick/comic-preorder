@@ -1,6 +1,6 @@
 # Store contact details and store colors in Settings
 
-**STATUS:** NOT STARTED — planned 2026-11-10 (Rick: "Go with Recommended"); D1-D4 ANSWERED 2026-11-10 (Rick: "defaults"); next is S0 · staging=— · prod=— · PR=— · findings=— (no ID consumed; F181 next free)
+**STATUS:** IN PROGRESS — S1 DONE on both environments (staging 2026-11-10 `330af30`; production 2026-11-10, PR #185, merge `cd264bd`); production data fill NOT yet done; S2, S3, S4 NOT STARTED · staging=2026-11-10 (S1) · prod=2026-11-10 (S1) · PR=#185 · findings=— (no ID consumed; F181 next free). *(Read "NOT STARTED ... next is S0" until the S1 promotion.)*
 
 Replaces the Settings rail's **Email Templates "Soon"** entry. Since F72 G-F (2026-11-07) every
 email already uses each shop's own name, so there is no template left to unblock. What is missing
@@ -152,7 +152,15 @@ every row). `raysandjudys` `pro`, phone `973-586-9182`, town `Rockaway, NJ`, bra
 a FREE fixture's color applies, since D2 makes that false**; `#123456` also fails the 3:1 card floor).
 Q3 body: `SELECT t.id, t.slug, t.display_name, t.branding FROM public.tenants t WHERE t.slug = p_slug`
 (matches § 6.9). An unlabelled paste of the same Q3 output arrived too; it may be production's.
-*Production:* not yet received.
+*Production, 2026-11-10 (Rick-run, the Q1+Q2 combined query):* `comicstore` `free`, `555-555-5555`,
+`New Jersey`, branding keys `display_name`, `primary_color` (`#00FF00`); `rjbookstop` `pro`, phone and
+town both **null**, branding keys `promo_banner`, no color. **The names check did NOT run before the S1
+file:** it read `names_taken_cols` 2 and `names_taken_funcs` 1, so the S1 SQL had already been applied
+on production when it ran. Run down, not assumed: an anonymous probe found `admin_set_store_contact` with
+its four-argument signature refused by the grant (`permission denied for function`, 401) and no
+`admin_set_brand_color`, and the S1 verdict query then read OK. So a pre-existing production object
+using these names was never ruled out by the check itself; it is ruled out because the one function
+present carries the S1 body marker and staging, which had the same history, read 0 / 0.
 
 ### S1 — Columns, the contact RPC, the Store contact panel, data fill (staging, then production)
 
@@ -228,8 +236,28 @@ image was actually requested), `ignoreproblems` (2), `noclean` (red because an u
 `https://…/` website then fails validation, so Save stays off and the run stopped early; teardown
 re-read clean). A screenshot showed the "How it will read" heading at body size (the label rule
 matched only `<label>`); fixed in `330af30`. **Full suite on the deployed bytes: 169 passed, 1 skipped,
-0 failed, 28.4 min, `EXIT=0`** (the log's own summary line). **Not yet done:** Rick's staging data fill
-through the panel; production SQL and promotion.
+0 failed, 28.4 min, `EXIT=0`** (the log's own summary line). ~~**Not yet done:** Rick's staging data fill
+through the panel; production SQL and promotion.~~ **Staging data fill DONE 2026-11-10 (Rick, through the
+panel), read back through the service role:** phone `973-586-9182` (**the dashed form, not D3's
+`(973) 586-9182`**, which matters for S2's byte-identical footer gate V3), town `Rockaway, NJ`, street
+address `40 W Main St. Rockaway, NJ 07866`, website `rjbookstop.com`, `updated_at` 2026-11-10T17:58:39Z.
+
+**S1 ON PRODUCTION 2026-11-10 (PR #185, merge `cd264bd`, merged 22:13:50Z by Rick; promotion branch
+parents `427df64` main + `5edc04b` staging tip).** Rick's `/promote-prod`. SQL applied on production
+FIRST (verdict OK, see S0 production above; file STATUS `prod=APPLIED`). **Gates:** step 0 empty after
+the STATUS update; merge result `settings.html` == staging's copy, `app.js` and every other page
+identical on both branches, `config.js` == `origin/main` (prod ref x1, staging ref x0),
+`supabase/migrations/` 2 files; PR file list read on GitHub: 7 files (`settings.html` plus docs),
+MERGEABLE. **Verified post-deploy:** on BOTH `pulllist.app` and `rjbookstop.pulllist.app`,
+`settings.html` (`2a733af7093cf612`, the same bytes staging served when the harness ran 45/45), `app.js`,
+`config.js`, `catalog`, `mylist`, `admin`, `analytics` and `style.css` byte-identical to `origin/main`;
+markers `admin_set_store_contact` x3, `id="contact-panel"` x1, `href="#store-contact"` x1,
+`sc-rollout-note` x1, `ROWS_PER_PAGE = 44.5` x1, `preview-banner` x0; the one remaining
+"Email Templates" is the panel's own code comment (the rail entry is gone). **Write-smoke skipped:**
+admin-only Settings page, the diff never touches `Preorders` or the reserve path. **Not verified:** the
+panel has not been used on production (no save there yet), Chromium only. **Still owed: the production
+data fill** (Rick, through the panel), then a service-role read-back; Rick's phone-format choice for it
+(D3's `(973) 586-9182` keeps S2's emails byte-identical to today's; the dashed form is what staging holds).
 
 **Observed during S1, staging only, NOT changed (Rick's call pending):** the prints' "View Online"
 reads `raysandjudys.pulllist.app` on staging, which does not resolve. `Tier.publicUrl()` is

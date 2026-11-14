@@ -770,6 +770,96 @@
   </div>
 </div>
 
+<!-- Invite a paper customer (customer engagement S1, 2026-11-13,
+     docs/customer-engagement-paper-to-app.md). Opened from the Invite… button on
+     a paper account's row. Converts the SAME account in place (reservations,
+     subscriptions and history stay put) and emails a sign-in link. Same shell as
+     the Edit Account modal above. #invite-paper-actions holds the one follow-up
+     button each of the two non-happy outcomes needs (Claim instead / Resend). -->
+<div id="invite-paper-overlay" style="display:none;position:fixed;inset:0;z-index:200;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div role="dialog" aria-modal="true" aria-labelledby="invite-paper-title"
+       style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:32px;width:100%;max-width:440px;margin:16px;position:relative;box-sizing:border-box">
+    <button id="invite-paper-close" aria-label="Close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 6px;font-size:1.1rem" id="invite-paper-title">Invite customer</h2>
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 20px;line-height:1.6">
+      Their reservations and subscriptions stay exactly as they are. We email them a link to set a
+      password and sign in.
+    </p>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label for="invite-paper-email" style="display:block;font-size:0.78rem;font-weight:600;
+                       color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
+          EMAIL ADDRESS
+        </label>
+        <input id="invite-paper-email" type="email" autocomplete="off" placeholder="jane@example.com"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+      <div>
+        <label for="invite-paper-phone" style="display:block;font-size:0.78rem;font-weight:600;
+                       color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.04em">
+          PHONE <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— optional</span>
+        </label>
+        <input id="invite-paper-phone" type="tel" placeholder="(973) 555-0142"
+          style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+                 color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+                 font-size:0.9rem;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="invite-paper-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="invite-paper-send-btn">Send invite</button>
+    </div>
+
+    <div id="invite-paper-result" role="status" style="display:none;margin-top:16px;padding:10px 14px;
+         border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
+    <div id="invite-paper-actions" style="display:none;margin-top:12px;gap:10px;justify-content:flex-end"></div>
+  </div>
+</div>
+
+<!-- Claim picker (customer engagement S1, 2026-11-13, decision D2). Replaces the old
+     prompt() that asked the admin to paste a user UUID from the Supabase dashboard,
+     which a shop owner cannot do. Lists the shop's own non-paper, non-admin accounts;
+     choosing one and confirming runs the same claim-paper-customer call as before. -->
+<div id="claim-overlay" style="display:none;position:fixed;inset:0;z-index:200;
+     background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px">
+  <div role="dialog" aria-modal="true" aria-labelledby="claim-title"
+       style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:32px;width:100%;max-width:480px;margin:16px;position:relative;box-sizing:border-box">
+    <button id="claim-close" aria-label="Close" style="position:absolute;top:14px;right:16px;
+      background:none;border:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer">✕</button>
+
+    <h2 style="margin:0 0 6px;font-size:1.1rem" id="claim-title">Merge into a real account</h2>
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 16px;line-height:1.6">
+      Choose the account this customer already made. Their reservations and subscriptions move to it,
+      and the paper account is deleted.
+    </p>
+
+    <input id="claim-search" type="search" autocomplete="off" placeholder="Search name or email"
+      aria-label="Search accounts"
+      style="width:100%;background:var(--bg-elevated);border:1px solid var(--border);
+             color:var(--text-primary);padding:10px 12px;border-radius:var(--radius);
+             font-size:0.9rem;box-sizing:border-box;margin-bottom:10px">
+    <div id="claim-list" role="radiogroup" aria-label="Accounts in your shop"
+         style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);
+                background:var(--bg-elevated)"></div>
+
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="claim-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="claim-go-btn" disabled>Merge…</button>
+    </div>
+    <div id="claim-result" role="status" style="display:none;margin-top:16px;padding:10px 14px;
+         border-radius:var(--radius);font-size:0.82rem;line-height:1.5"></div>
+  </div>
+</div>
+
 <!-- Order Follow-Up: Snooze (2026-11-09, docs/order-follow-up-redesign.md D1).
      Hides one title until a date, with an optional note; it comes back on
      that date if it is still open. Customers see nothing change. Same shell
@@ -4737,6 +4827,285 @@ There is no undo in the app.`);
     await loadData();
   });
 
+  // ── Invite a paper customer + Claim picker (customer engagement S1, 2026-11-13) ──
+  // docs/customer-engagement-paper-to-app.md. Invite… converts the SAME account in
+  // place through the convert-paper-customer Edge Function, so reservations,
+  // subscriptions and history stay where they are. Claim… still merges into a
+  // SECOND account the customer already made, but now picks it from a list of this
+  // shop's accounts instead of asking the admin to paste a UUID (decision D2).
+  // Both are declared with `function` so they hoist: the row listeners that call
+  // them are wired later in the file, as with openEditAccountModal above.
+
+  async function adminAccessToken() {
+    const { data } = await db.auth.getSession();
+    return data?.session?.access_token || null;
+  }
+
+  // Everything an account change can touch: the Accounts list, the Ordering-side
+  // paper list, the pending-orders pane, and profileMap (By Customer, This Week,
+  // bagging). The old Claim handler ran exactly this sequence.
+  async function refreshAfterAccountChange() {
+    await ensureAccounts({ force: true });
+    renderAccounts();
+    await refreshPaperCusts();
+    renderPendingOrders();
+    await loadData();
+  }
+
+  // textContent only: these strings carry a customer's name and the address typed in.
+  function showModalMessage(el, kind, text) {
+    const bad = kind === 'error', warn = kind === 'warn';
+    el.style.display    = 'block';
+    el.style.background = bad ? 'rgba(230,57,70,0.12)' : warn ? 'rgba(245,158,11,0.12)' : 'rgba(74,222,128,0.10)';
+    el.style.border     = bad ? '1px solid rgba(230,57,70,0.3)' : warn ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(74,222,128,0.3)';
+    el.style.color      = bad ? 'var(--accent)' : warn ? 'var(--warning)' : 'var(--success, #4ade80)';
+    el.textContent      = text;
+  }
+
+  // ---- Invite… ----
+  const invitePaperOverlay = document.getElementById('invite-paper-overlay');
+  const invitePaperTitle   = document.getElementById('invite-paper-title');
+  const invitePaperEmailEl = document.getElementById('invite-paper-email');
+  const invitePaperPhoneEl = document.getElementById('invite-paper-phone');
+  const invitePaperSendBtn = document.getElementById('invite-paper-send-btn');
+  const invitePaperResult  = document.getElementById('invite-paper-result');
+  const invitePaperActions = document.getElementById('invite-paper-actions');
+  let invitePaperTarget = null; // { id, name }
+
+  function openInvitePaperModal(id, name, phone) {
+    invitePaperTarget = { id, name };
+    invitePaperTitle.textContent = `Invite ${name}`;
+    invitePaperEmailEl.value = '';
+    invitePaperPhoneEl.value = phone || '';
+    invitePaperEmailEl.disabled = false;
+    invitePaperPhoneEl.disabled = false;
+    invitePaperResult.style.display  = 'none';
+    invitePaperActions.style.display = 'none';
+    invitePaperActions.replaceChildren();
+    invitePaperSendBtn.style.display = '';
+    invitePaperSendBtn.disabled      = false;
+    invitePaperSendBtn.textContent   = 'Send invite';
+    invitePaperOverlay.style.display = 'flex';
+    setTimeout(() => invitePaperEmailEl.focus(), 50);
+  }
+
+  function closeInvitePaperModal() {
+    invitePaperOverlay.style.display = 'none';
+    invitePaperTarget = null;
+  }
+
+  document.getElementById('invite-paper-close').addEventListener('click', closeInvitePaperModal);
+  document.getElementById('invite-paper-cancel-btn').addEventListener('click', closeInvitePaperModal);
+  invitePaperOverlay.addEventListener('click', e => { if (e.target === invitePaperOverlay) closeInvitePaperModal(); });
+  [invitePaperEmailEl, invitePaperPhoneEl].forEach(el =>
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') invitePaperSendBtn.click(); })
+  );
+
+  // One follow-up button under the message, for the two outcomes that need one.
+  function addInviteFollowUp(label, onClick) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-secondary btn-sm';
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    invitePaperActions.replaceChildren(b);
+    invitePaperActions.style.display = 'flex';
+  }
+
+  // The sign-in link again, for an account that is already converted. Used by the
+  // row's Resend invite button and by the modal after a failed first send.
+  async function resendInviteFor(userId, name, btn) {
+    const token = await adminAccessToken();
+    if (!token) { toast('Session expired — sign out and back in', 'error'); return false; }
+    const original = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    const { data, error } = await PaperCustomers.resendInvite(userId, token);
+    if (btn) { btn.disabled = false; btn.textContent = original; }
+    if (error) { toast(`Could not resend the invite to ${name}: ${error.message}`, 'error'); return false; }
+    if (!data?.invite_sent) { toast(`The email to ${name} could not be sent. Try again in a minute.`, 'error'); return false; }
+    toast(`✓ Invite sent again to ${name}`);
+    return true;
+  }
+
+  invitePaperSendBtn.addEventListener('click', async () => {
+    if (!invitePaperTarget) return;
+    const { id, name } = invitePaperTarget;
+    const email = invitePaperEmailEl.value.trim();
+    const phone = invitePaperPhoneEl.value.trim();
+    invitePaperResult.style.display  = 'none';
+    invitePaperActions.style.display = 'none';
+    invitePaperActions.replaceChildren();
+
+    if (!email) { invitePaperEmailEl.focus(); return; }
+    // Light check only; the function checks again and owns the real rule.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showModalMessage(invitePaperResult, 'error', 'That does not look like an email address.');
+      invitePaperEmailEl.focus();
+      return;
+    }
+    // Converting is not undone from this screen, so it is confirmed, as Decline is.
+    if (!confirm(
+      `Invite ${name} at ${email}?\n\n` +
+      `This turns their paper account into an online account. Their reservations and ` +
+      `subscriptions stay exactly as they are, and they are emailed a link to set a password and sign in.`
+    )) return;
+
+    const token = await adminAccessToken();
+    if (!token) { showModalMessage(invitePaperResult, 'error', 'Session expired — sign out and back in.'); return; }
+
+    invitePaperSendBtn.disabled    = true;
+    invitePaperSendBtn.textContent = 'Sending…';
+    const { data, error } = await PaperCustomers.convert(id, { email, phone }, token);
+
+    if (error) {
+      invitePaperSendBtn.disabled    = false;
+      invitePaperSendBtn.textContent = 'Send invite';
+      if (error.status === 409 && error.sameShop && error.existing) {
+        // D2: the address already belongs to an account in this shop, so offer the
+        // existing merge into it. Nothing was changed.
+        const ex = error.existing;
+        showModalMessage(invitePaperResult, 'warn',
+          `${email} already belongs to ${ex.full_name || 'another account'} in your shop. ` +
+          `To keep this customer's list, merge it into that account instead.`);
+        addInviteFollowUp(`Merge into ${ex.full_name || 'that account'}…`, () => {
+          closeInvitePaperModal();
+          openClaimModal(id, name, ex.id);
+        });
+      } else if (error.status === 409) {
+        showModalMessage(invitePaperResult, 'error', 'That email already has an account. Ask the customer for a different address.');
+      } else if (error.status === 404) {
+        showModalMessage(invitePaperResult, 'error', 'This paper account was not found. It may already have been converted. Reload the page.');
+      } else {
+        showModalMessage(invitePaperResult, 'error', `Could not send the invite: ${error.message}`);
+      }
+      return;
+    }
+
+    // The account is converted from here on, whether or not the email went.
+    await refreshAfterAccountChange();
+    if (data?.invite_sent) {
+      toast(`✓ Invite sent to ${email}`);
+      closeInvitePaperModal();
+      return;
+    }
+    invitePaperEmailEl.disabled = true;
+    invitePaperPhoneEl.disabled = true;
+    invitePaperSendBtn.style.display = 'none';
+    showModalMessage(invitePaperResult, 'warn',
+      `${name} is now an online account, but the email could not be sent. ` +
+      `Send it again, or ask them to use Forgot Password on the sign-in page.`);
+    addInviteFollowUp('Resend invite', async (ev) => {
+      const ok = await resendInviteFor(data.user_id, name, ev.currentTarget);
+      if (ok) closeInvitePaperModal();
+    });
+  });
+
+  // ---- Claim… (a picker, not a UUID prompt) ----
+  const claimOverlay  = document.getElementById('claim-overlay');
+  const claimTitleEl  = document.getElementById('claim-title');
+  const claimSearchEl = document.getElementById('claim-search');
+  const claimListEl   = document.getElementById('claim-list');
+  const claimGoBtn    = document.getElementById('claim-go-btn');
+  const claimResultEl = document.getElementById('claim-result');
+  let claimTarget = null; // { id, name }
+  let claimPickId = null;
+
+  // This shop's real customers: not paper, not admin, not the account itself. The
+  // list is the Accounts tab's own data, already limited to the admin's shop.
+  function claimCandidates() {
+    return accounts
+      .filter(a => !a.is_paper && !a.is_admin && a.id !== claimTarget?.id
+                && !(a.email || '').endsWith('@paper.pulllist.local'))
+      .sort((a, b) => (a.full_name || '').toLowerCase().localeCompare((b.full_name || '').toLowerCase()));
+  }
+
+  function renderClaimList() {
+    const q = claimSearchEl.value.trim().toLowerCase();
+    const rows = claimCandidates().filter(a =>
+      !q || (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q));
+    claimListEl.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'padding:14px;font-size:0.82rem;color:var(--text-muted)';
+      empty.textContent = q ? 'No account matches that search.' : 'This shop has no other customer accounts yet.';
+      claimListEl.appendChild(empty);
+      return;
+    }
+    rows.slice(0, 200).forEach(a => {
+      const label = document.createElement('label');
+      label.className = 'claim-row';
+      label.style.cssText = 'display:flex;gap:10px;align-items:flex-start;padding:9px 12px;cursor:pointer;' +
+                            'border-bottom:1px solid var(--border);font-size:0.85rem';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'claim-pick';
+      radio.value = a.id;
+      radio.checked = a.id === claimPickId;
+      radio.style.marginTop = '3px';
+      radio.addEventListener('change', () => { claimPickId = a.id; claimGoBtn.disabled = false; });
+      const text = document.createElement('span');
+      const nm = document.createElement('strong');
+      nm.textContent = a.full_name || '—';
+      const em = document.createElement('span');
+      em.style.cssText = 'display:block;color:var(--text-muted);font-size:0.78rem';
+      em.textContent = a.email || '';
+      text.append(nm, em);
+      label.append(radio, text);
+      claimListEl.appendChild(label);
+    });
+  }
+
+  function openClaimModal(id, name, preselectId) {
+    claimTarget = { id, name };
+    claimPickId = preselectId || null;
+    claimTitleEl.textContent = `Merge ${name} into a real account`;
+    claimSearchEl.value = '';
+    claimResultEl.style.display = 'none';
+    claimGoBtn.disabled    = !claimPickId;
+    claimGoBtn.textContent = 'Merge…';
+    renderClaimList();
+    claimOverlay.style.display = 'flex';
+    setTimeout(() => claimSearchEl.focus(), 50);
+  }
+
+  function closeClaimModal() {
+    claimOverlay.style.display = 'none';
+    claimTarget = null;
+    claimPickId = null;
+  }
+
+  document.getElementById('claim-close').addEventListener('click', closeClaimModal);
+  document.getElementById('claim-cancel-btn').addEventListener('click', closeClaimModal);
+  claimOverlay.addEventListener('click', e => { if (e.target === claimOverlay) closeClaimModal(); });
+  claimSearchEl.addEventListener('input', renderClaimList);
+
+  claimGoBtn.addEventListener('click', async () => {
+    if (!claimTarget || !claimPickId) return;
+    const { id, name } = claimTarget;
+    const real = accounts.find(a => a.id === claimPickId);
+    if (!real) return;
+    if (!confirm(
+      `This will move all of ${name}'s preorders and subscriptions ` +
+      `to ${real.full_name || 'the selected account'} (${real.email || 'no email'}) ` +
+      `and permanently delete the paper account.\n\nContinue?`
+    )) return;
+
+    const token = await adminAccessToken();
+    if (!token) { showModalMessage(claimResultEl, 'error', 'Session expired — sign out and back in.'); return; }
+
+    claimGoBtn.disabled    = true;
+    claimGoBtn.textContent = 'Merging…';
+    const { error } = await PaperCustomers.claim(id, real.id, token);
+    if (error) {
+      claimGoBtn.disabled    = false;
+      claimGoBtn.textContent = 'Merge…';
+      showModalMessage(claimResultEl, 'error', `Claim failed: ${error.message}`);
+      return;
+    }
+    toast(`✓ ${name}'s history merged — paper account removed`);
+    closeClaimModal();
+    await refreshAfterAccountChange();
+  });
+
   // ── Maintenance Mode Toggle ───────────────────────────────
   const maintToggle = document.getElementById('maint-toggle');
   const maintStatus = document.getElementById('maint-status');
@@ -5211,6 +5580,9 @@ There is no undo in the app.`);
   // carry status/email/is_paper for one surface would make every consumer pay.
   let accounts        = [];
   let accountsLoaded  = false;
+  // Ids of accounts converted from paper by Invite… (customer engagement S1). Own
+  // small read, non-fatal (see ensureAccounts); empty means "unknown or none".
+  let convertedIds    = new Set();
   let accountsSort    = { key: 'full_name', dir: 1 };
   // id → { last_sign_in_at, email_confirmed_at }. NULL (not an empty Map) means
   // "not loaded" — the two are different claims and the UI must not conflate
@@ -5233,6 +5605,24 @@ There is no undo in the app.`);
     }
     accounts       = data || [];
     accountsLoaded = true;
+
+    // Which of them were converted from paper (customer engagement S1). A SEPARATE
+    // query from the select above, and non-fatal on purpose: a select that names a
+    // column the database lacks fails the whole read (the F115 lesson), so this must
+    // never be able to take the Accounts tab down. On failure the Resend invite
+    // button simply does not show on the rows. Capped at one page: a shop that has
+    // converted more than 1,000 paper customers is not a case worth a loop.
+    convertedIds = new Set();
+    try {
+      const { data: conv, error: convErr } = await db.from('user_profiles')
+        .select('id')
+        .not('converted_from_paper_at', 'is', null)
+        .limit(1000);
+      if (convErr) throw convErr;
+      convertedIds = new Set((conv || []).map(r => r.id));
+    } catch (err) {
+      console.warn('converted_from_paper_at unavailable — Resend invite will not show', err);
+    }
 
     // Sign-in activity comes from auth.users, which is NOT reachable from a
     // browser session — there is no public.auth_users view. get_account_activity()
@@ -5513,8 +5903,14 @@ There is no undo in the app.`);
                   <button class="btn btn-secondary btn-sm acct-manage" data-id="${u.id}" data-name="${name}"
                           title="Open this customer's pull list">Manage</button>
                   ${u.is_paper ? `
+                    <button class="btn btn-primary btn-sm acct-invite" data-id="${u.id}" data-name="${name}" data-phone="${escapeHtml(u.phone || '')}"
+                            title="Give this customer online access. They get an email link to sign in, and their list stays exactly as it is">Invite…</button>
                     <button class="btn btn-ghost btn-sm acct-claim" data-id="${u.id}" data-name="${name}"
-                            style="color:var(--text-muted)" title="Merge into a real account when the customer goes digital">Claim…</button>
+                            style="color:var(--text-muted)" title="Merge into an account the customer already made">Claim…</button>
+                  ` : ''}
+                  ${!u.is_paper && stale && convertedIds.has(u.id) ? `
+                    <button class="btn btn-ghost btn-sm acct-resend" data-id="${u.id}" data-name="${name}"
+                            style="color:var(--text-muted)" title="Send the sign-in link again. They have not signed in yet">Resend invite</button>
                   ` : ''}
                 </div>
               </td>
@@ -5607,37 +6003,24 @@ There is no undo in the app.`);
     container.querySelectorAll('.acct-resume').forEach(btn =>
       btn.addEventListener('click', () => setStatus(btn, 'active', 'Resuming')));
 
-    container.querySelectorAll('.acct-claim').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const { id, name } = btn.dataset;
-        const realId = prompt(
-          `Merge "${name}" into a real customer account.\n\n` +
-          `Paste the real customer's user UUID.\n` +
-          `(Find it in Supabase → Authentication → Users)`
-        );
-        if (!realId?.trim()) return;
-        if (!confirm(
-          `This will move all of ${name}'s preorders and subscriptions ` +
-          `to the real account and permanently delete the paper account.\n\nContinue?`
-        )) return;
-
-        const { data: sessionData } = await db.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) { toast('Session expired — sign out and back in', 'error'); return; }
-
-        const { error } = await PaperCustomers.claim(id, realId.trim(), token);
-        if (error) {
-          toast(`Claim failed: ${error.message}`, 'error');
-          return;
-        }
-        toast(`✓ ${name}'s history merged — paper account removed`);
-        await ensureAccounts({ force: true });
-        renderAccounts();
-        // The Ordering-side entry pane reads its own paperCusts array.
-        await refreshPaperCusts();
-        renderPendingOrders();
-        await loadData();
+    // Invite… converts the paper account in place and emails a sign-in link; Claim…
+    // merges it into a second account the customer already made. Both open a modal
+    // (declared above, near the Edit Account modal). Claim used to prompt() for a
+    // pasted user UUID, which only someone with Supabase dashboard access could
+    // supply (customer engagement S1, decision D2).
+    container.querySelectorAll('.acct-invite').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { id, name, phone } = btn.dataset;
+        openInvitePaperModal(id, name, phone);
       });
+    });
+
+    container.querySelectorAll('.acct-resend').forEach(btn => {
+      btn.addEventListener('click', () => resendInviteFor(btn.dataset.id, btn.dataset.name, btn));
+    });
+
+    container.querySelectorAll('.acct-claim').forEach(btn => {
+      btn.addEventListener('click', () => openClaimModal(btn.dataset.id, btn.dataset.name));
     });
   }
 
