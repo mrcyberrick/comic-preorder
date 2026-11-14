@@ -201,6 +201,35 @@ Deno.serve(async (req) => {
       console.error('Could not extract userId from generateData:', JSON.stringify(generateData))
     }
 
+    // Customer engagement S2 (closes F89): record the invite. Attributed to
+    // the admin who sent it, not the new customer — the same reasoning
+    // convert-paper-customer already documents: a non-promo event under the
+    // customer's own id would read as their own activity (Analytics' tally,
+    // Accounts' "last seen"), marking a just-invited customer active today.
+    // Non-fatal: a logging failure must never undo an invite that already sent.
+    if (userId) {
+      try {
+        const evRes = await fetch(SUPABASE_URL + '/rest/v1/usage_events', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + SUPABASE_SERVICE,
+            apikey: SUPABASE_SERVICE,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({
+            event_type: 'invite_sent',
+            user_id:    userData.id,
+            tenant_id:  callerTenantId,
+            metadata:   { target_user_id: userId, via: 'invite' },
+          }),
+        })
+        if (!evRes.ok) console.error('invite-customer: usage_events insert failed', evRes.status, await evRes.text())
+      } catch (err) {
+        console.error('invite-customer: usage_events insert threw', String(err))
+      }
+    }
+
     return Response.json({ success: true, user_id: userId }, { headers: corsHeaders })
 
   } catch (err) {
