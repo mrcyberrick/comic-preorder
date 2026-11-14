@@ -250,13 +250,27 @@ Deno.serve(async (req) => {
         ;(row.is_unavailable ? bucket.unavailable : bucket.available).push(row)
       })
 
-      const recipients = [...byUser.entries()].map(([user_id, rows]) => ({
-        user_id,
-        name: eligible.get(user_id)?.full_name || 'Valued Customer',
-        ...rows,
-      }))
+      // Only email a customer who has an actual reason to come to the store
+      // this week. A customer whose ONLY matching title(s) are withdrawn,
+      // rejected by the supplier, or otherwise marked unavailable is dropped
+      // here rather than sent an email with nothing to pick up (Rick, 2026-11-14).
+      // Their unavailable rows are not lost — they simply aren't emailed about
+      // until something in their list is actually available, and the store's
+      // own Order Follow-Up panel is still where an unavailable title gets
+      // resolved.
+      const recipients = [...byUser.entries()]
+        .filter(([, rows]) => rows.available.length > 0)
+        .map(([user_id, rows]) => ({
+          user_id,
+          name: eligible.get(user_id)?.full_name || 'Valued Customer',
+          ...rows,
+        }))
 
-      plans.push({ tenant, recipients, skipped: recipients.length ? undefined : 'no eligible customer with a reservation on this week’s shipment' })
+      const skipped = recipients.length ? undefined
+        : byUser.size
+          ? 'every matching customer’s titles were withdrawn, rejected or otherwise unavailable this week — nothing worth a trip'
+          : 'no eligible customer with a reservation on this week’s shipment'
+      plans.push({ tenant, recipients, skipped })
     }
 
     const totalRecipients = plans.reduce((s, p) => s + p.recipients.length, 0)
@@ -381,6 +395,10 @@ function buildArrivalsEmail(
         </tr>`
   }).join('')
 
+  // available.length is always > 0 here — the caller only emails a customer
+  // with something actually worth a trip (Rick, 2026-11-14). Kept as a
+  // ternary rather than assumed, so this function stays correct if that
+  // caller-side guarantee ever changes.
   const table = available.length ? `
     <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif">
       <thead>
