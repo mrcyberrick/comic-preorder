@@ -2,7 +2,10 @@
 --                      policies=0, non_service_grants=0, rpc_now_exists=true,
 --                      rpc_anon_grants=0, rpc_authenticated_grant=1,
 --                      tenants_here=demoshop,raysandjudys,riverside-comics — exact match)
---         prod=PENDING
+--         prod=APPLIED 2026-11-15 (Rick; verdict not pasted back — independently confirmed via a
+--                      read-only service-role probe instead: paper_claim_codes readable (200), the
+--                      admin_get_paper_claim_codes RPC exists and executes without error, tenants on
+--                      the project read comicstore,rjbookstop confirming this was production)
 -- ============================================================================
 -- Customer engagement S5 (docs/customer-engagement-paper-to-app.md § S5)
 -- Prepared 2026-11-14. Operator: Rick (Supabase SQL Editor, runs as postgres).
