@@ -1,4 +1,8 @@
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-14 (verdict: table_now_exists=true, rls_enabled=true,
+--                      policies=0, non_service_grants=0, rpc_now_exists=true,
+--                      rpc_anon_grants=0, rpc_authenticated_grant=1,
+--                      tenants_here=demoshop,raysandjudys,riverside-comics — exact match)
+--         prod=PENDING
 -- ============================================================================
 -- Customer engagement S5 (docs/customer-engagement-paper-to-app.md § S5)
 -- Prepared 2026-11-14. Operator: Rick (Supabase SQL Editor, runs as postgres).

@@ -1,7 +1,8 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b ALL COMPLETE AND PROMOTED TO PRODUCTION, cron included; S4 and S5 BUILT
-ON STAGING 2026-11-14, NOT YET PUSHED, NOT PROMOTED — see § 6) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
+**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b ALL COMPLETE AND PROMOTED TO PRODUCTION, cron included; S4 and S5 BUILT,
+PUSHED, SQL APPLIED AND EDGE FUNCTION DEPLOYED ON STAGING 2026-11-14; NOT YET CLICKED THROUGH IN A BROWSER, NOT ON
+PRODUCTION — see § 6) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
 staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 (closes F89, closes F181), S3a
 (the Email button works for a past week) and S3b (the Tuesday notify-arrivals email + opt-out, SQL applied on both
 environments ahead of the code, `notify-arrivals` + the three other touched Edge Functions deployed to staging then
@@ -23,10 +24,11 @@ environments 2026-11-14, S2),
 F181 (RESOLVED on both environments 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own
 scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building S1,
 unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free). **S4 (QR codes on
-the poster, shelf tags and Print Catalog) and S5 (bag-slip claim code) BUILT 2026-11-14, not yet pushed, not yet
-verified against a deployed anything** — S5's own SQL (`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) has not been
-run on either environment, so `admin_get_paper_claim_codes` does not exist yet anywhere; see § 6 for exactly what
-that blocks and what fails open regardless.
+the poster, shelf tags and Print Catalog) and S5 (bag-slip claim code) BUILT 2026-11-14, pushed to staging
+(`17bec07`); S5's SQL (`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) applied on staging the same day (verdict
+matched exactly) and `convert-paper-customer` redeployed to staging with the new claim mode, `verify_jwt` confirmed
+OFF before and after, live probes confirming the dispatch works.** Not yet clicked through in a real browser; not on
+production. See § 6 for the full record.
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -695,12 +697,34 @@ project's history records for a pre-ship catch (e.g. the F156-adjacent and F182-
 this plan). The F182 self-update-guard interaction above is likewise a correctness fix within this step's own new
 column, not a defect in anything that shipped before it. **F183 remains the next free finding ID.**
 
-### S4 + S5: QR codes on the poster, shelf tags, Print Catalog and the bag-slip claim code (2026-11-14). BUILT ON STAGING, NOT PUSHED, NOT RUN, NOT PROMOTED.
+### S4 + S5: QR codes on the poster, shelf tags, Print Catalog and the bag-slip claim code (2026-11-14). BUILT, PUSHED TO STAGING, SQL APPLIED AND EDGE FUNCTION DEPLOYED ON STAGING. NOT ON PRODUCTION; NOT CLICKED THROUGH IN A REAL BROWSER YET.
 
-**One session, both steps together** (Rick: "Proceed to the next, S4 & S5 steps"). Code written and reviewed, on
-`feature/customer-engagement-s4-s5`; **nothing in this entry has been exercised against a live, deployed anything** —
-no SQL has been run, no Edge Function redeployed, no page loaded in a real browser. Stated this plainly because every
-other step in this plan reached at least a deployed-staging check before its own write-up; this one has not.
+**One session, both steps together** (Rick: "Proceed to the next, S4 & S5 steps"). Built on `feature/customer-engagement-s4-s5`,
+ff-merged and pushed to `staging` (`17bec07`), confirmed served (`-L`; the plain `curl` without it hit the documented
+Cloudflare Pages redirect trap and read as a false "nothing deployed" the first time this was checked). **Same day,
+Rick ran `docs/sql/2026-11-14-s5-paper-claim-codes.sql` on staging** — VERDICT pasted back matched the file's own
+expected line exactly: `table_now_exists=true, rls_enabled=true, policies=0, non_service_grants=0,
+rpc_now_exists=true, rpc_anon_grants=0, rpc_authenticated_grant=1,
+tenants_here=demoshop,raysandjudys,riverside-comics` — confirming it ran on staging, not production, by the tenant
+list alone. STATUS line updated to `staging=APPLIED`.
+
+**`convert-paper-customer` then redeployed to staging with the new claim mode**, `verify_jwt` read live by behaviour
+BEFORE and AFTER the deploy (an unauthenticated POST with no `code` field returns the function's own
+`{"error":"Unauthorized"}`, not the gateway's message, both times — OFF, preserved, deployed with
+`--no-verify-jwt`). **Live probes against the deployed function, staging, confirm the new dispatch works as designed:**
+a body with no `code` still requires admin auth (`{"error":"Unauthorized"}`, unchanged from the pre-deploy baseline —
+regression check); a body WITH a `code` and no Turnstile token reaches the new claim path and is refused with
+`{"error":"Verification required"}` (confirms `TURNSTILE_SECRET_KEY` is set on staging — a 503 would have meant it
+wasn't); a `code` with the honeypot filled returns `{"success":true}` with no further action, exactly as designed.
+Deployed artifact downloaded and hashed equal (CR-stripped) to the committed source, confirmed byte-for-byte via
+`diff`, not hash alone.
+
+**Not yet done, stated plainly:** nothing has been clicked through in a real browser (the poster, the shelf tags
+button, the claim panel, a real scan); the full Playwright suite has not been run against these deployed bytes; none
+of this has reached production — the SQL has not run there and `convert-paper-customer` on production still runs
+without the claim mode. The sections below (library choice, what each surface does, the two in-session fixes, the
+check against `renderThisWeek()`/`fetchAllPreorders()`) describe what was BUILT, before any of the staging
+verification above; they are accurate as a design record and are left as written.
 
 **Library:** vendored `vendor/qrcode-generator.js` — Kazuhiko Arase's `qrcode-generator` (MIT), pinned at the npm
 `1.4.4` release, fetched unminified (license header intact) from jsDelivr, `_headers` documents the source/pin/licence
@@ -810,14 +834,18 @@ full_name')` with no status filter either. So a `pending` account's reservations
 no code change needed; D6 stands exactly as decided, and `approve-customer` was confirmed generic (reads any pending
 profile by id, no `is_paper` dependency) the same way.
 
-**Not verified, stated plainly — this is a long list because nothing here has touched a live system yet:**
-- The SQL has not been run on staging or production. `admin_get_paper_claim_codes` does not exist anywhere yet.
-- `convert-paper-customer`'s new claim mode has not been deployed; its live `verify_jwt` setting was not re-read
-  (F93 still applies — read it live before deploying, same as every other function in this project, and preserve
-  whatever it is, even though the function already runs `--no-verify-jwt` by design).
-- `TURNSTILE_SECRET_KEY` was assumed already set on both projects (it must be, for native signup to work at all) but
-  was not independently re-confirmed this session.
-- No branch has been pushed; nothing has been loaded in a real browser, Chromium or otherwise.
+**Not verified when this section was first written; most of this is now answered — see the entry's own top paragraph
+for the staging apply/deploy that followed the same day:**
+- ~~The SQL has not been run on staging or production.~~ **Run on staging** (Rick), verdict matched exactly;
+  production still pending.
+- ~~`convert-paper-customer`'s new claim mode has not been deployed~~ **Deployed to staging**, `verify_jwt` read live
+  before and after (OFF, preserved), artifact hash-verified against committed source; production still pending.
+- **`TURNSTILE_SECRET_KEY` is confirmed set on staging** — not by reading the secret (never possible), but by
+  behaviour: the live claim-path probe reached "Verification required" rather than the function's own 503 for a
+  missing key, which only happens if the key is present.
+- ~~No branch has been pushed~~ **Pushed and merged to `staging`** (`17bec07`); still, nothing has been loaded in a
+  real browser, Chromium or otherwise, and the claim panel, the shelf-tags button and the poster have not been
+  clicked.
 - The QR encoder was read in full and matches the documented, decades-used public usage pattern for this exact
   library, but was never actually EXECUTED in this session (a sandboxed-tool-execution restriction, not a design
   choice) — correctness of the *text handed to it* was checked directly (a standalone string-equality harness,
