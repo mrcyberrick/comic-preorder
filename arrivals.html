@@ -90,12 +90,17 @@
       .ps-cta { background: #f2f2f2; border: 1.5px solid #1a1a1a; border-radius: 5px;
                 padding: 9px 14px; margin-bottom: 14px; page-break-inside: avoid;
                 -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .ps-cta-top { display: flex; align-items: baseline; justify-content: space-between;
+      .ps-cta-top { display: flex; align-items: center; justify-content: space-between;
                     flex-wrap: wrap; gap: 4px 14px; margin-bottom: 6px; }
+      .ps-cta-text { flex: 1 1 auto; min-width: 0; }
       .ps-cta-hook { font-size: 13.5px; font-weight: 800;
                      letter-spacing: -0.01em; color: #1a1a1a; }
       .ps-cta-line { font-size: 11.5px; color: #3a3a3a; }
       .ps-cta-line strong { color: #1a1a1a; }
+      /* QR in the CTA box: 56px square, no colour (pure black/white svg
+         path), so the "strictly grayscale" rule above holds without a
+         separate override. */
+      .ps-cta-top .qr-code { margin-left: 8px; }
       .ps-features { display: grid; grid-template-columns: repeat(4, 1fr);
                      gap: 6px 12px; margin-bottom: 6px; }
       .ps-feature { display: flex; gap: 6px; }
@@ -570,8 +575,13 @@
 
     <div class="ps-cta">
       <div class="ps-cta-top">
-        <div class="ps-cta-hook">Never miss an issue again.</div>
-        <div class="ps-cta-line">Reserve online at <strong>pulllist.app</strong> &mdash; we'll have them waiting.</div>
+        <div class="ps-cta-text">
+          <div class="ps-cta-hook">Never miss an issue again.</div>
+          <div class="ps-cta-line">Reserve online at <strong id="ps-cta-url">pulllist.app</strong> &mdash; we'll have them waiting.</div>
+        </div>
+        <!-- Filled by runStoreManagerView() (S4) with a QR to the shop's own
+             address, never the bare pulllist.app apex (which has no sign-up). -->
+        <div class="qr-code" id="ps-cta-qr" style="width:56px;height:56px"></div>
       </div>
       <div class="ps-features">
         <div class="ps-feature">
@@ -592,7 +602,7 @@
         </div>
       </div>
       <div class="ps-cta-foot">
-        <span class="ps-cta-pill">Start now &rarr; pulllist.app</span>
+        <span class="ps-cta-pill">Start now &rarr; <span id="ps-cta-pill-url">pulllist.app</span></span>
         <span class="ps-cta-alt">or ask a staff member<span data-paid-only> &middot; 973-586-9182</span></span>
       </div>
     </div>
@@ -615,6 +625,7 @@
 <script src="vendor/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="vendor/qrcode-generator.js"></script>
 <script>
 (async () => {
   // Header banner (PageBanner, app.js; set in Settings > Branding). FIRST THING, before any await:
@@ -1063,6 +1074,20 @@
     // mountStage() reveals them in the same synchronous block as the first
     // render, so nothing arrives above #arrivals-container in a frame of its own
     // (F166, below).
+
+    // S4: the poster's own CTA (its door, its code) — filled once here rather
+    // than per print click, since the tenant is already resolved by the time
+    // this view runs and does not change mid-session. Previously a static
+    // "pulllist.app" literal regardless of which shop printed the poster —
+    // the bare apex shows the platform marketing page, with "Create one"
+    // revealed only on a store's own hostname, so a new customer following
+    // the old poster reached a page with no sign-up at all.
+    const posterTenant = TenantContext.current();
+    const posterUrl = Tier.publicUrl(posterTenant);
+    document.getElementById('ps-cta-url').textContent = posterUrl;
+    document.getElementById('ps-cta-pill-url').textContent = posterUrl;
+    document.getElementById('ps-cta-qr').innerHTML =
+      QR.svg(QR.posterUrl(posterTenant), 'Scan to start your pull list online');
 
     // Monday (local Date) of the week currently shown. Updated by loadStoreWeek.
     let selectedMonday = null;

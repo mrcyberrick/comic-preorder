@@ -309,6 +309,68 @@ const Tier = {
 };
 window.Tier = Tier;
 
+// ============================================================================
+// QR — thin wrapper over vendor/qrcode-generator.js (Kazuhiko Arase, MIT;
+// customer engagement S4/S5, 2026-11-14). A page that renders a QR loads that
+// vendor script AFTER app.js, before its own page-specific <script> (see
+// arrivals.html / admin.html) — QR.svg() is only ever called from a click
+// handler or a render pass, never at parse time, so defining this object is
+// safe even on a page that never loads the vendor script at all.
+//
+// Each print surface's URL is built by its own small method below rather
+// than assembled inline at the call site, so a harness can assert the exact
+// string handed to the encoder — the thing that actually determines whether
+// the printed code is right — without decoding a rendered image back to
+// text. The encoding algorithm itself is the vendored library's job,
+// already proven by wide public use; ours is only "did we hand it the right
+// text," which a plain string comparison answers directly.
+const QR = {
+  // ?ref= values; S2's signup_source allowlist already names poster/
+  // catalog-print, this just builds the matching URL for each print surface.
+  // catalog-print itself has no caller any more (D8's Print Catalog QR was
+  // tried and removed the same day — not legible at a size the sheet's
+  // dense table could spare), kept in the allowlist regardless since S2
+  // anticipated it harmlessly ahead of time, same as the other unused names
+  // already sitting there.
+  posterUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=poster`;
+  },
+  // Every Bagging List customer card, paper or not — a general "come back
+  // online" prompt, distinct from a paper customer's own personal claimUrl
+  // below (a card can carry both: this one beside the shop's identity in
+  // the shared header, claimUrl in its own banner further down).
+  baggingUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=bagging`;
+  },
+  // The standalone Signup Sheet (admin.html, printed to accompany the
+  // catalog since the catalog's own header has no room for a legible QR).
+  // Same destination and messaging as the poster, but a distinct ref value
+  // — these are handed out in different physical circumstances and D8's
+  // own reasoning (track where a scan came from) applies here too.
+  signupSheetUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=signup-sheet`;
+  },
+  // A code on a bag slip (S5): claim="+code, no ?ref= (the sign-in page's
+  // ?claim= panel is its own funnel, distinct from signup_source).
+  claimUrl(tenant, code) {
+    return `https://${Tier.publicUrl(tenant)}/?claim=${encodeURIComponent(code)}`;
+  },
+  // Renders `text` as a self-contained <svg> string with its own viewBox, so
+  // a caller sizes it purely in CSS (wrap in a container with an explicit
+  // width/height — see the .qr-code rule in style.css — rather than reading
+  // the svg's own width/height attributes, which this never bothers to set
+  // to the final print size). 'M' error correction (~15% recovery) suits a
+  // short URL that will pick up handling wear on paper; typeNumber 0 lets
+  // the library auto-pick the smallest symbol version that fits the data.
+  svg(text, altText) {
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 8, alt: altText || undefined });
+  },
+};
+window.QR = QR;
+
 // ── Post-auth return path (S6c) ──────────────────────────────
 // initNav() redirects a signed-out visitor to index.html and, until 2026-09-08,
 // threw the requested URL away — there was no ?next=. So a newsletter or social
@@ -370,7 +432,7 @@ window.PostAuthRedirect = PostAuthRedirect;
 const SignupSource = {
   _key: 'pulllist.signup_source',
   _ttlMs: 60 * 60 * 1000,   // 1h — same window as PostAuthRedirect
-  _allowed: ['poster', 'shelf', 'slip', 'catalog-print', 'newsletter', 'news'],
+  _allowed: ['poster', 'shelf', 'slip', 'catalog-print', 'bagging', 'signup-sheet', 'newsletter', 'news'],
 
   capture(loc = window.location) {
     try {

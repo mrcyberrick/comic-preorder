@@ -451,6 +451,48 @@
       </p>
     </div>
 
+    <!-- ── Claim your pull list (customer engagement S5) — opened by ?claim=
+         on a bag-slip QR, a paper customer's own entry point, never a
+         normal sign-in or sign-up path. Email + Turnstile only: the account
+         already has a name on file, this just gives it a real address. ── -->
+    <div id="claim-form" style="display:none">
+      <h2>Claim your pull list</h2>
+      <div id="claim-error" class="alert alert-error" style="display:none"></div>
+      <p style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">
+        We already keep a pull list for you at the store. Enter your email below
+        to bring it online.
+      </p>
+      <div class="form-group">
+        <label for="claim-email">Email Address</label>
+        <input type="email" id="claim-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <!-- Honeypot — same convention as #signup-hp. -->
+      <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+        <label for="claim-hp">Leave this field blank</label>
+        <input type="text" id="claim-hp" name="claim-hp" tabindex="-1" autocomplete="off">
+      </div>
+      <div id="claim-turnstile" style="margin:14px 0"></div>
+      <button id="btn-claim" class="btn btn-primary btn-full" style="margin-top:8px">
+        Claim My List
+      </button>
+      <p style="margin-top:16px;font-size:0.75rem;color:var(--text-muted);
+                text-align:center;line-height:1.6">
+        Not your code? <a href="index.html" style="color:var(--accent);text-decoration:underline">Go to sign in</a>
+      </p>
+    </div>
+
+    <!-- ── Claim Success State ── -->
+    <div id="claim-success-state" style="display:none;text-align:center;padding:16px 0">
+      <div style="font-size:2.5rem;margin-bottom:12px">📬</div>
+      <div style="font-size:1rem;font-weight:600;color:var(--text-primary);margin-bottom:8px">
+        Almost there
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6">
+        Your pull list is linked to <span id="claim-success-email" style="color:var(--text-primary)"></span>.
+        The shop will review and send you a sign-in link shortly.
+      </div>
+    </div>
+
     <!-- ── Signup Success State ── -->
     <div id="signup-success-state" style="display:none;text-align:center;padding:16px 0">
       <div style="font-size:2.5rem;margin-bottom:12px">📬</div>
@@ -600,6 +642,12 @@
     if (policyEl) policyEl.style.display = 'inline';
   }
 
+  // Declared ahead of the claim panel below (which loads Turnstile eagerly,
+  // not on a click like signup's) so there is no ordering dependency on
+  // where TURNSTILE_SITE_KEY's own declaration sits later in this script.
+  const TURNSTILE_SITE_KEY = '0x4AAAAAAD8S0ONolq3newIs';
+  let claimTurnstileWidgetId = null;
+
   // ── Parse URL for tokens (query params AND hash fragment) ──
   const qParams     = new URLSearchParams(window.location.search);
   const hashParams  = new URLSearchParams(window.location.hash.substring(1));
@@ -612,13 +660,21 @@
   const type         = qParams.get('type') || hashParams.get('type');
   const hasInvite    = (tokenHash || accessToken) && type;
 
+  // Customer engagement S5 — a bag-slip code. Treated like hasInvite for the
+  // two checks right below it: it must open over the apex marketing page
+  // (a paper customer following a slip has never seen this site before),
+  // and it must NOT be hijacked by the "already signed in" redirect — the
+  // code claims a SPECIFIC other account, unrelated to whatever session
+  // might already exist in this browser (a shared household device, say).
+  const claimCode = (qParams.get('claim') || '').trim();
+
   // On the apex the sign-in panel is an overlay — a token must never land
   // behind the marketing page. (The head script normally has it open
   // already; this is the belt-and-braces pass once the tokens are parsed.)
-  if (hasInvite) window.SignIn?.open();
+  if (hasInvite || claimCode) window.SignIn?.open();
 
-  // ── Redirect if already logged in (no invite in URL) ───────
-  if (!hasInvite) {
+  // ── Redirect if already logged in (no invite or claim code in URL) ──
+  if (!hasInvite && !claimCode) {
     const session = await Auth.getSession();
     if (session) {
       // S6c — honour a stashed destination (already-signed-in visitor landing on index.html).
@@ -635,9 +691,29 @@
   const successState     = document.getElementById('success-state');
   const signupForm         = document.getElementById('signup-form');
   const signupSuccessState = document.getElementById('signup-success-state');
+  const claimForm          = document.getElementById('claim-form');
+  const claimSuccessState  = document.getElementById('claim-success-state');
+
+  // ── Claim your pull list (S5) ───────────────────────────────
+  // Takes over the panel outright — checked ahead of the invite/recovery
+  // branch below so a claim link can never be mistaken for one of those.
+  // Turnstile loads immediately here (unlike signup's, which waits for a
+  // click) because this panel is already the thing the visitor came for.
+  if (claimCode) {
+    setPasswordForm.style.display = 'none';
+    signInForm.style.display      = 'none';
+    claimForm.style.display       = 'block';
+    loadTurnstile(() => {
+      if (claimTurnstileWidgetId === null) {
+        claimTurnstileWidgetId = window.turnstile.render('#claim-turnstile', { sitekey: TURNSTILE_SITE_KEY, theme: 'dark' });
+      }
+    });
+  }
 
   // ── Invite / Recovery flow ─────────────────────────────────
-  if (hasInvite) {
+  // !claimCode: a crafted URL carrying both params must not let this branch
+  // clobber the claim panel just shown above — claim wins outright.
+  if (hasInvite && !claimCode) {
 
     // Two cases:
     // 1. access_token in hash = Supabase already verified the token and redirected here
@@ -885,7 +961,8 @@
   emailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') passwordEl.focus(); });
 
   // ── Create Account (native signup, any store hostname) ──────
-  const TURNSTILE_SITE_KEY   = '0x4AAAAAAD8S0ONolq3newIs';
+  // TURNSTILE_SITE_KEY now declared near the top of this script, above the
+  // claim panel block, which needs it earlier than signup does.
   const signupNameEl         = document.getElementById('signup-name');
   const signupEmailEl        = document.getElementById('signup-email');
   const signupHpEl           = document.getElementById('signup-hp');
@@ -1003,6 +1080,68 @@
   btnSignup?.addEventListener('click', doSignup);
   signupEmailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doSignup(); });
   signupNameEl?.addEventListener('keydown', e => { if (e.key === 'Enter') signupEmailEl.focus(); });
+
+  // ── Claim your pull list (S5) ────────────────────────────────
+  const claimEmailEl       = document.getElementById('claim-email');
+  const claimHpEl          = document.getElementById('claim-hp');
+  const btnClaim           = document.getElementById('btn-claim');
+  const claimErrorEl       = document.getElementById('claim-error');
+  const claimSuccessEmailEl = document.getElementById('claim-success-email');
+
+  async function doClaim() {
+    const email    = claimEmailEl.value.trim();
+    const honeypot = claimHpEl.value;
+
+    if (!email) {
+      claimErrorEl.textContent   = 'Please enter your email.';
+      claimErrorEl.style.display = 'block';
+      return;
+    }
+
+    const token = (window.turnstile && claimTurnstileWidgetId !== null)
+      ? window.turnstile.getResponse(claimTurnstileWidgetId) : '';
+    if (!token) {
+      claimErrorEl.textContent   = 'Please complete the verification.';
+      claimErrorEl.style.display = 'block';
+      return;
+    }
+
+    btnClaim.disabled    = true;
+    btnClaim.textContent = 'Claiming…';
+    claimErrorEl.style.display = 'none';
+
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/convert-paper-customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ code: claimCode, email, honeypot, turnstileToken: token }),
+      });
+      const result = await resp.json().catch(() => ({}));
+
+      if (!resp.ok || result.error) {
+        claimErrorEl.textContent   = result.error || 'Something went wrong. Please try again.';
+        claimErrorEl.style.display = 'block';
+        btnClaim.disabled    = false;
+        btnClaim.textContent = 'Claim My List';
+        if (window.turnstile && claimTurnstileWidgetId !== null) window.turnstile.reset(claimTurnstileWidgetId);
+        return;
+      }
+
+      claimSuccessEmailEl.textContent = email;
+      claimForm.style.display         = 'none';
+      claimSuccessState.style.display = 'block';
+
+    } catch (err) {
+      claimErrorEl.textContent   = 'Network error. Please try again.';
+      claimErrorEl.style.display = 'block';
+      btnClaim.disabled    = false;
+      btnClaim.textContent = 'Claim My List';
+      if (window.turnstile && claimTurnstileWidgetId !== null) window.turnstile.reset(claimTurnstileWidgetId);
+    }
+  }
+
+  btnClaim?.addEventListener('click', doClaim);
+  claimEmailEl?.addEventListener('keydown', e => { if (e.key === 'Enter') doClaim(); });
 
 })();
 </script>
