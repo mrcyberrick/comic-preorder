@@ -24,7 +24,8 @@ environments 2026-11-14, S2),
 F181 (RESOLVED on both environments 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own
 scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building S1,
 unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free). **S4 (QR codes on
-the poster, shelf tags and Print Catalog) and S5 (bag-slip claim code) BUILT 2026-11-14, pushed to staging
+the poster and Print Catalog — shelf tags were built, then dropped from scope the same day, Rick: "not needed") and
+S5 (bag-slip claim code) BUILT 2026-11-14, pushed to staging
 (`17bec07`); S5's SQL (`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) applied on staging the same day (verdict
 matched exactly) and `convert-paper-customer` redeployed to staging with the new claim mode, `verify_jwt` confirmed
 OFF before and after, live probes confirming the dispatch works.** Not yet clicked through in a real browser; not on
@@ -285,7 +286,14 @@ past weeks. There is no send-to-everyone button.
 - **Two weeks after the first scheduled send:** compare Visits on Tuesday and Wednesday with the two
   weeks before (Analytics), and record it in § 6.
 
-### S4. QR on the store poster, shelf tags and Print Catalog (#13)
+### S4. QR on the store poster and Print Catalog (#13)
+
+**Shelf tags for new #1s dropped from scope 2026-11-14 (Rick: "The shelf tags are not needed"), after being built
+and deployed to staging the same day they were designed.** Removed: the "Print #1 Shelf Tags" button and its print
+window (`arrivals.html`), `QR.shelfTagUrl()` (`app.js`), the `issue_number` addition to the weekly-shipment catalog
+read it needed, and the `SignupSource.capture()` call added to `subscriptions.html` solely to attribute a shelf
+tag's `?ref=shelf` scan (nothing generates that link any more, so nothing needed to capture it). The paragraph
+below is kept as written, struck through, as the record of what #13 originally asked for.
 
 Client-only. Brings the QR library that S5 reuses.
 
@@ -294,14 +302,16 @@ Client-only. Brings the QR library that S5 reuses.
   same-origin scripts. Render as inline SVG so it prints sharp.
 - **Store poster** (`arrivals.html`): replace the hardcoded `pulllist.app` in both lines with the
   shop's own address (`Tier.publicUrl()`), and add a QR to `https://<store address>/?ref=poster`.
-- **Shelf tags for new #1s:** a "Print #1 shelf tags" button on the admin store view for the selected
+- ~~**Shelf tags for new #1s:** a "Print #1 shelf tags" button on the admin store view for the selected
   week. One tag per series whose shipment row links to a catalog row with `issue_number = '1'` and a
   standard cover: title, "New series. Never miss an issue.", QR to
   `subscriptions.html?series=<name>&ref=shelf` on the store address. Rows with no catalog link are
-  skipped and counted on screen.
+  skipped and counted on screen.~~ **Dropped, see above.**
 - **Print Catalog (D8):** the same store QR beside "View Online", `ref=catalog-print`.
-- **Known limit:** a new sign-up waits for approval, and the series search is disabled until then, so
-  a shelf-tag scan by a newcomer ends at "account pending".
+- ~~**Known limit:** a new sign-up waits for approval, and the series search is disabled until then, so
+  a shelf-tag scan by a newcomer ends at "account pending".~~ **Moot — the shelf tag is gone.** The same limit
+  still applies to a poster or Print Catalog scan by a brand-new customer (any native sign-up waits for approval);
+  that was never specific to the shelf tag, just first written here.
 - **Gates:** decode every generated QR in the harness and compare with the expected URL; print preview
   inspected at letter size; **Rick scans a real laser print with a phone at arm's length** (the
   2026-08-24 barcode trial failed on the shop's scanner, so paper is the test that counts); nav and
@@ -697,7 +707,14 @@ project's history records for a pre-ship catch (e.g. the F156-adjacent and F182-
 this plan). The F182 self-update-guard interaction above is likewise a correctness fix within this step's own new
 column, not a defect in anything that shipped before it. **F183 remains the next free finding ID.**
 
-### S4 + S5: QR codes on the poster, shelf tags, Print Catalog and the bag-slip claim code (2026-11-14). BUILT, PUSHED TO STAGING, SQL APPLIED AND EDGE FUNCTION DEPLOYED ON STAGING. NOT ON PRODUCTION; NOT CLICKED THROUGH IN A REAL BROWSER YET.
+### S4 + S5: QR codes on the poster, Print Catalog and the bag-slip claim code (2026-11-14). BUILT, PUSHED TO STAGING, SQL APPLIED AND EDGE FUNCTION DEPLOYED ON STAGING. NOT ON PRODUCTION; NOT CLICKED THROUGH IN A REAL BROWSER YET.
+
+**Shelf tags removed from S4 later the same day (Rick: "The shelf tags are not needed").** Everything in this entry
+that describes the shelf-tags button, `QR.shelfTagUrl()`, the `issue_number` catalog read it needed, or the
+`SignupSource.capture()` fix added solely to attribute its `?ref=shelf` link is **struck through below** — all of
+it was built, reasoned about and (the capture fix) deployed to staging before being pulled back out the same day,
+so it is kept rather than silently deleted. S4a (the poster) and S4c (Print Catalog) are unaffected and current.
+§ 4's own S4 step description above carries the same correction.
 
 **One session, both steps together** (Rick: "Proceed to the next, S4 & S5 steps"). Built on `feature/customer-engagement-s4-s5`,
 ff-merged and pushed to `staging` (`17bec07`), confirmed served (`-L`; the plain `curl` without it hit the documented
@@ -719,8 +736,8 @@ wasn't); a `code` with the honeypot filled returns `{"success":true}` with no fu
 Deployed artifact downloaded and hashed equal (CR-stripped) to the committed source, confirmed byte-for-byte via
 `diff`, not hash alone.
 
-**Not yet done, stated plainly:** nothing has been clicked through in a real browser (the poster, the shelf tags
-button, the claim panel, a real scan); the full Playwright suite has not been run against these deployed bytes; none
+**Not yet done, stated plainly:** nothing has been clicked through in a real browser (the poster, the claim panel,
+a real scan); the full Playwright suite has not been run against these deployed bytes; none
 of this has reached production — the SQL has not run there and `convert-paper-customer` on production still runs
 without the claim mode. The sections below (library choice, what each surface does, the two in-session fixes, the
 check against `renderThisWeek()`/`fetchAllPreorders()`) describe what was BUILT, before any of the staging
@@ -730,17 +747,18 @@ verification above; they are accurate as a design record and are left as written
 `1.4.4` release, fetched unminified (license header intact) from jsDelivr, `_headers` documents the source/pin/licence
 and gives it the same `no-cache` posture as `app.js` (no `-vN` filename — this project has no build step to rename a
 reference automatically, and the file is small enough that a 304 revalidation costs nothing). `app.js` gets a thin `QR`
-helper: one URL-builder per print surface (`posterUrl`, `shelfTagUrl`, `catalogPrintUrl`, `claimUrl`, each a one-line
-template literal) plus `QR.svg(text, altText)`, which calls the library and returns a viewBox-scaled `<svg>` string a
-caller sizes purely in CSS (`.qr-code` rule in `style.css`; the two standalone `document.write()` print windows — Print
-Catalog and the new shelf-tags sheet — carry their own copy of that one rule, since they load no stylesheet at all).
+helper: one URL-builder per print surface (`posterUrl`, `catalogPrintUrl`, `claimUrl` — `shelfTagUrl` also existed
+briefly, removed with the shelf tags feature — each a one-line template literal) plus `QR.svg(text, altText)`, which
+calls the library and returns a viewBox-scaled `<svg>` string a caller sizes purely in CSS (`.qr-code` rule in
+`style.css`; the standalone `document.write()` Print Catalog window carries its own copy of that one rule, since it
+loads no stylesheet at all).
 
 **S4a, the store poster (`arrivals.html`):** the hardcoded "Reserve online at **pulllist.app**" / "Start now →
 pulllist.app" literals are replaced with `Tier.publicUrl(tenant)` (the shop's own address, never the bare apex, which
 has no sign-up for a store hostname) and a QR to `?ref=poster` is added beside the CTA text, filled once in
 `runStoreManagerView()` since the tenant doesn't change mid-session.
 
-**S4b, "Print #1 Shelf Tags" (`arrivals.html`, admin store view):** a new button beside Print Store Report. One tag per
+~~**S4b, "Print #1 Shelf Tags" (`arrivals.html`, admin store view):** a new button beside Print Store Report. One tag per
 series where a shipment row for the SELECTED week links (`catalog_id`) to a catalog row with `issue_number === '1'`
 and a standard cover (`isStandardCoverType()`, never a variant #1), deduped by series name so a second printing of the
 same new #1 (a second cover) doesn't double the tag count. Each tag: "NEW SERIES · #1", the series name, "Never miss
@@ -750,27 +768,36 @@ pattern Print Catalog already uses) rather than printing in place — this page 
 (`.print-store`, the personal list) and a third CSS-toggled mode risked exactly the kind of collision F119 already
 scarred this file with once. A shipment row with no catalog match (`catalog_id` null — the normal shape for an
 unmatched invoice line, F76) cannot be judged "new #1 or not" and is **skipped and counted on screen**, per the plan's
-own requirement — the toast names how many, both on a successful print and on "no new #1s found".
+own requirement — the toast names how many, both on a successful print and on "no new #1s found".~~
+
+**REMOVED 2026-11-14, same day, before any browser click-through** (Rick: "The shelf tags are not needed"). The
+button, its print window, and the `issue_number` field added to the weekly-shipment catalog read purely to support it
+are all gone from `arrivals.html`; `QR.shelfTagUrl()` is gone from `app.js`.
 
 **S4c, Print Catalog (`admin.html`, D8):** the same store QR added beside "View Online" in the sheet's page-1 header
 (`?ref=catalog-print`), no new wording. **Not** added to the repeating `@page` footer margin box — CSS page-margin
 `content` is text/counter-only and cannot embed an `<svg>` at all, so the footer keeps its existing text-only "View
 Online" line and the QR lives on page 1 only, which is where a customer taking the sheet home would see it anyway.
 
-**S4's own known limit, read from code, not tested:** a brand-new signup via any of these three QR codes still waits
-for admin approval and has its series search disabled until then (the existing, unrelated `isBlocked` pattern) — a
-shelf-tag scan by a genuine newcomer ends at "account pending", same as any other native signup today.
+**S4's own known limit, read from code, not tested:** a brand-new signup via either of these two QR codes still waits
+for admin approval and has its series search disabled until then (the existing, unrelated `isBlocked` pattern), same
+as any other native signup today.
 
-**S2's `signup_source` wiring reaches S4 correctly, with one gap found and fixed in the same session:** `SignupSource`
-already allowlisted `poster`/`shelf`/`catalog-print` (S2 anticipated these three names ahead of time) and `index.html`
-already calls `SignupSource.capture()` on load, so the poster and Print Catalog links (both target `/`, the sign-in
-page) attribute correctly with no further change. The shelf tag link targets `subscriptions.html` directly, which a
-signed-out visitor never reaches — `initNav()` bounces them to sign-in before anything else on that page runs — so
-`?ref=shelf` would have been silently lost for exactly the new-customer case the tag exists for. Fixed by calling
-`SignupSource.capture()` as the very first line of `subscriptions.html`'s own init script, ahead of `initNav()`
-(mirroring S6c's `PostAuthRedirect.stash()`, which runs ahead of its own redirect for the identical reason);
-`SignupSource.capture()` has no tenant/auth dependency, so this is safe regardless of what `initNav()` does next. **No
-finding ID consumed — caught and fixed before any push, nothing shipped broken.**
+**S2's `signup_source` wiring reaches S4 correctly** — `SignupSource` already allowlisted `poster`/`catalog-print`
+and `index.html` already calls `SignupSource.capture()` on load, so both links (which target `/`, the sign-in page)
+attribute correctly with no further change needed.
+
+~~**With one gap found and fixed in the same session:** `SignupSource` already allowlisted `poster`/`shelf`/
+`catalog-print` (S2 anticipated these three names ahead of time)... The shelf tag link targets `subscriptions.html`
+directly, which a signed-out visitor never reaches — `initNav()` bounces them to sign-in before anything else on
+that page runs — so `?ref=shelf` would have been silently lost for exactly the new-customer case the tag exists
+for. Fixed by calling `SignupSource.capture()` as the very first line of `subscriptions.html`'s own init script,
+ahead of `initNav()`...~~ **Moot — removed the same day the shelf tag itself was.** The fix was real and correctly
+reasoned while the feature existed (kept here rather than deleted, same as everything else in this entry), but with
+no shelf-tag link left to generate a `?ref=shelf` scan, the capture call it motivated was removed from
+`subscriptions.html` too; nothing else on that page needed it. **No finding ID consumed either way — caught, fixed,
+and later removed along with its own reason to exist, all before any push reached a point where a real customer
+could have been affected.**
 
 **S5, the bag-slip claim code.** New table `public.paper_claim_codes` (code PK, 12 characters from a 31-symbol
 unambiguous alphabet — 0/1/I/O/L dropped, ~59 bits of entropy — tenant_id, paper_user_id, created_at, expires_at,
@@ -792,8 +819,8 @@ customer the shop has). A paper customer's printed card gains a banner between t
 `?claim=<code>` and "Your pull list is online. Scan to claim it." — print-only, same hidden-until-`body.printing-this-week`
 treatment as the existing header. **Fails open by construction, the F115 lesson applied deliberately:** the RPC call
 is wrapped in its own error check, so if the SQL above hasn't run yet (true right now, on both environments) the whole
-Bagging List still renders normally — the claim banner just never appears, nothing else breaks. The shelf-tags and
-poster QR code paths have no dependency on this migration at all (pre-existing columns only), so pushing this branch
+Bagging List still renders normally — the claim banner just never appears, nothing else breaks. The poster and Print
+Catalog QR code paths have no dependency on this migration at all (pre-existing columns only), so pushing this branch
 is safe in any order relative to Rick running the SQL; running the SQL first is still the right sequencing to actually
 exercise the feature.
 
@@ -844,16 +871,16 @@ for the staging apply/deploy that followed the same day:**
   behaviour: the live claim-path probe reached "Verification required" rather than the function's own 503 for a
   missing key, which only happens if the key is present.
 - ~~No branch has been pushed~~ **Pushed and merged to `staging`** (`17bec07`); still, nothing has been loaded in a
-  real browser, Chromium or otherwise, and the claim panel, the shelf-tags button and the poster have not been
-  clicked.
+  real browser, Chromium or otherwise, and the claim panel and the poster have not been clicked. (The shelf tags
+  button this bullet originally also named was removed later the same day.)
 - The QR encoder was read in full and matches the documented, decades-used public usage pattern for this exact
   library, but was never actually EXECUTED in this session (a sandboxed-tool-execution restriction, not a design
   choice) — correctness of the *text handed to it* was checked directly (a standalone string-equality harness,
   7/7, confirming the exact URL each print surface builds); correctness of the *encoding itself* rests on the
   library's own long public track record, not on anything run here.
 - No decode-and-compare harness ran against a rendered QR image (the plan's own gate for S4); no print preview was
-  inspected at letter size; **Rick has not scanned a real print of anything** — the poster, a shelf tag, the Print
-  Catalog, or a bag slip. This is the step the plan itself calls "the test that counts" (recalling the 2026-08-24
+  inspected at letter size; **Rick has not scanned a real print of anything** — the poster, the Print Catalog, or a
+  bag slip. This is the step the plan itself calls "the test that counts" (recalling the 2026-08-24
   barcode trial, which failed on the shop's own scanner for a different, unrelated reason — resolution against a
   laser print, not an encoding defect; QR codes and a phone camera are a different technology and that trial's
   finding does not transfer, but it is still untested here).
@@ -873,11 +900,10 @@ corrected while writing this code, before any push and before any real customer 
 "pre-ship catch" disposition this plan's own S3b entry records for its three-valued-logic defect. **F183 remains the
 next free finding ID.**
 
-**Next, before this can be called done, roughly in order:** push the branch to staging; Rick runs the SQL on staging
-(then production, once staging is proven); deploy `convert-paper-customer` with `verify_jwt` read live first; a real
-browser pass through all four surfaces; the full Playwright suite once, against the deployed bytes (not run this
-session); Rick's own print-and-scan of a poster, a shelf tag, the catalog and a bag slip; then the SQL and deploy
-repeat on production before `/promote-prod`.
+**Next, before this can be called done, roughly in order:** a real browser pass through the three remaining surfaces
+(the poster, Print Catalog, the claim panel); the full Playwright suite once, against the deployed bytes (not run
+this session); Rick's own print-and-scan of a poster, the catalog and a bag slip; then the SQL and deploy repeat on
+production before `/promote-prod`.
 
 ## 7. Not verified when this plan was written
 

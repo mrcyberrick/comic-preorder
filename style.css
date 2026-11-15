@@ -2543,8 +2543,8 @@ button { cursor: pointer; font-family: var(--font-body); }
 /* ── QR code (customer engagement S4/S5) ──────────────────────
    app.js's QR.svg() returns a self-contained <svg> with its own viewBox but
    no final-size opinion. A caller sets the physical size on the WRAPPER
-   (inline style, since each print surface — poster, shelf tag, Print
-   Catalog, bag slip — wants a different size) and this one shared rule
+   (inline style, since each print surface — poster, Print Catalog, bag
+   slip — wants a different size) and this one shared rule
    makes the generated svg fill it; the viewBox keeps the code's own modules
    proportional at any size, so nothing here can distort or crop it. */
 .qr-code, .qr-code svg {

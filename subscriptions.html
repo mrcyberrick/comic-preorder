@@ -388,17 +388,6 @@ function confirmDialog(message, okLabel = 'Unsubscribe') {
 }
 
 (async () => {
-  // Customer engagement S4: capture ?ref=shelf before initNav() can redirect
-  // a signed-out visitor away. A shelf tag's QR lands HERE, not on index.html
-  // — poster and catalog-print both target the sign-in page's own "/", which
-  // already captures ?ref= (index.html), but a brand-new customer scanning a
-  // shelf tag is signed out and initNav() below bounces them to sign-in
-  // before this page runs another line. SignupSource.capture() is
-  // location-only (no tenant/auth dependency), so it is safe to call first,
-  // same reasoning as S6c's PostAuthRedirect.stash() running ahead of any
-  // redirect elsewhere in this app.
-  SignupSource.capture();
-
   // Header banner (PageBanner, app.js; set in Settings > Branding). FIRST THING, before any await:
   // it reads its config in parallel with auth and tenant resolution and paints as soon as it can,
   // because the art is the largest paint on pages with no cover grid. Never throws or rejects.

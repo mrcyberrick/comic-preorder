@@ -325,13 +325,10 @@ window.Tier = Tier;
 // already proven by wide public use; ours is only "did we hand it the right
 // text," which a plain string comparison answers directly.
 const QR = {
-  // ?ref= values; S2's signup_source allowlist already names poster/shelf/
+  // ?ref= values; S2's signup_source allowlist already names poster/
   // catalog-print, this just builds the matching URL for each print surface.
   posterUrl(tenant) {
     return `https://${Tier.publicUrl(tenant)}/?ref=poster`;
-  },
-  shelfTagUrl(tenant, seriesName) {
-    return `https://${Tier.publicUrl(tenant)}/subscriptions.html?series=${encodeURIComponent(seriesName || '')}&ref=shelf`;
   },
   catalogPrintUrl(tenant) {
     return `https://${Tier.publicUrl(tenant)}/?ref=catalog-print`;

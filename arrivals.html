@@ -490,12 +490,6 @@
     <button class="btn btn-secondary btn-sm" id="btn-print-store" style="display:none">
       ⎙ Print Store Report
     </button>
-    <!-- Customer engagement S4: shelf tags for the week's new #1s, admin
-         store view only — shown by runStoreManagerView() beside the other
-         store-only print controls. -->
-    <button class="btn btn-secondary btn-sm" id="btn-print-shelf-tags" style="display:none">
-      ⎙ Print #1 Shelf Tags
-    </button>
   </div>
 
   <!-- Store-manager week navigation (admin, own view only) — lets an admin
@@ -1074,10 +1068,8 @@
   // nested so it shares the selectedMonday week-cursor with the nav buttons.
   async function runStoreManagerView() {
     const btnStore = document.getElementById('btn-print-store');
-    const btnShelfTags = document.getElementById('btn-print-shelf-tags');
     document.getElementById('btn-print').style.display = 'none';        // no personal print here
     btnStore.style.display = '';
-    btnShelfTags.style.display = '';
     // The toolbar, week nav and reconciliation panel are NOT revealed here.
     // mountStage() reveals them in the same synchronous block as the first
     // render, so nothing arrives above #arrivals-container in a frame of its own
@@ -1236,122 +1228,6 @@
     });
     window.addEventListener('afterprint', () => document.body.classList.remove('print-store'));
 
-    // ── S4: "Print #1 shelf tags" ──────────────────────────────
-    // One tag per NEW series arriving this week — a shipment row that links
-    // to a catalog row with issue_number '1' and a standard cover (never a
-    // variant; a variant #1 is not the newcomer's entry point). Opens its
-    // own standalone print window (admin.html's openPrintWindow() pattern,
-    // duplicated here — there is no shared module between pages in this
-    // project) rather than printing in place, so its 8-per-page cut-line
-    // grid cannot collide with this page's two existing print modes
-    // (.print-store / the personal list) the way a new @media print rule
-    // added to an existing print mode has bitten this file before (F119).
-    function openShelfTagsPrintWindow(html) {
-      const printWin = window.open('', '_blank', 'width=1100,height=800');
-      if (!printWin) {
-        toast('Pop-up blocked — allow pop-ups for this site to print', 'error');
-        return false;
-      }
-      printWin.document.write(html);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => { printWin.print(); }, 400);
-      return true;
-    }
-
-    function buildShelfTagsHtml(tags, tenant) {
-      const printDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const cells = tags.map(t => `
-        <div class="tag-cell">
-          <div class="tag-badge">NEW&nbsp;SERIES&nbsp;&middot;&nbsp;#1</div>
-          <div class="tag-title">${escapeHtml(t.name)}</div>
-          <div class="tag-sub">Never miss an issue.</div>
-          <div class="tag-qr">${t.qrSvg}</div>
-          <div class="tag-foot">Scan to subscribe</div>
-        </div>`).join('');
-
-      // D9: 8 per letter page, 2 columns x 4 rows, dashed cut lines between
-      // cells (printed on the actual cut line, not just around the sheet).
-      return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Shelf tags &mdash; ${printDate}</title>
-  <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: letter portrait; margin: 0.3in; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111; background: #fff; }
-    .tag-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: repeat(4, 1fr);
-      width: 7.9in; height: 10.4in;
-    }
-    .tag-cell {
-      border: 1px dashed #999;
-      padding: 10px 14px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      text-align: center;
-      page-break-inside: avoid;
-    }
-    .tag-badge {
-      font-size: 8pt; font-weight: 700; letter-spacing: 0.06em; color: #c0392b;
-      margin-bottom: 6px;
-    }
-    .tag-title { font-size: 14pt; font-weight: 800; line-height: 1.15; margin-bottom: 4px; }
-    .tag-sub { font-size: 9pt; color: #444; margin-bottom: 8px; }
-    .tag-qr, .tag-qr svg { display: block; width: 100%; height: 100%; }
-    .tag-qr { width: 0.95in; height: 0.95in; margin-bottom: 4px; }
-    .tag-foot { font-size: 7.5pt; color: #777; letter-spacing: 0.03em; }
-  </style>
-</head>
-<body>
-  <div class="tag-grid">${cells}</div>
-</body>
-</html>`;
-    }
-
-    btnShelfTags.addEventListener('click', () => {
-      if (btnShelfTags.disabled) return;
-
-      // catalog_id can be null on a shipment row the import matched to
-      // nothing (F76's own unmatched-row case); issue_number lives on the
-      // catalog row, so an unmatched row can never be judged "new #1 or
-      // not" and is skipped rather than guessed. Reported on screen, not
-      // silently dropped — the plan's own "counted on screen" requirement.
-      const noCatalogLink = currentShipment.filter(r => !r.catalog).length;
-
-      const seriesSeen = new Set();
-      const tags = [];
-      currentShipment.forEach(r => {
-        const c = r.catalog;
-        if (!c || c.issue_number !== '1' || !isStandardCoverType(c.variant_type)) return;
-        const name = c.series_name || c.title;
-        if (!name || seriesSeen.has(name)) return; // one tag per series, not per cover/printing
-        seriesSeen.add(name);
-        tags.push({
-          name,
-          qrSvg: QR.svg(QR.shelfTagUrl(posterTenant, name), `Scan to subscribe to ${name}`),
-        });
-      });
-
-      if (!tags.length) {
-        toast(
-          noCatalogLink
-            ? `No new #1s found for this week (${noCatalogLink} shipment row${noCatalogLink !== 1 ? 's' : ''} had no catalog match, so could not be checked)`
-            : 'No new #1s found for this week',
-          'error'
-        );
-        return;
-      }
-
-      if (noCatalogLink) {
-        toast(`Printing ${tags.length} tag${tags.length !== 1 ? 's' : ''} — ${noCatalogLink} shipment row${noCatalogLink !== 1 ? 's' : ''} had no catalog match and could not be checked`, 'success');
-      }
-
-      openShelfTagsPrintWindow(buildShelfTagsHtml(tags, posterTenant));
-    });
-
     // Week navigation — shift ±7 days from the selected Monday.
     const shiftWeek = (days) => {
       const base = selectedMonday ? new Date(selectedMonday) : new Date();
@@ -1395,7 +1271,7 @@
             id, distributor, upc, item_code, title, price_usd, quantity, cover_url, on_sale_date,
             catalog:catalog_id (
               id, title, series_name, publisher, cover_url, price_usd, distributor, variant_type,
-              order_requirement, issue_number
+              order_requirement
             )
           `)
           .gte('on_sale_date', start)

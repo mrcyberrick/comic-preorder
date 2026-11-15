@@ -20,7 +20,7 @@
 # release (unminified source, license header intact; fetched from
 # https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js). It renders
 # as a global `qrcode` function, called from app.js's `QR` helper for the
-# store poster, shelf tags and Print Catalog (and S5's bag-slip claim code).
+# store poster and Print Catalog (and S5's bag-slip claim code).
 # A static library file with no runtime config, but kept no-cache anyway
 # rather than given a `-vN` immutable name: this project has no build step to
 # rename a reference automatically, and no-cache only costs a cheap 304 on an
