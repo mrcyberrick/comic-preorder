@@ -2,8 +2,10 @@
 
 **STATUS:** COMPLETE AND PROMOTED TO PRODUCTION (S1 THROUGH S5 ALL PROMOTED, PR #189, merge `033c5c69`,
 2026-11-15 — full Playwright suite 170 passed/1 skipped/0 failed first, both Edge Functions redeployed to
-production with `verify_jwt` re-confirmed OFF, S5's SQL also run on production the same day. See § 6 for the
-full record.) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
+production with `verify_jwt` re-confirmed OFF, S5's SQL also run on production the same day. Every print surface
+scanned and confirmed working on production — poster, Bagging List, Signup Sheet by Rick directly, the Claim QR
+via a disposable fixture account, verified end to end and cleanly torn down. See § 6 for the full record.) ·
+planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
 staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 (closes F89, closes F181), S3a
 (the Email button works for a past week) and S3b (the Tuesday notify-arrivals email + opt-out, SQL applied on both
 environments ahead of the code, `notify-arrivals` + the three other touched Edge Functions deployed to staging then
@@ -1013,15 +1015,27 @@ file.
 
 **Rick scanned all three general-purpose prints on production (poster, Bagging List, Signup Sheet) and all three
 resolve correctly** — confirms the staging dead link was exactly the provisioning gap it was diagnosed as, nothing
-else. **Deliberately NOT tested: the Claim QR** ("I did not test the Claim QR link due to concerns about
-compromising account data on Prod") — correct caution: unlike the other three, completing that flow for real
-changes a SPECIFIC customer's own account (auth email, `is_paper`, `status`), so testing it against a genuine
-paper customer would alter their real data. The safe version of this test — a disposable fixture paper customer,
-same pattern as S1's own production verification (`docs/customer-engagement-paper-to-app.md` § 6, "Paper Tiger") —
-is proposed, not yet run; see the note below. The `?claim=` panel itself has also never been clicked through end
-to end by a human on any environment, staging included.
+else. **Deliberately NOT tested with a real customer: the Claim QR** ("I did not test the Claim QR link due to
+concerns about compromising account data on Prod") — correct caution: unlike the other three, completing that flow
+for real changes a SPECIFIC customer's own account (auth email, `is_paper`, `status`), so testing it against a
+genuine paper customer would alter their real data.
 
-**Not yet verified:** the `?claim=` panel / claim flow end to end, on any environment, for the reason above.
+**Claim flow verified end to end on production 2026-11-15, with a disposable fixture instead (same pattern as
+S1's own "Paper Tiger" production verification).** A throwaway paper customer ("ZZTEST Claim Flow Check") and its
+claim code were created directly via the service-role API (mirroring `create-paper-customer`'s own
+account-creation shape exactly); Rick opened the real claim URL
+(`https://rjbookstop.pulllist.app/?claim=<code>`) on a real browser, completed the real Turnstile challenge (the
+browser console showed a wall of Cloudflare's own internal Turnstile diagnostics — WebGPU adapter probing, a WOFF2
+font warning, a `data:,` CSP block inside Cloudflare's own iframe — none of it from this app, and none of it
+stopped the challenge from completing), and submitted a real email. **Read back from the database, not assumed:**
+`is_paper` false, `status` pending, `signup_source` slip, `converted_from_paper_at` set, the email changed to what
+was typed, the claim code's `used_at` set (spent exactly once), one `paper_converted` event logged with
+`via: slip_code` attributed to the account itself. **Full teardown confirmed by a fresh read:** auth user deleted
+(404 on re-fetch), 0 profile rows, 0 claim-code rows, the one `usage_events` row survives with `user_id` set to
+NULL (same convention this project uses for every deleted test account).
+
+**Not yet verified:** nothing remaining on this surface — the claim flow has now been exercised for real against
+production, end to end, with a disposable account.
 
 **Finding-ID disposition, in words: no finding ID consumed** — this promotion is feature work (S2's F89/F181
 closures were already recorded at the staging stage); the two S4 scope corrections were design changes, not

@@ -142,15 +142,26 @@ none of them the reserve path.
 
 **Rick scanned the poster, Bagging List and Signup Sheet on production — all three resolve correctly**, confirming
 the staging dead link was exactly the provisioning gap it was diagnosed as (production's real paid tenant
-subdomain is provisioned; staging's never was). **The Claim QR was deliberately NOT tested** ("concerns about
-compromising account data on Prod") — the right call: unlike the other three, completing that flow for real
+subdomain is provisioned; staging's never was). **The Claim QR was deliberately NOT tested against a real
+customer** ("concerns about compromising account data on Prod") — the right call: completing that flow for real
 changes a specific customer's own account (auth email, `is_paper`, `status`), so exercising it against a genuine
-paper customer would alter their real data. A safe version — a disposable fixture paper customer, same pattern as
-S1's own "Paper Tiger" production verification — is proposed, not yet run.
+paper customer would alter their real data.
 
-**Not yet verified, stated plainly:** the `?claim=` panel / claim flow end to end, on any environment, for the
-reason above; the RLS/grant shape of `paper_claim_codes` on production rests on Rick's report plus the partial
-REST-only probe above, not a system-catalog read.
+**Claim flow verified end to end on production 2026-11-15 with a disposable fixture instead** (same pattern as
+S1's "Paper Tiger"). A throwaway paper customer and claim code were created directly via the service-role API
+(mirroring `create-paper-customer`'s own account-creation shape); Rick opened the real claim URL, completed the
+real Turnstile challenge (the browser console showed a wall of Cloudflare's own internal Turnstile diagnostics —
+WebGPU probing, a font warning, a `data:,` CSP block inside Cloudflare's own iframe — none of it from this app,
+none of it stopping the challenge), and submitted a real email. **Read back from the database:** `is_paper` false,
+`status` pending, `signup_source` slip, `converted_from_paper_at` set, email changed to what was typed, the claim
+code's `used_at` set (spent exactly once), one `paper_converted` event logged `via: slip_code` attributed to the
+account itself. **Teardown confirmed by a fresh read:** auth user deleted (404 on re-fetch), 0 profile rows, 0
+claim-code rows, the `usage_events` row survives with `user_id` set to NULL (this project's standard convention
+for a deleted test account).
+
+**Not yet verified, stated plainly:** the RLS/grant shape of `paper_claim_codes` on production (policy count,
+non-service grants) rests on Rick's report of running the SQL plus the earlier partial REST-only probe, not a
+system-catalog read — everything else this plan set out to verify is now done.
 
 **Finding-ID disposition, in words: no finding ID consumed.** S1-S5 are feature builds Rick asked for, not defect
 fixes (S2's F89/F181 closures are its own sub-items, already recorded closed at the staging stage); the two S4
