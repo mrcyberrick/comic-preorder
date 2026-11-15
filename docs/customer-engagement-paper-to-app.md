@@ -23,12 +23,16 @@ cron live 2026-11-14 (jobid 1) · PR=#186 (S1), #187 (S2+S3a+S3b), #188 (S3b ref
 environments 2026-11-14, S2),
 F181 (RESOLVED on both environments 2026-11-14, S2 — found separately while planning G-I, not part of this plan's own
 scope, fixed here per D3), F182 (filed and RESOLVED on both environments the same day, found while building S1,
-unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free). **S4 (QR codes on
-the poster and Print Catalog — shelf tags were built, then dropped from scope the same day, Rick: "not needed") and
-S5 (bag-slip claim code) BUILT 2026-11-14, pushed to staging
-(`17bec07`); S5's SQL (`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) applied on staging the same day (verdict
-matched exactly) and `convert-paper-customer` redeployed to staging with the new claim mode, `verify_jwt` confirmed
-OFF before and after, live probes confirming the dispatch works.** Not yet clicked through in a real browser; not on
+unrelated to S1's own code); no new ID consumed for S1, S2, S3a or S3b so far (F183 next free). **S4 (QR codes —
+scope corrected twice the same day: shelf tags built then dropped, "not needed"; Print Catalog's QR built then
+dropped too, "will not support the QR code" at a legible size, replaced by a general QR on every Bagging List card
+plus a new standalone Signup Sheet meant to accompany a printed catalog) and S5 (bag-slip claim code) BUILT
+2026-11-14, pushed to staging
+(`17bec07` then `a12a99b` then a further commit for this second correction); S5's SQL
+(`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) applied on staging the same day (verdict matched exactly) and
+both `convert-paper-customer` (claim mode) and `register-customer` (the widened signup-source allowlist)
+redeployed to staging, `verify_jwt` confirmed OFF before and after both times, live probes confirming each
+dispatch works.** Not yet clicked through in a real browser; not on
 production. See § 6 for the full record.
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
@@ -286,14 +290,27 @@ past weeks. There is no send-to-everyone button.
 - **Two weeks after the first scheduled send:** compare Visits on Tuesday and Wednesday with the two
   weeks before (Analytics), and record it in § 6.
 
-### S4. QR on the store poster and Print Catalog (#13)
+### S4. QR on the store poster, the Bagging List and a standalone Signup Sheet (#13)
 
-**Shelf tags for new #1s dropped from scope 2026-11-14 (Rick: "The shelf tags are not needed"), after being built
-and deployed to staging the same day they were designed.** Removed: the "Print #1 Shelf Tags" button and its print
-window (`arrivals.html`), `QR.shelfTagUrl()` (`app.js`), the `issue_number` addition to the weekly-shipment catalog
-read it needed, and the `SignupSource.capture()` call added to `subscriptions.html` solely to attribute a shelf
-tag's `?ref=shelf` scan (nothing generates that link any more, so nothing needed to capture it). The paragraph
-below is kept as written, struck through, as the record of what #13 originally asked for.
+**Scope corrected twice on 2026-11-14, same day as the original build — both corrections recorded here rather
+than silently folded in:**
+1. **Shelf tags dropped** (Rick: "The shelf tags are not needed"), after being built and deployed to staging the
+   same day they were designed. Removed: the "Print #1 Shelf Tags" button and its print window
+   (`arrivals.html`), `QR.shelfTagUrl()` (`app.js`), the `issue_number` addition to the weekly-shipment catalog
+   read it needed, and the `SignupSource.capture()` call added to `subscriptions.html` solely to attribute a
+   shelf tag's `?ref=shelf` scan.
+2. **Print Catalog's QR dropped, a Bagging List QR and a standalone Signup Sheet added instead** (Rick: "it
+   appears that the Print Catalog will not support the QR code unless we sacrifice space by making the image
+   larger (better to remove the QR code). A signup sheet can be shared with the catalog."). D8's QR beside "View
+   Online" on the catalog's page-1 header is removed — legible only at a size that would have eaten into the
+   order table. In its place: every Bagging List customer card gets a general QR beside the existing "View
+   Online" text (`?ref=bagging`, distinct from a paper customer's own personal claim QR elsewhere on the same
+   card), and a new standalone one-page **Signup Sheet** (`admin.html`, Ordering ▸ Paper Orders, beside Print
+   Catalog) carries a large, reliably scannable QR (`?ref=signup-sheet`) with the store poster's own wording,
+   meant to be printed once and handed out alongside the catalog rather than embedded in it.
+
+The paragraph below is kept as originally written for #13, with each dropped/changed item struck through in
+place rather than deleted.
 
 Client-only. Brings the QR library that S5 reuses.
 
@@ -307,11 +324,16 @@ Client-only. Brings the QR library that S5 reuses.
   standard cover: title, "New series. Never miss an issue.", QR to
   `subscriptions.html?series=<name>&ref=shelf` on the store address. Rows with no catalog link are
   skipped and counted on screen.~~ **Dropped, see above.**
-- **Print Catalog (D8):** the same store QR beside "View Online", `ref=catalog-print`.
+- ~~**Print Catalog (D8):** the same store QR beside "View Online", `ref=catalog-print`.~~ **Dropped the same day
+  it shipped — see above.** "View Online: <address>" text, with no QR, is the whole feature on this surface now.
+- **New, added in place of the above:** every Bagging List card gets a QR beside its existing "View Online" text
+  (`admin.html`'s Bagging List print, `?ref=bagging`); a new standalone Signup Sheet (`admin.html`, printed
+  separately, `?ref=signup-sheet`) carries a large QR and the poster's own copy, meant to accompany a printed
+  catalog rather than live inside it.
 - ~~**Known limit:** a new sign-up waits for approval, and the series search is disabled until then, so
   a shelf-tag scan by a newcomer ends at "account pending".~~ **Moot — the shelf tag is gone.** The same limit
-  still applies to a poster or Print Catalog scan by a brand-new customer (any native sign-up waits for approval);
-  that was never specific to the shelf tag, just first written here.
+  still applies to a scan of any of this step's surfaces by a brand-new customer (any native sign-up waits for
+  approval); that was never specific to the shelf tag, just first written here.
 - **Gates:** decode every generated QR in the harness and compare with the expected URL; print preview
   inspected at letter size; **Rick scans a real laser print with a phone at arm's length** (the
   2026-08-24 barcode trial failed on the shop's scanner, so paper is the test that counts); nav and
@@ -900,10 +922,53 @@ corrected while writing this code, before any push and before any real customer 
 "pre-ship catch" disposition this plan's own S3b entry records for its three-valued-logic defect. **F183 remains the
 next free finding ID.**
 
-**Next, before this can be called done, roughly in order:** a real browser pass through the three remaining surfaces
-(the poster, Print Catalog, the claim panel); the full Playwright suite once, against the deployed bytes (not run
-this session); Rick's own print-and-scan of a poster, the catalog and a bag slip; then the SQL and deploy repeat on
-production before `/promote-prod`.
+**Next, before this can be called done, roughly in order:** a real browser pass through every remaining surface (the
+poster, the Bagging List QR, the Signup Sheet, the claim panel — see the entry below for the latest scope correction
+to this list); the full Playwright suite once, against the deployed bytes (not run this session); Rick's own
+print-and-scan of each printed surface; then the SQL and deploy repeat on production before `/promote-prod`.
+
+### S4, second correction, same day: Print Catalog's QR dropped; a Bagging List QR and a Signup Sheet added instead
+
+**Rick, after looking at the Print Catalog build:** "add QR code on bagging list pages and it appears that the
+Print Catalog will not support the QR code unless we sacrifice space by making the image larger (better to remove
+the QR code). A signup sheet can be shared with the catalog." Three changes, one session, all pushed to `staging`
+and the two touched Edge Function allowlists redeployed the same day.
+
+**Print Catalog's QR (D8) is gone.** `admin.html`'s `buildCombinedCatalogHtml()` reverts to exactly its pre-QR
+shape: no `printQrSvg`, no `.ph-right-group`/`.ph-qr` wrapper, just the original `.ph-right` div holding the title
+count and "View Online" text. Nothing else about the sheet changed.
+
+**Every Bagging List card now carries a general QR.** `admin.html`'s `renderThisWeek()` computes one
+`printQrSvg` (`QR.svg(QR.baggingUrl(printTenant), ...)`) alongside the existing `printStoreLine`, and the
+per-customer print header wraps the "View Online" text and the QR together in a small flex row. This is for
+**every** customer's card, paper or not — a paper customer's card therefore carries two QR elements with two
+different jobs: this one (general "come back online" prompt, beside the shop's identity in the shared header)
+and their own `bagging-claim-banner` further down the same card (a personalized one-time claim code). `QR.baggingUrl()`
+is new in `app.js`, targeting `?ref=bagging` — its own signup-source value, not reused from the poster, since a
+scan here happens in a genuinely different physical circumstance (picking up a bag of already-reserved books) than
+a poster scan (browsing in-store) and the whole point of S2 is to tell those apart. Added to both allowlists
+(`SignupSource._allowed` in `app.js`; `SIGNUP_SOURCE_ALLOWED` in `register-customer`) and redeployed to staging
+(verify_jwt re-confirmed OFF before and after by behaviour, deployed artifact diffed byte-identical to committed
+source). Since the Bagging List prints in-place (`window.print()` + `body.printing-this-week`, not a standalone
+`document.write()` window), it already loads `style.css` and needed no duplicated `.qr-code` sizing rule the way
+Print Catalog's own standalone window did.
+
+**A new standalone Signup Sheet** (`admin.html`, Ordering ▸ Paper Orders, a new "Print Signup Sheet" button beside
+Print Catalog) is the home for the QR the catalog couldn't carry — one page, a 3-inch QR (large enough to scan
+reliably at arm's length, the plan's own bar), the store poster's exact wording reused rather than new copy
+invented ("Never miss an issue again," the same four features, tier-gated identity), `?ref=signup-sheet` — its own
+value again, for the same reason `bagging` got one rather than reusing `poster`: handed out alongside a printed
+catalog is a different circumstance from a poster seen in-store, even though the pitch is identical. Opens via the
+same `openPrintWindow()` standalone-document pattern Print Catalog already uses, so it cannot collide with any
+existing print mode.
+
+**Finding-ID disposition, in words: no finding ID consumed** — a design correction at Rick's request after seeing
+the built feature, not a defect; the QR worked exactly as built, it just didn't fit where it was first put. **F183
+remains the next free finding ID.**
+
+**Not yet done, stated plainly:** none of this — the reverted Print Catalog header, the new Bagging List QR, or
+the Signup Sheet — has been clicked through in a real browser or printed for a real scan test; the full Playwright
+suite has not run against these bytes; production has none of it.
 
 ## 7. Not verified when this plan was written
 

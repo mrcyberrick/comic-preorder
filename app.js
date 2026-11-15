@@ -327,11 +327,28 @@ window.Tier = Tier;
 const QR = {
   // ?ref= values; S2's signup_source allowlist already names poster/
   // catalog-print, this just builds the matching URL for each print surface.
+  // catalog-print itself has no caller any more (D8's Print Catalog QR was
+  // tried and removed the same day — not legible at a size the sheet's
+  // dense table could spare), kept in the allowlist regardless since S2
+  // anticipated it harmlessly ahead of time, same as the other unused names
+  // already sitting there.
   posterUrl(tenant) {
     return `https://${Tier.publicUrl(tenant)}/?ref=poster`;
   },
-  catalogPrintUrl(tenant) {
-    return `https://${Tier.publicUrl(tenant)}/?ref=catalog-print`;
+  // Every Bagging List customer card, paper or not — a general "come back
+  // online" prompt, distinct from a paper customer's own personal claimUrl
+  // below (a card can carry both: this one beside the shop's identity in
+  // the shared header, claimUrl in its own banner further down).
+  baggingUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=bagging`;
+  },
+  // The standalone Signup Sheet (admin.html, printed to accompany the
+  // catalog since the catalog's own header has no room for a legible QR).
+  // Same destination and messaging as the poster, but a distinct ref value
+  // — these are handed out in different physical circumstances and D8's
+  // own reasoning (track where a scan came from) applies here too.
+  signupSheetUrl(tenant) {
+    return `https://${Tier.publicUrl(tenant)}/?ref=signup-sheet`;
   },
   // A code on a bag slip (S5): claim="+code, no ?ref= (the sign-in page's
   // ?claim= panel is its own funnel, distinct from signup_source).
@@ -415,7 +432,7 @@ window.PostAuthRedirect = PostAuthRedirect;
 const SignupSource = {
   _key: 'pulllist.signup_source',
   _ttlMs: 60 * 60 * 1000,   // 1h — same window as PostAuthRedirect
-  _allowed: ['poster', 'shelf', 'slip', 'catalog-print', 'newsletter', 'news'],
+  _allowed: ['poster', 'shelf', 'slip', 'catalog-print', 'bagging', 'signup-sheet', 'newsletter', 'news'],
 
   capture(loc = window.location) {
     try {

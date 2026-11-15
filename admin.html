@@ -586,6 +586,19 @@
          printed page and its <title> match, the latter being the filename
          offered when the print is saved as a PDF. -->
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
+      <!-- Customer engagement S4 (2026-11-14): a separate one-page flyer, meant
+           to be printed once and handed out ALONGSIDE the catalog (Rick: "A
+           signup sheet can be shared with the catalog") — the catalog's own
+           page-1 header had no room for a QR legible enough to scan without
+           eating into the order table, so this carries it instead. -->
+      <button class="btn btn-secondary btn-sm" id="btn-print-signup-sheet"
+        style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM17 17h4v4h-4zM14 21h3M21 14h0"/>
+        </svg>
+        Print Signup Sheet
+      </button>
       <button class="btn btn-secondary btn-sm" id="btn-print-combined-catalog"
         style="display:flex;align-items:center;gap:5px;font-size:0.78rem">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -5371,6 +5384,12 @@ There is no undo in the app.`);
       ? `<div>${escapeHtml(printTenant.display_name || "Ray & Judy's Book Stop")} &middot; 973-586-9182 &middot; rjbookstop.com</div>
               <div style="font-weight:700">View Online: ${escapeHtml(Tier.publicUrl(printTenant))}</div>`
       : `<div style="font-weight:700">View Online: ${escapeHtml(Tier.publicUrl(printTenant))}</div>`;
+    // A QR beside the identity text, every card — unlike the paper-only claim
+    // banner further below, this is the same "go online" prompt the poster
+    // and (until the same day) Print Catalog carry; a paper customer's card
+    // shows BOTH this and their own personal claim banner, which serve
+    // different purposes (general brand/URL vs a personalized one-time code).
+    const printQrSvg = QR.svg(QR.baggingUrl(printTenant), 'Scan to view your pull list online');
 
     // Customer engagement S5: which of this week's customers are still paper
     // accounts, and each one's live claim code (admin_get_paper_claim_codes
@@ -5466,8 +5485,11 @@ There is no undo in the app.`);
           <div class="customer-group bagging-customer-card" data-user-id="${group.user_id}">
             <div class="bagging-print-header">
               <div style="font-weight:700">Bagging List &middot; ${weekDisplay}</div>
-              <div style="text-align:right">
-                ${printStoreLine}
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="text-align:right">
+                  ${printStoreLine}
+                </div>
+                <div class="qr-code" style="width:0.5in;height:0.5in;flex:none">${printQrSvg}</div>
               </div>
             </div>
             ${claimHtml}
@@ -6790,13 +6812,11 @@ There is no undo in the app.`);
     const printTenant = TenantContext.current();
     const printIsPaid = Tier.isPaid(printTenant);
     const printViewOnline = Tier.publicUrl(printTenant);
-    // D8 (customer engagement S4): the same store QR beside View Online, no
-    // new wording. Generated HERE, in the opener window (which has
-    // vendor/qrcode-generator.js loaded), and spliced into the print
-    // window's markup as a plain string — the print window itself is a
-    // standalone document.write() page with no script tags and no access
-    // to the opener's scripts, so the SVG has to arrive pre-rendered.
-    const printQrSvg = QR.svg(QR.catalogPrintUrl(printTenant), 'Scan to reserve online');
+    // D8 (customer engagement S4) tried a QR here and REMOVED it the same
+    // day (Rick: legible at this sheet's page-1 header size only by eating
+    // into the dense table's own space; the "View Online" text line is the
+    // whole feature now — a standalone Signup Sheet carries the QR instead,
+    // meant to be printed and handed out alongside this one).
 
     const total = groups.reduce((n, g) => n + g.items.length, 0);
 
@@ -6899,18 +6919,12 @@ There is no undo in the app.`);
       font-weight: 600;
       color: #333;
     }
-    .ph-right-group { display: flex; align-items: center; gap: 6px; }
     .ph-right {
       font-size: 6.5pt;
       color: #666;
       text-align: right;
       line-height: 1.5;
     }
-    /* D8: the SVG this print window's own markup carries no viewBox-scaling
-       rule by default — this is a standalone document.write() page, not
-       style.css's document, so the shared .qr-code rule there does not
-       apply here and has to be re-stated. */
-    .ph-qr, .ph-qr svg { display: block; width: 100%; height: 100%; }
 
     /* ── Table ── */
     table {
@@ -7034,12 +7048,9 @@ There is no undo in the app.`);
       <div class="ph-logo">PULL<span>LIST</span></div>
       <div class="ph-dist">Catalog &mdash; ${escapeHtml(monthLabel)}</div>
     </div>
-    <div class="ph-right-group">
-      <div class="ph-right">
-        <div>${total.toLocaleString()} titles</div>
-        <div style="font-weight:700">View Online: ${printViewOnline}</div>
-      </div>
-      <div class="ph-qr" style="width:34px;height:34px">${printQrSvg}</div>
+    <div class="ph-right">
+      <div>${total.toLocaleString()} titles</div>
+      <div style="font-weight:700">View Online: ${printViewOnline}</div>
     </div>
   </div>
 
@@ -7127,6 +7138,75 @@ There is no undo in the app.`);
   }
 
   document.getElementById('btn-print-combined-catalog').addEventListener('click', printCombinedCatalog);
+
+  // ── Print Signup Sheet (customer engagement S4, 2026-11-14) ─────
+  // A standalone one-page flyer, printed once and handed out ALONGSIDE the
+  // catalog (Rick: "A signup sheet can be shared with the catalog") — the
+  // catalog's own page-1 header had no room for a QR big enough to scan
+  // reliably without eating into the order table, so this carries the QR
+  // instead. Copy reuses the store poster's own wording (arrivals.html's
+  // Store Manager view) rather than inventing new messaging — it is the
+  // same pitch, just as its own sheet instead of embedded in the arrivals
+  // grid. Strictly grayscale, matching every other print surface's QR.
+  function buildSignupSheetHtml(tenant) {
+    const isPaid = Tier.isPaid(tenant);
+    const address = escapeHtml(Tier.publicUrl(tenant));
+    const qrSvg = QR.svg(QR.signupSheetUrl(tenant), 'Scan to start your pull list online');
+    const storeLine = isPaid
+      ? `<div class="ss-store-name">${escapeHtml(tenant.display_name || "Ray & Judy's Book Stop")}</div>
+         <div>973-586-9182 &middot; rjbookstop.com</div>`
+      : '';
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Signup Sheet</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: letter portrait; margin: 0.5in; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; background: #fff; }
+    .ss-page { display: flex; flex-direction: column; align-items: center; text-align: center;
+               height: 10in; justify-content: center; gap: 22px; }
+    .ss-hook { font-size: 30px; font-weight: 900; letter-spacing: -0.01em; }
+    .ss-line { font-size: 15px; color: #3a3a3a; }
+    .ss-line strong { color: #1a1a1a; }
+    .ss-qr, .ss-qr svg { display: block; width: 100%; height: 100%; }
+    .ss-qr { width: 3in; height: 3in; border: 1.5px solid #1a1a1a; border-radius: 6px; padding: 14px; }
+    .ss-scan { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #3a3a3a; }
+    .ss-features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 36px; margin-top: 4px; }
+    .ss-feature { display: flex; align-items: baseline; gap: 8px; font-size: 13px; text-align: left; }
+    .ss-feature-num { flex: none; width: 18px; height: 18px; border-radius: 50%; background: #1a1a1a;
+                       color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center;
+                       justify-content: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ss-store { font-size: 12px; color: #555; line-height: 1.5; border-top: 1px solid #ccc; padding-top: 14px; margin-top: 4px; }
+    .ss-store-name { font-weight: 700; font-size: 14px; color: #1a1a1a; }
+    .ss-online { font-weight: 700; color: #1a1a1a; }
+  </style>
+</head>
+<body>
+  <div class="ss-page">
+    <div class="ss-hook">Never miss an issue again.</div>
+    <div class="ss-line">Reserve online at <strong>${address}</strong> &mdash; we'll have them waiting.</div>
+    <div class="ss-qr">${qrSvg}</div>
+    <div class="ss-scan">Scan to get started</div>
+    <div class="ss-features">
+      <div class="ss-feature"><div class="ss-feature-num">1</div><div><strong>Browse &amp; reserve</strong> anytime, any device.</div></div>
+      <div class="ss-feature"><div class="ss-feature-num">2</div><div><strong>Auto-reserve</strong> your series monthly.</div></div>
+      <div class="ss-feature"><div class="ss-feature-num">3</div><div><strong>Know what's arriving</strong>, by date.</div></div>
+      <div class="ss-feature"><div class="ss-feature-num">4</div><div><strong>Confirmation email</strong>, always handy.</div></div>
+    </div>
+    <div class="ss-store">
+      ${storeLine}
+      <div class="ss-online">View Online: ${address}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  document.getElementById('btn-print-signup-sheet').addEventListener('click', () => {
+    openPrintWindow(buildSignupSheetHtml(TenantContext.current()));
+  });
 
   // ── Print / Save Reserved-Titles Report (By Distributor tab) ──
   // Compact, print-optimized report of active titles reserved for the current
