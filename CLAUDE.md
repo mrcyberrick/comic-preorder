@@ -140,10 +140,17 @@ touches `Preorders.*` or `toggleReserve` — grepped the full `origin/main`..`or
 zero hits. Every changed surface is admin-only prints, a new public conversion endpoint, and a new sign-in panel,
 none of them the reserve path.
 
-**Not yet verified, stated plainly:** the `?claim=` panel has never been clicked through end to end by a human on
-any environment; no real paper customer has scanned a real production bag slip, poster, or Signup Sheet yet; the
-RLS/grant shape of `paper_claim_codes` on production rests on Rick's report plus the partial REST-only probe above,
-not a system-catalog read.
+**Rick scanned the poster, Bagging List and Signup Sheet on production — all three resolve correctly**, confirming
+the staging dead link was exactly the provisioning gap it was diagnosed as (production's real paid tenant
+subdomain is provisioned; staging's never was). **The Claim QR was deliberately NOT tested** ("concerns about
+compromising account data on Prod") — the right call: unlike the other three, completing that flow for real
+changes a specific customer's own account (auth email, `is_paper`, `status`), so exercising it against a genuine
+paper customer would alter their real data. A safe version — a disposable fixture paper customer, same pattern as
+S1's own "Paper Tiger" production verification — is proposed, not yet run.
+
+**Not yet verified, stated plainly:** the `?claim=` panel / claim flow end to end, on any environment, for the
+reason above; the RLS/grant shape of `paper_claim_codes` on production rests on Rick's report plus the partial
+REST-only probe above, not a system-catalog read.
 
 **Finding-ID disposition, in words: no finding ID consumed.** S1-S5 are feature builds Rick asked for, not defect
 fixes (S2's F89/F181 closures are its own sub-items, already recorded closed at the staging stage); the two S4

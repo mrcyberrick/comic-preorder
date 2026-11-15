@@ -1011,8 +1011,17 @@ file.
 **Write-smoke skipped, confirmed from the diff rather than assumed:** grepped the whole promoted diff for
 `Preorders.` and `toggleReserve` — zero hits. Nothing here touches the reserve path.
 
-**Not yet verified:** the `?claim=` panel has never been clicked through end to end by a human, on any
-environment; no real customer has scanned a real production poster, Bagging List card, or Signup Sheet yet.
+**Rick scanned all three general-purpose prints on production (poster, Bagging List, Signup Sheet) and all three
+resolve correctly** — confirms the staging dead link was exactly the provisioning gap it was diagnosed as, nothing
+else. **Deliberately NOT tested: the Claim QR** ("I did not test the Claim QR link due to concerns about
+compromising account data on Prod") — correct caution: unlike the other three, completing that flow for real
+changes a SPECIFIC customer's own account (auth email, `is_paper`, `status`), so testing it against a genuine
+paper customer would alter their real data. The safe version of this test — a disposable fixture paper customer,
+same pattern as S1's own production verification (`docs/customer-engagement-paper-to-app.md` § 6, "Paper Tiger") —
+is proposed, not yet run; see the note below. The `?claim=` panel itself has also never been clicked through end
+to end by a human on any environment, staging included.
+
+**Not yet verified:** the `?claim=` panel / claim flow end to end, on any environment, for the reason above.
 
 **Finding-ID disposition, in words: no finding ID consumed** — this promotion is feature work (S2's F89/F181
 closures were already recorded at the staging stage); the two S4 scope corrections were design changes, not
