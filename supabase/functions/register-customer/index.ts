@@ -51,7 +51,7 @@ const MAIL_FROM_NAME  = Deno.env.get('MAIL_FROM_NAME')  ?? "Ray & Judy's Book St
 // allowlist as app.js's SignupSource — re-checked here because the client
 // list is a convenience, not a boundary; a posted value outside it is
 // silently dropped (stored as null), never trusted as-is.
-const SIGNUP_SOURCE_ALLOWED = new Set(['poster', 'shelf', 'slip', 'catalog-print', 'newsletter', 'news'])
+const SIGNUP_SOURCE_ALLOWED = new Set(['poster', 'shelf', 'slip', 'catalog-print', 'bagging', 'signup-sheet', 'newsletter', 'news'])
 
 // F72 S2 (free-tier slice): a tenant's display_name is admin-set, not
 // user-submitted, but it is interpolated into HTML mail — escape it before

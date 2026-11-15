@@ -1,7 +1,8 @@
 -- STATUS: staging=N/A (staging never gets the schedule — test fixtures with made-up
 --                      addresses would bounce and hurt the pulllist.app sender, F152;
 --                      exercised by hand there with dry_run and a stubbed Resend)
---         prod=PENDING
+--         prod=APPLIED 2026-11-14 (jobid 1, schedule '0 15 * * 2', active true,
+--                      verified by reading cron.job directly, not assumed)
 -- ============================================================================
 -- Customer engagement S3b (docs/customer-engagement-paper-to-app.md § S3b)
 -- Prepared 2026-11-14. Operator: Rick (Supabase SQL Editor, runs as postgres).
@@ -26,12 +27,21 @@
 -- ============================================================================
 
 -- ── PRE-CHECK (run on its own first; the SQL Editor shows only the last result)
+-- ⚠️ v1 of this query referenced cron.job directly in an EXISTS subquery,
+-- which Postgres must resolve at PLAN time regardless of how conditionally
+-- it looks wrapped — if the cron schema doesn't exist yet (pg_cron not
+-- installed), the whole statement fails to parse with 42P01 before any
+-- availability check even runs. Caught by Rick's first real run on
+-- production, not by me catching it first. Fixed with to_regclass(), the
+-- same null-safe existence check already used elsewhere in this plan's own
+-- S3b pre-check (arrival_notices) — it returns NULL for a relation that
+-- doesn't exist (even in a schema that doesn't exist) instead of erroring.
 SELECT
   EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_cron')  AS pg_cron_available,
   EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')          AS pg_cron_installed,
   EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_net')   AS pg_net_available,
   EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net')           AS pg_net_installed,
-  EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'notify-arrivals-weekly') AS job_already_exists;
+  (to_regclass('cron.job') IS NOT NULL)                                  AS cron_job_table_exists;
 -- STOP if pg_cron_available or pg_net_available is false — neither extension
 -- can be enabled on this plan/project, and the fix direction is the GitHub
 -- Actions fallback above, not this file.
@@ -41,7 +51,12 @@ SELECT
 -- EXTENSION statement below is refused with a permissions error, enable both
 -- from the Supabase dashboard's Database > Extensions page instead, then
 -- re-run from "THE CHANGE" with the CREATE EXTENSION lines removed).
--- STOP if job_already_exists is true — do not double-schedule.
+-- cron_job_table_exists = false simply means pg_cron has never scheduled
+-- anything here yet (expected, first use) — it does NOT mean pg_cron is
+-- unavailable; that is the *_available columns' job. If it reads true,
+-- run this as a follow-up BEFORE scheduling anything:
+--   SELECT jobid, jobname FROM cron.job WHERE jobname = 'notify-arrivals-weekly';
+-- STOP if that returns a row — do not double-schedule.
 
 -- ── THE CHANGE ──────────────────────────────────────────────────────────────
 -- Not wrapped in BEGIN/COMMIT: CREATE EXTENSION and cron.schedule() are each

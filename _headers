@@ -14,11 +14,26 @@
 # vendor/supabase.min.js is the self-hosted Supabase UMD bundle (pinned
 # 2.110.1, replaces the floating jsdelivr @2 tag — 2026-07 review, A11). Same
 # no-cache posture so an upgraded bundle can never skew against fresh HTML.
+#
+# vendor/qrcode-generator.js (customer engagement S4, 2026-11-14) is Kazuhiko
+# Arase's MIT-licensed QR encoder, pinned at the npm `qrcode-generator@1.4.4`
+# release (unminified source, license header intact; fetched from
+# https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js). It renders
+# as a global `qrcode` function, called from app.js's `QR` helper for the
+# store poster and Print Catalog (and S5's bag-slip claim code).
+# A static library file with no runtime config, but kept no-cache anyway
+# rather than given a `-vN` immutable name: this project has no build step to
+# rename a reference automatically, and no-cache only costs a cheap 304 on an
+# unfingerprinted file this small (a decision, not an oversight — see the
+# `-vN`-is-load-bearing warning in the artwork block below for the trade this
+# avoids).
 /app.js
   Cache-Control: no-cache
 /config.js
   Cache-Control: no-cache
 /vendor/supabase.min.js
+  Cache-Control: no-cache
+/vendor/qrcode-generator.js
   Cache-Control: no-cache
 
 # Static artwork caching (2026-08-24 Lighthouse perf sweep).

@@ -75,6 +75,162 @@ decision." until G-D ran, and before that "G-B (engine to production) and G-D (F
 **✅ NOVEMBER NEW-MONTH IMPORT RAN ON PRODUCTION 2026-10-28 (Rick; `node import.js` with `Lunar_Product_Data_1126.csv` + `2026_11_PRH_metadata_full_active.csv`, dry run first). This is the import that "revisit D1 after the November import", G-I's scripts half (F164) and G-G (F169/F157) were waiting on: all three are now unblocked, none started.** Read back from the database, not the console: `catalog` 2026-11 = **Lunar 1,283 / PRH 761**, all founding tenant (= raw rows, 0 rejected); 33 subscriber auto-reserves, all founding-tenant rows on 2026-11 titles; archived 342, purged 1,894, deduped 18; auto-fulfilled 2 (the one title over 14 days past on-sale; the "36 titles" warning ignores the 14-day hold). **F164 interim check passed first** (66 subscriptions, one tenant; `comicstore` holds only 2 rows in 2026-06). **F165 S1's first real exercise: the "Withdrawal marking is retired" line printed and no mark was written.** October's order (Run E, 10-27: 257 Lunar + 204 PRH lines) left nothing to confirm at the closing-cycle prompt. Afterwards: Maintenance Mode OFF (10-29 15:47Z), Order Deadline **2026-11-23** (set 10-29). Run A Step 3's revision sweep was skipped (Run C had run 10-23). **Not established:** whether the catalog notification email went out (`n` was answered at the prompt during the real run; a re-run was offered; `notify-customers` logs nothing to read). `docs/import-sop.md` brought current with the scripts the same session (`94746be`: Run B 5 to 3 steps since the import no longer publishes the feed; Run C's 2026-10-19 sections; Order Deadline location). No finding ID consumed; **F179 remains next free**.
 **✅ PROMOTED TO PRODUCTION 2026-11-10 -- Store contact S1: Settings ▸ Store contact replaces the "Email Templates · Soon" placeholder (PR #185, merge `cd264bd`, merged 22:13:50Z by Rick; promotion parents `427df64` main + `5edc04b` staging tip; staging code `c333b3d` the warning removal and page estimate, `53575ae` the panel, `330af30` a heading-size fix).** Rick's `/promote-prod`. **What shipped:** a panel with phone, street address, town and website, saved through the new admin-only `admin_set_store_contact()` (tenant derived inside, admin only, length caps, blank stores NULL) into `tenants.contact_phone` / `postal_address` (new) / `location` / `website` (new), with a live preview and a tier note; plus the stale "filters are not applied yet" warning removed and the print estimate at 44.5 rows per page (fits all six measured prints; 46 matched none). **Nothing reads the new fields yet**: emails (S2) and pages and prints (S3) still show Ray & Judy's hardcoded text, so no customer sees a change. **`settings.html` is the only code file; no `app.js`, `config.js`, Edge Function or RLS change** (the `TenantContext` widening moved to S3 so a missing column can never break every page). **SQL `docs/sql/2026-11-10-store-contact.sql` applied on BOTH environments (Rick), production FIRST: verdict OK; an anonymous probe found the four-argument function refused by the grant (401, 42501).** The production names check ran after the file and read 2 / 1, so it proved nothing on its own; the body marker in the verdict and staging's 0 / 0 rule out a pre-existing object. **Gates:** step 0 empty; merge result `settings.html` == staging, every other page identical on both branches, `config.js` == `origin/main` (prod ref x1, staging ref x0), `supabase/migrations/` 2 files; PR file list on GitHub 7 files, MERGEABLE. **Staging evidence:** harness `store-contact-verify.mjs` (local-only) 45/45 on the working tree and the deployed bytes, four negative controls each red; full suite 169 passed, 1 skipped, 0 failed, 28.4 min. **Verified post-deploy:** on BOTH `pulllist.app` and `rjbookstop.pulllist.app`, `settings.html` (`2a733af7093cf612`, the bytes the harness ran against on staging), `app.js`, `config.js`, `catalog`, `mylist`, `admin`, `analytics`, `style.css` byte-identical to `origin/main`; markers `admin_set_store_contact` x3, `id="contact-panel"` x1, `ROWS_PER_PAGE = 44.5` x1, `preview-banner` x0 (the one "Email Templates" left is a code comment). **Write-smoke skipped:** admin-only page, the diff never touches `Preorders` or the reserve path. **Not verified:** no save through the panel on production yet; Chromium only. **Still owed (Rick):** the production data fill through the panel, then a service-role read-back; his phone format choice (`(973) 586-9182` keeps S2's emails byte-identical; staging holds `973-586-9182`); and whether staging's "View Online: raysandjudys.pulllist.app" on prints is just noted (production prints `rjbookstop.pulllist.app`, which resolves). **Finding-ID disposition, in words: No finding ID consumed (feature build, not a defect).** **F181 remains the next free finding ID.** Next: S2 (the six mail functions read the fields). Plan: `docs/store-contact-and-colors.md`.
 
+**🔧 customer engagement S4, SECOND SCOPE CORRECTION SAME DAY: Print Catalog's QR dropped, replaced by a Bagging
+List QR and a standalone Signup Sheet — 2026-11-14.** Rick, after seeing the Print Catalog build: "add QR code on
+bagging list pages and it appears that the Print Catalog will not support the QR code unless we sacrifice space by
+making the image larger (better to remove the QR code). A signup sheet can be shared with the catalog." Three
+changes: (1) **Print Catalog's QR (D8) is gone** — `admin.html`'s `buildCombinedCatalogHtml()` reverts exactly to
+its pre-QR shape (no `.ph-right-group`/`.ph-qr`, no `printQrSvg`); the "View Online" text line is the whole feature
+there now. (2) **Every Bagging List customer card gets a general QR** beside its existing "View Online" text
+(`renderThisWeek()`, new `QR.baggingUrl()` in `app.js`, `?ref=bagging` — its own signup-source value, not reused
+from the poster, since a scan while picking up a bag is a different circumstance from one in front of a poster). A
+paper customer's card now carries two separate QR elements: this general one in the shared header, and their own
+personal claim QR in the `bagging-claim-banner` further down — different jobs, kept distinct. Prints in-place
+(`window.print()`), so it already has `style.css`'s `.qr-code` rule with no duplicate needed. (3) **New standalone
+Signup Sheet** (`admin.html`, Ordering ▸ Paper Orders, a "Print Signup Sheet" button beside Print Catalog): one
+page, a 3-inch QR (legible at the plan's own "arm's length" bar, which the catalog's cramped header could not
+meet), the store poster's own copy reused rather than invented, `?ref=signup-sheet` — again its own value, meant to
+be printed once and handed out alongside the catalog rather than embedded in it. `register-customer`'s
+`SIGNUP_SOURCE_ALLOWED` and `app.js`'s `SignupSource._allowed` both widened to include `bagging` and `signup-sheet`;
+`register-customer` redeployed to staging (`verify_jwt` re-confirmed OFF before and after by behaviour, artifact
+diffed byte-identical to committed source). **Finding-ID disposition, in words: no finding ID consumed** — a design
+correction after seeing the built feature, not a defect; the QR worked exactly as built, it just didn't fit where
+it was first put. **F183 remains the next free finding ID.** **Not yet done:** none of this has been clicked
+through in a real browser or printed for a real scan test; the full suite has not run; production has none of it.
+Record: `docs/customer-engagement-paper-to-app.md` § 4 (S4) and § 6.
+
+**🔧 customer engagement S4's shelf tags REMOVED FROM SCOPE 2026-11-14, same day they were built and deployed to
+staging (Rick: "The shelf tags are not needed").** Pulled back out before any browser ever clicked the button:
+`arrivals.html` loses the "Print #1 Shelf Tags" button, its standalone print window, and the `issue_number` field
+added to the weekly-shipment catalog read purely to support it; `app.js` loses `QR.shelfTagUrl()`;
+`subscriptions.html` loses the `SignupSource.capture()` call added solely to attribute that link's `?ref=shelf`
+scans (nothing generates that link any more). **S4a (the store poster) and S4c (Print Catalog) are untouched —
+both still carry their own QR, unaffected by this.** S5 (the bag-slip claim code) is also untouched. No SQL change,
+no Edge Function redeploy needed (shelf tags were purely client-side). Committed and pushed to `staging` directly.
+**Finding-ID disposition, in words: no finding ID consumed** — a scope change at Rick's request, not a defect; the
+feature was built correctly and simply isn't wanted. **F183 remains the next free finding ID.** Record:
+`docs/customer-engagement-paper-to-app.md` § 4 (S4) and § 6, both with the removed text struck through rather than
+deleted.
+
+**🔧 customer engagement S4 + S5 PUSHED TO STAGING, SQL APPLIED, EDGE FUNCTION DEPLOYED — 2026-11-14, same day as the
+build below. (Describes the shelf-tags button too — see the paragraph just above for its same-day removal.)** Branch
+`feature/customer-engagement-s4-s5` ff-merged and pushed (`17bec07`), confirmed served on
+staging (the plain `curl` without `-L` hit the documented Cloudflare Pages redirect trap on the first check and
+falsely read as nothing deployed; `-L` showed every marker present). **Rick ran
+`docs/sql/2026-11-14-s5-paper-claim-codes.sql` on staging**: VERDICT matched the file's own expected line exactly
+(`table_now_exists=true, rls_enabled=true, policies=0, non_service_grants=0, rpc_now_exists=true,
+rpc_anon_grants=0, rpc_authenticated_grant=1, tenants_here=demoshop,raysandjudys,riverside-comics` — the tenant list
+alone confirms staging, not production). STATUS line updated to `staging=APPLIED`. **`convert-paper-customer`
+redeployed to staging with the new claim mode**, `verify_jwt` read live before AND after (the function's own
+`{"error":"Unauthorized"}`, not the gateway's, both times — OFF, preserved, `--no-verify-jwt`). **Live probes against
+the deployed function:** no `code` field still requires admin auth, unchanged from the pre-deploy baseline
+(regression check); a `code` with no Turnstile token reaches the new path and is refused
+`{"error":"Verification required"}` (confirms `TURNSTILE_SECRET_KEY` is set on staging — a missing key would 503
+instead); a `code` with the honeypot filled returns `{"success":true}`, no action taken. Deployed artifact
+downloaded and diffed byte-for-byte (CR-stripped) against the committed source — identical. **Not yet done:**
+nothing has been clicked through in a real browser; the full suite has not run against these bytes; production has
+neither the SQL nor the redeployed function. Record: `docs/customer-engagement-paper-to-app.md` § 6.
+
+**🔧 customer engagement S4 + S5 BUILT ON STAGING 2026-11-14, SAME DAY (Rick: "Proceed to the next, S4 & S5 steps").
+This paragraph describes the BUILD only — see the paragraph directly above for the same-day push, SQL apply and
+Edge Function deploy that followed it.** Plan
+`docs/customer-engagement-paper-to-app.md` § S4/S5, build record § 6. Branch
+`feature/customer-engagement-s4-s5`. **S4 (QR on the store poster, shelf tags, Print Catalog):** vendored
+`vendor/qrcode-generator.js` (Kazuhiko Arase, MIT, pinned `qrcode-generator@1.4.4`, unminified, no-cache in
+`_headers`); `app.js` gains a `QR` helper (one URL builder per print surface + `QR.svg()`); `arrivals.html`'s store
+poster now points at the shop's own address with a QR (was hardcoded `pulllist.app`, which has no sign-up); a new
+"Print #1 Shelf Tags" button (admin store view) prints 8-per-letter-page cut-line tags, one per new series whose
+shipment row links to a catalog row with `issue_number = '1'` and a standard cover, QR to `subscriptions.html?series=
+<name>&ref=shelf`; `admin.html`'s Print Catalog gets the same QR beside View Online on page 1 only (CSS page-margin
+`content` cannot embed an SVG, so the repeating footer stays text-only). **A real gap found and fixed in the same
+session, before any push:** `subscriptions.html` (the shelf tag's own landing page) never called
+`SignupSource.capture()`, so `?ref=shelf` would have been silently lost for a signed-out visitor before `initNav()`
+bounced them to sign-in — fixed by calling it as the first line of that page's init, ahead of the redirect (S6c's
+`PostAuthRedirect.stash()` pattern). **S5 (bag-slip claim code):** new table `paper_claim_codes` (RLS on, zero
+policies — the only two readers, the new SECURITY DEFINER RPC and the Edge Function's service-role key, both bypass
+RLS) and admin-only `admin_get_paper_claim_codes()` (D7: one live 60-day code per paper customer, reused until used
+or expired); SQL `docs/sql/2026-11-14-s5-paper-claim-codes.sql`, **STATUS PENDING on both environments — not run
+anywhere**. `admin.html`'s Bagging List prints a paper customer's card with a QR to `?claim=<code>` and "Your pull
+list is online. Scan to claim it."; the RPC call fails open (the F115 lesson applied on purpose), so the whole
+Bagging List keeps rendering normally with no claim banners until the SQL lands — pushing this branch is safe in any
+order relative to running it. `convert-paper-customer` gains a third, PUBLIC mode (`{code, email, turnstileToken,
+honeypot}`), dispatched on `body.code` BEFORE the admin-auth check (the function is already `--no-verify-jwt`, which
+is what makes a public mode possible on an otherwise admin-only function with no platform change); every
+distinguishable failure returns the identical generic "ask at the counter" denial. **A second gap found and fixed
+in the same session:** the first draft spent the one-time code before checking whether the submitted email was
+already taken — reordered to check first, spend last, so the single most likely real mistake (a typo/duplicate
+address) doesn't burn the customer's only code. `index.html` gets a new `?claim=` panel (email + Turnstile), ahead
+of the invite/sign-in branches and suppressing the "already signed in" redirect. **Checked before building, not
+assumed:** `renderThisWeek()` and `fetchAllPreorders()` were read directly and neither filters on `user_profiles.status`
+at all, so D6's "pending, then the admin approves" needed no code change to keep a pending account's reservations on
+the Bagging list and the order export; `approve-customer` was confirmed generic (no `is_paper` dependency) the same
+way. **Not verified, stated plainly:** the SQL has not run anywhere; the Edge Function has not been redeployed (its
+live `verify_jwt` must be read first, F93, though the function already runs `--no-verify-jwt` by design);
+`TURNSTILE_SECRET_KEY`'s presence was assumed, not re-confirmed; nothing has loaded in a real browser; the QR encoder
+was read in full and never executed in this session (a sandboxed-tool-execution limit, not a design choice) — the
+URL TEXT each print surface hands it was checked directly instead (a standalone string-equality harness, 7/7); no
+decode-and-compare harness ran against a rendered image; **Rick has not scanned a real print of anything yet** — the
+plan's own stated "test that counts," after the 2026-08-24 barcode trial failed on the shop's scanner for an
+unrelated reason (laser-print resolution against that hardware, not an encoding defect — QR + a phone camera is a
+different technology and untested here). **Finding-ID disposition, in words: no finding ID consumed** — both gaps
+above were caught and fixed before any push, before any real customer could reach either path (the same pre-ship-catch
+disposition this plan's own S3b entry already records). **F183 remains the next free finding ID.** Next: push the
+branch; Rick runs the SQL on staging; deploy the function; a real browser pass; the full suite; Rick's own
+print-and-scan of all four surfaces; repeat on production before `/promote-prod`.
+
+**✅ customer engagement S3b's CRON SET UP ON PRODUCTION 2026-11-14, same day as PR #188 (Rick, walked through step by
+step; first use of `pg_cron`/`pg_net` anywhere in this project; SQL only, `docs/sql/2026-11-14-s3b-notify-arrivals-cron.sql`;
+no code, no deploy).** Plan `docs/customer-engagement-paper-to-app.md` § 6. **Pre-check:** `pg_cron_available=true,
+pg_net_available=true`, neither installed yet, no prior job — both extensions available on the plan, so the
+documented GitHub Actions fallback was not needed. **A real `42P01` parse-time bug in the pre-check's OWN existence
+check was caught here, by Rick's first real run, not in advance:** `EXISTS (SELECT 1 FROM cron.job WHERE ...)` must
+be resolved by Postgres at plan time regardless of how conditionally it looks wrapped, so with the `cron` schema not
+yet existing the statement failed to parse before any availability check could even run. Fixed to `to_regclass('cron.job')
+IS NOT NULL` — the same null-safe pattern already used elsewhere in this same plan's S3b pre-check for
+`arrival_notices`, inconsistently missed here the first time. **`ARRIVALS_CRON_SECRET` set on production** (CLI);
+`CREATE EXTENSION IF NOT EXISTS pg_cron` / `pg_net` and `cron.schedule('notify-arrivals-weekly', '0 15 * * 2', ...)`
+each run as their own statement. **Verdict, read from `cron.job` directly, not assumed:** `jobid=1, schedule='0 15 * * 2',
+active=true`, command text matching the intended URL/headers/body exactly. **Rick's own `dry_run` rehearsal run the
+same way the cron itself will call it** (the real secret, the real deployed function, read-only): a wrong secret
+still correctly refused with `401`; the correct secret with `dry_run: true` returned `200` with `would_email: 0` for
+both real tenants (`comicstore`: no `weekly_shipment` rows for this week yet; `rjbookstop`: no reservation matches
+this week's shipment) — this week's shipment data had not landed at the time of the check, consistent with every
+earlier read-only check this session. **Accepted by Rick as sufficient**: the mechanism (auth, response shape, skip
+reasons) is proven correct; the first real Tuesday fire is the actual first content check. **Not yet done:** reading
+back that first scheduled run's response and one delivered email (headers only), and a Visits comparison two weeks
+after the first send. **Finding-ID disposition, in words: no finding ID consumed** (the pre-check bug was caught and
+fixed before the cron was ever scheduled, no real customer exposed). **F183 remains the next free finding ID.**
+Customer engagement S1 through S3b are now all COMPLETE AND PROMOTED, cron included; only S4 and S5 of the plan
+remain, not started.
+
+**✅ PROMOTED TO PRODUCTION 2026-11-14 -- notify-arrivals skips a customer whose only match is unavailable (PR #188,
+merge `2c17265`; promotion commit `75c4053`, parents `cd10a2d` main + `5355048` staging tip; staging code `5355048`).**
+Rick's `/promote-prod`, same day as and directly following PR #187. **Rick's direction, caught before the cron exists
+and before `ARRIVALS_CRON_SECRET` is even set on production, so no real customer was ever exposed to the old
+behaviour.** A customer whose only matching reservation this week was withdrawn, rejected by the supplier, or
+otherwise marked unavailable no longer gets emailed — `recipients` now requires at least one *available* title; a
+tenant where every matching customer falls into this case skips with its own distinct reason ("nothing worth a trip"),
+separate from the existing "shipment import has not run" skip. **One file:
+`supabase/functions/notify-arrivals/index.ts`; the PR is 4 files, the other three doc-only carrying forward the prior
+close-out record (already on staging, never separately promoted — the normal doc-rides-along-in-the-next-merge
+shape).** **Gates:** step 0 only the deliberately-deferred cron file unresolved; merge-result and tree-integrity checks
+all green; PR file list on GitHub 4 files, `MERGEABLE`/`CLEAN`. **Staging evidence:** the gate harness
+(`s3b-gates.mjs`, local-only) extended with two new cases — a rejected-only customer on the founding tenant confirmed
+excluded from both `dry_run` and the real send (no `arrival_notices` row), and a second tenant (`riverside-comics`)
+where the only matching customer is rejected-only confirmed to skip with the new, distinct reason — **40/40, full
+teardown clean**. This diff is Edge-Function-only, so the Playwright suite (drives the web client) could not exercise
+it; the gate harness against the real deployed function is the right-shaped smoke test, already green before
+promoting. **Verified post-deploy:** `verify_jwt` re-confirmed OFF by behaviour (the function's own
+`{"error":"Unauthorized"}` on both an unauthenticated and a garbage-token POST, before and after); deployed artifact
+hashed equal (CR-stripped) to committed `origin/main` source. **Read-only spot-check of real production data (both
+tenants, this week): 0 matching rows for either — the weekly shipment hasn't landed yet, so this refinement currently
+changes nothing for a real customer either way; informational only, not part of the verification, since the logic
+itself was already fully exercised by staging's synthetic fixtures.** **Write-smoke not applicable:** this is a
+backend-only Edge Function with no live caller yet (no cron, no secret) and no customer-facing surface. **Finding-ID
+disposition, in words: No finding ID consumed (design refinement, not a defect found after shipping).** **F183
+remains the next free finding ID.** Next: set `ARRIVALS_CRON_SECRET` on production, then the cron file's own
+`pg_cron`/`pg_net` pre-check.
+
 **✅ PROMOTED TO PRODUCTION 2026-11-14 -- customer engagement S2 + S3a + S3b (PR #187, merge `cd10a2d`; promotion commit
 `3adbbee`, parents `a6a6b0b` main + `1390a27` staging tip; staging code as recorded in the two entries directly below).**
 Rick's explicit `/promote-prod` ("PR Merged"), a full merge (20 commits staging was ahead, one of them an unrelated
