@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** PLANNED, NOT STARTED · planned 2026-11-17 · D1-D3 answered by Rick 2026-11-17, D4-D10 proposed defaults awaiting his read · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
+**STATUS:** PLANNED, NOT STARTED · planned 2026-11-17 · D1-D5, D7, D8 and O1 answered by Rick 2026-11-17; D6, D9, D10 proposed defaults; O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -18,8 +18,8 @@ two tiers, *personal* (series the customer has reserved before, from `reservatio
 `preorders`) and *popular* (`get_popular_series()`), **alternated, personal first** (Rick, 2026-10-09).
 A row is dropped when it is already reserved **by exact catalog id**, past FOC, not a standard cover,
 hidden by the store's catalog visibility settings, or a second title from a series already picked.
-So request (2) already holds for the exact row; the gap is a **different row of the same issue**, and
-the emails, which do not exist yet, must apply the same rule server-side.
+So request (2) already holds on the rail. Rick (2026-11-17): keep that rule as it is and apply the same
+rule in the emails (D4).
 
 **The ranking runs in the browser.** The emails run in two Edge Functions (Deno, service role, many
 customers per run). Copying the JavaScript into both would give three copies of one rule. § 3 moves the
@@ -50,6 +50,13 @@ subscriptions page's `?series=` (S6b) and `PostAuthRedirect` (S6c, one-shot, 1-h
   `0`, and "AMAZING SPIDER-MAN: SYMBIE #1 COVER E ... 1:25 VARIANT" stores `14`. The `#1` must come from
   the **title**.
 - Format separates comics from the rest: Lunar `Periodical` (1,050), PRH `Comic Book` (495).
+- **Comics only, then compared** (Rick asked whether limiting `issue_number` to comics helps). Standard
+  covers only: on **Lunar** comics, `issue_number = 1` gives 73 rows and `#1` in the title gives 56; all 56
+  have `issue_number = 1`, and the 17 extra are Dynamic Forces signed or exclusive copies of other issues
+  (`DF HARLEY QUINN #66 ...`, `DF ABSOLUTE BATMAN #23 ...`) that Lunar stamps with 1. On **PRH** comics,
+  `issue_number = 1` finds **1** of the 26 titles with `#1` in the title; the others store `0` (Zorro
+  Annual, Fantastic Four: First Foes, Amazing Spider-Man: Symbie). So comics-only helps on Lunar and does
+  not rescue PRH, whose Marvel #1s would all be missed.
 - Standard cover + format `Periodical`/`Comic Book` + `#1` in the title (not `#10`-`#19`) = **82 rows**;
   dropping DC Start Here bundles, `(NET)`, facsimiles, Dynamic Forces `DF ...` and `SIGNED` editions,
   `2ND PTG`/printings, `BLANK` and `VIRGIN` leaves **61 rows, 59 distinct series (Lunar 36, PRH 23)**.
@@ -64,22 +71,24 @@ subscriptions page's `?series=` (S6b) and `PostAuthRedirect` (S6c, one-shot, 1-h
 |---|---|---|
 | D1 | **Reserve from the email = a link that opens that title on the Catalog page with its Reserve button.** A signed-out customer signs in and lands back on the title. Every existing reserve rule applies unchanged. No link reserves by itself: mail scanners (Outlook Safe Links and similar) open every link before the customer does, and the store orders each reservation for that customer. | **Rick, 2026-11-17** |
 | D2 | **Three toggles:** new-catalog email, weekly arrivals email, and "Include Top Picks in my emails". The email's opt-out link opens these settings without signing in (D9). | **Rick, 2026-11-17** |
-| D3 | **Priority: personal over store, popular over New #1.** New #1 is the default only when no history can be used. Read as: personal and popular keep alternating, personal first (Rick's 2026-10-09 rule, unchanged); **New #1s fill only the slots the two history tiers leave empty**, so they appear for a shop with no reservation history at all, and as a top-up when history runs short (late in the month, when most history titles are past FOC). | **Rick, 2026-11-17** (the alternation and the top-up are this plan's reading of his answer; correct here if not) |
-| D4 | "Already reserved" widens from the exact row to **the same issue**: same `series_name` + distributor + the `#N` parsed from the title, in the current month. A title with no `#N` (a trade, a one-off) falls back to the exact row. A second issue of the same series in the same month (a twice-monthly book) is still a pick. | proposed |
-| D5 | **New #1 rule:** standard cover; format `Periodical` or `Comic Book`; `#1` in the title, not followed by a digit; title does not match `FACSIMILE`, `BUNDLE`, `(NET)`, a leading `DF`, `SIGNED`, `BLANK`, `VIRGIN`, `PTG`/`PRINTING`; FOC not passed; passes the store's visibility settings; one per series. One-shots count. | proposed |
+| D3 | **Priority: personal over store, popular over New #1.** New #1 is the default only when no history can be used. Read as: personal and popular keep alternating, personal first (Rick's 2026-10-09 rule, unchanged); **New #1s fill only the slots the two history tiers leave empty**, so they appear for a shop with no reservation history at all, and as a top-up when history runs short (late in the month, when most history titles are past FOC). | **Rick, 2026-11-17** (the alternation and the top-up are this plan's reading of his answer; he did not correct it when it was put to him the same day) |
+| D4 | "Already reserved" stays **the exact row**, the rail's existing rule (Rick's 2026-10-09 rail), unchanged, and the emails use the same rule. A different cover of an issue the customer reserved can still be a pick. | **Rick, 2026-11-17** |
+| D5 | **New #1 rule: comics only** (Rick: "not interested in trades and T-shirts"): format `Periodical` (Lunar) or `Comic Book` (PRH); standard cover; **`#1` read from the title**, not followed by a digit, because PRH's `issue_number` is `0` on 25 of its 26 #1 comics (§ 1); title does not match `FACSIMILE`, `BUNDLE`, `(NET)`, a leading `DF`, `SIGNED`, `BLANK`, `VIRGIN`, `PTG`/`PRINTING`; FOC not passed; passes the store's visibility settings; one per series. One-shots count. On Lunar the title test and `issue_number = 1` agree once `DF` copies are dropped. | **Rick, 2026-11-17** (comics only); the title test is the measured consequence |
 | D6 | **Emails carry 4 picks**, only for an account that is active, not paper, and has Top Picks on. Fewer than 4 eligible picks shows what there is; none omits the section. | proposed |
-| D7 | The arrivals toggle **moves** from My List to the profile page; My List keeps a "Email settings" link in its place, so one setting has one control. The arrivals email's "turn it off on My List" line is replaced by the opt-out link. | proposed |
-| D8 | The profile page is **`account.html`, "My Account"**, reached by making the nav greeting's name a link (desktop bar and phone drawer). It joins the nav sync set as its **eighth** page. Name and email are shown read-only (changing an email is F126, out of scope). | proposed |
+| D7 | The arrivals toggle **moves** from My List to the profile page; My List keeps a "Email settings" link in its place, so one setting has one control. The arrivals email's "turn it off on My List" line is replaced by the opt-out link. | **Rick, 2026-11-17** (default) |
+| D8 | The profile page is **`account.html`, "My Account"**, reached by making the nav greeting's name a link (desktop bar and phone drawer). It joins the nav sync set as its **eighth** page. Name and email are shown read-only (changing an email is F126, out of scope). | **Rick, 2026-11-17** (default) |
 | D9 | **Opt-out:** each email footer links to a **preferences page that needs no sign-in** (a signed token in the link), showing the three toggles. Each email also carries `List-Unsubscribe` + `List-Unsubscribe-Post` headers; the one-click unsubscribe a mail client offers turns off **that** email. The link only opens the page; nothing changes until the customer presses a button (scanners again). | proposed |
 | D10 | "See more" on the rail still opens the Recommended For You view (its own ranking in `app.js`). When the rail holds only New #1s, "See more" is hidden, since that view has nothing matching to show. | proposed |
 
-**Open, not decided here:**
-- **O1.** `notify-customers` emails **pending and paused** accounts too (it filters on `is_admin` only).
-  This plan sends picks to active accounts only and does not change who gets the email itself. Whether
-  pending and paused accounts should get the catalog email at all is Rick's call (a one-line filter).
-- **O2.** Should a series the customer **subscribes to** be excluded from picks? Auto-reserve normally
-  reserves it at import, so D4 already hides it; it matters only when a subscription was added after the
-  import. Not built unless asked.
+**Answered, and open:**
+- **O1, answered (Rick, 2026-11-17): "not promotional, should remain transactional only".** Pending and
+  paused accounts keep getting the catalog email exactly as today (`notify-customers` filters on
+  `is_admin` only), and **never with Top Picks**: picks go to active accounts only. The footer settings
+  link (D9) is on every send, theirs included, since it is how anyone turns an email off and is not
+  promotional.
+- **O2, open.** Should a series the customer **subscribes to** be excluded from picks? Auto-reserve normally
+  reserves its standard cover at import, so D4 already hides that row; it matters only when a
+  subscription was added after the import. Not built unless asked.
 
 ---
 
@@ -97,7 +106,7 @@ revoked from `anon` and `PUBLIC` (F124's lesson: a new function is executable by
 - **Tiers:** personal (`reservation_history` + `preorders` series keys), popular (the same aggregate
   `get_popular_series()` computes), New #1 (D5). Alternate personal/popular, personal first, one per
   series across all tiers; New #1 fills what is left (D3).
-- **Drops:** reserved by issue (D4), FOC passed, not a standard cover, and the store's `catalog_filters`
+- **Drops:** reserved by this customer, exact row (D4), FOC passed, not a standard cover, and the store's `catalog_filters`
   rules that can apply to a standard cover: hidden publisher, standard covers switched off, zero price.
   (Variant and ratio rules cannot touch a standard cover; past-FOC is already dropped.)
 - **Returns** `catalog_id, tier ('personal'|'popular'|'new1')` in rank order.
@@ -165,11 +174,11 @@ Each session is staging first; production is a separate, explicitly requested pr
 | Session | What | Gate |
 |---|---|---|
 | **S0** | Read-only on production: New #1 yield for 2026-11 under D5; how many active customers have no personal history; current rail picks for three accounts (Rick's choice of accounts). | numbers recorded here |
-| **S1** | SQL (`docs/sql/<date>-top-picks-rpc-and-email-prefs.sql`): `get_top_picks()`, the two columns, the widened guard. Staging. | **parity harness:** for 10+ staging accounts the RPC's picks equal today's `getTopPicks()` except where D3/D4/D5 apply, each difference explained; anon refused (`42501`); a customer cannot ask for another customer; an admin cannot ask across tenants; a negative control per rule seen red |
+| **S1** | SQL (`docs/sql/<date>-top-picks-rpc-and-email-prefs.sql`): `get_top_picks()`, the two columns, the widened guard. Staging. | **parity harness:** for 10+ staging accounts the RPC's picks equal today's `getTopPicks()` exactly, except New #1 top-up rows (D3/D5) after the history tiers run out, each one explained; anon refused (`42501`); a customer cannot ask for another customer; an admin cannot ask across tenants; a negative control per rule seen red |
 | **S2** | Client: the rail calls the RPC; New #1 caption; D10; `?pick=` deep link + `pick_opened` event. | spec updates (local suite) + the full suite after push; a real deep-link click signed in and signed out |
 | **S3** | `account.html` (eighth nav page), the three toggles, the greeting link, D7 on My List, a `privacy.html` sentence. **The settings gear self-gates on `#search` being absent**, so a new page without a search box would show it; gate it on the page explicitly. | nav and footer hashes identical across eight pages; toggles round-trip; the F182 guard accepts the two new columns and still refuses everything else |
 | **S4** | `email-preferences` Edge Function + `email-preferences.html` + the secret. | bad and missing token refused; good token reads and sets; one-click POST turns off only its own email; no other profile column writable through it; GET never changes anything |
-| **S5** | Both mail functions: picks section, footer link, `List-Unsubscribe` headers, `email_catalog` honored, the postal-address rule. Deploy to staging reading live `verify_jwt` first (F93; `notify-customers` and `notify-arrivals` are both OFF). | a fake-network template harness (opted-out customer gets no picks; free shop without address gets no picks; HTML escaped); then Rick's real inbox, **headers only**: picks render, links open the title, unsubscribe works |
+| **S5** | Both mail functions: picks section (active accounts only, O1), footer link, `List-Unsubscribe` headers, `email_catalog` honored, the postal-address rule. Deploy to staging reading live `verify_jwt` first (F93; `notify-customers` and `notify-arrivals` are both OFF). | a fake-network template harness (opted-out customer gets no picks; a pending or paused account gets the email without picks; free shop without address gets no picks; HTML escaped); then Rick's real inbox, **headers only**: picks render, links open the title, unsubscribe works |
 | **S6** | Production: SQL first, then the client PR (`app.js` carries `merge=ours`: assert its merge result), then the three Edge Functions and the secret. | served bytes equal `main`; a real send read back; a write-smoke, since the catalog reserve path changes |
 
 S1 + S2 alone are a useful first promotion (the better rail) and can ship before the emails. S3 and S4
