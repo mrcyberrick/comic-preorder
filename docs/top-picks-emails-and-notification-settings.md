@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** PLANNED, NOT STARTED · planned 2026-11-17 · D1-D5, D7, D8 and O1 answered by Rick 2026-11-17; D6, D9, D10 proposed defaults; O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
+**STATUS:** IN PROGRESS — S0 DONE 2026-11-17 (§ 6); S1 SQL WRITTEN (`docs/sql/2026-11-17-top-picks-rpc-and-email-prefs.sql`, staging=PENDING, prod=PENDING), not yet run · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -74,11 +74,11 @@ subscriptions page's `?series=` (S6b) and `PostAuthRedirect` (S6c, one-shot, 1-h
 | D3 | **Priority: personal over store, popular over New #1.** New #1 is the default only when no history can be used. Read as: personal and popular keep alternating, personal first (Rick's 2026-10-09 rule, unchanged); **New #1s fill only the slots the two history tiers leave empty**, so they appear for a shop with no reservation history at all, and as a top-up when history runs short (late in the month, when most history titles are past FOC). | **Rick, 2026-11-17** (the alternation and the top-up are this plan's reading of his answer; he did not correct it when it was put to him the same day) |
 | D4 | "Already reserved" stays **the exact row**, the rail's existing rule (Rick's 2026-10-09 rail), unchanged, and the emails use the same rule. A different cover of an issue the customer reserved can still be a pick. | **Rick, 2026-11-17** |
 | D5 | **New #1 rule: comics only** (Rick: "not interested in trades and T-shirts"): format `Periodical` (Lunar) or `Comic Book` (PRH); standard cover; **`#1` read from the title**, not followed by a digit, because PRH's `issue_number` is `0` on 25 of its 26 #1 comics (§ 1); title does not match `FACSIMILE`, `BUNDLE`, `(NET)`, a leading `DF`, `SIGNED`, `BLANK`, `VIRGIN`, `PTG`/`PRINTING`; FOC not passed; passes the store's visibility settings; one per series. One-shots count. On Lunar the title test and `issue_number = 1` agree once `DF` copies are dropped. | **Rick, 2026-11-17** (comics only); the title test is the measured consequence |
-| D6 | **Emails carry 4 picks**, only for an account that is active, not paper, and has Top Picks on. Fewer than 4 eligible picks shows what there is; none omits the section. | proposed |
+| D6 | **Emails carry 4 picks**, only for an account that is active, not paper, and has Top Picks on. Fewer than 4 eligible picks shows what there is; none omits the section. | **Rick, 2026-11-17** (default) |
 | D7 | The arrivals toggle **moves** from My List to the profile page; My List keeps a "Email settings" link in its place, so one setting has one control. The arrivals email's "turn it off on My List" line is replaced by the opt-out link. | **Rick, 2026-11-17** (default) |
 | D8 | The profile page is **`account.html`, "My Account"**, reached by making the nav greeting's name a link (desktop bar and phone drawer). It joins the nav sync set as its **eighth** page. Name and email are shown read-only (changing an email is F126, out of scope). | **Rick, 2026-11-17** (default) |
-| D9 | **Opt-out:** each email footer links to a **preferences page that needs no sign-in** (a signed token in the link), showing the three toggles. Each email also carries `List-Unsubscribe` + `List-Unsubscribe-Post` headers; the one-click unsubscribe a mail client offers turns off **that** email. The link only opens the page; nothing changes until the customer presses a button (scanners again). | proposed |
-| D10 | "See more" on the rail still opens the Recommended For You view (its own ranking in `app.js`). When the rail holds only New #1s, "See more" is hidden, since that view has nothing matching to show. | proposed |
+| D9 | **Opt-out:** each email footer links to a **preferences page that needs no sign-in** (a signed token in the link), showing the three toggles. Each email also carries `List-Unsubscribe` + `List-Unsubscribe-Post` headers; the one-click unsubscribe a mail client offers turns off **that** email. The link only opens the page; nothing changes until the customer presses a button (scanners again). | **Rick, 2026-11-17** (default) |
+| D10 | "See more" on the rail still opens the Recommended For You view (its own ranking in `app.js`). When the rail holds only New #1s, "See more" is hidden, since that view has nothing matching to show. | **Rick, 2026-11-17** (default) |
 
 **Answered, and open:**
 - **O1, answered (Rick, 2026-11-17): "not promotional, should remain transactional only".** Pending and
@@ -106,10 +106,20 @@ revoked from `anon` and `PUBLIC` (F124's lesson: a new function is executable by
 - **Tiers:** personal (`reservation_history` + `preorders` series keys), popular (the same aggregate
   `get_popular_series()` computes), New #1 (D5). Alternate personal/popular, personal first, one per
   series across all tiers; New #1 fills what is left (D3).
-- **Drops:** reserved by this customer, exact row (D4), FOC passed, not a standard cover, and the store's `catalog_filters`
-  rules that can apply to a standard cover: hidden publisher, standard covers switched off, zero price.
-  (Variant and ratio rules cannot touch a standard cover; past-FOC is already dropped.)
-- **Returns** `catalog_id, tier ('personal'|'popular'|'new1')` in rank order.
+- **Drops:** reserved by this customer, exact row (D4), FOC passed, not a standard cover, and the store's
+  `catalog_filters` rules, read the way `CatalogFilters.load()`/`.hides()` read them: hidden publisher,
+  standard covers switched off, the restricted-ratio rules (`coverClassOf()` calls a standard cover with a
+  ratio "restricted"; measured 0 such rows, copied anyway), the FOC rule in either mode, zero price
+  (`Number(null) === 0`, so a missing price counts as zero, as in JS).
+- **Order, defined here because the JavaScript left it to chance** (S1):
+  - within a series, the eligible row with the **soonest FOC** (JS took the first by UUID);
+  - personal series by **how often this customer reserved them**, then the store's count, then name (JS
+    used whatever order the database returned the history in);
+  - popular series by the store's count, **then name**: `get_popular_series()` has no tie-breaker, so
+    today's rail can reorder tied series between page loads;
+  - New #1s by soonest FOC, then title.
+- **Returns** `pick_id uuid, pick_tier text ('personal'|'popular'|'new1'), pick_rank integer`, rank order;
+  `p_limit` defaults to 20, capped at 500.
 - **Date:** "today" for FOC is `CURRENT_DATE` (UTC). The import may run in the evening Eastern, after the
   UTC date has turned, which drops a title whose FOC is that same day a few hours early. Conservative,
   accepted.
@@ -174,7 +184,7 @@ Each session is staging first; production is a separate, explicitly requested pr
 | Session | What | Gate |
 |---|---|---|
 | **S0** | Read-only on production: New #1 yield for 2026-11 under D5; how many active customers have no personal history; current rail picks for three accounts (Rick's choice of accounts). | numbers recorded here |
-| **S1** | SQL (`docs/sql/<date>-top-picks-rpc-and-email-prefs.sql`): `get_top_picks()`, the two columns, the widened guard. Staging. | **parity harness:** for 10+ staging accounts the RPC's picks equal today's `getTopPicks()` exactly, except New #1 top-up rows (D3/D5) after the history tiers run out, each one explained; anon refused (`42501`); a customer cannot ask for another customer; an admin cannot ask across tenants; a negative control per rule seen red |
+| **S1** | SQL (`docs/sql/<date>-top-picks-rpc-and-email-prefs.sql`): `get_top_picks()`, the two columns, the widened guard. Staging. | **parity harness:** for 10+ staging accounts, run today's `getTopPicks()` (the real `app.js`, in a browser, unlimited) and the RPC (limit 500): the **series in each tier are identical**, every RPC row passes the rules on its own data, and New #1 rows appear only after both history tiers run out (D3/D5). Rank order and the row chosen within a series are compared to § 3.1's new rules, not to JS (which left both to chance); anon refused (`42501`); a customer cannot ask for another customer; an admin cannot ask across tenants; a negative control per rule seen red |
 | **S2** | Client: the rail calls the RPC; New #1 caption; D10; `?pick=` deep link + `pick_opened` event. | spec updates (local suite) + the full suite after push; a real deep-link click signed in and signed out |
 | **S3** | `account.html` (eighth nav page), the three toggles, the greeting link, D7 on My List, a `privacy.html` sentence. **The settings gear self-gates on `#search` being absent**, so a new page without a search box would show it; gate it on the page explicitly. | nav and footer hashes identical across eight pages; toggles round-trip; the F182 guard accepts the two new columns and still refuses everything else |
 | **S4** | `email-preferences` Edge Function + `email-preferences.html` + the secret. | bad and missing token refused; good token reads and sets; one-click POST turns off only its own email; no other profile column writable through it; GET never changes anything |
@@ -191,3 +201,41 @@ must land before S5: no promotional content is sent until the opt-out it points 
 Changing a customer's email or name from the profile page (F126). A picks section on the weekly
 newsletter (Brevo, `weekly-pull-feed`). A phone version of the rail. Reserving without signing in (D1).
 Resend's 100-per-day limit (F148) is unchanged by this work: picks add no sends.
+
+---
+
+## 6. Build record
+
+### S0, 2026-11-17: production counts (read-only, service role, GET only)
+
+Script kept in the session scratchpad, not committed. "Today" = 2026-11-17; the store's
+`catalog_filters` applied; customer ids not printed.
+
+| | `rjbookstop` (pro), month 2026-11 | `comicstore` (free), month 2026-06 |
+|---|---|---|
+| Catalog rows with a series | 1,925 | 2 |
+| New #1 series under D5, FOC still open | **42** (Lunar 24, PRH 18) | 0 |
+| Non-admin profiles | 33: 21 active, 12 paper, 0 pending, 0 suspended | 1 active |
+| Active customers with **no personal history** | **8 of 21** | 0 |
+| Popular series this month | 68 | 1 |
+| History-based picks available per active customer (distinct series, FOC open) | min **41**, median 68, max 69 | 1 |
+| Customers short of 4 (an email) / short of 20 (the rail) | 0 / 0 | 1 / 1 |
+
+**What it means for D3.** Every active Ray & Judy's customer has at least 41 history-based picks today,
+so with "popular over New #1" **New #1s will not appear at Ray & Judy's** in the rail or the emails; the 8
+customers with no history of their own get the store's popular titles. New #1s fill in only for a shop
+with no reservation history (a new tenant) or one whose history titles are all past FOC. Reported to
+Rick the same day; the priority is one line in `get_top_picks()` if he wants New #1s mixed in instead.
+
+New #1 sample (production): HIDE NOR HAIR #1 (OF 6) CVR A, Barbie #1 (CVR A), Dr Syn #1 Cover A, DC ALL
+IN SAGA THE NEW GODS #1 (ONE SHOT) CVR A, AVENGERS: INCURSIONS #1 COVER A, Vampire Hunter D: Fortress of
+Blood #1 (CVR A).
+
+### S1, 2026-11-17: SQL written, not yet run
+
+`docs/sql/2026-11-17-top-picks-rpc-and-email-prefs.sql`: STEP 0 pre-check (halts if the F182 guard is not
+the S3b body or `get_popular_series()` no longer counts rows), one transaction (two columns, the widened
+guard, `get_top_picks()`, grants), a VERDICT that reads differently before and after, and a SMOKE per
+tenant with no customer ids. `get_popular_series()`'s body was taken from the 2026-06-10 production
+schema dump (`COUNT(*)`, tenant-filtered, no tie-breaker); STEP 0 confirms it is still that shape.
+**Next:** Rick runs it on staging; then the parity harness (§ 4, S1 gate).
