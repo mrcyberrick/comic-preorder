@@ -1,7 +1,8 @@
 -- Top Picks: one pick rule for the catalog rail and both customer emails, plus
 -- the two new customer email settings.
 -- Plan: docs/top-picks-emails-and-notification-settings.md (session S1).
--- STATUS: staging=APPLIED 2026-11-17 | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-17 | prod=PENDING (PARTIAL 2026-11-17: get_top_picks() and its grants landed,
+-- the two columns did not; run the COMPLETION section at the end of this file)
 -- (staging: Rick ran it and pasted the SMOKE only; STEP 0 and VERDICT output were not
 -- pasted. Their claims were proven by behaviour instead: playwright/top-picks-rpc-parity.mjs
 -- 109/0 (anon refused 42501, columns present with 0 non-default rows, the guard allows the two
@@ -324,3 +325,51 @@ SELECT t.slug,
 -- picks, most = 20, new1_picks = 0 (every customer has 41+ history picks).
 -- Staging has no S0 baseline; any tenant with active customers should show
 -- with_picks = active_customers unless its catalog month is entirely past FOC.
+
+-- ── COMPLETION (PRODUCTION, 2026-11-17) ─────────────────────────────────────
+-- On production the function and its grants landed (Rick's SMOKE: rjbookstop 21/21
+-- with 20 picks, new1 0; an anonymous call is refused 42501) but the two columns did
+-- not: selecting either returns 42703 "column does not exist". The block above is one
+-- transaction, so most likely only part of it was selected when it ran. This section
+-- adds only what is missing and does not touch get_top_picks(). Run each part on its own.
+
+-- C0: pre-check (changes nothing)
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+    AND table_name = 'user_profiles' AND column_name = 'email_catalog')       AS email_catalog_exists,
+  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+    AND table_name = 'user_profiles' AND column_name = 'email_picks')         AS email_picks_exists,
+  (SELECT pg_get_functiondef(oid) LIKE '%ARRAY[''has_seen_welcome'', ''email_arrivals'']%'
+     FROM pg_proc WHERE proname = 'user_profiles_guard_self_update'
+      AND pronamespace = 'public'::regnamespace)                              AS guard_is_s3b_body,
+  (SELECT pg_get_functiondef(oid) LIKE '%''email_catalog'', ''email_picks''%'
+     FROM pg_proc WHERE proname = 'user_profiles_guard_self_update'
+      AND pronamespace = 'public'::regnamespace)                              AS guard_already_widened,
+  to_regprocedure('public.get_top_picks(uuid,integer)') IS NOT NULL           AS picks_fn_exists,
+  (SELECT string_agg(slug, ',' ORDER BY slug) FROM public.tenants
+    WHERE slug NOT LIKE 'pw-%')                                               AS tenants_here;
+-- Expected: false, false, then EXACTLY ONE of guard_is_s3b_body / guard_already_widened
+-- true, picks_fn_exists true, comicstore,rjbookstop. HALT if both guard columns are
+-- false: the guard is neither body this file knows, so do not replace it.
+
+-- C1: the missing pieces, one transaction (safe to re-run: IF NOT EXISTS, and the guard
+-- body is the one in (c) above, so replacing an already-widened guard changes nothing)
+BEGIN;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS email_catalog boolean NOT NULL DEFAULT true;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS email_picks   boolean NOT NULL DEFAULT true;
+CREATE OR REPLACE FUNCTION public.user_profiles_guard_self_update()
+RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+  -- f182 guard, widened for S3b (email_arrivals) and the Top Picks plan (email_catalog, email_picks)
+  IF current_user NOT IN ('anon', 'authenticated') THEN RETURN NEW; END IF;
+  IF public.current_user_is_admin() IS TRUE THEN RETURN NEW; END IF;
+  IF (to_jsonb(NEW) - ARRAY['has_seen_welcome', 'email_arrivals', 'email_catalog', 'email_picks'])
+     IS DISTINCT FROM (to_jsonb(OLD) - ARRAY['has_seen_welcome', 'email_arrivals', 'email_catalog', 'email_picks']) THEN
+    RAISE EXCEPTION 'That part of a profile can only be changed by a shop admin' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+COMMIT;
+
+-- C2: then run the VERDICT above. Expected: true, true, 0, true, true, false, true, true,
+-- comicstore,rjbookstop.
