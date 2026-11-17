@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE 2026-11-17; S1 DONE ON STAGING 2026-11-17 (SQL applied by Rick; parity harness 109/0, two negative controls red; prod SQL PENDING) (§ 6); S2-S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); production untouched (S1 SQL PENDING there); S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -276,3 +276,41 @@ original `catalog_filters` value afterwards (`updated_at` unchanged, checked).
 **Not verified:** production (SQL still PENDING there); the staging popular tier holds only 1-2 series,
 so popular-tier parity rests on few rows; personal-tier ORDER is checked as "alternating", not against
 each customer's own counts.
+
+### S2, 2026-11-17: the rail on `get_top_picks()` and the `?pick=` link, on staging
+
+Staging code `4a2434c` (`app.js`, `catalog.html`; branch `feature/top-picks-s2-rail-rpc-and-deep-link`,
+fast-forwarded). **What changed:** `loadTopPicks()` calls `db.rpc('get_top_picks', { p_user_id:
+AdminContext.resolveUserId(user.id), p_limit: 20 })` (the function applies the reserved rule and the
+store's settings itself); the caption adds ", plus New #1s starting this month" when New #1s are on the
+rail, and reads "New #1 series starting this month" when nothing else is; "See more" is hidden by
+`visibility` when the rail holds only New #1s (D10; `display` would slide the Hide button, since the link
+carries `margin-left: auto`). `catalog.html?pick=<id>&ref=<source>` fetches that row, opens its modal,
+strips both parameters (`history.replaceState`), and logs `pick_opened` `{source, catalog_id}` for a real
+customer (not an admin, not while viewing as a customer); a malformed id or one this shop cannot see
+shows a toast. `app.js`: `UsageEvents.pickOpened()` added; `Recommendations.getTopPicks()` removed (the
+Recommended For You view keeps `getCatalogIds()`).
+
+**Verified on the deployed bytes** (served `catalog.html` and `app.js` hashed equal to the commit first):
+- **`playwright/top-picks-s2-verify.mjs` (local-only) 19/19:** the rail shows `get_top_picks(…, 20)`
+  in rank order (20 of 20) with the matching caption and "See more"; with the history publishers hidden
+  for the run, a no-history customer's rail is New #1s only, captioned "New #1 series starting this
+  month", "See more" hidden (screenshot inspected: Hide stays at the right edge). The link: opens the
+  title's modal signed in; removes the parameters; logs one `pick_opened` with the right source, title and
+  shop; Reserve in that modal writes the reservation (right shop, qty 1); a reload neither reopens nor
+  logs again; the reserved title leaves the rail; works at 390 px; signed out, the sign-in page keeps the
+  link (`PostAuthRedirect`) and after sign-in the customer lands on the title; an admin sees the modal and
+  nothing is logged; a malformed id and an unknown id each show their toast and no modal.
+  `catalog_filters` restored exactly. **One harness error of mine, fixed:** the event checks first read
+  the table straight after the modal opened and then closed the browser, which can abort the app's
+  fire-and-forget insert (L10 read 1 of 2); the checks now wait up to 10 s.
+- **`playwright/catalog-top-picks-verify.mjs` (the rail's original harness) 46/46** on groups v3, unpin,
+  collapse, memory, par, cls, nav. One check, **B3**, failed first by design: a no-history customer's
+  caption is now "The store's most popular reservations, plus New #1s starting this month" (staging's
+  popular tier is short, so D3's top-up applies); its expectation was updated to the new contract, with
+  the old wording kept in a comment. Layout shift 0.0098 desktop, 0.0115 mobile.
+- **Full suite on the deployed bytes: 170 passed, 1 skipped, 0 failed, 28.5 min, exit 0** (the log's own summary line), the same as the 2026-11-15 baseline. No committed spec covers the rail or the link; the evidence for them is the two harnesses above.
+
+**Not verified:** a real browser on a real phone; WebKit; the admin view-as-customer rail in a browser
+(the function's admin path is proven by the S1 harness, Z4); production (needs the S1 SQL there first).
+**Its old harness's negative controls** that patch `getTopPicks()` text in `app.js` no longer apply.
