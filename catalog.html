@@ -1826,9 +1826,13 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
   // ── Top picks rail ────────────────────────────────────────
-  // docs/catalog-top-picks-redesign.md § 3.3. Ranked by Recommendations (the same
-  // ranking the "Recommended For You" view uses), one title per series, standard
-  // covers only, nothing the customer already reserved, nothing the store hides.
+  // docs/catalog-top-picks-redesign.md § 3.3. Ranked since 2026-11-17 by the database
+  // function get_top_picks() (docs/top-picks-emails-and-notification-settings.md § 3.1),
+  // the ONE pick rule the rail and both customer emails share: one title per series,
+  // standard covers only, nothing the customer already reserved, nothing the store hides;
+  // the customer's own series and the store's most popular alternate, and New #1 comics
+  // fill whatever those two leave empty. (It used to be Recommendations.getTopPicks() in
+  // app.js; the emails run on the server, so the rule moved there.)
   // Started once at the very end of init, AFTER the first loadCatalog() has
   // resolved, so it never delays the grid's own requests.
   const picksSection = document.getElementById('top-picks');
@@ -1891,15 +1895,17 @@
     if (!desktopMQ.matches) return;
     if (!currentMonth) { hidePicksSection(); return; }
     try {
-      const picks = await Recommendations.getTopPicks(
-        AdminContext.resolveUserId(user.id), currentMonth,
-        { reservedIds, cfg: catalogFilterCfg });
+      // The function applies the store's visibility settings and the reserved rule itself, and
+      // lets an admin viewing as a customer ask for that customer (its own shop only).
+      const { data: picks, error: picksErr } = await db.rpc('get_top_picks', {
+        p_user_id: AdminContext.resolveUserId(user.id), p_limit: 20 });
       if (run !== picksRun) return;
-      if (!picks.length) { hidePicksSection(); return; }
+      if (picksErr) throw picksErr;
+      if (!picks || !picks.length) { hidePicksSection(); return; }
 
       // Full rows for the picked ids in ONE query, then restore rank order
       // (.in() returns rows in arbitrary order) — the Recommended view's two-step.
-      const ids = picks.map(p => p.id);
+      const ids = picks.map(p => p.pick_id);
       const { data, error } = await db.from('catalog').select('*').in('id', ids);
       if (run !== picksRun) return;
       if (error) throw error;
@@ -1925,13 +1931,23 @@
       // reservations and most popular reservations for the store". "Reservations" is the
       // customer's own (their history plus this month's), "popular" is the store's most-reserved
       // series (get_popular_series). A customer with no history sees the popular half only, and
-      // the caption says so rather than claiming reservations they do not have.
-      const hasPersonal = picks.some(p => p.tier === 'personal');
-      const hasPopular  = picks.some(p => p.tier === 'popular');
-      picksCaption.textContent = hasPersonal && hasPopular
+      // the caption says so rather than claiming reservations they do not have. New #1s (tier
+      // 'new1') appear only once both history tiers have run out (Rick, 2026-11-17, D3), so they
+      // are named as an addition, or alone when nothing else qualified (a shop with no history).
+      const hasPersonal = picks.some(p => p.pick_tier === 'personal');
+      const hasPopular  = picks.some(p => p.pick_tier === 'popular');
+      const hasNew1     = picks.some(p => p.pick_tier === 'new1');
+      const historyCaption = hasPersonal && hasPopular
         ? 'Based on your reservations and the store\'s most popular reservations'
         : hasPersonal ? 'Based on your reservations'
-        : 'The store\'s most popular reservations';
+        : hasPopular ? 'The store\'s most popular reservations' : '';
+      picksCaption.textContent = !hasNew1 ? historyCaption
+        : historyCaption ? historyCaption + ', plus New #1s starting this month'
+        : 'New #1 series starting this month';
+      // D10: "See more" opens Recommended For You, which ranks history only, so with nothing but
+      // New #1s on the rail it would show nothing that matches. Hidden by visibility, not display:
+      // the button carries margin-left: auto, and removing it would slide the Hide button over.
+      picksMore.style.visibility = (hasPersonal || hasPopular) ? '' : 'hidden';
       picksSection.hidden = false;
       syncPicksArrows();
     } catch (err) {
@@ -2042,6 +2058,39 @@
   // Last, and not awaited: the grid is already on screen (this runs after
   // `await loadCatalog()` above), and the rail must not hold up anything else.
   loadTopPicks();
+
+  // ── ?pick=<catalog id>: open one title (docs/top-picks-emails-and-notification-settings.md § 3.2) ──
+  // The Top Picks in the customer emails link here. The link OPENS the title's modal and never
+  // reserves by itself (D1): mail scanners open every link in a message before the customer does,
+  // and the store orders each reservation for that customer. Signed out, initNav() stashed this
+  // URL (PostAuthRedirect) and sign-in brought the customer back to it. Works on a phone too: the
+  // rail is desktop-only, the modal is not. The parameters are removed first, so a reload neither
+  // reopens the title nor logs it twice. An id this shop cannot see (RLS) opens nothing.
+  {
+    const params = new URLSearchParams(window.location.search);
+    const pickId = params.get('pick');
+    if (pickId) {
+      const source = ['email-catalog', 'email-arrivals'].includes(params.get('ref')) ? params.get('ref') : 'link';
+      params.delete('pick');
+      params.delete('ref');
+      const rest = params.toString();
+      history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash);
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pickId)) {
+        const { data: row } = await db.from('catalog').select('*').eq('id', pickId).maybeSingle();
+        if (row) {
+          pickItems.set(row.id, row);   // openModal() and toggleReserve() resolve rows from here too
+          openModal(row.id);
+          if (!profile?.is_admin && !AdminContext.isActive()) {
+            UsageEvents.pickOpened(user.id, { source, catalogId: row.id });
+          }
+        } else {
+          toast('That title is no longer in the catalog.', 'error');
+        }
+      } else {
+        toast('That link does not point to a title.', 'error');
+      }
+    }
+  }
 
 })();
 </script>
