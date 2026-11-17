@@ -714,7 +714,11 @@ SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
   production via the CLI; both `CREATE EXTENSION IF NOT EXISTS` statements and `cron.schedule('notify-arrivals-weekly',
   '0 15 * * 2', ...)` run one at a time. **Verdict, read from `cron.job` directly, not assumed:** `jobid=1,
   schedule='0 15 * * 2', active=true`, command text matching the intended URL/headers/body exactly. The job is live;
-  the first real fire is the next Tuesday 15:00 UTC.
+  the first real fire is the next Tuesday 15:00 UTC. **⚠️ CORRECTED 2026-11-17 (F183): that first fire FAILED** with
+  `schema "net" does not exist`: `pg_net` was not installed on production, and this verdict (it read only `cron.job`)
+  could not tell. Fixed the same day by `docs/sql/2026-11-17-f183-pg-net-arrivals-cron-fix.sql` (Rick): a dry run
+  through the job's own command returned 200, would_email 9; then the job's command was run once by hand: **9 sent,
+  0 failed, 9 notices** for the week of 2026-11-16. The first unattended run is Tue 2026-11-24 15:00 UTC.
 - **✅ RICK'S `dry_run` REHEARSAL DONE 2026-11-14, same real auth path the cron itself uses** (the cron secret header,
   the real deployed function, read-only). A wrong secret still correctly refused with `401 Unauthorized` (confirms the
   cron's own auth will work exactly as intended); the correct secret with `dry_run: true` returned `200` with
