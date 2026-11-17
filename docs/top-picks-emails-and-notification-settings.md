@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); production untouched (S1 SQL PENDING there); S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); production untouched (S1 SQL PENDING there); S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
