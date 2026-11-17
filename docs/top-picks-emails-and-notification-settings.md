@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 not yet promoted; S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -331,3 +331,28 @@ the S2 promotion exercises it as a signed-in customer.
 **Found on the way, separately (F183):** while confirming this work leaves the arrivals schedule alone, its
 first run (15:00 UTC the same day) was found to have failed because `pg_net` was not installed. Fixed the same
 day; this week's email sent by hand (9 of 9). See `docs/technical-reference.md` § 13 F183.
+
+### S2 on production, 2026-11-17 (PR #190)
+
+Rick's `/promote-prod`; promotion commit `ab1d222` (parents `033c5c6` main + `012986a` staging tip), merge
+`01b1a08`, merged 18:50:44Z by Rick. **Code: `app.js` and `catalog.html` only**; the PR is 10 files, the rest
+docs and SQL records. No `config.js`, nothing under `supabase/`.
+
+**Gates.** Step 0: no SQL pending (S1 already on production). The merge RESULT of `app.js` and
+`catalog.html` equalled staging's copy (`merge=ours` discarded nothing); every other page identical on both
+branches; `config.js` == `origin/main`; `supabase/migrations/` 2 files; GitHub's own file list 10 files,
+MERGEABLE. Rick's own look at staging was not reported before the PR opened; the PR body said so.
+
+**Verified after the merge.** On BOTH `pulllist.app` and `rjbookstop.pulllist.app`: `app.js`
+(`f095c966fa061938`), `catalog.html` (`9d21ae0624988596`), `config.js`, `mylist`, `arrivals`, `admin`,
+`subscriptions`, `settings`, `analytics` and `style.css` byte-identical to `origin/main`, and the two code
+hashes equal the bytes staging served when the harnesses and the full suite ran. Markers: `get_top_picks` x2
+in `catalog.html` (the call and its comment), `pickOpened` x1 and `getTopPicks` x0 in `app.js`; `config.js`
+prod ref x1, staging ref x0. **Write-smoke (Rick): "Top Picks show and Reserved and canceled a title"**, read
+back from the production log: a `reserve` at 22:27:34Z and a `cancel` at 22:27:58Z, both on `rjbookstop`.
+Since the rail itself is loaded by `get_top_picks()`, his report that it showed is the first production
+proof that a signed-in customer can call the function (the grant inferred in the S1 entry above).
+
+**Not verified:** a `pick_opened` event on production (no email carries a pick link yet, so nothing on
+production makes one until S5); the rail as an admin viewing as a customer on production; WebKit or a real
+phone; whether the reserved title came from a rail card or the grid (the log does not say).
