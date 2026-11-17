@@ -1,6 +1,8 @@
 -- STATUS: staging=N/A (staging never gets the schedule — test fixtures with made-up
 --                      addresses would bounce and hurt the pulllist.app sender, F152;
 --                      exercised by hand there with dry_run and a stubbed Resend)
+--         ⚠️ F183 (2026-11-17): pg_net was NOT installed by this file's run, so the first scheduled
+--         run failed; fixed by docs/sql/2026-11-17-f183-pg-net-arrivals-cron-fix.sql (prod=APPLIED).
 --         prod=APPLIED 2026-11-14 (jobid 1, schedule '0 15 * * 2', active true,
 --                      verified by reading cron.job directly, not assumed)
 -- ============================================================================
