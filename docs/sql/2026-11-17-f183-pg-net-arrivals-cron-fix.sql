@@ -4,9 +4,8 @@
 -- Finding: docs/technical-reference.md § 13 F183.
 -- STATUS: staging=N/A (staging never gets the schedule, see the S3b cron file) | prod=APPLIED 2026-11-17
 -- (Rick: STEP 4 dry run 200, dry_run true, would_email 9 (rjbookstop 9, comicstore skipped, no
--- shipment); STEP 5 200, sent 9, failed 0, notices_this_week 9. STEP 0 and the STEP 3 VERDICT were
--- not pasted, so whether STEP 2's 60 s timeout landed is NOT confirmed; the dry run proves pg_net
--- is installed and the job's command reaches the function with an accepted secret.)
+-- shipment); STEP 5 200, sent 9, failed 0, notices_this_week 9. STEP 3 VERDICT, pasted afterwards:
+-- true, true, true, true, '0 15 * * 2', so the 60 s timeout landed. STEP 0's output was not pasted.)
 --
 -- PRODUCTION ONLY. Supabase SQL Editor (runs as postgres). Run each step ON ITS
 -- OWN, in order, and read its result before the next. Every result query below
