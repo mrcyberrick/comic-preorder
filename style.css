@@ -2124,7 +2124,7 @@ button { cursor: pointer; font-family: var(--font-body); }
   /* Account rows (F168): "Welcome, name" is the drawer's first row and Sign Out
      its last, instead of a second header line that hung outside the 60px bar
      and sat under the drawer (the drawer covered 83-88% of the name). Markup
-     is in the nav block of the seven synced pages; desktop keeps .nav-user in
+     is in the nav block of the eight synced pages; desktop keeps .nav-user in
      the bar and hides these (base rule beside .nav-user). Two lines on
      purpose, small "Welcome," over the name, so a long name wraps inside the
      200px drawer instead of crowding a button the way the old row did. */

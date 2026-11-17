@@ -50,6 +50,10 @@
        keyboard focus ring; this puts it on the visible slider instead. */
     .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
     .toggle-switch input:disabled + .toggle-slider { opacity: 0.55; }
+    /* .toggle-switch is a 44px-wide flex item here; with a wrapping description beside
+       it (a phone) it shrank to about 24px while the knob still travelled 20px, so the
+       knob stuck out of its own track. It must keep its width. */
+    .acct-row .toggle-switch { flex: none; }
 
     /* Rows are laid out from first paint and only revealed once the profile has
        loaded, so the footer does not jump (layout shift) when they appear. */

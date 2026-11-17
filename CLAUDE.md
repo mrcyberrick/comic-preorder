@@ -3568,8 +3568,10 @@ comic-preorder/                    ← production repo (github.com/mrcyberrick/c
   admin.html                       ← │
   analytics.html                   ← │ admin-gated nav link — but it DOES
                                    ← │ carry the shared nav+footer blocks
-  settings.html                    ← ┘ admin-gated; added 2026-09-23 (S2),
-                                   ←   the SEVENTH member of the sync set
+  settings.html                    ← │ admin-gated; added 2026-09-23 (S2),
+                                   ← │ the SEVENTH member of the sync set
+  account.html                     ← ┘ every signed-in user; added 2026-11-17
+                                   ←   (top-picks S3), the EIGHTH member
   forgot-password.html             ← linked from the index.html sign-in footer
   app.js
   style.css
@@ -4070,20 +4072,28 @@ branch, and in fuller, more current form in the docs this table points to.)*
 
 ## Files That Must Stay in Sync
 
-The nav block must be identical across **seven** pages: `catalog.html`,
+The nav block must be identical across **eight** pages: `catalog.html`,
 `mylist.html`, `arrivals.html`, `subscriptions.html`, `admin.html`,
-**`analytics.html`**, and **`settings.html`**. When updating nav, copy from the
-most recently-updated file — the canonical version is whichever HTML file was
-last touched.
+**`analytics.html`**, **`settings.html`**, and **`account.html`**. When updating
+nav, copy from the most recently-updated file — the canonical version is
+whichever HTML file was last touched.
+
+**`account.html` ("My Account", the customer's own page with the three email
+switches) joined the set 2026-11-17** (top-picks plan S3), in the same commit as
+the page. It is why the nav greeting's name is now a link (`a.nav-user-link` in
+the bar, `a.nav-drawer-name-link` in the phone drawer): that was the one nav
+change, made identically on all seven existing pages. `initNav()` keeps the
+drawer's name link out of the active-page loop (it is not a page link) and marks
+both name links `aria-current` on `account.html`.
 
 **`settings.html` joined the set 2026-09-23** (S2 of
 `docs/admin-settings-catalog-visibility.md`), added in the same commit as the
 page itself, deliberately: this list going stale is the documented drift source,
 and `analytics.html` sat missing from it for months. Verify with a hash, not by
-reading — all seven nav blocks and all seven footers must match:
+reading — all eight nav blocks and all eight footers must match:
 
 ```powershell
-foreach ($f in 'catalog','mylist','arrivals','subscriptions','admin','analytics','settings') {
+foreach ($f in 'catalog','mylist','arrivals','subscriptions','admin','analytics','settings','account') {
   $nav = (Get-Content "$f.html" -Raw) -replace '(?s)^.*?(<nav class="nav" id="main-nav">.*?</nav>).*$','$1'
   "{0,-16} {1}" -f $f, (Get-FileHash -InputStream ([IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($nav)))).Hash.Substring(0,12)
 }
@@ -4107,7 +4117,7 @@ identically (`EB2513E8ED474B3CE5251F2540A69852`), all six load
 contract in this section. Found while planning `docs/mobile-nav-tab-bar.md`,
 where a five-file nav edit would have silently skipped it.
 
-The footer block must be identical across all seven pages, placed immediately
+The footer block must be identical across all eight pages, placed immediately
 before `<div id="toast-container"></div>`.
 
 The `<script>` load order must be the same on every page: Supabase UMD bundle
@@ -4119,6 +4129,11 @@ the pages that have no search box — `admin.html`, `analytics.html` and
 `settings.html` — and never beside the search magnifier. Adding a `#search` to
 one of those three silently removes its gear; removing `#search` from one of the
 other four silently adds one. Either is a nav change, not a page-local one.
+**`account.html` has no `#search` either, and opts out explicitly with
+`<body data-nav-gear="none">`:** the slot then holds an empty 44px spacer for
+everyone, admins included (a gear on the customer's own account page would be an
+inert icon for a customer and a store-settings link for an admin). The spacer is
+what keeps the logo centred on a phone; a page that opts out must not delete it.
 
 ---
 
