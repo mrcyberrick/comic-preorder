@@ -1,7 +1,11 @@
 -- Top Picks: one pick rule for the catalog rail and both customer emails, plus
 -- the two new customer email settings.
 -- Plan: docs/top-picks-emails-and-notification-settings.md (session S1).
--- STATUS: staging=PENDING | prod=PENDING
+-- STATUS: staging=APPLIED 2026-11-17 | prod=PENDING
+-- (staging: Rick ran it and pasted the SMOKE only; STEP 0 and VERDICT output were not
+-- pasted. Their claims were proven by behaviour instead: playwright/top-picks-rpc-parity.mjs
+-- 109/0 (anon refused 42501, columns present with 0 non-default rows, the guard allows the two
+-- new toggles and still refuses full_name). Production must run before S2's client promotion.)
 --
 -- What the block does (one transaction):
 --   (a) user_profiles.email_catalog boolean NOT NULL DEFAULT true  (new-catalog email)

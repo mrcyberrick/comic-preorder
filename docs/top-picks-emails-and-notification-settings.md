@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE 2026-11-17 (§ 6); S1 SQL WRITTEN (`docs/sql/2026-11-17-top-picks-rpc-and-email-prefs.sql`, staging=PENDING, prod=PENDING), not yet run · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
+**STATUS:** IN PROGRESS — S0 DONE 2026-11-17; S1 DONE ON STAGING 2026-11-17 (SQL applied by Rick; parity harness 109/0, two negative controls red; prod SQL PENDING) (§ 6); S2-S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (no ID consumed; F183 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -231,11 +231,48 @@ New #1 sample (production): HIDE NOR HAIR #1 (OF 6) CVR A, Barbie #1 (CVR A), Dr
 IN SAGA THE NEW GODS #1 (ONE SHOT) CVR A, AVENGERS: INCURSIONS #1 COVER A, Vampire Hunter D: Fortress of
 Blood #1 (CVR A).
 
-### S1, 2026-11-17: SQL written, not yet run
+### S1, 2026-11-17: SQL written, applied on staging, gate green
 
 `docs/sql/2026-11-17-top-picks-rpc-and-email-prefs.sql`: STEP 0 pre-check (halts if the F182 guard is not
 the S3b body or `get_popular_series()` no longer counts rows), one transaction (two columns, the widened
 guard, `get_top_picks()`, grants), a VERDICT that reads differently before and after, and a SMOKE per
 tenant with no customer ids. `get_popular_series()`'s body was taken from the 2026-06-10 production
 schema dump (`COUNT(*)`, tenant-filtered, no tie-breaker); STEP 0 confirms it is still that shape.
-**Next:** Rick runs it on staging; then the parity harness (§ 4, S1 gate).
+*(This read "**Next:** Rick runs it on staging; then the parity harness" until the run below.)*
+
+**Staging, 2026-11-17.** Rick ran the file on staging and pasted the SMOKE only:
+`raysandjudys` 19 active customers, all 19 with picks, fewest 11, most 12; tiers summed personal 1,
+popular 19, new1 190. Staging's catalog is still 2026-10 (production is on 2026-11), so most of its
+history titles are past FOC: each customer had 1-2 history picks and about 10 New #1s filled the rest.
+That is D3's top-up doing its job, and the only place it can be seen today (S0: production never
+reaches it). **STEP 0 and the VERDICT were not pasted**, so their claims were checked by behaviour.
+
+**Gate: `playwright/top-picks-rpc-parity.mjs`** (scripts repo working tree, local-only). As a
+throwaway admin in a real browser (UTC, so "today" matches `CURRENT_DATE`), for 12 customers (throwaway
+A with 12 seeded history series and one reservation, throwaway B with nothing, 10 real staging
+customers) it runs the deployed `app.js` `getTopPicks()` unlimited and `get_top_picks()` at 500. For the
+run it hides one publisher (Scholastic, the publisher of one of A's series) and restores the exact
+original `catalog_filters` value afterwards (`updated_at` unchanged, checked).
+
+- **109 passed, 0 failed:** the series in each history tier identical for all 12 (A: 10 personal + 1
+  popular, after its reserved series and the hidden publisher's series dropped out); every history pick
+  in `app.js`'s own eligible list; every New #1 passes the real `CatalogFilters.hides()` and reserve /
+  FOC / cover rules on its own row; one per series; each history pick its series' soonest-FOC row;
+  personal/popular alternate, personal first; New #1s only after both history tiers, all D5 comics from
+  series neither tier holds; ranks 1..n. Who may ask: anon refused by the grant (401, `42501`); a
+  customer gets their own picks, cannot ask for another (403); an admin can ask within their shop, not
+  for another shop's customer (403); the service role can ask for anyone. Columns: both present, 0
+  non-default rows; a customer can switch both new toggles off and on, and the guard still refuses their
+  own `full_name` (403, `42501`). D4: reserving a customer's rank-1 pick removes it.
+- **Negative controls, each red on the series it should be:** `--control=noreserved` (the `app.js` side
+  ignores reservations) failed P1 on A's reserved series (Strange Pictures TP); `--control=nocfg` (the
+  `app.js` side ignores the store's settings) failed P1 on the hidden publisher's series (Baby Sitters
+  Club TP).
+- **Harness errors caught on the way (mine, not the function's):** the first run checked New #1 picks
+  against `app.js`'s ranked list, which never contains them (12 false failures, one per customer, each
+  equal to that customer's New #1 count); and it ran the two throwaways twice, because the "real
+  customers" query found them.
+
+**Not verified:** production (SQL still PENDING there); the staging popular tier holds only 1-2 series,
+so popular-tier parity rests on few rows; personal-tier ORDER is checked as "alternating", not against
+each customer's own counts.
