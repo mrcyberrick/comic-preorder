@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4-S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -356,3 +356,70 @@ proof that a signed-in customer can call the function (the grant inferred in the
 **Not verified:** a `pick_opened` event on production (no email carries a pick link yet, so nothing on
 production makes one until S5); the rail as an admin viewing as a customer on production; WebKit or a real
 phone; whether the reserved title came from a rail card or the grid (the log does not say).
+
+### S3 on staging, 2026-11-17 (`473d98b`, switch fix `8e2da2f`; `account.html`, `app.js`, `style.css`, seven nav pages, `mylist.html`, `privacy.html`)
+
+**What changed.** `account.html` ("My Account", the eighth nav page): name and email read-only; three switches
+(new-catalog email, weekly arrivals email, Include Top Picks in my emails) that save as they are switched, straight
+to `user_profiles`. The save asks for the row back (`.select('id')`), so a write the server refuses with an empty
+answer reverts the switch and says so, instead of reading as success. No switches while an admin views as a customer
+(it would be the admin's own row), or for a pending or paused account (the catalog notice stays an account notice,
+O1, so a switch there would promise something the emails do not do); a column the profile read does not return hides
+only its own row; all three missing shows a message. The nav greeting's name is a link to it, in the desktop bar and
+the phone drawer (the same two lines on all seven existing pages). `initNav()` keeps the drawer's name link out of the
+active-page loop and marks both links `aria-current` on the page. **The gear opt-out** is `<body data-nav-gear="none">`:
+`NavSettingsLink` then renders an empty 44px spacer for everyone, admins included (the plan's "gate it on the page").
+**D7:** the arrivals switch left My List; an "Email settings" link to `account.html#email-settings` is in its place
+(hidden while viewing as a customer). `privacy.html` has two sentences that are true with S3 alone (the picks and
+the email-footer link are not mentioned until S5 makes them true). No SQL: S1 already added the columns and widened
+the F182 guard on both environments.
+
+**Verified on the deployed bytes** (served files equal the commit first, three consecutive samples):
+- **`playwright/account-s3-verify.mjs` (local-only) 43/43:** the eight pages carry one nav block (2,750 chars) and
+  one footer; the page reflects the database (arrivals set OFF beforehand shows OFF); each switch saves and the other
+  two are untouched; a reload shows the saved state; the Top Picks hint appears with both emails off and hides when
+  one is back on; a PATCH answered with no row, and one answered 500, each revert the switch with an error toast and
+  leave the database unchanged; keyboard focus shows a ring on the slider; layout shift 0.0095; all three tracks are
+  44x24 on desktop and on a 390 px phone; the name links work (desktop bar and phone drawer, both marked current on the
+  page, no page link highlighted, drawer link has no pill or padding and wraps); the gear is an empty 44x44 spacer for
+  a customer and an admin on My Account, an admin on Settings still gets the gear link (control), and the logo sits at
+  the same x on My Account and the Catalog; My List has no old switch and a working "Email settings" link, hidden while
+  viewing as a customer, and the print header still reads the name; pending, paused and view-as-customer show a
+  message and no switches; a stripped column fails open for its own row only, all stripped shows the message; signed
+  out is sent to sign-in with the page remembered; and **the F182 guard**: the two new columns are accepted from the
+  customer's own browser, while `full_name`, `is_admin`, a different `status`, and a mixed write are all refused (403)
+  with nothing reaching the row. Teardown re-read 0 leftover profiles.
+- **Negative controls, each seen red on the check it targets** (by serving a deliberately broken copy of `/account`;
+  the working tree is untouched): `--control=noreadback` fails D5 (the refused write left the switch wrong); 
+  `--control=noimpersonation` fails S2; and the page run against the previous staging bytes (before the push) fails
+  P1-P3 and cannot load. **D10 (switch width) was seen red on the deployed first build** (tracks 24, 25 and 19 px on
+  the phone) and green after the fix.
+- **A defect found by LOOKING, not by the harness, and fixed:** a phone screenshot showed the switch tracks squeezed
+  to about 24 px with the knob sticking out, because the shared `.toggle-switch` is a flex item beside a wrapping
+  description. Fixed page-scoped (`.acct-row .toggle-switch { flex: none; }`, `8e2da2f`); D10 added; the retaken
+  screenshot shows round, whole switches. Screenshots of desktop, phone, the open drawer and My List's toolbar were
+  inspected.
+- **Harness errors of mine, caught and corrected before being believed:** D7 failed because `page.unroute` was given a
+  new function each time, so the 500 handler from D6 was still active (fixed with one shared matcher); F4 failed
+  because it wrote `status: 'active'` to an account that is already active, a no-op the guard rightly allows (now
+  writes a different value).
+- **Full suite on the deployed bytes: 170 passed, 1 skipped, 0 failed, 26.8 min, `EXIT=0`** (the log's own summary
+  line, not the launcher's notice; the same as the 2026-11-17 baseline). It ran on `473d98b`, before the switch fix,
+  which changes only `account.html` (no spec loads that page) plus a comment; the harness above was rerun on the final
+  bytes. Spec 18 (the nav) is in that run.
+
+**Not verified:** WebKit or a real phone (Chromium emulation only); the page as a paid versus free tenant's customer
+(the shop name in "ask <shop>" comes from `data-tenant-name`); Maintenance Mode on this page (the check is the same
+two lines the other customer pages use, not exercised); production; Rick has not looked at it on staging.
+
+**For S4 and S5.** (1) The anonymous preferences page (S4) should follow the same rule as this one: a pending or
+paused account sees no switches there either, or S5 must say plainly what the footer link does for them. (2) **The
+live Tuesday arrivals email (`notify-arrivals`, line 461) says "Turn it off on My List, next to Email My List".** Once
+S3 is on production that still leads to the right place (My List now has an "Email settings" link in that spot), but
+the sentence is stale; S5 replaces it with the footer link (D7). (3) `privacy.html` needs the picks and footer-link
+sentences when S5 ships; its "Effective October 29, 2026" date was left alone (Rick's call whether two clarifying
+sentences move it).
+
+**Promotion.** S3 stands alone (no SQL, no Edge Function); a promotion needs Rick's `/promote-prod`, `app.js` carries
+`merge=ours` (assert its merge RESULT), and a write-smoke is warranted: the nav changed on every page and `mylist.html`
+changed, though the reserve path did not.
