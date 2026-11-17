@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); production untouched (S1 SQL PENDING there); S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 not yet promoted; S3-S6 not started (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=— · prod=— · PR=— · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -314,3 +314,20 @@ Recommended For You view keeps `getCatalogIds()`).
 **Not verified:** a real browser on a real phone; WebKit; the admin view-as-customer rail in a browser
 (the function's admin path is proven by the S1 harness, Z4); production (needs the S1 SQL there first).
 **Its old harness's negative controls** that patch `getTopPicks()` text in `app.js` no longer apply.
+
+### S1 on production, 2026-11-17 (Rick, two passes)
+
+The first pass landed only `get_top_picks()` and its grants: Rick's SMOKE read `rjbookstop` 21 active, all 21
+with 20 picks, personal 63, popular 357, new1 0 (exactly S0's prediction) and `comicstore` 1/1, but selecting
+either new column returned `42703`. The main block is one transaction, so most likely only part of it was
+selected. STEP 0 then read: columns false, guard = the S3b body, function present. A re-run of the main block
+failed `42723` (the function exists) and rolled back whole, changing nothing. The file's new COMPLETION
+section (C1: the two columns with `IF NOT EXISTS` and the widened guard, no function) then landed; C0 run
+afterwards read columns true, guard widened, function present, production. Read-only checks afterwards: both
+columns readable, 0 of 37 profiles non-default, an anonymous call refused `42501`. **Not read:** the VERDICT
+row itself, so `authenticated_can_execute` is inferred (its GRANT ran in the pass whose REVOKE is confirmed);
+the S2 promotion exercises it as a signed-in customer.
+
+**Found on the way, separately (F183):** while confirming this work leaves the arrivals schedule alone, its
+first run (15:00 UTC the same day) was found to have failed because `pg_net` was not installed. Fixed the same
+day; this week's email sent by hand (9 of 9). See `docs/technical-reference.md` § 13 F183.

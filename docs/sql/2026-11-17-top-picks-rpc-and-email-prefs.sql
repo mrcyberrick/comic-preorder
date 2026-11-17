@@ -1,8 +1,13 @@
 -- Top Picks: one pick rule for the catalog rail and both customer emails, plus
 -- the two new customer email settings.
 -- Plan: docs/top-picks-emails-and-notification-settings.md (session S1).
--- STATUS: staging=APPLIED 2026-11-17 | prod=PENDING (PARTIAL 2026-11-17: get_top_picks() and its grants landed,
--- the two columns did not; run the COMPLETION section at the end of this file)
+-- STATUS: staging=APPLIED 2026-11-17 | prod=APPLIED 2026-11-17
+-- (production in two passes the same day: the first landed get_top_picks() and its grants only
+-- (SMOKE rjbookstop 21/21, 20 picks, new1 0); STEP 0 then read columns false, guard = the S3b body;
+-- a re-run of the main block failed 42723 (function exists) and rolled back whole; the COMPLETION C1
+-- then landed, C0 afterwards: columns true, guard widened, function present. Read-only checks: both
+-- columns readable, 0 of 37 profiles non-default, anon refused 42501. Not run there: the VERDICT row
+-- itself, so authenticated_can_execute was not read; the S2 promotion exercises it as a customer.)
 -- (staging: Rick ran it and pasted the SMOKE only; STEP 0 and VERDICT output were not
 -- pasted. Their claims were proven by behaviour instead: playwright/top-picks-rpc-parity.mjs
 -- 109/0 (anon refused 42501, columns present with 0 non-default rows, the guard allows the two
