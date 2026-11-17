@@ -1361,6 +1361,14 @@ const UsageEvents = {
     this._log(userId, 'promo_banner_dismissed', { banner_id: bannerId });
   },
 
+  // A Top Picks link (catalog.html?pick=<id>&ref=<source>) opened its title.
+  // docs/top-picks-emails-and-notification-settings.md § 3.2. Unlike the banner
+  // events above, this IS customer activity (a click), so analytics.html may count
+  // it like any other event; `source` is 'email-catalog', 'email-arrivals' or 'link'.
+  pickOpened(userId, { source, catalogId } = {}) {
+    this._log(userId, 'pick_opened', { source: source || 'link', catalog_id: catalogId || null });
+  },
+
   catalogView(userId, { catalogMonth, page, search, publisher, distributor } = {}) {
     this._log(userId, 'catalog_view', {
       catalog_month: catalogMonth || null,
@@ -2550,10 +2558,11 @@ const Recommendations = {
   // content the customer is likely to care about.
   //
   // MEMOISED per (userId, month) for the page's lifetime, as a promise so two
-  // callers that arrive together share one fetch. The Top picks rail and the
-  // "Recommended For You" view both rank the whole month (about three paged
-  // requests plus the user's reservation signal, which runs to 1,345+ rows on the
-  // heaviest account); without this each would pay for it separately.
+  // callers that arrive together share one fetch. It ranks the whole month (about
+  // three paged requests plus the user's reservation signal, which runs to 1,345+
+  // rows on the heaviest account). Since 2026-11-17 its only caller is the
+  // "Recommended For You" view: the Top picks rail moved to the database function
+  // get_top_picks() (docs/top-picks-emails-and-notification-settings.md § 3.1).
   // The result object is SHARED: callers filter and slice it, never mutate it.
   // A reservation or cancellation changes the signal, so catalog.html calls
   // invalidate() after either; a failed fetch drops its own entry so it retries.
@@ -2658,70 +2667,6 @@ const Recommendations = {
       items: [...personalItems, ...popularItems],
       hasPersonal: userSignal.size > 0,
     };
-  },
-
-  // The Top picks rail (catalog.html): an ordered list of { id, tier }, at most `limit`
-  // long, built from the same ranking the Recommended view uses so the two cannot
-  // disagree about what "recommended" means.
-  //
-  // BLENDED, not stacked (Rick, 2026-10-09: picks are "based on reservations and most
-  // popular reservations for the store"). The ranking is two tiers: series the customer has
-  // reserved before (tier 'personal'), then the store's most-reserved series
-  // (get_popular_series, tier 'popular'). Taking the list top-down fills the whole rail from
-  // the first tier for anyone with a real history, so the store's popular titles never
-  // appear. Instead the two tiers ALTERNATE, personal first, so both are always represented;
-  // when one runs out the other fills the rest, and a customer with no history sees the
-  // popular half alone.
-  //
-  // A pick is a title the customer could still reserve and would plausibly want
-  // to look at, so a row is DROPPED, before the two lists are merged, when it is:
-  //   - already reserved by this customer (`reservedIds`, a Map or Set of ids);
-  //   - past its FOC (isFocLocked, the same test the Reserve button uses);
-  //   - not a standard cover. Variants and allocation-restricted rows are the
-  //     long tail of a month and would crowd out the issues people subscribe to;
-  //   - hidden by the tenant's catalog visibility config (`cfg`), via the one
-  //     shared CatalogFilters.hides() predicate, so a publisher the store hides
-  //     cannot reappear in a carousel;
-  //   - a second title from a series already picked. ONE PER SERIES across both tiers, the
-  //     first in rank, so one popular series cannot fill the whole rail.
-  // The reservation exemption CatalogFilters.apply() offers is deliberately not
-  // used: a reserved title is not a pick whether or not a filter would hide it.
-  async getTopPicks(userId, month, { reservedIds = null, cfg = null, limit = 20 } = {}) {
-    const { items } = await this.getCatalogIds(userId, month);
-    const eligible = items.filter(item =>
-      !(reservedIds && reservedIds.has(item.id)) &&
-      !isFocLocked(item.foc_date) &&
-      isStandardCoverType(item.variant_type) &&
-      !(cfg && CatalogFilters.hides(item, cfg, month)));
-    const lists = [
-      { items: eligible.filter(i => i.tier === 'personal'), at: 0 },
-      { items: eligible.filter(i => i.tier === 'popular'),  at: 0 },
-    ];
-    const picks = [];
-    const series = new Set();
-    // Next pick from one list, skipping any series already taken; false when it is dry.
-    const take = (list) => {
-      while (list.at < list.items.length) {
-        const item = list.items[list.at++];
-        const key = `${item.series_name}||${item.distributor}`;
-        if (series.has(key)) continue;
-        series.add(key);
-        picks.push({ id: item.id, tier: item.tier });
-        return true;
-      }
-      return false;
-    };
-    // Alternate until both are dry or the rail is full. take() returning false for a dry list
-    // is what lets the other tier fill the remaining slots.
-    let more = true;
-    while (more && picks.length < limit) {
-      more = false;
-      for (const list of lists) {
-        if (picks.length >= limit) break;
-        if (take(list)) more = true;
-      }
-    }
-    return picks;
   },
 };
 
