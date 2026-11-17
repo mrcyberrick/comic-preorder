@@ -759,6 +759,21 @@ const NavSettingsLink = {
     const navInner = document.querySelector('.nav-inner');
     if (!navInner || document.getElementById('nav-settings-gear')) return; // idempotent
 
+    // A page can opt out with <body data-nav-gear="none"> (account.html, for
+    // every user: it is the customer's own page, and a gear there would be an
+    // inert icon for a customer and a store-settings link on a page about a
+    // person's account for an admin). The slot still gets an empty 44px box,
+    // because on a phone it is what keeps the logo centred against the
+    // hamburger. It shows nothing and is not focusable.
+    if (document.body.dataset.navGear === 'none') {
+      const spacer = document.createElement('span');
+      spacer.id = 'nav-settings-gear';
+      spacer.className = 'nav-settings-placeholder';
+      spacer.setAttribute('aria-hidden', 'true');
+      navInner.appendChild(spacer);
+      return;
+    }
+
     let el;
     if (isAdmin) {
       el = document.createElement('a');
@@ -882,9 +897,15 @@ async function initNav() {
   if (currentPage !== 'index.html' && !currentPage.endsWith('.html')) {
     currentPage += '.html';
   }
-  nav.querySelectorAll('.nav-links a').forEach(a => {
+  // The greeting's name link (to account.html) sits inside .nav-links in the
+  // phone drawer; it is not one of the page links and must not take the pill
+  // styling, so it is marked current by aria-current only (style.css).
+  nav.querySelectorAll('.nav-links a:not(.nav-drawer-name-link)').forEach(a => {
     if (a.getAttribute('href') === currentPage) a.classList.add('active');
   });
+  if (currentPage === 'account.html') {
+    nav.querySelectorAll('.nav-user-link, .nav-drawer-name-link').forEach(a => a.setAttribute('aria-current', 'page'));
+  }
   NavAdminGroup.mount(nav); // after the loop: it reads which link is .active
 
   // Mobile tab bar + catalog search proxy (docs/mobile-nav-tab-bar.md)

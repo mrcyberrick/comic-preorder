@@ -197,6 +197,13 @@ button { cursor: pointer; font-family: var(--font-body); }
   color: var(--text-muted);
 }
 .nav-user strong { color: var(--text-secondary); }
+/* The name is the way to My Account (account.html, top-picks plan D8). It
+   looks like it did before until hovered; the underline is what says "link". */
+.nav-user-link { color: inherit; }
+.nav-user-link:hover strong,
+.nav-user-link:focus-visible strong,
+.nav-user-link[aria-current="page"] strong { color: var(--text-primary); text-decoration: underline; }
+.nav-user-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 /* The phone drawer's own copies of Welcome / Sign Out (F168). Desktop keeps
    .nav-user in the bar, so these stay hidden here; the max-width:640px block
    further down shows and styles them. */
@@ -2135,6 +2142,22 @@ button { cursor: pointer; font-family: var(--font-body); }
     color: var(--text-primary);
     overflow-wrap: anywhere;
   }
+  /* The name links to My Account (top-picks plan D8). `.nav-links a` above gives
+     every drawer link a padded, nowrap, hover-filled row; this one is a text link
+     inside the Welcome row, so it takes none of that. The selector carries the
+     drawer row's class to outrank `.nav-links a:hover` and `.nav-links a.active`. */
+  .nav-links .nav-drawer-user a.nav-drawer-name-link,
+  .nav-links .nav-drawer-user a.nav-drawer-name-link:hover {
+    display: block;
+    padding: 0;
+    background: none;
+    border-radius: 0;
+    white-space: normal;
+    color: inherit;
+  }
+  .nav-drawer-name-link:hover .nav-drawer-name,
+  .nav-drawer-name-link[aria-current="page"] .nav-drawer-name { text-decoration: underline; }
+  .nav-drawer-name-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .nav-drawer-signout {
     display: block;
     margin-top: 6px;
