@@ -1,8 +1,11 @@
 # Customer engagement: paper customers to app users
 
-**STATUS:** IN PROGRESS (S1, S2, S3a AND S3b ALL COMPLETE AND PROMOTED TO PRODUCTION, cron included; S4 and S5 BUILT,
-PUSHED, SQL APPLIED AND EDGE FUNCTION DEPLOYED ON STAGING 2026-11-14; NOT YET CLICKED THROUGH IN A BROWSER, NOT ON
-PRODUCTION — see § 6) · planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
+**STATUS:** COMPLETE AND PROMOTED TO PRODUCTION (S1 THROUGH S5 ALL PROMOTED, PR #189, merge `033c5c69`,
+2026-11-15 — full Playwright suite 170 passed/1 skipped/0 failed first, both Edge Functions redeployed to
+production with `verify_jwt` re-confirmed OFF, S5's SQL also run on production the same day. Every print surface
+scanned and confirmed working on production — poster, Bagging List, Signup Sheet by Rick directly, the Claim QR
+via a disposable fixture account, verified end to end and cleanly torn down. See § 6 for the full record.) ·
+planned 2026-11-13, decisions D1-D9 answered the same day, S1 built and verified end to end on
 staging 2026-11-13, promoted to production 2026-11-14 (PR #186, merge `a6a6b0b4`); S2 (closes F89, closes F181), S3a
 (the Email button works for a past week) and S3b (the Tuesday notify-arrivals email + opt-out, SQL applied on both
 environments ahead of the code, `notify-arrivals` + the three other touched Edge Functions deployed to staging then
@@ -32,8 +35,8 @@ plus a new standalone Signup Sheet meant to accompany a printed catalog) and S5 
 (`docs/sql/2026-11-14-s5-paper-claim-codes.sql`) applied on staging the same day (verdict matched exactly) and
 both `convert-paper-customer` (claim mode) and `register-customer` (the widened signup-source allowlist)
 redeployed to staging, `verify_jwt` confirmed OFF before and after both times, live probes confirming each
-dispatch works.** Not yet clicked through in a real browser; not on
-production. See § 6 for the full record.
+dispatch works.** **PROMOTED TO PRODUCTION 2026-11-15, PR #189 — see the dedicated entry in § 6 for the full
+close-out.**
 
 Owner: Rick. One session per step (S1 to S5). Each step ships on its own: staging first, production
 only on Rick's `/promote-prod`. Database steps are Rick-run.
@@ -711,7 +714,11 @@ SQL files marked `staging=APPLIED`, confirmed live, not from their own say-so).
   production via the CLI; both `CREATE EXTENSION IF NOT EXISTS` statements and `cron.schedule('notify-arrivals-weekly',
   '0 15 * * 2', ...)` run one at a time. **Verdict, read from `cron.job` directly, not assumed:** `jobid=1,
   schedule='0 15 * * 2', active=true`, command text matching the intended URL/headers/body exactly. The job is live;
-  the first real fire is the next Tuesday 15:00 UTC.
+  the first real fire is the next Tuesday 15:00 UTC. **⚠️ CORRECTED 2026-11-17 (F183): that first fire FAILED** with
+  `schema "net" does not exist`: `pg_net` was not installed on production, and this verdict (it read only `cron.job`)
+  could not tell. Fixed the same day by `docs/sql/2026-11-17-f183-pg-net-arrivals-cron-fix.sql` (Rick): a dry run
+  through the job's own command returned 200, would_email 9; then the job's command was run once by hand: **9 sent,
+  0 failed, 9 notices** for the week of 2026-11-16. The first unattended run is Tue 2026-11-24 15:00 UTC.
 - **✅ RICK'S `dry_run` REHEARSAL DONE 2026-11-14, same real auth path the cron itself uses** (the cron secret header,
   the real deployed function, read-only). A wrong secret still correctly refused with `401 Unauthorized` (confirms the
   cron's own auth will work exactly as intended); the correct secret with `dry_run: true` returned `200` with
@@ -969,6 +976,74 @@ remains the next free finding ID.**
 **Not yet done, stated plainly:** none of this — the reverted Print Catalog header, the new Bagging List QR, or
 the Signup Sheet — has been clicked through in a real browser or printed for a real scan test; the full Playwright
 suite has not run against these bytes; production has none of it.
+
+### PROMOTED TO PRODUCTION 2026-11-15 — S1 through S5, all together (PR #189)
+
+**Rick's `/promote-prod`.** He'd already accepted the staging dead-link issue as expected (production's real paid
+tenant subdomain is provisioned, staging's never was), then asked for the full Playwright suite to run before
+cutting the branch — nothing in this whole plan had run through it yet. First attempt hit the PowerShell
+stderr-wrapping trap CLAUDE.md already records (a harmless Node warning misread as a test failure); recognized
+immediately from the symptom, the interrupted run's state checked directly against staging rather than assumed
+(synthetic tenant gone, `catalog_filters` back to its real value, no orphaned processes), then re-run via Bash per
+the documented fix: **170 passed, 1 skipped, 0 failed, 27.5 min**, clean teardown. Unit suite 477/0.
+
+**Merge:** `033c5c69`, parents `2c17265` (main) + `48ec32f` (staging tip). Gates: step 0 found S5's SQL at
+`prod=PENDING`, judged not a blocker (the code fails open by design) and stated so in the PR body; merge-base
+check confirmed `app.js`'s `merge=ours` driver did not fire (asserted against the merge result, not branch tips);
+tree integrity (migrations count, `config.js` ref) both green; PR file list re-read on GitHub, 13 files,
+`MERGEABLE`/`CLEAN`.
+
+**Same day, Rick ran S5's SQL on production too** ("Script run on Prod"). No verdict pasted this time; independently
+confirmed via a read-only service-role probe instead of taking the report alone: `paper_claim_codes` reads 200,
+`admin_get_paper_claim_codes` exists and runs without error, and the project's tenant list reads
+`comicstore,rjbookstop` — genuinely production. The RLS/grant shape itself (policy count, non-service grants) was
+NOT independently re-checked — that needs the SQL Editor's own system-catalog queries, Rick's domain, not a REST
+probe's.
+
+**Both Edge Functions redeployed to production** from a worktree of `origin/main` (deploys come from the CLI
+working tree, not the merge). `verify_jwt` read live before and after each: both still OFF, preserved,
+`--no-verify-jwt`. Live probes against the deployed `convert-paper-customer`: no `code` still requires admin auth
+(regression check, unchanged); a `code` with no Turnstile token reaches the new path (`"Verification required"` —
+confirms `TURNSTILE_SECRET_KEY` is already set on production); honeypot absorbs silently. Both artifacts
+downloaded and diffed byte-for-byte against the worktree source — identical.
+
+**Verified post-deploy on both `pulllist.app` and `rjbookstop.pulllist.app`:** `app.js`, `admin.html`,
+`arrivals.html`, `style.css`, `vendor/qrcode-generator.js`, `config.js` all byte-identical to `origin/main`.
+`index.html` differs only by Cloudflare's own `mailto:` obfuscation and its injected decoder script — confirmed by
+diffing the served bytes directly and finding exactly those two lines changed, nothing else. `/_headers` returning
+something different is not drift — it's Cloudflare Pages' own fallback page at that path, never the literal config
+file.
+
+**Write-smoke skipped, confirmed from the diff rather than assumed:** grepped the whole promoted diff for
+`Preorders.` and `toggleReserve` — zero hits. Nothing here touches the reserve path.
+
+**Rick scanned all three general-purpose prints on production (poster, Bagging List, Signup Sheet) and all three
+resolve correctly** — confirms the staging dead link was exactly the provisioning gap it was diagnosed as, nothing
+else. **Deliberately NOT tested with a real customer: the Claim QR** ("I did not test the Claim QR link due to
+concerns about compromising account data on Prod") — correct caution: unlike the other three, completing that flow
+for real changes a SPECIFIC customer's own account (auth email, `is_paper`, `status`), so testing it against a
+genuine paper customer would alter their real data.
+
+**Claim flow verified end to end on production 2026-11-15, with a disposable fixture instead (same pattern as
+S1's own "Paper Tiger" production verification).** A throwaway paper customer ("ZZTEST Claim Flow Check") and its
+claim code were created directly via the service-role API (mirroring `create-paper-customer`'s own
+account-creation shape exactly); Rick opened the real claim URL
+(`https://rjbookstop.pulllist.app/?claim=<code>`) on a real browser, completed the real Turnstile challenge (the
+browser console showed a wall of Cloudflare's own internal Turnstile diagnostics — WebGPU adapter probing, a WOFF2
+font warning, a `data:,` CSP block inside Cloudflare's own iframe — none of it from this app, and none of it
+stopped the challenge from completing), and submitted a real email. **Read back from the database, not assumed:**
+`is_paper` false, `status` pending, `signup_source` slip, `converted_from_paper_at` set, the email changed to what
+was typed, the claim code's `used_at` set (spent exactly once), one `paper_converted` event logged with
+`via: slip_code` attributed to the account itself. **Full teardown confirmed by a fresh read:** auth user deleted
+(404 on re-fetch), 0 profile rows, 0 claim-code rows, the one `usage_events` row survives with `user_id` set to
+NULL (same convention this project uses for every deleted test account).
+
+**Not yet verified:** nothing remaining on this surface — the claim flow has now been exercised for real against
+production, end to end, with a disposable account.
+
+**Finding-ID disposition, in words: no finding ID consumed** — this promotion is feature work (S2's F89/F181
+closures were already recorded at the staging stage); the two S4 scope corrections were design changes, not
+defects in what shipped. **F183 remains the next free finding ID.**
 
 ## 7. Not verified when this plan was written
 
