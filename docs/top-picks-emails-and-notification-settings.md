@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4 DONE ON STAGING 2026-11-17 (`072d9fe`; the `email-preferences` function is deployed to staging, its secret set there only, § 6); S5 BUILT AND VERIFIED ON STAGING 2026-11-18 (`c18b865`, `7525dc3`, `33e067a`; both mail functions deployed to staging; real-inbox check still Rick's, § 6); S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4 DONE ON STAGING 2026-11-17 (`072d9fe`; the `email-preferences` function is deployed to staging, its secret set there only, § 6); S5 BUILT AND VERIFIED ON STAGING 2026-11-18 (`c18b865`, `7525dc3`, `33e067a`; both mail functions deployed to staging; Rick's real-inbox check done 2026-11-18: arrived in the Gmail Inbox, footer link present, DKIM over the new headers not yet confirmed, § 6); paid-shop link addresses built the same day (`baedd98`, staging only); S6 PREPARED, NOT STARTED, needs Rick's go (§ 6) · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 and F185 filed 2026-11-18 from this work's observations, F186 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -610,7 +610,7 @@ equal to the committed source). Also `privacy.html` (one sentence on Top Picks a
   use its own address (`<slug>.pulllist.app`, the `Tier.publicUrl()` convention), a free shop's stay on the apex (S1a),
   gated by a production-only setting because no staging shop has a provisioned address (F145), so staging can prove
   only how the links are BUILT, not the branded landing.
-- **Observed, not fixed, not filed:** `notify-customers` builds its email lookup from one
+- **Observed, not fixed, ~~not filed~~ FILED AS F184 later the same day:** `notify-customers` builds its email lookup from one
   `auth/v1/admin/users?per_page=1000` read. That list is every user of the project across all tenants, newest first, so
   once a project holds more than 1000 users the OLDEST customers get no catalog email and nothing says so. Staging held
   **999** users on 2026-11-18. The seventh instance of the unbounded-read class (F82, F113, F139, F140, F156, F162);
@@ -637,4 +637,121 @@ first send with picks, and the December catalog import will be the first catalog
 effective date (October 29, 2026) is left unchanged on purpose; it should move on the day this reaches production.
 
 **Finding-ID disposition, in words: no finding ID consumed (feature build, not a defect). F184 remains the next free
-finding ID.**
+finding ID.** *(Written 2026-11-18; F184 and F185 were filed later the same day, see below, and F186 is now next free.)*
+
+### S5 follow-ups, 2026-11-18 (later): Rick's inbox result, link addresses built, F184 and F185 filed
+
+**Rick's real-inbox result (his report).** The email **landed in the Gmail Inbox, not spam**, and the "Email settings or
+unsubscribe" link was present. **Not confirmed: DKIM over the new `List-Unsubscribe` headers** (he asked how to check).
+How: open the message in Gmail, three-dot menu, **Show original**. The summary at the top gives SPF, DKIM and DMARC. Then
+find the `DKIM-Signature:` header whose `d=` is `pulllist.app` and read its `h=` list of signed headers: RFC 8058 wants
+`list-unsubscribe` and `list-unsubscribe-post` in it. Paste only the `d=`, `s=` and `h=` parts, never a link.
+
+**Rick's decisions on my four items:** (1) the throwaway shop, titles, customer and login are removed (his
+`--teardown`; a fresh read of staging 2026-11-18 found none left: 0 `S5` tenants, 0 profiles for that address, 0 `S5`
+titles, 0 auth users); (2) build the signed-out landing: below; (3) prepare S6: below; (4) file the two unfiled
+observations: **F184** and **F185** (`technical-reference.md` § 13). **Reading of "file this", mine:** the pair my item 4
+listed (the purged-title link and the 1,000-user lookup); say so if he meant something else.
+
+**Link addresses, built (`baedd98`, `notify-customers` and `notify-arrivals`; § 3.5's own line, "links use the shop's
+own address for a paid shop and the apex otherwise", which my S5 build had deliberately not followed).** A signed-out
+customer who follows a link to the shared apex lands on the platform's marketing page; a shop's own address shows the
+shop's sign-in at once (measured read-only on `rjbookstop.pulllist.app` and `pulllist.app`). A paid shop's app links
+(Browse the Catalog, See My List, every pick) now use `https://<slug>.pulllist.app`, **only** where `APP_BASE_URL`'s host
+is exactly `pulllist.app` and the slug is a valid DNS label; a free shop stays on `APP_BASE_URL` (S1a), staging is
+unchanged (no shop there has a provisioned address, F145, so a per-shop link would be dead), and the settings-page link
+and the List-Unsubscribe address are unchanged. **`EMAIL_SHOP_LINKS=off` reverts it with no deploy.** The block is
+byte-identical in both functions (hash-gated by the harness); the tenant-identity block shared by six functions is
+untouched. `notify-customers` reads the shop's slug with one extra query, only for a paid shop; `notify-arrivals` already
+had it. **Verified:** `email-prefs-s5-logic.mjs` now has a link-address suite, **16/16**, and the earlier suites are
+unchanged (22/22, 15/15, the pre-S5 regression anchor); **35 deliberately broken copies each turn their named checks
+red**. Two of those first stayed green and were corrected rather than accepted: M22 did not fail because
+`notify-customers` guards a free shop twice (the block's `isPaid` test, and no slug read at all), so the mutation now
+removes both layers, and the single-layer copy is kept as an "informational, must stay green" line; M29 never reached the
+`catch` it breaks because my fake database returned an HTTP error and not a thrown request, so the fake now has a
+throwing mode. Deployed to staging only, `verify_jwt` read by behaviour before and after (OFF, unchanged), deployed
+artifacts hash-equal to the commit (`5f332d7d…`, `28f9b2a2…`). **Not verified, stated plainly:** the branded landing
+itself can only be seen on a provisioned hostname, so staging proves only how the links are BUILT; the first look at the
+real thing is production after S6. No staging email was sent for this change (Resend's 100 a day: 42 at last report).
+**A tradeoff, for Rick:** a browser keeps its sign-in per address, so a customer who normally signs in at `pulllist.app`
+will be asked to sign in once at `rjbookstop.pulllist.app` the first time they follow one of these links, and not again on
+that device; customers who use the printed address (`rjbookstop.pulllist.app`) already have a session there. It is the
+price of the branded landing; the off switch undoes it.
+
+**Filed:** **F184** (`notify-customers` reads emails from one page of 1,000 users across every shop; production holds 37
+profiles) and **F185** (an email link to a title that is no longer in the catalog lands on the plain catalog with a brief
+message). **F186 is next free.**
+
+### S6, production rollout: PREPARED 2026-11-18, NOT STARTED (needs Rick's explicit go)
+
+**Read-only facts gathered 2026-11-18.** (1) Production's secrets, by name and digest (`supabase secrets list --project-ref
+plgegklqtdjxeglvyjte`, values never shown): `APP_BASE_URL`, `ARRIVALS_CRON_SECRET`, `FOUNDING_TENANT_ID`,
+`MAIL_FROM_EMAIL`, `MAIL_FROM_NAME`, `RESEND_API_KEY` are present; **`EMAIL_PREFS_SECRET` and `EMAIL_SHOP_LINKS` are not.**
+(2) **`APP_BASE_URL`'s digest equals the SHA-256 of `https://pulllist.app`** (checked against that string, with and
+without a trailing slash and two other candidates), so it IS the production apex and the shop-link rule will fire there.
+(3) `/promote-prod` step 0 lists two files, `2026-11-14-s3b-notify-arrivals-cron.sql` and
+`2026-11-14-s5-paper-claim-codes.sql`: **both are `prod=APPLIED`**; the gate reads only a file's first STATUS line and
+their `prod=` sits on a continuation line, so these are false alarms, not blockers. No unapplied SQL. (4) What staging
+would carry to production (raw `main..staging`, code only, 12 commits ahead): `account.html` and `email-preferences.html`
+(new), `privacy.html`, `app.js`, `style.css`, the nav pages (`admin`, `analytics`, `arrivals`, `catalog`, `mylist`,
+`settings`, `subscriptions`: the greeting link), and the sources of `email-preferences` (new), `notify-customers` and
+`notify-arrivals`; plus docs. The raw diff also shows `config.js` (per-branch, restored to `origin/main`'s at step 2) and
+`supabase/migrations/` as deleted (F125, never touch): neither belongs in the PR.
+
+**Timing, Rick's choice.** The arrivals cron fires **Tuesdays 15:00 UTC** (next: Tue 2026-11-24), and Tue 24 Nov is also
+the first unattended run since F183. **Option 1 (matches "next week we can include these changes"):** do steps 1-5 by
+Mon 23 Nov, set the secret (step 6) that evening after the zero-send checks, so Tuesday's run is the first with picks;
+rollback up to 15:00 UTC Tuesday is one command (unset the secret). **Option 2:** do steps 1-5 now, leave the secret unset
+(emails then go out as before S5 apart from the shop-address links and the one replaced arrivals sentence), set it after
+Tuesday's run is read clean; the first picks then go out on Tue 1 Dec or with the December catalog email. Resend's 100 a
+day is shared with staging: do not run staging gates on the day.
+
+**Steps (each production step is Rick's call; the agent prepares and verifies).**
+1. **Privacy date.** On `staging`, set `privacy.html`'s effective date to the day of promotion (it reads October 29, 2026);
+   commit, push, confirm served.
+2. **Client PR, `/promote-prod` steps 0-4.** Branch from `origin/main` (`git checkout -B feat/top-picks-emails-prod
+   origin/main`), `git merge origin/staging --no-commit --no-ff`, `git checkout origin/main -- config.js`. **`app.js` carries
+   `merge=ours`: assert the merge RESULT equals staging's copy** (the driver has dropped it three times). Branch-tree
+   assertions: `supabase/migrations/` still 2 files, `config.js` carries `plgegklqtdjxeglvyjte`, the PR file list read on
+   GitHub equals the scope above (no `config.js`, nothing under `supabase/migrations/`).
+3. **After Rick merges:** served bytes on BOTH `pulllist.app` and `rjbookstop.pulllist.app` byte-identical to `origin/main`
+   for `app.js`, `account.html`, `email-preferences.html`, `privacy.html`, `style.css` and the nav pages, `config.js` prod
+   ref x1 and staging ref x0; markers named from the diff at the time (the nav name link in `app.js`, the switch rows in
+   `account.html`). **Write-smoke (the nav changed on every page): Rick reserves and cancels one title on production;
+   read back the `reserve` and `cancel` events and the `tenant_id`.** Note that `account.html` and `email-preferences.html`
+   are live from here, harmlessly: the page needs a token that does not yet exist.
+4. **Rollback copies first.** Download the CURRENT production `notify-customers` and `notify-arrivals` (`supabase functions
+   download <name> --project-ref plgegklqtdjxeglvyjte --workdir <empty scratch dir>`) and keep them until the rollout is
+   closed out.
+5. **Functions, from a worktree of `origin/main`** (Edge Functions deploy from the CLI tree, not from the merge): read the
+   live `verify_jwt` of `notify-customers` and `notify-arrivals` by behaviour (their own error body = OFF) before and after;
+   deploy `email-preferences` (new), `notify-customers` and `notify-arrivals` with `--no-verify-jwt`; download each artifact
+   and hash it equal to `origin/main`'s source. **Zero-send checks, no secret yet:** `email-preferences` answers 503 (no
+   secret, fails closed); `notify-arrivals` dry run through the job's own stored command with `{"dry_run": true}`
+   (Rick-run SQL, as in F183) returns 200 with `would_email` and sends nothing.
+6. **The secret (switches the emails on).** Generate it locally without printing it (PowerShell: 32 bytes from
+   `[Security.Cryptography.RandomNumberGenerator]` as hex), `supabase secrets set EMAIL_PREFS_SECRET=... --project-ref
+   plgegklqtdjxeglvyjte`, keep a copy in the scripts `.env` as `EMAIL_PREFS_SECRET_PROD` (never in a repo or in chat), and
+   confirm by `supabase secrets list` that its digest differs from staging's. **Losing or changing it later breaks every
+   link already sent**, so it is not rotated casually.
+7. **Checks with Rick's own production account only (no customer data touched):** `email-preferences` with a bad token is 403;
+   with a token minted for his own admin account the GET returns his three switches, a POST of the same values reads back
+   unchanged, and the page `https://pulllist.app/email-preferences.html?u=...&s=...` opens in a browser.
+8. **First real send (Tue 24 Nov under Option 1).** Read the run: `net._http_response` for the job's call (the F183 query)
+   shows `sent`, `failed` and **`with_picks`**; `arrival_notices` gains one row per recipient; Resend's dashboard shows no
+   bounces or complaints for that batch. Ask one real recipient, if Rick can, whether the Reserve link opened the title.
+9. **Close out** (`/promote-prod` step 6): a "Last completed work" entry in `CLAUDE.md` with both SHAs and the PR, what was
+   verified and how, and the finding-ID disposition in words (expected: no finding ID consumed, a feature build).
+
+**Rollback, cheapest first.** (a) `supabase secrets unset EMAIL_PREFS_SECRET --project-ref plgegklqtdjxeglvyjte`: the next
+send is the pre-S5 email (no picks, link or header), proven byte for byte by the harness. (b) `EMAIL_SHOP_LINKS=off`:
+links back on the shared address. (c) Redeploy the two saved function copies from step 4. (d) Revert the client PR (the
+pages are inert without the secret). Emails already sent cannot be recalled.
+
+**Known gaps going in:** the first production picks email goes to real customers (no safe way to send one production email
+to one person: both functions send to the whole eligible list). **Admins:** `notify-customers` excludes them
+(`is_admin=eq.false`, line 409), but `notify-arrivals` does NOT (its eligibility is active, not paper, opted in), so
+Rick's own admin account receives the arrivals email if it holds a reservation that matches that week's shipment. Whether
+it does is not established; if it does, that copy is the production check for step 8 (headers only). DKIM over the new headers is
+unconfirmed (Rick's Show-original check above); O2 (whether a subscribed series is excluded from picks) is still unbuilt;
+F184 and F185 are open and not blockers (production holds 37 profiles).
