@@ -194,8 +194,8 @@ function buildPicksHtml(picks: EmailPick[], baseUrl: string, ref: string): strin
     const sub = [p.publisher ? escapeHtml(p.publisher) : '', price].filter(Boolean).join(' &middot; ')
     return `
       <tr style="border-top:1px solid #2e2e2e">
-        ${cover ? `<td width="56" valign="top" style="padding:10px 12px 10px 0"><a href="${link}"><img src="${cover}" alt="${escapeAttr(p.title)}" width="56" style="display:block;width:56px;height:auto;border:0;border-radius:3px;background:#222"></a></td>` : ''}
-        <td valign="top" style="padding:10px 0;font-size:0.84rem;color:#f0ece4">
+        ${cover ? `<td width="56" valign="top" style="padding:10px 12px 10px 0"><a href="${link}"><img src="${cover}" alt="${escapeAttr(p.title)}" width="56" style="display:block;width:56px;height:auto;border:0;border-radius:3px;background:#222"></a></td>` : `<td width="56" style="padding:10px 12px 10px 0">&nbsp;</td>`}
+        <td width="100%" valign="top" style="padding:10px 0;font-size:0.84rem;color:#f0ece4">
           <div style="font-weight:600">${escapeHtml(p.title)}</div>
           ${sub ? `<div style="font-size:0.74rem;color:#9a9390;margin-top:2px">${sub}</div>` : ''}
         </td>
