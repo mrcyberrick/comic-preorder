@@ -2298,6 +2298,7 @@ Production's real post-cutover send authenticated fully clean but surfaced
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
 | `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
+| `email-preferences` | `email-preferences.html` (static page, no sign-in) and a mail client's RFC 8058 one-click POST; added 2026-11-17 (Top Picks S4), **deployed to staging only until S6**, `--no-verify-jwt` | HMAC-SHA256 token over `v1\|<user_id>` with `EMAIL_PREFS_SECRET`; every token failure is one identical 403; a missing or short secret fails closed (503) | no — the tenant comes from the customer's own profile; it reads and writes only `user_profiles.email_catalog`, `email_arrivals`, `email_picks` (an explicit allowlist) and the shop's `display_name` |
 
 `invite-customer` and `create-paper-customer` resolve `tenant_id` from the
 calling admin's own profile (fixed 2026-05-10; F34) — new users created by
@@ -2328,6 +2329,7 @@ Set in Supabase → Edge Functions → Secrets:
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. **UNSET on both projects 2026-10-15** (Rick's report; the secrets lists were not re-read by the agent). |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
 | `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
+| `EMAIL_PREFS_SECRET` | email-preferences (Top Picks S4, 2026-11-17), and from S5 notify-customers and notify-arrivals (they mint the links; the token block is copied byte-identically). At least 32 characters; a missing or shorter one makes the function answer 503 instead of accepting any token. **A different value on each project.** Staging: set 2026-11-17 (name confirmed by `supabase secrets list`; the value is saved as `EMAIL_PREFS_SECRET_STAGING` in the scripts `.env`). **Production: not set yet (S6).** Changing it invalidates every link already sent, so do not rotate it casually |
 
 `FOUNDING_TENANT_ID` was added during Phase 2 to enable tenant-aware
 filtering and writes from the Edge Functions. The web app reads tenant

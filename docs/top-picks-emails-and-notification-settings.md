@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4-S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4 DONE ON STAGING 2026-11-17 (`072d9fe`; the `email-preferences` function is deployed to staging, its secret set there only, § 6); S5-S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -156,6 +156,14 @@ columns in the same SQL file, or every customer's save fails with `42501`.
 - **Page `email-preferences.html`** (static, anonymous, like `forgot-password.html`; no nav): reads the
   token from the URL, shows the three toggles, saves on press. The page is static because Supabase is
   understood to serve an Edge Function's HTML as plain text on its own domain (verify in S4).
+- **As built (S4, details in § 6):** the token is 64 lowercase hex characters, minted and checked by one
+  block of code (`mintPrefsToken` / `verifyPrefsToken`, marked `BEGIN` / `END` in the function) that S5's two
+  mail functions copy byte-identically with a grep gate, as the F72 identity block is. The function never
+  returns HTML: a GET from a browser (`Accept: text/html`) is **redirected** to the static page, so the
+  address that goes in `List-Unsubscribe` also works when a person simply clicks it. The one-click POST is
+  honoured for **every** account state (a mail client has already shown "unsubscribed"); the page's own
+  switches follow My Account's rule (a pending or paused account sees none). No `usage_events` row is written,
+  because an event attributed to the customer would move their "last seen".
 
 ### 3.5 The email section
 
@@ -423,3 +431,86 @@ sentences move it).
 **Promotion.** S3 stands alone (no SQL, no Edge Function); a promotion needs Rick's `/promote-prod`, `app.js` carries
 `merge=ours` (assert its merge RESULT), and a write-smoke is warranted: the nav changed on every page and `mylist.html`
 changed, though the reserve path did not.
+
+### S4, 2026-11-17: the `email-preferences` function and the no-sign-in page (BUILT AND VERIFIED ON STAGING, `072d9fe`)
+
+**Production untouched.** Edge Function `supabase/functions/email-preferences/index.ts` (new) and the static page
+`email-preferences.html` (new, no nav, so the nav sync set stays at eight). No SQL, no `app.js`, `style.css`,
+`config.js`, `_headers` or existing page changed.
+
+- **Deployed to staging only,** `--no-verify-jwt` (a NEW function, so there was no live setting to preserve;
+  confirmed by behaviour: an unauthenticated call returns the function's own `{"error":"This link is not valid."}`,
+  not the gateway's message). `EMAIL_PREFS_SECRET` was generated locally (96 hex characters, never printed), set on
+  the staging project with `supabase secrets set`, and saved as `EMAIL_PREFS_SECRET_STAGING` in the scripts `.env`
+  (gitignored) so the harness can mint tokens independently. **Production has no secret and no function yet (S6),
+  and its value must be different.**
+- **As built:** GET reads and changes nothing; a browser navigation (`Accept: text/html`) is redirected to the page
+  at `APP_BASE_URL` (fixed destination, parameters re-encoded, not an open redirect); POST JSON sets only the three
+  switches (booleans, the three keys, all-or-nothing, 2 KB cap); POST `List-Unsubscribe=One-Click` with `?k=catalog`
+  or `?k=arrivals` turns that one email off (`picks` is deliberately not offered; one line to add). Every token
+  failure (missing, malformed, wrong signature, another secret, another customer's token, wrong version tag,
+  truncated, a customer that no longer exists) is one identical 403. A missing or short (< 32) secret fails closed
+  with 503. Nothing is written to `usage_events`.
+- **Decisions made while building (mine, defaults, say if you disagree):** (1) the one-click POST is honoured for
+  pending and paused accounts too, because a mail client has already told the person they are unsubscribed; the
+  page's own switches still follow My Account's rule (O1). This means S5's `notify-customers` must honour
+  `email_catalog = false` for **every** recipient, pending and paused included. (2) A browser opening the function's
+  own address is sent to the page (the address in `List-Unsubscribe` therefore works for a plain click as well as
+  the one-click button). (3) The page is not gated by Maintenance Mode: an opt-out must keep working, and it writes
+  three booleans on one profile.
+- **Page:** the three switch rows copied from My Account; saves on press and trusts the stored value the server
+  read back, not the click (a refused or failed save puts the switch back); a "not valid" message, a "once your
+  account is active" message for pending and paused accounts; arriving from an Unsubscribe link (`?k=`) names that
+  email and highlights its switch, and changes nothing until it is pressed. `noindex`, `referrer: no-referrer`
+  (the address carries the token), no `app.js`, no Supabase client.
+- **Verified, two harnesses (both local-only, in the scripts repo's `playwright/` folder):**
+  - `email-prefs-s4-logic.mjs`: the REAL function source run in Node against a fake PostgREST (Node 24 strips the
+    types; Deno is not installed here). **65/65 checks** (refusals, GET, saves, one-click, account states, failure
+    handling) plus three fail-closed secret cases, and **12 deliberately broken copies, each turning its named
+    checks red** (token not verified, any key accepted, GET writes, one-click may turn picks off, unknown user
+    answered differently, pending may write, short secret accepted, one-click needs no body, no size cap, write
+    result not checked, shop name not blanked) and one harmless change that correctly turns nothing red.
+  - `email-prefs-s4-verify.mjs`: the DEPLOYED function, the real staging database and the page in Chromium.
+    **56/56**, including whole-row comparisons (not just the columns I thought of) for every write that must change
+    exactly one column and every write that must change none; tokens minted by an independent HMAC; the redirect
+    landing on staging's own page; the function address opened in a browser; a failed save and a lying server both
+    leaving the switch on the stored value; no Referer carrying the token to any other origin; phone width with no
+    horizontal scroll and 44 x 24 switch tracks; layout shift under 0.05 (0.001 measured). Three page-side controls
+    each seen RED on their own check: `--control=trustclick` (F12), `--control=squeeze` (F24, tracks of 25, 26 and
+    21 px), `--control=noreserve` (F6b). Teardown re-read: 0 throwaway profiles.
+  - Screenshots of the desktop page, the phone page, the phone page arriving from an Unsubscribe link and a pending
+    account's page were inspected.
+- **My errors, caught before they were believed:** the first refusal list used a destructuring default, so "no
+  token" would have been refilled with a good one (found by reading, before the first run); a Playwright route
+  callback that threw inside its own event loop skipped my teardown and left five `pw-eprefs-*` users, which I
+  deleted after listing them by prefix, and the harness now removes them on any uncaught exception; a first control
+  (`noreserve`) turned nothing red because the first-paint reservation does not affect layout shift, so the check
+  was replaced with one that holds the settings request open and asserts the switches stay hidden (F6b); and the
+  first referrer check failed because Google's font files carry the stylesheet's address as Referer, so it now asks
+  the question that matters (nothing carries this page's address or token).
+- **One failure I could not explain:** in the run with `--control=squeeze`, check A3 (a write with a bad token is
+  refused and the row is untouched) failed once; it passed in the four full runs straight after and in every later
+  run, and the check now prints the statuses and any changed column if it fails again. Probably a transient
+  platform response, but not established.
+- **Not verified:** a real inbox and a real mail client's one-click POST (the S5 gate: RFC 8058 specifies a form post
+  with that exact body, which is what the harness sends, but no real mail client has been observed doing it); the
+  fail-closed secret check live (it was proved against the real source locally, and staging's secret was not
+  disturbed to test it); production, including that its `APP_BASE_URL` is `https://pulllist.app` (staging's was
+  confirmed to be the staging site by check B5); Safari or a real phone; the full Playwright suite (not run: no
+  existing page, script or style changed, and no spec loads the new page).
+
+**For S5.** (1) Copy the token block (`BEGIN` / `END` markers in the function) byte-identically into
+`notify-customers` and `notify-arrivals` and add a grep gate; mint with the same `EMAIL_PREFS_SECRET`. (2) The
+footer link goes to the **page** (`<base>/email-preferences.html?u=<id>&s=<token>`); the `List-Unsubscribe` header
+carries the **function** address (`<SUPABASE_URL>/functions/v1/email-preferences?u=&s=&k=catalog` or `k=arrivals`)
+and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Resend's `headers` field must be confirmed to carry both
+before building. (3) Honour `email_catalog = false` for every recipient, because one-click is honoured for every
+account state. (4) Replace the arrivals email's "Turn it off on My List, next to Email My List" line (D7).
+(5) `privacy.html` still needs the picks and footer-link sentences.
+
+**For S6.** Set a different `EMAIL_PREFS_SECRET` on production first, deploy `email-preferences` with
+`--no-verify-jwt` and read it back by behaviour, and confirm the redirect check (B5's twin) lands on
+`https://pulllist.app`. The page ships with the client PR; it needs nothing but `config.js`.
+
+**Finding-ID disposition, in words: no finding ID consumed (feature build, not a defect). F184 remains the next
+free finding ID.**
