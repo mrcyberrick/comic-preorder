@@ -569,10 +569,31 @@ equal to the committed source). Also `privacy.html` (one sentence on Top Picks a
     rows and no horizontal overflow on a phone.
 - **Not verified, stated plainly:** a **real inbox** (that is the S5 gate's last step and is Rick's: whether DKIM
   signs the `List-Unsubscribe` headers, whether Gmail offers its Unsubscribe button, inbox versus spam, F152), how
-  Outlook and Gmail render the layout (Chromium only), a Reserve link followed from a real email (S2 proved the
-  sign-in and open-the-title flow itself), the no-secret path live (proved only against the fake backend), 100 or
-  more recipients, and production (secret, deploy, `APP_BASE_URL`). About 40 emails went to Resend test addresses
-  across the runs, against the shared 100-a-day limit (F148).
+  Outlook and Gmail render the layout (Chromium only), the no-secret path live (proved only against the fake
+  backend), 100 or more recipients, and production (secret, deploy, `APP_BASE_URL`). About 40 emails went to Resend
+  test addresses across the runs, against the shared 100-a-day limit (F148).
+- **Follow-up, same day (Rick's report: a Top Pick link from the Resend dashboard preview "shows the full catalog",
+  not one title).** Cause, read from data: that was one of the live gate's emails (`email-prefs-s5-staging.mjs`,
+  customer "S5 r6", covers `https://example.com/s5-cover.jpg`), whose throwaway shop the gate tears down when it
+  ends. A read of staging found none of its four pick titles and no recipient profile, so the page did exactly what
+  it is built to do for a title this shop cannot see: the full catalog and a short "That title is no longer in the
+  catalog." message. **Not a defect in the link.** The Resend dashboard keeps these emails after the data is gone, so
+  its previews of gate emails can never open a title; only an email from `email-prefs-s5-inbox.mjs` (its shop stays
+  until `--teardown`) can. The same session ran the link as the email writes it (`catalog.html?pick=<id>&ref=email-arrivals`,
+  which redirects to `/catalog?...` and keeps the query, read from the response) with a local-only harness,
+  `top-picks-email-link-verify.mjs`: **10/10, twice, against the deployed staging bytes** (a real throwaway customer,
+  a real pick from `get_top_picks()`): signed in, the title's modal opens, the address is cleaned, one `pick_opened`
+  event (source `email-arrivals`) is logged and nothing is reserved; **signed out, through the real sign-in form
+  (not an injected session), the customer lands back on that title**; a deleted title and another shop's title (read
+  as the customer: 0 rows) each leave the full catalog with the message and log nothing; an admin sees the modal and
+  logs nothing. **Gaps in my own earlier record, stated:** S2's harness only requested `/catalog?pick=` (never
+  `catalog.html?...`, the form the email carries) and faked the sign-in with an injected session. Two of this
+  harness's first-run failures were its own timing (it read the page before the handler had run, and E4b assumed one
+  event where E1 and E2b had each logged one); the product behaved the same on every run. **Still not verified:** a
+  link followed from a real mail client's inbox, and a customer on a phone through the sign-in form. **One thing a
+  customer can hit that Rick's report shows is easy to miss:** an email link to a title the NEXT catalog month's
+  import has purged (the import deletes unreserved past-month rows) gets the same quiet message, so an old email's
+  Reserve button can land on the plain catalog. Unfiled, Rick's call.
 - **Observed, not fixed, not filed:** `notify-customers` builds its email lookup from one
   `auth/v1/admin/users?per_page=1000` read. That list is every user of the project across all tenants, newest first, so
   once a project holds more than 1000 users the OLDEST customers get no catalog email and nothing says so. Staging held
