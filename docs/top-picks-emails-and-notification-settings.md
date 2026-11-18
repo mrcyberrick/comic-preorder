@@ -594,6 +594,22 @@ equal to the committed source). Also `privacy.html` (one sentence on Top Picks a
   customer can hit that Rick's report shows is easy to miss:** an email link to a title the NEXT catalog month's
   import has purged (the import deletes unreserved past-month rows) gets the same quiet message, so an old email's
   Reserve button can land on the plain catalog. Unfiled, Rick's call.
+- **Rick's real-inbox check, 2026-11-18 (`email-prefs-s5-inbox.mjs --to`, one customer, both emails through the real
+  functions and the real Resend, `with_picks` 1 each).** His report: he followed the link as the throwaway customer
+  "and it performs as expected". **That is his report; he pasted no headers**, so DKIM over the new
+  `List-Unsubscribe` headers, inbox versus spam (F152), and Gmail's Unsubscribe button are NOT confirmed, and his
+  words do not say which of the footer link, the switches and the covers he exercised. Two things his test showed:
+  (1) signed in as his own Ray & Judy's account, the throwaway shop's title is invisible (RLS), so the link shows the
+  full catalog and the message; the customer must arrive as the recipient. (2) **Signed out, the link lands on the
+  platform marketing page** (`data-front-door="apex"`, the sign-in form hidden behind a small Sign in button, the
+  return path kept). Measured read-only the same day: `rjbookstop.pulllist.app` shows the shop's sign-in form at
+  once (`data-front-door="tenant"`), `pulllist.app` shows the marketing page. Signing in from that page still lands
+  on the title (verified in a real browser as the throwaway customer, his exact link). **This is the cost of my
+  deviation from § 3.5 (links use `APP_BASE_URL`, not the shop's own address);** the existing "View catalog" and
+  "See My List" links already land the same way. **Recommended for S6, not built, Rick's call:** a paid shop's links
+  use its own address (`<slug>.pulllist.app`, the `Tier.publicUrl()` convention), a free shop's stay on the apex (S1a),
+  gated by a production-only setting because no staging shop has a provisioned address (F145), so staging can prove
+  only how the links are BUILT, not the branded landing.
 - **Observed, not fixed, not filed:** `notify-customers` builds its email lookup from one
   `auth/v1/admin/users?per_page=1000` read. That list is every user of the project across all tenants, newest first, so
   once a project holds more than 1000 users the OLDEST customers get no catalog email and nothing says so. Staging held
