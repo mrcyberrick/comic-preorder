@@ -2353,6 +2353,26 @@ status is unchecked — so whether this link currently points at
 not established by this correction, only that it is **not** a literal in
 the code.
 
+**Top Picks S5 (2026-11-18, staging only until S6) — `notify-customers` and
+`notify-arrivals`.** Both now (a) add a "Top picks for you" section (up to 4,
+read per recipient from `get_top_picks()` then `catalog`; any failure means no
+picks, never a failed email), only for an active, non-paper account with
+`email_picks` on; (b) put an "Email settings or unsubscribe" footer link and
+`List-Unsubscribe` + `List-Unsubscribe-Post` (RFC 8058) headers on **every**
+send, signed with `EMAIL_PREFS_SECRET` (the token block is byte-identical to
+`email-preferences`; the picks block is byte-identical between the two mail
+functions; compare by hash after editing either). `notify-customers` also skips
+any customer with `email_catalog = false`, whatever their account state, and
+reports `with_picks` and `skipped_catalog_off`; `notify-arrivals` reports
+`with_picks`. A secret that is missing or shorter than 32 characters means the
+email goes out exactly as it did before S5 (no picks, link or header). A free
+shop with no `tenants.location` gets its arrivals email without picks, and
+`notify-customers` still refuses without one (422). Links use `APP_BASE_URL`,
+as before. Observed, not filed: `notify-customers` builds its email lookup from
+one `auth/v1/admin/users?per_page=1000` read, which silently drops the oldest
+accounts once the project holds more than 1000 users across all tenants
+(staging held 999 on 2026-11-18).
+
 **`send-my-list`**: per-customer pull-list confirmation email. The
 session-token check at the top of the function verifies that *some*
 authenticated session exists, but does not verify that the session's

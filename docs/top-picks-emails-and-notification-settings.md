@@ -1,6 +1,6 @@
 # Top Picks: smarter picks, picks in emails, and a notification settings page
 
-**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4 DONE ON STAGING 2026-11-17 (`072d9fe`; the `email-preferences` function is deployed to staging, its secret set there only, § 6); S5-S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
+**STATUS:** IN PROGRESS — S0 DONE; S1 and S2 DONE ON STAGING 2026-11-17 (S1 SQL applied by Rick, parity harness 109/0; S2 `4a2434c`, harnesses 19/19 and 46/46, full suite 170/1/0); S1 SQL APPLIED ON PRODUCTION 2026-11-17 (two passes, § 6); S2 PROMOTED TO PRODUCTION 2026-11-17 (PR #190, merge `01b1a08`; served bytes verified, Rick's write-smoke read back from the log, § 6); S3 DONE ON STAGING 2026-11-17 (`473d98b` + `8e2da2f`, § 6); S4 DONE ON STAGING 2026-11-17 (`072d9fe`; the `email-preferences` function is deployed to staging, its secret set there only, § 6); S5 BUILT AND VERIFIED ON STAGING 2026-11-18 (`c18b865`, `7525dc3`, `33e067a`; both mail functions deployed to staging; real-inbox check still Rick's, § 6); S6 not started · planned 2026-11-17 · every decision D1-D10 and O1 answered by Rick 2026-11-17 (D6, D9, D10: "defaults"); O2 open · staging=2026-11-17 (S1, S2) · prod=2026-11-17 (S1, S2) · PR=#190 · findings=— (none consumed by this work; F183 filed the same day for the arrivals schedule, found while checking this work leaves it alone; F184 next free)
 
 Rick's request (2026-11-17): the catalog's **Top picks for you** rail should (1) surface **New #1 series
 starting this month** when there is no history to build from, and (2) never show a title the customer has
@@ -514,3 +514,90 @@ account state. (4) Replace the arrivals email's "Turn it off on My List, next to
 
 **Finding-ID disposition, in words: no finding ID consumed (feature build, not a defect). F184 remains the next
 free finding ID.**
+
+### S5, 2026-11-18: picks, the settings link and List-Unsubscribe in the two mail functions (BUILT AND VERIFIED ON STAGING, `c18b865`, `7525dc3`, `33e067a`)
+
+**Production untouched.** `notify-customers` and `notify-arrivals` are deployed to staging only (`--no-verify-jwt`,
+read by behaviour before and after: both answer with their own error body, so unchanged; deployed artifacts hashed
+equal to the committed source). Also `privacy.html` (one sentence on Top Picks and the opt-out link). No SQL, no
+`app.js`, `config.js` or other page.
+
+- **What each email now does.** A "Top picks for you" section after the email's own purpose: up to 4 picks read per
+  recipient from `get_top_picks()` and then `catalog`, each a cover (when it has one), title, publisher and price, and a
+  Reserve button to `catalog.html?pick=<id>&ref=email-catalog` (arrivals: `email-arrivals`); the caption uses the
+  rail's wording. Only for an active, non-paper account with Top Picks on (O1: pending and paused accounts keep the
+  catalog notice, without picks). An "Email settings or unsubscribe" footer link and `List-Unsubscribe` +
+  `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers go on **every** send, signed with `EMAIL_PREFS_SECRET`.
+  `notify-customers` skips anyone with `email_catalog = false`, whatever their account state (S4's decision), and
+  reports `with_picks` and `skipped_catalog_off`; `notify-arrivals` reports `with_picks` (so the cron's logged
+  response shows whether picks went out). The arrivals email's stale "Turn it off on My List" sentence is gone.
+- **Safe by construction.** The token block is byte-identical in `email-preferences`, `notify-customers` and
+  `notify-arrivals`, and the picks block in the two mail functions (the harness compares them by hash; compare again
+  after any edit). With no `EMAIL_PREFS_SECRET` (or under 32 characters) the email goes out **exactly as before S5**
+  (proved byte for byte against the pre-S5 sources), except that the arrivals email then says "Open My Account (your
+  name at the top of any page) and switch it off". Any failure reading picks sends the email without them. A free
+  shop with no `tenants.location` gets its arrivals email without picks (not skipped); `notify-customers` still
+  refuses without one (422). Pick titles and covers are escaped for text and for attributes, and a cover address that
+  is not plain http(s) is dropped.
+- **Deviation from § 3.5, mine, say if you disagree:** links use `APP_BASE_URL` (what both functions already used),
+  not the shop's own address for a paid shop. Reason: staging's founding shop is `pro` but its hostname is not
+  provisioned (F145), so a per-shop link would be dead there; production's founding shop would link to its own
+  hostname. It can be added in S6 if you want it.
+- **Verified:**
+  - `email-prefs-s5-logic.mjs` (local-only): the REAL sources against a fake Supabase and a fake Resend, with the
+    PRE-S5 sources (`b00bbfc`) run in the same worlds as a regression anchor. notify-customers 22/22, notify-arrivals
+    15/15, the shared blocks identical, the pre-S5 sources shown to FAIL the new checks, and 21 deliberately broken
+    copies each turning its named checks red (catalog switch ignored, picks to pending accounts, picks switch ignored,
+    no footer link, no header, titles not escaped, any cover scheme allowed, short secret accepted, more than four
+    picks, a link minted for the wrong customer, a picks failure stopping the email, picks counted wrongly, no address
+    rule, no address line, stale sentence kept, dry run reading picks).
+  - `email-prefs-s5-staging.mjs` (local-only): the DEPLOYED functions, the real database, the real `get_top_picks()`
+    and the **real Resend API**, for a throwaway free shop whose customers are Resend's own `delivered+...@resend.dev`
+    test addresses (nothing reaches a real inbox). **14/14, twice** (before and after the layout fix below): the real
+    RPC returns picks and the columns the email reads carry data; the catalog email goes to the five customers who want
+    it (the one with the catalog email off is skipped), none rejected by Resend, picks in exactly two; the arrivals
+    email goes to four, a notice recorded for each and for no one else, picks in three; a second run sends nothing; a
+    free shop with no address still gets all four emails without picks; `notify-customers` still refuses it (422); a
+    paid shop gets picks again; the one-click address the email carries turns the arrivals email off for that
+    customer and the next run skips them. Teardown re-read: none left. **Timing measured:** 0.7 to 1.0 s per recipient
+    in 4 to 5 recipient runs, picks included, so 90 recipients (the arrivals cap, and Resend's own 100 a day) is
+    roughly 60 to 90 s; I believe the Edge limit on this plan is about 150 s but did not re-check it.
+  - **Rendered, and looked at:** the real email HTML in Chromium at 760 and 390 px, six variants (catalog and
+    arrivals, free and paid, with and without picks), real cover art. **A defect found this way, not by any check:** a
+    pick with no cover had two table cells where the others have three, so its text column collapsed and its Reserve
+    button sat in a different place. Fixed (`33e067a`, in the shared block, both files), and a re-render shows aligned
+    rows and no horizontal overflow on a phone.
+- **Not verified, stated plainly:** a **real inbox** (that is the S5 gate's last step and is Rick's: whether DKIM
+  signs the `List-Unsubscribe` headers, whether Gmail offers its Unsubscribe button, inbox versus spam, F152), how
+  Outlook and Gmail render the layout (Chromium only), a Reserve link followed from a real email (S2 proved the
+  sign-in and open-the-title flow itself), the no-secret path live (proved only against the fake backend), 100 or
+  more recipients, and production (secret, deploy, `APP_BASE_URL`). About 40 emails went to Resend test addresses
+  across the runs, against the shared 100-a-day limit (F148).
+- **Observed, not fixed, not filed:** `notify-customers` builds its email lookup from one
+  `auth/v1/admin/users?per_page=1000` read. That list is every user of the project across all tenants, newest first, so
+  once a project holds more than 1000 users the OLDEST customers get no catalog email and nothing says so. Staging held
+  **999** users on 2026-11-18. The seventh instance of the unbounded-read class (F82, F113, F139, F140, F156, F162);
+  `notify-arrivals` looks each user up individually and is not affected. Your call whether to file it.
+
+**Rick's real-inbox check (headers only).** `node email-prefs-s5-inbox.mjs --to you+s5@example.com` (use an address
+that is NOT already a staging account; a plus address works with most providers; add `--paid` to see the paid layout)
+creates a throwaway shop with one customer at that address and sends both emails through the real functions. It
+prints a sign-in (that customer's address and a random password) so the Reserve links can be followed.
+`node email-prefs-s5-inbox.mjs --teardown` removes everything. Check: (1) both emails arrive, and where (inbox or
+spam); (2) in "Show original": `From`, `Subject`, `List-Unsubscribe`, `List-Unsubscribe-Post` and the `dkim=`, `spf=`,
+`dmarc=` results, pasting **headers only** with any link replaced by `[link]` (the settings link carries a token that
+never expires); (3) the picks section and the footer link; (4) Reserve opens the title after signing in; (5) the
+footer link opens the settings page and a switch saves; (6) if your mail client shows an Unsubscribe button, that it
+turns that one email off.
+
+**For S6.** Production needs, in this order: a DIFFERENT `EMAIL_PREFS_SECRET`; `APP_BASE_URL` confirmed to be
+`https://pulllist.app` (the S4 redirect check lands on it); the client PR (S3 My Account, the nav greeting link, the
+`email-preferences.html` page, `privacy.html`; `app.js` carries `merge=ours`, so assert its merge result, and the
+nav changed on every page, so run a write-smoke); then `email-preferences`, `notify-customers` and `notify-arrivals`
+deployed `--no-verify-jwt` (read the two existing ones' live setting first). Two timing facts: the arrivals cron fires
+Tuesdays 15:00 UTC, so deploying before the 2026-11-24 run means that run (F183's first unattended one) is also the
+first send with picks, and the December catalog import will be the first catalog email with them. `privacy.html`'s
+effective date (October 29, 2026) is left unchanged on purpose; it should move on the day this reaches production.
+
+**Finding-ID disposition, in words: no finding ID consumed (feature build, not a defect). F184 remains the next free
+finding ID.**
