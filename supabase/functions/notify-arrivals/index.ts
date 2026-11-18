@@ -28,6 +28,9 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, RESEND_API_KEY
  *   ARRIVALS_CRON_SECRET  ← the cron job's own header value (docs/sql/..-cron.sql)
  *   APP_BASE_URL          ← optional, defaults to https://pulllist.app
+ *   EMAIL_PREFS_SECRET    ← signs the opt-out links (Top Picks S5); missing or shorter than 32
+ *                           characters means the email goes out WITHOUT picks, settings link or
+ *                           List-Unsubscribe header, never with a weaker link
  *
  * verify_jwt: deploy --no-verify-jwt, same reasoning as notify-customers — the cron caller
  * presents no user JWT at all, only the secret header.
@@ -89,6 +92,173 @@ async function fetchTenantIdentity(
   }
 }
 // ── F72 G-F shared tenant-identity block — END ───────────────────────────────
+
+// ── Top Picks S5: opt-out links and promotional picks ────────────────────────
+// A shorter secret means no links and no picks, never a weaker token: the email then goes out
+// exactly as it did before S5 (no picks, no settings link, no List-Unsubscribe header). Picks are
+// promotional, so they are never sent without the opt-out they point to.
+const PREFS_SECRET   = Deno.env.get('EMAIL_PREFS_SECRET') ?? ''
+const PREFS_LINKS_OK = PREFS_SECRET.length >= 32
+
+// ── email-preferences token block — BEGIN ────────────────────────────────────
+// notify-customers and notify-arrivals (S5) mint links with the SAME block; keep the copies
+// byte-identical and gate on it (docs/top-picks-emails-and-notification-settings.md § 3.4).
+// Token = lowercase hex of HMAC-SHA256(secret, "v1|" + lowercase user id). Verification is
+// constant-time (crypto.subtle.verify), and a malformed token is refused before any crypto.
+const PREFS_UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const PREFS_TOKEN_RE = /^[0-9a-f]{64}$/
+
+async function prefsKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
+}
+
+async function mintPrefsToken(secret: string, userId: string): Promise<string> {
+  const sig = await crypto.subtle.sign('HMAC', await prefsKey(secret),
+    new TextEncoder().encode('v1|' + userId.toLowerCase()))
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function verifyPrefsToken(secret: string, userId: string, token: string): Promise<boolean> {
+  if (!PREFS_UUID_RE.test(userId) || !PREFS_TOKEN_RE.test(token)) return false
+  const bytes = new Uint8Array(32)
+  for (let i = 0; i < 32; i++) bytes[i] = parseInt(token.slice(i * 2, i * 2 + 2), 16)
+  return crypto.subtle.verify('HMAC', await prefsKey(secret), bytes,
+    new TextEncoder().encode('v1|' + userId))
+}
+// ── email-preferences token block — END ──────────────────────────────────────
+
+// The page link goes in the footer; the function address goes in List-Unsubscribe (RFC 8058: a
+// mail client POSTs "List-Unsubscribe=One-Click" to it, and a browser that follows it is redirected
+// to the page). Both carry the same signed token, which authorizes this customer's three email
+// switches and nothing else.
+async function prefsLinksFor(supabaseUrl: string, userId: string): Promise<{ page: string; unsubscribe: string }> {
+  const s = await mintPrefsToken(PREFS_SECRET, userId)
+  return {
+    page: `${APP_BASE_URL}/email-preferences.html?u=${userId}&s=${s}`,
+    unsubscribe: `${supabaseUrl}/functions/v1/email-preferences?u=${userId}&s=${s}&k=arrivals`,
+  }
+}
+
+// ── Top picks email block — BEGIN ────────────────────────────────────────────
+// Byte-identical in notify-customers and notify-arrivals; a grep gate checks the two copies
+// match (Top Picks plan S5, docs/top-picks-emails-and-notification-settings.md § 3.5). The pick
+// RULE lives in the database (get_top_picks); this block only fetches the rows and renders them.
+// Every failure here means "no picks": an email's own purpose never depends on this block.
+const PICKS_LIMIT = 4
+const PICKS_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type EmailPick = {
+  id: string; tier: string; title: string; series_name: string | null
+  publisher: string | null; cover_url: string | null; price_usd: number | string | null
+}
+
+// escapeHtml leaves quotes alone, which is fine between tags and wrong inside an attribute.
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+// An address from the database for an <img src>: http(s) only, safe inside a quoted attribute.
+function safeHttpUrl(u: unknown): string {
+  if (typeof u !== 'string') return ''
+  const t = u.trim()
+  return /^https?:\/\/[^\s"'<>]+$/i.test(t) ? escapeAttr(t) : ''
+}
+
+function formatPrice(p: unknown): string {
+  const n = typeof p === 'number' ? p : (typeof p === 'string' && p.trim() !== '' ? Number(p) : NaN)
+  return Number.isFinite(n) && n > 0 ? '$' + n.toFixed(2) : ''
+}
+
+async function fetchPicks(supabaseUrl: string, serviceKey: string, userId: string): Promise<EmailPick[]> {
+  try {
+    const h = { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, 'Content-Type': 'application/json', Accept: 'application/json' }
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/get_top_picks`, {
+      method: 'POST', headers: h, body: JSON.stringify({ p_user_id: userId, p_limit: PICKS_LIMIT }),
+    })
+    if (!res.ok) return []
+    const ranked = await res.json()
+    if (!Array.isArray(ranked)) return []
+    const top = ranked
+      .filter((r: { pick_id?: unknown }) => typeof r.pick_id === 'string' && PICKS_UUID_RE.test(r.pick_id))
+      .sort((a: { pick_rank: number }, b: { pick_rank: number }) => a.pick_rank - b.pick_rank)
+      .slice(0, PICKS_LIMIT)
+    if (!top.length) return []
+    const catRes = await fetch(
+      `${supabaseUrl}/rest/v1/catalog?id=in.(${top.map((r: { pick_id: string }) => r.pick_id).join(',')})` +
+        `&select=id,title,series_name,publisher,cover_url,price_usd`,
+      { headers: h },
+    )
+    if (!catRes.ok) return []
+    const rows = await catRes.json()
+    if (!Array.isArray(rows)) return []
+    const byId = new Map<string, Record<string, unknown>>(rows.map((r: { id: string }) => [r.id, r]))
+    const picks: EmailPick[] = []
+    for (const r of top) {
+      const c = byId.get(r.pick_id)
+      if (!c || typeof c.title !== 'string' || !c.title.trim()) continue
+      picks.push({
+        id: r.pick_id, tier: String(r.pick_tier ?? ''), title: c.title.trim(),
+        series_name: (c.series_name as string | null) ?? null, publisher: (c.publisher as string | null) ?? null,
+        cover_url: (c.cover_url as string | null) ?? null, price_usd: (c.price_usd as number | string | null) ?? null,
+      })
+    }
+    return picks
+  } catch (err) {
+    console.warn('fetchPicks: failed for one customer, sending without picks', String(err))
+    return []
+  }
+}
+
+// The same wording as the catalog rail (catalog.html), so the email and the page describe picks alike.
+function picksCaption(picks: EmailPick[]): string {
+  const hasPersonal = picks.some(p => p.tier === 'personal')
+  const hasPopular  = picks.some(p => p.tier === 'popular')
+  const hasNew1     = picks.some(p => p.tier === 'new1')
+  const history = hasPersonal && hasPopular ? 'Based on your reservations and the store\u2019s most popular reservations'
+    : hasPersonal ? 'Based on your reservations'
+    : hasPopular ? 'The store\u2019s most popular reservations' : ''
+  return !hasNew1 ? history : history ? history + ', plus New #1s starting this month' : 'New #1 series starting this month'
+}
+
+// Table layout, inline styles: mail clients ignore most CSS. Many clients block remote images by
+// default, so the title and price carry each card without the cover.
+function buildPicksHtml(picks: EmailPick[], baseUrl: string, ref: string): string {
+  if (!picks.length) return ''
+  const rows = picks.map(p => {
+    const link = escapeAttr(`${baseUrl}/catalog.html?pick=${encodeURIComponent(p.id)}&ref=${ref}`)
+    const cover = safeHttpUrl(p.cover_url)
+    const price = formatPrice(p.price_usd)
+    const sub = [p.publisher ? escapeHtml(p.publisher) : '', price].filter(Boolean).join(' &middot; ')
+    return `
+      <tr style="border-top:1px solid #2e2e2e">
+        ${cover ? `<td width="56" valign="top" style="padding:10px 12px 10px 0"><a href="${link}"><img src="${cover}" alt="${escapeAttr(p.title)}" width="56" style="display:block;width:56px;height:auto;border:0;border-radius:3px;background:#222"></a></td>` : ''}
+        <td valign="top" style="padding:10px 0;font-size:0.84rem;color:#f0ece4">
+          <div style="font-weight:600">${escapeHtml(p.title)}</div>
+          ${sub ? `<div style="font-size:0.74rem;color:#9a9390;margin-top:2px">${sub}</div>` : ''}
+        </td>
+        <td valign="middle" align="right" style="padding:10px 0 10px 12px;white-space:nowrap">
+          <a href="${link}" style="display:inline-block;background:#e63946;color:#fff;padding:7px 14px;border-radius:4px;text-decoration:none;font-weight:700;font-size:0.76rem">Reserve</a>
+        </td>
+      </tr>`
+  }).join('')
+  return `
+    <div style="margin-top:28px;padding-top:18px;border-top:1px solid #2e2e2e">
+      <div style="font-size:0.95rem;font-weight:700;color:#fff">Top picks for you</div>
+      <div style="font-size:0.74rem;color:#9a9390;margin:2px 0 10px">${escapeHtml(picksCaption(picks))}</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif">${rows}
+      </table>
+    </div>`
+}
+
+// Runs fn over items, `size` at a time (the picks are read ahead of the send loop).
+async function inBatches<T>(items: T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += size) await Promise.all(items.slice(i, i + size).map(fn))
+}
+// ── Top picks email block — END ──────────────────────────────────────────────
+function settingsLinkHtml(pageUrl: string): string {
+  return '<br><a href="' + escapeAttr(pageUrl) + '" style="color:#888;text-decoration:underline">Email settings or unsubscribe</a>'
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -183,7 +353,7 @@ Deno.serve(async (req) => {
 
     type Plan = {
       tenant: { id: string; slug: string }
-      recipients: Array<{ user_id: string; name: string; email?: string; available: DigestRow[]; unavailable: DigestRow[] }>
+      recipients: Array<{ user_id: string; name: string; email?: string; wantsPicks: boolean; available: DigestRow[]; unavailable: DigestRow[] }>
       skipped?: string
     }
     const plans: Plan[] = []
@@ -222,10 +392,10 @@ Deno.serve(async (req) => {
       // paged batch so a large shop never truncates at PostgREST's cap.
       const profilesRes = await fetch(
         `${SUPABASE_URL}/rest/v1/user_profiles?tenant_id=eq.${tenant.id}&id=in.(${userIds.join(',')})` +
-          `&select=id,full_name,is_paper,status,email_arrivals`,
+          `&select=id,full_name,is_paper,status,email_arrivals,email_picks`,
         { headers: svc },
       )
-      const profiles: Array<{ id: string; full_name: string; is_paper: boolean; status: string; email_arrivals: boolean }> =
+      const profiles: Array<{ id: string; full_name: string; is_paper: boolean; status: string; email_arrivals: boolean; email_picks: boolean | null }> =
         await profilesRes.json()
       const eligible = new Map(
         profiles
@@ -263,6 +433,8 @@ Deno.serve(async (req) => {
         .map(([user_id, rows]) => ({
           user_id,
           name: eligible.get(user_id)?.full_name || 'Valued Customer',
+          // Picks are promotional: only for a customer who has them on (every recipient here is already active and non-paper).
+          wantsPicks: eligible.get(user_id)?.email_picks !== false,
           ...rows,
         }))
 
@@ -303,6 +475,17 @@ Deno.serve(async (req) => {
       if (!plan.recipients.length) continue
       const identity = await fetchTenantIdentity(SUPABASE_URL, SUPABASE_SERVICE, plan.tenant.id)
 
+      // A send that includes picks must carry the shop's postal address (the rule notify-customers
+      // follows, Q13): a paid shop's contact line has it, a free shop needs tenants.location. A free
+      // shop with none gets this email WITHOUT picks rather than not at all. And no secret, no picks.
+      const picksEnabled = PREFS_LINKS_OK && (identity.isPaid || !!identity.location)
+      const picksByUser = new Map<string, EmailPick[]>()
+      if (picksEnabled) {
+        await inBatches(plan.recipients.filter(r => r.wantsPicks), 4, async (r) => {
+          picksByUser.set(r.user_id, await fetchPicks(SUPABASE_URL!, SUPABASE_SERVICE!, r.user_id))
+        })
+      }
+
       for (const r of plan.recipients) {
         try {
           const authUserRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${r.user_id}`, { headers: svc })
@@ -310,7 +493,15 @@ Deno.serve(async (req) => {
           const email = authUser?.email
           if (!email) { failures.push({ tenant: plan.tenant.slug, user_id: r.user_id, error: 'no email on auth user' }); continue }
 
-          const html = buildArrivalsEmail(r.name, r.available, r.unavailable, identity)
+          // Signed links on EVERY send, picks or not: they are how anyone turns this email off.
+          const links = PREFS_LINKS_OK ? await prefsLinksFor(SUPABASE_URL!, r.user_id) : null
+          const picks = picksByUser.get(r.user_id) ?? []
+          const html = buildArrivalsEmail(r.name, r.available, r.unavailable, identity, {
+            picksHtml: buildPicksHtml(picks, APP_BASE_URL, 'email-arrivals'),
+            settingsLine: links ? settingsLinkHtml(links.page) : '',
+            noLinks: !links,
+            freeLocation: picks.length && !identity.isPaid ? identity.location : '',
+          })
           const mailRes = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -319,6 +510,7 @@ Deno.serve(async (req) => {
               to: email,
               subject: `Your books this week — ${identity.storeName}`,
               html,
+              ...(links ? { headers: { 'List-Unsubscribe': `<${links.unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}),
             }),
           })
           if (!mailRes.ok) {
@@ -373,6 +565,7 @@ function buildArrivalsEmail(
   available: DigestRow[],
   unavailable: DigestRow[],
   identity: TenantIdentity,
+  opts: { picksHtml: string; settingsLine: string; noLinks: boolean; freeLocation: string },
 ): string {
   const safeStore = escapeHtml(identity.storeName)
   const totalQty = available.reduce((s, r) => s + (r.quantity || 1), 0)
@@ -431,6 +624,24 @@ function buildArrivalsEmail(
       ${safeStore} &middot; ${PAID_CONTACT_HTML}
     </p>
 `
+    // A free shop's email carries no contact line unless it includes picks, which must carry a
+    // postal address (Q13); then it is the shop's own tenants.location.
+    : opts.freeLocation
+      ? `    <p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">
+      Questions? Stop by the shop.<br>
+      ${safeStore} &middot; ${escapeHtml(opts.freeLocation)}
+    </p>
+`
+      : ''
+
+  // With a signed settings link the footer carries it. Without one (no EMAIL_PREFS_SECRET) the email
+  // keeps a plain sentence that is still true: the switches live in My Account, reached from the
+  // name at the top of any page.
+  const optOutParagraph = opts.noLinks
+    ? `    <p style="margin-top:20px;font-size:0.72rem;color:#666">
+      Don't want this weekly note? Open My Account (your name at the top of any page) and switch it off.
+    </p>
+`
     : ''
 
   return `
@@ -456,14 +667,11 @@ function buildArrivalsEmail(
               letter-spacing:0.03em">
       See My List &rarr;
     </a>
-
-    <p style="margin-top:20px;font-size:0.72rem;color:#666">
-      Don't want this weekly note? Turn it off on My List, next to Email My List.
-    </p>
-${contactParagraph}  </div>
+${opts.picksHtml}
+${optOutParagraph}${contactParagraph}  </div>
 
   <div style="background:#111;padding:16px 32px;font-size:0.72rem;color:#555;border-top:1px solid #222">
-    ${safeStore} &middot; Sent via the PullList pre-order system
+    ${safeStore} &middot; Sent via the PullList pre-order system${opts.settingsLine}
   </div>
 
 </div>`
