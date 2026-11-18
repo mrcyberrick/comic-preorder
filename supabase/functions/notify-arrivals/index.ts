@@ -469,6 +469,7 @@ Deno.serve(async (req) => {
 
     // ── Send ──
     const sent: Array<{ tenant: string; user_id: string }> = []
+    let withPicks = 0
     const failures: Array<{ tenant: string; user_id: string; error: string }> = []
 
     for (const plan of plans) {
@@ -529,18 +530,20 @@ Deno.serve(async (req) => {
             console.error('notify-arrivals: arrival_notices insert failed', await noticeRes.text())
           }
           sent.push({ tenant: plan.tenant.slug, user_id: r.user_id })
+          if (picks.length) withPicks++
         } catch (err) {
           failures.push({ tenant: plan.tenant.slug, user_id: r.user_id, error: String(err) })
         }
       }
     }
 
-    console.log(`notify-arrivals: ${sent.length} sent, ${failures.length} failed, week ${weekStart}..${weekEnd}` +
+    console.log(`notify-arrivals: ${sent.length} sent (${withPicks} with picks), ${failures.length} failed, week ${weekStart}..${weekEnd}` +
       (actingAdminId ? ` (manual, admin ${actingAdminId}, tenant ${scopeTenantId})` : ' (cron, all tenants)'))
 
     return json({
       week: { start: weekStart, end: weekEnd },
       sent: sent.length,
+      with_picks: withPicks,
       failed: failures.length,
       skipped_tenants: plans.filter(p => p.skipped && !p.recipients.length).map(p => ({ tenant: p.tenant.slug, reason: p.skipped })),
       failures,
