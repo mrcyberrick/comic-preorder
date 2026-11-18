@@ -28,6 +28,9 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, RESEND_API_KEY
  *   ARRIVALS_CRON_SECRET  ← the cron job's own header value (docs/sql/..-cron.sql)
  *   APP_BASE_URL          ← optional, defaults to https://pulllist.app
+ *   EMAIL_SHOP_LINKS      ← optional; "off" keeps every app link on APP_BASE_URL (otherwise a paid
+ *                           shop's links use <slug>.pulllist.app, and only where APP_BASE_URL is the
+ *                           production apex)
  *   EMAIL_PREFS_SECRET    ← signs the opt-out links (Top Picks S5); missing or shorter than 32
  *                           characters means the email goes out WITHOUT picks, settings link or
  *                           List-Unsubscribe header, never with a weaker link
@@ -99,6 +102,27 @@ async function fetchTenantIdentity(
 // promotional, so they are never sent without the opt-out they point to.
 const PREFS_SECRET   = Deno.env.get('EMAIL_PREFS_SECRET') ?? ''
 const PREFS_LINKS_OK = PREFS_SECRET.length >= 32
+
+// ── Top Picks S5: where a customer's links point — BEGIN ─────────────────────
+// A signed-out customer who follows a link lands on whatever that address shows: the shared apex shows
+// the platform's marketing page (the sign-in sits behind a button), a shop's own address shows that
+// shop's sign-in at once. So a PAID shop's app links use its own address, <slug>.pulllist.app, which is
+// provisioned per shop (F145, tenant-onboarding-runbook Step 3, required for plan = 'pro'). A free shop
+// stays on the shared apex (S1a). Where APP_BASE_URL is not the production apex (staging, a preview) no
+// shop has such an address, so nothing changes there. EMAIL_SHOP_LINKS=off turns it off without a deploy.
+const APEX_HOST      = 'pulllist.app'
+const SHOP_LINKS_ON  = (Deno.env.get('EMAIL_SHOP_LINKS') ?? 'on').toLowerCase() !== 'off'
+function appHost(): string {
+  try { return new URL(APP_BASE_URL).hostname.toLowerCase() } catch { return '' }
+}
+function linkBaseFor(isPaid: boolean, slug: string | null | undefined): string {
+  if (SHOP_LINKS_ON && isPaid && appHost() === APEX_HOST && typeof slug === 'string'
+      && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) {
+    return `https://${slug}.${APEX_HOST}`
+  }
+  return APP_BASE_URL
+}
+// ── Top Picks S5: where a customer's links point — END ───────────────────────
 
 // ── email-preferences token block — BEGIN ────────────────────────────────────
 // notify-customers and notify-arrivals (S5) mint links with the SAME block; keep the copies
@@ -475,6 +499,8 @@ Deno.serve(async (req) => {
     for (const plan of plans) {
       if (!plan.recipients.length) continue
       const identity = await fetchTenantIdentity(SUPABASE_URL, SUPABASE_SERVICE, plan.tenant.id)
+      // Where this shop's app links point: a paid shop's own address on production, else APP_BASE_URL.
+      const linkBase = linkBaseFor(identity.isPaid, plan.tenant.slug)
 
       // A send that includes picks must carry the shop's postal address (the rule notify-customers
       // follows, Q13): a paid shop's contact line has it, a free shop needs tenants.location. A free
@@ -498,7 +524,8 @@ Deno.serve(async (req) => {
           const links = PREFS_LINKS_OK ? await prefsLinksFor(SUPABASE_URL!, r.user_id) : null
           const picks = picksByUser.get(r.user_id) ?? []
           const html = buildArrivalsEmail(r.name, r.available, r.unavailable, identity, {
-            picksHtml: buildPicksHtml(picks, APP_BASE_URL, 'email-arrivals'),
+            picksHtml: buildPicksHtml(picks, linkBase, 'email-arrivals'),
+            linkBase,
             settingsLine: links ? settingsLinkHtml(links.page) : '',
             noLinks: !links,
             freeLocation: picks.length && !identity.isPaid ? identity.location : '',
@@ -568,7 +595,7 @@ function buildArrivalsEmail(
   available: DigestRow[],
   unavailable: DigestRow[],
   identity: TenantIdentity,
-  opts: { picksHtml: string; settingsLine: string; noLinks: boolean; freeLocation: string },
+  opts: { picksHtml: string; linkBase: string; settingsLine: string; noLinks: boolean; freeLocation: string },
 ): string {
   const safeStore = escapeHtml(identity.storeName)
   const totalQty = available.reduce((s, r) => s + (r.quantity || 1), 0)
@@ -664,7 +691,7 @@ function buildArrivalsEmail(
     ${table}
     ${notArrivingHtml}
 
-    <a href="${APP_BASE_URL}/mylist.html"
+    <a href="${opts.linkBase}/mylist.html"
        style="display:inline-block;margin-top:24px;background:#e63946;color:white;padding:12px 26px;
               border-radius:4px;text-decoration:none;font-weight:700;font-size:0.85rem;
               letter-spacing:0.03em">

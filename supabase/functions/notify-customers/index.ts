@@ -62,6 +62,49 @@ const APP_BASE_URL = Deno.env.get('APP_BASE_URL') ?? 'https://pulllist.app'
 const PREFS_SECRET   = Deno.env.get('EMAIL_PREFS_SECRET') ?? ''
 const PREFS_LINKS_OK = PREFS_SECRET.length >= 32
 
+// ── Top Picks S5: where a customer's links point — BEGIN ─────────────────────
+// A signed-out customer who follows a link lands on whatever that address shows: the shared apex shows
+// the platform's marketing page (the sign-in sits behind a button), a shop's own address shows that
+// shop's sign-in at once. So a PAID shop's app links use its own address, <slug>.pulllist.app, which is
+// provisioned per shop (F145, tenant-onboarding-runbook Step 3, required for plan = 'pro'). A free shop
+// stays on the shared apex (S1a). Where APP_BASE_URL is not the production apex (staging, a preview) no
+// shop has such an address, so nothing changes there. EMAIL_SHOP_LINKS=off turns it off without a deploy.
+const APEX_HOST      = 'pulllist.app'
+const SHOP_LINKS_ON  = (Deno.env.get('EMAIL_SHOP_LINKS') ?? 'on').toLowerCase() !== 'off'
+function appHost(): string {
+  try { return new URL(APP_BASE_URL).hostname.toLowerCase() } catch { return '' }
+}
+function linkBaseFor(isPaid: boolean, slug: string | null | undefined): string {
+  if (SHOP_LINKS_ON && isPaid && appHost() === APEX_HOST && typeof slug === 'string'
+      && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) {
+    return `https://${slug}.${APEX_HOST}`
+  }
+  return APP_BASE_URL
+}
+// ── Top Picks S5: where a customer's links point — END ───────────────────────
+
+// The shop's slug, read only for linkBaseFor. Any failure means the shared address.
+async function fetchTenantSlug(
+  supabaseUrl: string | undefined,
+  serviceKey: string | undefined,
+  tenantId: string | null | undefined,
+): Promise<string | null> {
+  if (!supabaseUrl || !serviceKey || !tenantId) return null
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/tenants?id=eq.${encodeURIComponent(tenantId)}&select=slug`,
+      { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, Accept: 'application/json' } },
+    )
+    if (!res.ok) return null
+    const rows = await res.json()
+    const slug = Array.isArray(rows) ? rows[0]?.slug : undefined
+    return typeof slug === 'string' ? slug : null
+  } catch (err) {
+    console.warn('fetchTenantSlug: lookup failed, links stay on the shared address', String(err))
+    return null
+  }
+}
+
 // ── email-preferences token block — BEGIN ────────────────────────────────────
 // notify-customers and notify-arrivals (S5) mint links with the SAME block; keep the copies
 // byte-identical and gate on it (docs/top-picks-emails-and-notification-settings.md § 3.4).
@@ -429,6 +472,9 @@ Deno.serve(async (req) => {
           + 'Please log in and reserve your titles before the order deadline.'
           + '</p>'
 
+    // Where this shop's app links point: a paid shop's own address on production, else APP_BASE_URL.
+    const linkBase = linkBaseFor(tenant.isPaid, tenant.isPaid ? await fetchTenantSlug(SUPABASE_URL, SUPABASE_SERVICE, callerTenantId) : null)
+
     const buildHtml = (picksHtml: string, settingsLine: string) => '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#1a1a1a;color:#f0f0f0;border-radius:8px;overflow:hidden">'
       + '<div style="background:#111;padding:24px 32px;border-bottom:3px solid #e63946">'
       + '<div style="font-size:1.6rem;font-weight:900;letter-spacing:0.08em">PULL<span style="color:#e63946">LIST</span></div>'
@@ -438,7 +484,7 @@ Deno.serve(async (req) => {
       + '<h2 style="margin:0 0 16px;font-size:1.1rem;color:#fff">The ' + monthLabel + ' catalog is now live</h2>'
       + '<p style="color:#ccc;line-height:1.7;margin:0 0 16px">The new pull list is ready &mdash; browse this month\'s Lunar and PRH titles and reserve the ones you want.</p>'
       + deadlinePara
-      + `<a href="${APP_BASE_URL}/catalog.html" style="display:inline-block;background:#e63946;color:white;padding:13px 28px;border-radius:4px;text-decoration:none;font-weight:700;font-size:0.9rem;letter-spacing:0.03em">Browse the Catalog &rarr;</a>`
+      + `<a href="${linkBase}/catalog.html" style="display:inline-block;background:#e63946;color:white;padding:13px 28px;border-radius:4px;text-decoration:none;font-weight:700;font-size:0.9rem;letter-spacing:0.03em">Browse the Catalog &rarr;</a>`
       + picksHtml
       + '<p style="margin-top:24px;font-size:0.78rem;color:#666;line-height:1.6">'
       + contactLine
@@ -458,7 +504,7 @@ Deno.serve(async (req) => {
       const links = PREFS_LINKS_OK ? await prefsLinksFor(SUPABASE_URL!, recipient.id) : null
       const picks = picksByUser.get(recipient.id) ?? []
       const html = buildHtml(
-        buildPicksHtml(picks, APP_BASE_URL, 'email-catalog'),
+        buildPicksHtml(picks, linkBase, 'email-catalog'),
         links ? settingsLinkHtml(links.page) : '',
       )
 
