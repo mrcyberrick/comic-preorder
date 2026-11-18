@@ -2298,6 +2298,7 @@ Production's real post-cutover send authenticated fully clean but surfaced
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
 | `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
+| `email-preferences` | `email-preferences.html` (static page, no sign-in) and a mail client's RFC 8058 one-click POST; added 2026-11-17 (Top Picks S4), **deployed to staging only until S6**, `--no-verify-jwt` | HMAC-SHA256 token over `v1\|<user_id>` with `EMAIL_PREFS_SECRET`; every token failure is one identical 403; a missing or short secret fails closed (503) | no — the tenant comes from the customer's own profile; it reads and writes only `user_profiles.email_catalog`, `email_arrivals`, `email_picks` (an explicit allowlist) and the shop's `display_name` |
 
 `invite-customer` and `create-paper-customer` resolve `tenant_id` from the
 calling admin's own profile (fixed 2026-05-10; F34) — new users created by
@@ -2328,6 +2329,8 @@ Set in Supabase → Edge Functions → Secrets:
 | ~~`MAILERLITE_WEBHOOK_SECRET`~~ | **DEAD as of 2026-08-30** — the webhook path it belonged to was removed from `register-customer`. Nothing reads it, nor `tenants.settings->>'mailerlite_webhook_secret'`. **UNSET on both projects 2026-10-15** (Rick's report; the secrets lists were not re-read by the agent). |
 | `FOUNDING_TENANT_ID` | notify-customers, send-my-list, create-paper-customer, invite-customer, register-customer (retained for diagnostics on register-customer post-5.4-S2) |
 | `TENANT_PROVISION_SECRET` | register-tenant (operator gate, 5.4 S3) — never shared with tenant admins |
+| `EMAIL_PREFS_SECRET` | email-preferences (Top Picks S4, 2026-11-17), and from S5 notify-customers and notify-arrivals (they mint the links; the token block is copied byte-identically). At least 32 characters; a missing or shorter one makes the function answer 503 instead of accepting any token. **A different value on each project.** Staging: set 2026-11-17 (name confirmed by `supabase secrets list`; the value is saved as `EMAIL_PREFS_SECRET_STAGING` in the scripts `.env`). **Production: not set yet (S6).** Changing it invalidates every link already sent, so do not rotate it casually |
+| `EMAIL_SHOP_LINKS` | notify-customers and notify-arrivals (added 2026-11-18). Optional; **`off`** keeps every app link in the two emails on `APP_BASE_URL`. Unset means on, which only has an effect where `APP_BASE_URL` is the production apex (`pulllist.app`) and the shop is paid. The off switch needs no deploy |
 
 `FOUNDING_TENANT_ID` was added during Phase 2 to enable tenant-aware
 filtering and writes from the Edge Functions. The web app reads tenant
@@ -2350,6 +2353,38 @@ status is unchecked — so whether this link currently points at
 `mrcyberrick.us`, `pulllist.app`, or something else on either project is
 not established by this correction, only that it is **not** a literal in
 the code.
+
+**Top Picks S5 (2026-11-18, staging only until S6) — `notify-customers` and
+`notify-arrivals`.** Both now (a) add a "Top picks for you" section (up to 4,
+read per recipient from `get_top_picks()` then `catalog`; any failure means no
+picks, never a failed email), only for an active, non-paper account with
+`email_picks` on; (b) put an "Email settings or unsubscribe" footer link and
+`List-Unsubscribe` + `List-Unsubscribe-Post` (RFC 8058) headers on **every**
+send, signed with `EMAIL_PREFS_SECRET` (the token block is byte-identical to
+`email-preferences`; the picks block is byte-identical between the two mail
+functions; compare by hash after editing either). `notify-customers` also skips
+any customer with `email_catalog = false`, whatever their account state, and
+reports `with_picks` and `skipped_catalog_off`; `notify-arrivals` reports
+`with_picks`. A secret that is missing or shorter than 32 characters means the
+email goes out exactly as it did before S5 (no picks, link or header). A free
+shop with no `tenants.location` gets its arrivals email without picks, and
+`notify-customers` still refuses without one (422). **Where the app links
+point (added 2026-11-18, `baedd98`; byte-identical block in both functions):**
+the "Browse the Catalog" / "See My List" buttons and every pick link use the
+shop's own address, `https://<slug>.pulllist.app`, for a **paid** shop, but only
+where `APP_BASE_URL`'s host is exactly `pulllist.app` (production) and the slug is
+a valid DNS label; a free shop, staging and any invalid slug keep `APP_BASE_URL`.
+Reason: a signed-out customer who follows a link to the shared apex lands on the
+platform's marketing page (the sign-in sits behind a button), while a shop's own
+address shows that shop's sign-in at once (measured read-only on production
+2026-11-18). The settings-page link and the List-Unsubscribe address are not
+changed. Secret `EMAIL_SHOP_LINKS=off` reverts to `APP_BASE_URL` with no deploy.
+Production's `APP_BASE_URL` was confirmed to equal `https://pulllist.app` on
+2026-11-18 by comparing the CLI's secret digest with the SHA-256 of that string
+(the value itself is never shown). **Filed 2026-11-18 as F184:** `notify-customers`
+builds its email lookup from one `auth/v1/admin/users?per_page=1000` read, which
+silently drops accounts past the first 1,000 users across all tenants (staging
+held 999, production 37 profiles).
 
 **`send-my-list`**: per-customer pull-list confirmation email. The
 session-token check at the top of the function verifies that *some*
@@ -7060,7 +7095,29 @@ reasoning — only the disposition changed, not the diagnosis.
 - **Found** 2026-11-17, while confirming for Rick that the Top Picks S1/S2 promotion leaves the arrivals schedule untouched (it does; `docs/top-picks-emails-and-notification-settings.md`).
 - **Related:** customer engagement S3b (`docs/customer-engagement-paper-to-app.md` § 6, which records the schedule as set up and verified 2026-11-14); **F148** (Resend's 100-a-day limit, unchanged); **F135** (the newsletter's GitHub Actions cron, the plan's documented fallback if `pg_net` cannot be installed).
 
-Next free finding ID: **F184**.
+#### F184 — `notify-customers` looks up customer emails from one page of 1,000 users, across every shop
+
+- **Filed 2026-11-18. OPEN (filed, not fixed).** **Severity: Medium, latent.** The monthly catalog email is the shop's main customer notice; the failure is a customer silently not receiving it.
+- **What the code does** (`supabase/functions/notify-customers/index.ts`, read 2026-11-18): it builds its `user id → email` map from ONE read, `auth/v1/admin/users?per_page=1000` (line ~419), with no paging. That list is every user of the Supabase project, all shops together. A customer whose id is not on that page gets `email: undefined`, and `.filter(r => r.email && …)` drops them without a count or a warning. The response and the log report only the recipients that matched, so nothing shows that anyone was left out. Fewer than 1,000 users: no effect.
+- **Why "latent" and why it is platform-wide, not per-shop.** The limit is the project's total user count, so it arrives with the Nth shop, not with one big shop. **Measured 2026-11-18:** staging held **999** auth users (Playwright suites and harnesses create and delete users, so the figure moves); production holds **37** profiles (read-only count, 2026-11-18). Which users fall off the page is by the admin list's order, which the S5 notes recorded as newest first (not re-verified), so the OLDEST customers, the longest-standing ones, would be the first to lose the email.
+- **Not reproduced.** Doing it needs more than 1,000 users on a project; staging is one test account away, but a throwaway-user fixture would have to hold 1,001 users open. The conclusion rests on reading the code and the staging count.
+- **Not affected:** `notify-arrivals` reads each user by id (`auth/v1/admin/users/<id>`), so it has no cap. `send-my-list`, `approve-customer` and the others were not read for this.
+- **Fix direction (nothing decided).** Read each recipient's email by id, as `notify-arrivals` does (batched, the same way Top Picks reads are), or page the list to the end; and COUNT recipients dropped for a missing email and return it in the response next to `sent` and `failed`, so a silent omission cannot recur. `import.js` Step 7 should prompt on a non-zero count, which is also F148's mitigation.
+- **Found** 2026-11-18 while building Top Picks S5 (the S5 build record in `docs/top-picks-emails-and-notification-settings.md` § 6 first noted it as "observed, not filed"); filed at Rick's request ("file this").
+- **Related:** the unbounded-read class, seventh instance after **F82**, **F113**, **F139**, **F140**, **F156**, **F162**; **F148** (one request per recipient, and the same wish for a visible failure count).
+
+#### F185 — An email link to a title that is no longer in the catalog lands on the plain catalog with only a brief message
+
+- **Filed 2026-11-18. OPEN (filed, not fixed).** **Severity: Low.** Nothing is lost or written; a customer clicks a Reserve button and does not get the title.
+- **What happens** (`catalog.html`'s `?pick=` handler, lines ~2062-2093; run end to end 2026-11-18 with a local harness against the deployed staging bytes): a link whose title this shop cannot read (a title deleted from the catalog, or another shop's title) shows the full catalog and the toast "That title is no longer in the catalog." and nothing else. That is the designed answer for a title that is gone, and it is the right one for a foreign id.
+- **Why it can happen to a real customer.** The new-month import purges unreserved rows from past catalog months (the November import purged 1,894). Top picks in an email come from the current month, so a customer who opens an email after the next month's import can find the title gone. The catalog email is sent once a month and the arrivals email weekly, so the window is real but short for arrivals and up to a month for the catalog email.
+- **What the customer sees.** The same message, on the whole catalog, as a toast that disappears by itself. Rick's report on 2026-11-18 ("not loading the deeplink to show one title. I see the full catalog page") was this case, caused by test data rather than a purge; it shows how easily the message is missed.
+- **Fix direction (nothing decided).** If the title is gone, say so in a message that stays (a banner, or a sentence above the grid) and, where the id is still in `reservation_history` or the next month's catalog has the same series, offer that series. Do not guess a replacement silently. Needs a product call on how much to build; the plain message alone is cheap.
+- **Not measured:** how often it happens (no usage event is written for a missed pick; `pick_opened` fires only when the title opens), or how many email links point at titles the next import removes.
+- **Found** 2026-11-18, from Rick's follow-up of the Top Picks S5 emails; filed at Rick's request ("file this"). No code change made.
+- **Related:** Top Picks S2/S5 (`docs/top-picks-emails-and-notification-settings.md` § 3.2 and § 6), the new-month import (`docs/import-sop.md`).
+
+Next free finding ID: **F186**.
 
 ---
 

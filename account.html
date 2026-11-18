@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>My Account — Pull List</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192-v2.png">
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+  <!-- Fonts: preconnect + direct <link>, never an @import — see style.css's
+       own note at the old @import location (2026-08-24 perf sweep). -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── My Account — page-scoped styles ───────────────────────────
+       Flat class names over the shared style.css variables, matching
+       settings.html / analytics.html. Nothing here belongs in the global sheet. */
+
+    .acct-wrap { max-width: 720px; min-height: 60vh; }
+
+    .acct-panel {
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      background: var(--bg-card); overflow: hidden; margin-bottom: 16px;
+    }
+    .acct-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+    .acct-panel-head h2 { margin: 0; font-size: 0.98rem; font-weight: 700; }
+    .acct-panel-head p  { margin: 2px 0 0; font-size: 0.78rem; color: var(--text-secondary); }
+
+    .acct-fact {
+      display: flex; gap: 16px; align-items: baseline; padding: 12px 18px;
+      border-top: 1px solid var(--border); font-size: 0.9rem;
+    }
+    .acct-fact:first-of-type { border-top: 0; }
+    .acct-fact dt { flex: 0 0 84px; color: var(--text-secondary); font-size: 0.78rem; }
+    .acct-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); }
+    .acct-note { margin: 0; padding: 12px 18px; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--text-secondary); }
+
+    .acct-row {
+      display: flex; gap: 16px; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-top: 1px solid var(--border);
+    }
+    .acct-row:first-of-type { border-top: 0; }
+    .acct-row-text { min-width: 0; }
+    .acct-row-title { display: block; font-size: 0.92rem; font-weight: 600; color: var(--text-primary); cursor: pointer; }
+    .acct-row-desc  { margin: 2px 0 0; font-size: 0.8rem; color: var(--text-secondary); }
+    .acct-row-hint  { margin: 6px 0 0; font-size: 0.78rem; color: var(--warning); }
+    /* The shared .toggle-switch hides its checkbox at 0x0, which also hides the
+       keyboard focus ring; this puts it on the visible slider instead. */
+    .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .toggle-switch input:disabled + .toggle-slider { opacity: 0.55; }
+    /* .toggle-switch is a 44px-wide flex item here; with a wrapping description beside
+       it (a phone) it shrank to about 24px while the knob still travelled 20px, so the
+       knob stuck out of its own track. It must keep its width. */
+    .acct-row .toggle-switch { flex: none; }
+
+    /* Rows are laid out from first paint and only revealed once the profile has
+       loaded, so the footer does not jump (layout shift) when they appear. */
+    .acct-rows[data-ready="0"] .acct-row { visibility: hidden; }
+
+    .acct-always { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 16px; }
+    .acct-back { font-size: 0.85rem; }
+    .acct-back a { color: var(--accent); }
+
+    @media (max-width: 640px) {
+      .acct-fact { flex-direction: column; gap: 2px; }
+      .acct-fact dt { flex: none; }
+    }
+  </style>
+</head>
+<!-- data-nav-gear="none": no settings gear on this page for anyone (app.js NavSettingsLink). -->
+<body data-nav-gear="none">
+
+<nav class="nav" id="main-nav">
+  <div class="container nav-inner">
+    <a href="catalog.html" class="nav-logo">PULL<span>LIST</span></a>
+    <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links">
+      <li class="nav-drawer-user"><span>Welcome,</span><a href="account.html" class="nav-drawer-name-link" title="My Account"><strong class="nav-drawer-name"></strong></a></li>
+      <li><a href="catalog.html">Catalog</a></li>
+      <li><a href="mylist.html">My List</a></li>
+      <li><a href="subscriptions.html">Subscriptions</a></li>
+      <li><a href="arrivals.html" id="nav-arrivals-link">This Week</a></li>
+      <li id="nav-admin" class="nav-group" style="display:none">
+        <button type="button" class="nav-group-btn" id="nav-admin-btn" aria-expanded="false" aria-controls="nav-admin-menu">
+          Admin
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+        <ul class="nav-group-menu" id="nav-admin-menu" aria-label="Admin">
+          <li><a href="admin.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>Dashboard</a></li>
+          <li id="nav-analytics"><a href="analytics.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>Analytics</a></li>
+          <li class="nav-group-sep" role="separator"></li>
+          <li id="nav-settings"><a href="settings.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle><path d="M19 12h2.3M15.5 5.94 16.65 3.95M8.5 5.94 7.35 3.95M5 12H2.7M8.5 18.06 7.35 20.05M15.5 18.06 16.65 20.05"></path></svg>Settings</a></li>
+        </ul>
+      </li>
+      <li class="nav-drawer-signout"><button type="button" class="nav-drawer-signout-btn">Sign Out</button></li>
+    </ul>
+    <div class="nav-user">
+      <span>Welcome, <a href="account.html" class="nav-user-link" title="My Account"><strong id="nav-username"></strong></a></span>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container acct-wrap">
+
+  <div class="page-header">
+    <h1>My Account</h1>
+    <p>Your details and which emails you get</p>
+  </div>
+
+  <section class="acct-panel" aria-labelledby="acct-details-h">
+    <div class="acct-panel-head">
+      <h2 id="acct-details-h">Your details</h2>
+    </div>
+    <dl style="margin:0">
+      <div class="acct-fact"><dt>Name</dt><dd id="acct-name">—</dd></div>
+      <div class="acct-fact"><dt>Email</dt><dd id="acct-email">—</dd></div>
+    </dl>
+    <p class="acct-note">To change your name or email address, ask <span data-tenant-name>the shop</span>.</p>
+  </section>
+
+  <section class="acct-panel" id="email-settings" aria-labelledby="acct-email-h">
+    <div class="acct-panel-head">
+      <h2 id="acct-email-h">Email settings</h2>
+      <p>Changes save as soon as you switch them.</p>
+    </div>
+
+    <!-- Shown instead of the switches when they do not apply (view-as-customer,
+         an account that is not active yet, or the settings could not be read). -->
+    <p class="acct-note" id="acct-email-message" style="display:none;border-top:0"></p>
+
+    <div class="acct-rows" id="acct-email-rows" data-ready="0">
+      <div class="acct-row" data-col="email_catalog">
+        <div class="acct-row-text">
+          <label class="acct-row-title" for="chk-email_catalog">New catalog email</label>
+          <p class="acct-row-desc" id="desc-email_catalog">A note when the shop loads a new month's catalog, so you know it is ready to browse.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="chk-email_catalog" aria-describedby="desc-email_catalog">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="acct-row" data-col="email_arrivals">
+        <div class="acct-row-text">
+          <label class="acct-row-title" for="chk-email_arrivals">Weekly arrivals email</label>
+          <p class="acct-row-desc" id="desc-email_arrivals">A short note on Tuesdays when books you reserved are on that week's shipment.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="chk-email_arrivals" aria-describedby="desc-email_arrivals">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="acct-row" data-col="email_picks">
+        <div class="acct-row-text">
+          <label class="acct-row-title" for="chk-email_picks">Include Top Picks in my emails</label>
+          <p class="acct-row-desc" id="desc-email_picks">A few titles chosen for you, each with a link to look at it and reserve it. Added to the two emails above only.</p>
+          <p class="acct-row-hint" id="hint-email_picks" style="display:none">Both emails above are off, so there is nowhere for Top Picks to appear.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="chk-email_picks" aria-describedby="desc-email_picks">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <p class="acct-always">You will still get messages about your account itself: sign-in and password-reset links, approval of a new account, and your pull list when you press "Email My List".</p>
+
+  <p class="acct-back"><a href="mylist.html">&larr; Back to My List</a></p>
+</div>
+
+<footer class="site-footer">
+  Service provided by <span data-tenant-name>Ray &amp; Judy's Book Stop</span><span data-paid-only> &middot; Rockaway, NJ</span>
+  <div class="site-footer-links"><span data-paid-only><a href="policy.html">Pull-List Policy</a> &middot; </span><a href="terms.html">Terms of Use</a> &middot; <a href="privacy.html">Privacy</a></div>
+</footer>
+
+<div id="toast-container"></div>
+
+<script src="vendor/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const navData = await initNav();
+  if (!navData) return;
+  const { user, profile } = navData;
+
+  // Maintenance Mode blocks this page for customers like the other four customer pages: it
+  // writes a profile row, and the app is write-blocked by construction while it is on.
+  try { await checkMaintenanceMode(profile?.is_admin); }
+  catch (e) { if (e.message === 'maintenance') return; }
+
+  const el = (id) => document.getElementById(id);
+
+  // ── Your details (read-only; changing an email is F126, out of scope) ──
+  el('acct-name').textContent  = profile?.full_name || '—';
+  el('acct-email').textContent = user.email || '—';
+
+  // ── Email settings ───────────────────────────────────────────
+  const COLS = [
+    { col: 'email_catalog',  on: 'New catalog email turned on',     off: 'New catalog email turned off' },
+    { col: 'email_arrivals', on: 'Weekly arrivals email turned on', off: 'Weekly arrivals email turned off' },
+    { col: 'email_picks',    on: 'Top Picks turned on',             off: 'Top Picks turned off' },
+  ];
+  const rows = el('acct-email-rows');
+  const message = el('acct-email-message');
+
+  // Not the account's own settings, or not yet applicable: say so instead of
+  // showing switches. A view-as-customer admin is looking at THEIR OWN profile
+  // here, never the customer's, so editing it would be editing the wrong person.
+  // A pending or paused account keeps getting the catalog notice whatever it
+  // says (it is an account notice, not promotional: Rick 2026-11-17, O1), so a
+  // switch there would promise something the emails do not do.
+  function showMessage(text) {
+    rows.style.display = 'none';
+    message.textContent = text;
+    message.style.display = '';
+  }
+
+  // Top Picks only ever appear inside the two emails, so with both of them off the
+  // third switch has nothing to act on; say so rather than leave it looking live.
+  function syncPicksHint() {
+    const offAndShown = (col) => rows.querySelector(`[data-col="${col}"]`).style.display !== 'none' && !el('chk-' + col).checked;
+    const picksShown  = rows.querySelector('[data-col="email_picks"]').style.display !== 'none';
+    el('hint-email_picks').style.display = (picksShown && offAndShown('email_catalog') && offAndShown('email_arrivals')) ? '' : 'none';
+  }
+
+  if (AdminContext.isActive()) {
+    showMessage('You are viewing the site as a customer. Email settings belong to each person\'s own sign-in, so they are not shown here.');
+  } else if (!profile?.is_admin && (profile?.status === 'pending' || profile?.status === 'suspended')) {
+    showMessage('Email settings are available once your account is approved.');
+  } else {
+    let shown = 0;
+    for (const { col, on, off } of COLS) {
+      const row = rows.querySelector(`[data-col="${col}"]`);
+      const chk = el('chk-' + col);
+      // Fails open per column: a column the database does not have (or that came
+      // back as anything but true/false) hides its row; it never breaks the page.
+      if (typeof profile?.[col] !== 'boolean') { row.style.display = 'none'; continue; }
+      shown++;
+      chk.checked = profile[col];
+      chk.addEventListener('change', async () => {
+        const next = chk.checked;
+        chk.disabled = true;
+        // .select('id') makes a refused write visible: an update that matches no
+        // row (RLS) returns no error and an empty list, which would otherwise
+        // read as success while nothing saved.
+        const { data, error } = await db.from('user_profiles').update({ [col]: next }).eq('id', user.id).select('id');
+        chk.disabled = false;
+        if (error || !Array.isArray(data) || data.length !== 1) {
+          chk.checked = !next; // show what is actually stored
+          toast('Could not save — please try again', 'error');
+        } else {
+          toast(next ? on : off);
+        }
+        syncPicksHint();
+      });
+    }
+    if (!shown) showMessage('Email settings could not be loaded right now. Please try again later.');
+    syncPicksHint();
+  }
+
+  rows.dataset.ready = '1';
+})();
+</script>
+</body>
+</html>
