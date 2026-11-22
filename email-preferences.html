@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email settings — Pull List</title>
+  <!-- The address carries a signed token that lets whoever holds it change this
+       customer's email switches, so: keep it out of search results, and never send
+       it onward in a Referer header (the font stylesheet below is a third party). -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192-v2.png">
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&amp;family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&amp;display=swap">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Email settings (no sign-in) — page-scoped styles ──────────
+       The switch rows are the same as account.html's (My Account); they are copied,
+       not shared, because that page is a signed-in page in the nav set and this one is
+       a standalone page with no nav. Change one, check the other. */
+
+    .ep-page {
+      min-height: 100vh; padding: 32px 16px 40px;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(232,50,28,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.04) 0%, transparent 60%),
+        var(--bg);
+    }
+    .ep-wrap { max-width: 560px; margin: 0 auto; }
+    .ep-wrap .login-logo { margin-bottom: 4px; }
+    .ep-wrap .login-tagline { margin-bottom: 24px; }
+
+    .ep-panel {
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      background: var(--bg-card); overflow: hidden; margin-bottom: 16px;
+    }
+    .ep-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+    .ep-head h1 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    .ep-head p  { margin: 2px 0 0; font-size: 0.8rem; color: var(--text-secondary); }
+    .ep-note { margin: 0; padding: 14px 18px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.55; }
+    .ep-lead { margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-primary);
+               background: rgba(59,130,246,0.08); }
+
+    .ep-row {
+      display: flex; gap: 16px; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-top: 1px solid var(--border);
+    }
+    .ep-row:first-child { border-top: 0; }
+    .ep-row.is-lead { background: rgba(59,130,246,0.08); }
+    .ep-row-text { min-width: 0; }
+    .ep-row-title { display: block; font-size: 0.92rem; font-weight: 600; color: var(--text-primary); cursor: pointer; }
+    .ep-row-desc  { margin: 2px 0 0; font-size: 0.8rem; color: var(--text-secondary); }
+    .ep-row-hint  { margin: 6px 0 0; font-size: 0.78rem; color: var(--warning); }
+    .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .toggle-switch input:disabled + .toggle-slider { opacity: 0.55; }
+    /* The shared .toggle-switch is a 44px flex item; beside wrapping text on a phone it
+       shrank to about 24px with the knob sticking out (found on account.html, S3). */
+    .ep-row .toggle-switch { flex: none; }
+
+    /* Laid out from first paint, shown once the settings have loaded (no layout shift).
+       Only the not-valid / not-active / could-not-load paths change the layout afterwards. */
+    body[data-ready="0"] #ep-rows, body[data-ready="0"] #ep-always, body[data-ready="0"] #ep-lead { visibility: hidden; }
+
+    .ep-status { min-height: 1.3em; margin: 0 0 12px; font-size: 0.82rem; color: var(--text-secondary); }
+    .ep-status.is-error { color: #ff8070; }
+    .ep-always { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 16px; line-height: 1.55; }
+    .ep-links { font-size: 0.8rem; color: var(--text-muted); text-align: center; margin: 0; }
+    .ep-links a { color: var(--text-secondary); text-decoration: underline; }
+  </style>
+</head>
+<body data-ready="0">
+
+<div class="ep-page">
+  <div class="ep-wrap">
+    <div class="login-logo">PULL<span>LIST</span></div>
+    <div class="login-tagline">Email settings</div>
+
+    <section class="ep-panel" aria-labelledby="ep-h">
+      <div class="ep-head">
+        <h1 id="ep-h">Your email settings</h1>
+        <p id="ep-store">Loading…</p>
+      </div>
+
+      <!-- One of these is shown instead of the switches when they do not apply. -->
+      <p class="ep-note" id="ep-message" role="status" style="display:none"></p>
+
+      <p class="ep-lead" id="ep-lead" style="display:none"></p>
+
+      <div id="ep-rows">
+        <div class="ep-row" data-col="email_catalog">
+          <div class="ep-row-text">
+            <label class="ep-row-title" for="chk-email_catalog">New catalog email</label>
+            <p class="ep-row-desc" id="desc-email_catalog">A note when the shop loads a new month's catalog, so you know it is ready to browse.</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="chk-email_catalog" aria-describedby="desc-email_catalog" disabled>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="ep-row" data-col="email_arrivals">
+          <div class="ep-row-text">
+            <label class="ep-row-title" for="chk-email_arrivals">Weekly arrivals email</label>
+            <p class="ep-row-desc" id="desc-email_arrivals">A short note on Tuesdays when books you reserved are on that week's shipment.</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="chk-email_arrivals" aria-describedby="desc-email_arrivals" disabled>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="ep-row" data-col="email_picks">
+          <div class="ep-row-text">
+            <label class="ep-row-title" for="chk-email_picks">Include Top Picks in my emails</label>
+            <p class="ep-row-desc" id="desc-email_picks">A few titles chosen for you, each with a link to look at it and reserve it. Added to the two emails above only.</p>
+            <p class="ep-row-hint" id="hint-email_picks" style="display:none">Both emails above are off, so there is nowhere for Top Picks to appear.</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="chk-email_picks" aria-describedby="desc-email_picks" disabled>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <p class="ep-status" id="ep-status" role="status" aria-live="polite"></p>
+
+    <p class="ep-always" id="ep-always">You will still get messages about your account itself: sign-in and password-reset links, approval of a new account, and your pull list when you press "Email My List". Changes on this page save as soon as you switch them.</p>
+
+    <p class="ep-links"><a href="index.html">Sign in</a> &middot; <a href="terms.html">Terms of Use</a> &middot; <a href="privacy.html">Privacy</a></p>
+  </div>
+</div>
+
+<!-- Deliberately no app.js and no Supabase client: this page only talks to one Edge
+     Function, and the signed token in the address is its only credential. config.js is
+     loaded for SUPABASE_URL alone. -->
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+  const el = (id) => document.getElementById(id);
+  const params = new URLSearchParams(window.location.search);
+  const u = params.get('u') || '';
+  const s = params.get('s') || '';
+  const kParam = params.get('k') || '';
+  const ENDPOINT = SUPABASE_URL + '/functions/v1/email-preferences?u=' + encodeURIComponent(u) + '&s=' + encodeURIComponent(s);
+
+  const COLS = [
+    { col: 'email_catalog',  on: 'New catalog email is on',     off: 'New catalog email is off' },
+    { col: 'email_arrivals', on: 'Weekly arrivals email is on', off: 'Weekly arrivals email is off' },
+    { col: 'email_picks',    on: 'Top Picks are on',            off: 'Top Picks are off' },
+  ];
+  // ?k= names the email whose Unsubscribe link was followed (k=catalog / k=arrivals).
+  const KIND = { catalog: { col: 'email_catalog', label: 'new catalog email' }, arrivals: { col: 'email_arrivals', label: 'weekly arrivals email' } };
+  const kind = Object.prototype.hasOwnProperty.call(KIND, kParam) ? KIND[kParam] : null;
+
+  const rows = el('ep-rows'), message = el('ep-message'), status = el('ep-status'), lead = el('ep-lead');
+  let statusTimer = null;
+  // Reserve the notice's space from first paint when the link names an email (no shift when it fills in).
+  if (kind) { lead.textContent = 'You opened the unsubscribe link in the ' + kind.label + '.'; lead.style.display = ''; }
+
+  function setStatus(text, isError) {
+    status.textContent = text;
+    status.classList.toggle('is-error', !!isError);
+    clearTimeout(statusTimer);
+    if (text && !isError) statusTimer = setTimeout(() => { status.textContent = ''; }, 4000);
+  }
+  function showMessage(text) {
+    rows.style.display = 'none';
+    lead.style.display = 'none';
+    el('ep-always').style.display = 'none';
+    message.textContent = text;
+    message.style.display = '';
+    document.body.dataset.ready = '1';
+  }
+  // With both emails off, Top Picks has nowhere to appear; say so rather than leave the switch looking live.
+  function syncPicksHint() {
+    const both = !el('chk-email_catalog').checked && !el('chk-email_arrivals').checked;
+    el('hint-email_picks').style.display = both ? '' : 'none';
+  }
+
+  async function call(method, body) {
+    const init = { method, headers: { Accept: 'application/json' }, cache: 'no-store' };
+    if (body) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    const res = await fetch(ENDPOINT, init);
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* not JSON */ }
+    return { status: res.status, data };
+  }
+
+  async function init() {
+    // A link with no token at all cannot be valid; say so without asking the server.
+    if (!u || !s) { el('ep-store').textContent = ''; showMessage('This link is not valid. Use the link in a recent email from the shop, or sign in and open My Account.'); return; }
+
+    let r;
+    try { r = await call('GET'); } catch (e) {
+      el('ep-store').textContent = '';
+      showMessage('Email settings could not be loaded right now. Please try again in a moment.');
+      return;
+    }
+    if (r.status === 403) { el('ep-store').textContent = ''; showMessage('This link is not valid. Use the link in a recent email from the shop, or sign in and open My Account.'); return; }
+    if (r.status !== 200 || !r.data || r.data.ok !== true) { el('ep-store').textContent = ''; showMessage('Email settings could not be loaded right now. Please try again in a moment.'); return; }
+
+    el('ep-store').textContent = r.data.store || '';
+    document.title = 'Email settings — ' + (r.data.store || 'Pull List');
+
+    if (!r.data.editable) {
+      showMessage('Email settings are available once your account is active. You will still get messages about your account itself.');
+      return;
+    }
+
+    let shown = 0;
+    for (const { col, on, off } of COLS) {
+      const row = rows.querySelector('[data-col="' + col + '"]');
+      const chk = el('chk-' + col);
+      if (typeof r.data[col] !== 'boolean') { row.style.display = 'none'; continue; }
+      shown++;
+      chk.checked = r.data[col];
+      chk.disabled = false;
+      chk.addEventListener('change', async () => {
+        const next = chk.checked;
+        chk.disabled = true;
+        let saved = false;
+        try {
+          const w = await call('POST', { [col]: next });
+          // Trust the stored value the server read back, not our own click.
+          saved = w.status === 200 && w.data && w.data.ok === true && w.data[col] === next;
+        } catch (e) { saved = false; }
+        chk.disabled = false;
+        if (saved) setStatus(next ? on : off, false);
+        else { chk.checked = !next; setStatus('Could not save. Please try again.', true); }
+        syncPicksHint();
+      });
+    }
+    if (!shown) { showMessage('Email settings could not be loaded right now. Please try again in a moment.'); return; }
+
+    // They followed an Unsubscribe link: point at that switch. Nothing has changed yet.
+    if (kind && typeof r.data[kind.col] === 'boolean') {
+      lead.textContent = r.data[kind.col]
+        ? 'You opened the unsubscribe link in the ' + kind.label + '. Switch it off below to stop it.'
+        : 'The ' + kind.label + ' is already off.';
+      rows.querySelector('[data-col="' + kind.col + '"]').classList.add('is-lead');
+    } else {
+      lead.style.display = 'none';
+    }
+
+    syncPicksHint();
+    document.body.dataset.ready = '1';
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
