@@ -2298,7 +2298,7 @@ Production's real post-cutover send authenticated fully clean but surfaced
 | `claim-paper-customer` | admin.html | admin check, plus `is_paper` source check | no |
 | `reset-password` | forgot-password.html | none (anti-enumeration: always returns success) | no |
 | `register-tenant` | operator (curl/internal tooling, not customer-facing) | `TENANT_PROVISION_SECRET` via `x-operator-secret` header (5.4 S3) | creates the tenant — seeds `branding`/`settings` (incl. a fresh per-tenant webhook secret) on the new row |
-| `email-preferences` | `email-preferences.html` (static page, no sign-in) and a mail client's RFC 8058 one-click POST; added 2026-11-17 (Top Picks S4), **deployed to staging only until S6**, `--no-verify-jwt` | HMAC-SHA256 token over `v1\|<user_id>` with `EMAIL_PREFS_SECRET`; every token failure is one identical 403; a missing or short secret fails closed (503) | no — the tenant comes from the customer's own profile; it reads and writes only `user_profiles.email_catalog`, `email_arrivals`, `email_picks` (an explicit allowlist) and the shop's `display_name` |
+| `email-preferences` | `email-preferences.html` (static page, no sign-in) and a mail client's RFC 8058 one-click POST; added 2026-11-17 (Top Picks S4), **deployed to staging 2026-11-17 and to production 2026-11-21 (PR #191; it answers 503 there until `EMAIL_PREFS_SECRET` is set)**, `--no-verify-jwt` | HMAC-SHA256 token over `v1\|<user_id>` with `EMAIL_PREFS_SECRET`; every token failure is one identical 403; a missing or short secret fails closed (503) | no — the tenant comes from the customer's own profile; it reads and writes only `user_profiles.email_catalog`, `email_arrivals`, `email_picks` (an explicit allowlist) and the shop's `display_name` |
 
 `invite-customer` and `create-paper-customer` resolve `tenant_id` from the
 calling admin's own profile (fixed 2026-05-10; F34) — new users created by
@@ -2354,7 +2354,7 @@ status is unchecked — so whether this link currently points at
 not established by this correction, only that it is **not** a literal in
 the code.
 
-**Top Picks S5 (2026-11-18, staging only until S6) — `notify-customers` and
+**Top Picks S5 (2026-11-18; on production since 2026-11-21, PR #191, with the secret still unset at the time of writing) — `notify-customers` and
 `notify-arrivals`.** Both now (a) add a "Top picks for you" section (up to 4,
 read per recipient from `get_top_picks()` then `catalog`; any failure means no
 picks, never a failed email), only for an active, non-paper account with
