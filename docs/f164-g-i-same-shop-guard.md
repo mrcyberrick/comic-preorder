@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 MERGED to scripts `main` 2026-11-14 (`e437c4f`, with the paged-read sort) and its first production import (2026-11-20) read NORMAL per § 5, so the interim pre-import queries are retired (2026-11-21); S2 (the trigger) NOT STARTED: S2a on staging first, then S2b; F164 OPEN** · *(The rest of this line is as written 2026-11-11:)* **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -664,3 +664,23 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
   three (routine `trig_01BYubBzX9uVvmCRvYWC9Z6m` and calendar event `10r4rjgo2k38gglf3n015noca0`, still 8:00 AM ET).
   No finding ID consumed (a latent defect, fixed the
   session it was found, nothing left open); **F182 remains the next free finding ID.**
+- **2026-11-14, the merge (Rick; recorded 2026-11-21, a week late).** The scripts repo reflog reads both fast-forwards at
+  2026-11-14 08:06:09 -05:00 (`feature/f164-import-tenant-reads` to `e73e2ef`, then `feature/import-paged-read-order`
+  to `e437c4f`); `main` == `origin/main` == `e437c4f`, clean, read 2026-11-21. Whether the Fri 11-13 import was read
+  first (F180 V3) is not recorded.
+- **2026-11-21, § 5: the first production import on S1's code read NORMAL (Rick's paste; main session, read-only).** A
+  same-month 2026-11 refresh plus two shipment files (Lunar shipment 914654, 68 rows; PRH delivery 0076080253, 36 rows;
+  on-sale 2026-11-25). Step 5 verbatim: `Found 69 subscription(s) to process`, `Catalog rows fetched: 2086`, `Matched:
+  36 | Already reserved: 35 | Carried forward: 0 | To insert: 1`, `Auto-reserved 1 item(s) for subscribers`. **All three
+  § 5 conditions hold:** (1) 69 is the founding shop's count by construction (the read carries
+  `tenant_id=eq.${TENANT_ID}`; read from the code; 66 on 2026-10-28), **not independently counted: a read-only
+  production count was refused by the session's permission check and not worked around**; (2) no `Ignored ... from
+  other shops` line and no `arrived without tenant_id` line; (3) a normal week (35 already reserved from the 10-28
+  run, 1 new). **So the interim pre-import queries are RETIRED** (`docs/import-sop.md`, same commit; the plan's own
+  rule). The API path stays open until S2. **S2a has NOT started** (no `docs/sql` F164 file exists), so the Sat
+  2026-11-21 S2b gate does not open yet: S2a on staging comes first (§ 8.2), then S2b (§ 8.3). The rest of the
+  output, for the record: 2074 catalog rows upserted (1289 Lunar / 785 PRH, all normalised); 4 reserved and 46
+  unreserved in-store dates corrected by the re-pull; 104 of 104 shipment rows matched; catalog notification sent to
+  21, 0 failed; 209 reservations checked before auto-fulfil, 197 fulfilled, so about 12 held back by the 14-day rule
+  (F155 S3(a)), which matches the 11 listed titles on sale 2026-11-11 and 2026-11-18; the warning still lists those as
+  "about to be marked fulfilled" (the wording gap recorded 2026-10-28). No finding ID consumed.
