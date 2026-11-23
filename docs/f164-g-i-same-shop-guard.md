@@ -795,5 +795,24 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
   `tenant_id`, is unread. The cancel half exercises F109's unchanged delete trigger; the reserve half is the first
   insert through the new trigger by a real customer session on production (the probe ran as the SQL Editor's role).
   **Still outstanding: T9**, the next production import's Step 5 printing no "Auto-reserve batch failed" (Rick's next
-  Friday run; not scheduled, no reminder set, pending his say-so). **F164 stays OPEN** and the § 6.6 completion records are
-  still not written; they follow T9. Nothing was changed on production by the agent. No finding ID consumed.
+  Friday run; at first not scheduled, no reminder set, pending his say-so; he then asked for one, see the next entry).
+  **F164 stays OPEN** and the § 6.6 completion records are still not written; they follow T9. Nothing was changed on
+  production by the agent. No finding ID consumed.
+- **2026-11-22, Gate scheduled: T9, the first real production import after the trigger; reminders set for Fri 2026-11-27,
+  8:00 AM ET (Rick's ask: "Remind should be clear about what actions need to be taken").** The gate is event-based (one
+  real production import after 2026-11-22), not a duration; the date is Rick's usual Friday import, which falls the day
+  after Thanksgiving (Thu 2026-11-26), so it may move, and both reminders say so and say what to do if it does (ask for a
+  new reminder). Weekdays checked by command (2026-11-22 Sunday, 11-26 Thursday, 11-27 Friday). **Reminders:** a one-time
+  cloud routine `trig_01SstpiQPyUcCuMXBsQiEyWh` (`run_once_at` 2026-11-27T13:00:00Z, which is 8:00 AM ET since clocks
+  went back on 2026-11-01; the skill's template says 12:00 UTC, which is the daylight-time offset; allowed tools
+  PushNotification, Read, Grep, Glob; connectors cleared after the server auto-attached five, because a reminder needs
+  none; https://claude.ai/code/routines/trig_01SstpiQPyUcCuMXBsQiEyWh) and a Google Calendar event
+  `s73k5cppbbf4im57cdq247323s` (8:00 to 8:15 AM ET, popup at the start and email an hour before, same text). **Both carry
+  the same four numbered actions:** (1) run the next real import, a `--no-write` dry run does not count because it never
+  writes reservations; (2) find the Step 5 "Processing subscriptions" block; (3) check it (the expected lines, and the
+  three lines that must not appear); (4) paste the block into a Claude Code session and say "T9", which triggers the §
+  6.6 completion records. **And the failure branch:** do not re-run the import and do not change anything yet, paste the
+  output first, since an import failure does not stop customers reserving; run the rollback (drop the trigger, then the
+  function, after checking the project is production) only if customers cannot reserve or Claude says so. The routine only
+  reminds and takes no action. No credential appears in either. **Not verified:** that either reminder fires (the
+  routine's `next_run_at` reads 2026-11-27T13:00:00Z; the event's start reads 13:00Z, equal to 8:00 AM ET).
