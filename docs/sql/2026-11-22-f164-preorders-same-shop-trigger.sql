@@ -21,9 +21,12 @@
 -- enabled), V2 (anon false, authenticated false, SECURITY DEFINER true, search_path=public), V3 (= P1) all 0, and the
 -- AFTER probe "F164 PASS: checks 1 2 3 4 passed" (check 3, the other-shop customer, ran, so production holds a
 -- second-shop customer). NOT independently observed by the agent: nothing on production was read or written by the
--- agent in S2b. NOT yet in this record: T8 (Rick's reserve-then-cancel through the app) and T9 (the next production
--- import, Step 5 with no "Auto-reserve batch failed"). The probe runs as the SQL Editor's role, so it exercises the
--- trigger, not RLS or a real customer JWT.
+-- agent in S2b. T8, Rick's write-smoke through the app on production (2026-11-22; a reserve then a cancel of MAGNETO: END
+-- OF DAYS #1 COVER A, "green", minutes before he reported it), is HIS REPORT: the agent's read-back of the `reserve` and
+-- `cancel` events from production was refused by the session's permission check and not worked around, so it is not
+-- independently observed. NOT yet in this record: T9 (the next production import, Step 5 with no "Auto-reserve batch
+-- failed"). The probe runs as the SQL Editor's role, so it exercises the trigger, not RLS or a real customer JWT; T8 is
+-- the only check so far that went through the app's own session.
 -- =====================================================================
 -- F164 (session G-I, S2): a same-shop trigger on public.preorders
 -- Plan: docs/f164-g-i-same-shop-guard.md § 6 (D1 = yes, answered 2026-11-11: the trigger checks the listing's shop
