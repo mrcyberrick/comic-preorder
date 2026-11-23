@@ -800,3 +800,5 @@ SELECT r.status_code, r.timed_out, r.error_msg, r.created,
 ```
 
 Expected: the cron row `succeeded`; status_code 200, timed_out false, sent about 10, with_picks equal to sent (or close), failed 0, notices_this_week equal to sent. If timed_out is true but notices_this_week equals sent, the emails went and only the wait ran out (60 s). If no `_http_response` row exists, `arrival_notices` (permanent) and the function log ("notify-arrivals: N sent (M with picks)") still answer.
+
+Gate scheduled (2026-11-22): the arrivals job fires Tue 2026-11-24 15:00 UTC and its response row expires about 6 hours later; reminder: cloud routine `trig_01QEWtZeoeGtBi5bsfzPoUBu` (one-shot, reminds only, no connectors) and Google Calendar event `eeb22rhnegi5j0a9ek8089qcuo`, both 10:30 AM ET (15:30 UTC), popup at the time and email 30 minutes before.
