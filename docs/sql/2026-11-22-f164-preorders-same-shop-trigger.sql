@@ -1,8 +1,10 @@
--- STATUS: staging=APPLIED 2026-11-22 | prod=PENDING (deliberately: production is session S2b)
+-- STATUS: staging=APPLIED 2026-11-22 | prod=APPLIED 2026-11-22
 -- (F105) This line is the applied-state record. A gate that lives only in prose gets missed: update it the
--- moment you run this file. It is kept on ONE line so /promote-prod step 0 reads both tokens. Between S2a and S2b,
--- step 0 lists this file on every promotion as prod=PENDING; that is deliberate and is not a blocker (no page or
--- app.js references the names it adds).
+-- moment you run this file. It is kept on ONE line so /promote-prod step 0 reads both tokens. *(Between S2a and S2b
+-- the production token was PENDING, deliberately: production was session S2b, and /promote-prod step 0 listed the
+-- file on every promotion in that window.)* Production was applied by Rick later the same day (S2b); see the
+-- production evidence note below. The write-smoke (T8) and the next production import (T9) were still outstanding
+-- when this line was changed; plan § 9 records them as they are read.
 -- EVIDENCE NOTE (staging, 2026-11-22). Operator-pasted (Rick, SQL Editor): P1 all 0; P2a / P2b; the BEFORE probe
 -- read "F164 FAIL 1"; V1 (two triggers, the new one BEFORE INSERT OR UPDATE OF catalog_id,tenant_id,user_id, ROW,
 -- enabled; F109's delete trigger unchanged); V2 (anon false, authenticated false, SECURITY DEFINER true,
@@ -11,6 +13,17 @@
 -- against the deployed staging database (harnesses in the scripts repo's playwright folder, local-only): the trigger
 -- refuses the G-D shapes with HTTP 400 / 23514 for a customer JWT, an admin JWT and the service role, and every
 -- legitimate write still lands (see plan § 9).
+-- EVIDENCE NOTE (PRODUCTION, 2026-11-22, S2b). Operator-pasted (Rick, SQL Editor, production project; the agent never
+-- writes to production and did not see the blocks run): S0 (tenants = comicstore, rjbookstop, so the project is
+-- production); P1 all 0; P2a (catalog, preorders, user_profiles: owner postgres, RLS on, not forced) and P2b (postgres,
+-- rolbypassrls true); the BEFORE probe read "F164 FAIL 1" (seen red); then the migration, V1 (two triggers: F109's
+-- delete trigger unchanged; the new one BEFORE, insert and update, update_columns catalog_id,tenant_id,user_id, ROW,
+-- enabled), V2 (anon false, authenticated false, SECURITY DEFINER true, search_path=public), V3 (= P1) all 0, and the
+-- AFTER probe "F164 PASS: checks 1 2 3 4 passed" (check 3, the other-shop customer, ran, so production holds a
+-- second-shop customer). NOT independently observed by the agent: nothing on production was read or written by the
+-- agent in S2b. NOT yet in this record: T8 (Rick's reserve-then-cancel through the app) and T9 (the next production
+-- import, Step 5 with no "Auto-reserve batch failed"). The probe runs as the SQL Editor's role, so it exercises the
+-- trigger, not RLS or a real customer JWT.
 -- =====================================================================
 -- F164 (session G-I, S2): a same-shop trigger on public.preorders
 -- Plan: docs/f164-g-i-same-shop-guard.md § 6 (D1 = yes, answered 2026-11-11: the trigger checks the listing's shop

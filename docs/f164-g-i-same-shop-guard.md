@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 MERGED to scripts `main` 2026-11-14 (`e437c4f`, with the paged-read sort) and its first production import (2026-11-20) read NORMAL per § 5, so the interim pre-import queries are retired (2026-11-21); S2a (the trigger, STAGING) DONE 2026-11-22 (§ 9): `docs/sql/2026-11-22-f164-preorders-same-shop-trigger.sql` applied on staging by Rick, T0 to T6 green; S2b (production) NOT STARTED, a separate session; F164 OPEN** *(this said "S2 (the trigger) NOT STARTED: S2a on staging first, then S2b" until S2a ran)* · *(The rest of this line is as written 2026-11-11:)* **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **(then:) S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9); S2a trigger APPLIED and verified 2026-11-22 (§ 9) · prod: — (never touched; the trigger's SQL file reads `prod=PENDING`, deliberately, until S2b) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 MERGED to scripts `main` 2026-11-14 (`e437c4f`, with the paged-read sort) and its first production import (2026-11-20) read NORMAL per § 5, so the interim pre-import queries are retired (2026-11-21); S2a (the trigger, STAGING) DONE 2026-11-22 (§ 9): `docs/sql/2026-11-22-f164-preorders-same-shop-trigger.sql` applied on staging by Rick, T0 to T6 green; S2b (production): THE TRIGGER IS APPLIED ON PRODUCTION 2026-11-22 (Rick; § 9), V1 to V3 and the AFTER probe passed; T8 (Rick's reserve-then-cancel through the app) and T9 (the next production import) are OUTSTANDING; F164 stays OPEN until they are read** *(this said "S2 (the trigger) NOT STARTED: S2a on staging first, then S2b" until S2a ran, then "S2b (production) NOT STARTED" until it was applied)* · *(The rest of this line is as written 2026-11-11:)* **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **(then:) S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9); S2a trigger APPLIED and verified 2026-11-22 (§ 9) · prod: the trigger APPLIED 2026-11-22 (S2b, Rick-run; § 9); the SQL file's STATUS reads `prod=APPLIED 2026-11-22` · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -758,3 +758,31 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
     BEFORE, the migration, V1 to V3, the probe AFTER, all Rick-run). **Finding-ID disposition, in words: no finding ID
     consumed** (S2a executes a designed fix for F164, which already owns the work and stays OPEN until S2b; the
     handoff's stale expectation and the flake are recorded here and not filed).
+- **2026-11-22, S2b: the same-shop trigger is APPLIED ON PRODUCTION (Rick ran every SQL block in the SQL Editor on the
+  production project; the agent never writes to production and read nothing there in this session). T8 and T9 are
+  OUTSTANDING, so F164 stays OPEN.** Preconditions confirmed before any SQL: S2a applied on staging (entry above); S1 merged
+  to scripts `main` (`e437c4f`, read 2026-11-22: `main` == `origin/main`, clean); the first production import on S1's code
+  read normal (the 2026-11-21 entry above). **Operator-pasted (Rick), in the plan's order (T6b, then T7):** S0, `slug`:
+  `comicstore`, `rjbookstop` (so the project is production, not staging); **P1 all four 0**; **P2a** `catalog`,
+  `preorders`, `user_profiles` each owner `postgres`, RLS on, RLS not forced; **P2b** `postgres`, `rolbypassrls` true, so
+  the SECURITY DEFINER function reads every shop's rows; **the probe BEFORE read `F164 FAIL 1`** at the same line as on
+  staging (seen red on production, and a second shop's listing exists to test with); then the § 6.3 migration, run as one
+  block; **V1** two triggers (F109's `trg_preorders_block_ordered_delete`: BEFORE, delete only, ROW, enabled, unchanged; the
+  new `trg_preorders_require_same_tenant`: BEFORE, insert and update, ROW, enabled, `update_columns`
+  `catalog_id,tenant_id,user_id`); **V2** anon false, authenticated false, security definer true, `search_path=public`;
+  **V3 (= P1) all four 0**; **the AFTER probe `F164 PASS: checks 1 2 3 4 passed`**, check 3 included (so production holds
+  a second-shop customer, and the plan's "owner check not exercised on production" caveat does NOT apply). The pasted
+  probe in the BEFORE round carried the SQL Editor's page text (tab titles, "Expand sidebar", and so on) around the
+  error; only the error line was read. **Not independently observed by the agent:** the agent made no production read or
+  write in S2b (the probe and checks above are Rick's pastes), so the trigger's behaviour on production rests on his
+  pastes plus staging's observed behaviour (T2 to T6 above, run against the same SQL text). **Same SQL text on both:** the
+  block Rick ran on production was the block in the SQL file, copied from the plan's § 6.3, as on staging; I did not
+  diff Rick's editor contents against the file. **Not yet done, and not claimed:** **T8**, Rick's reserve-then-cancel
+  through the app on production (every reserve now passes through the trigger; the probe runs as the SQL Editor's role, so
+  it exercises the trigger, not RLS or a real customer JWT), and **T9**, the next production import's Step 5 printing no
+  "Auto-reserve batch failed" (the first import after S2; the weekly import is Fridays). Until both are read, the § 6.6
+  completion records (`technical-reference.md` § 7.1 and § 13 F164, `pre-phase-6-gate-closure.md` § 2e and the G8 row, the
+  CLAUDE.md row and entry) are NOT written and F164 is not marked RESOLVED. **Rollback, if either fails:** the commented
+  block at the bottom of the SQL file (drop the trigger, then the function); dropping the trigger alone restores prior
+  behaviour at once, no deploy. **What changes for promotions:** the SQL file's STATUS now reads `prod=APPLIED
+  2026-11-22`, so `/promote-prod` step 0 no longer lists it. No finding ID consumed.
