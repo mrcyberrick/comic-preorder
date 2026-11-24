@@ -5885,6 +5885,27 @@ reasoning — only the disposition changed, not the diagnosis.
   change proposed here.
 - **Where:** production only (`plgegklqtdjxeglvyjte`) — this send was against production, post-M6.
   Not tested against staging.
+- **2026-11-24: a second Microsoft Junk placement, on the first arrivals email with Top Picks (Top
+  Picks S6 step 8).** The scheduled `notify-arrivals` run at 15:00 UTC sent 10 emails (10
+  `arrival_notices` rows written 15:00:07 to 15:00:08 UTC, equal to the dry run and the forecast).
+  The copy to the shop's own admin mailbox, a Hotmail (Outlook.com) address, landed in **Junk**.
+  Headers read from Rick's paste: `spf=pass` (`send.pulllist.app`, SES `54.240.14.59`), `dkim=pass`
+  for `pulllist.app` (selector `resend`) and `amazonses.com`, `dmarc=pass`, `compauth=pass
+  reason=100`; both DKIM signatures' `h=` lists include `List-Unsubscribe` and
+  `List-Unsubscribe-Post`, so the S5 headers are signed. Microsoft's verdict:
+  `X-MS-Exchange-Organization-SCL: 5` (`X-Message-Delivery` decodes to `SCL=6`), `BCL:0`, and
+  `X-Microsoft-Antispam-Mailbox-Delivery: ... dest:J; OFR:SpamFilterAuthJ; RF:JunkEmail`. So the
+  content and reputation filter chose Junk, not authentication, and `BCL:0` says it was not scored
+  as bulk mail. **Customer exposure this week on Microsoft: none.** The 10 recipients are 8 Gmail,
+  1 Yahoo/AOL and 1 Microsoft consumer address, and that one is the admin mailbox itself (provider
+  groups read from the auth users; no address printed). **Not established:** whether the Gmail and
+  Yahoo copies reached the inbox; whether S6's new content (four pick links to
+  `rjbookstop.pulllist.app`, third-party cover images, a `supabase.co` address in
+  `List-Unsubscribe`) raised the score, or whether this is the same cold-start reputation as
+  2026-09-02. **The discriminating check:** the same mailbox also received the 2026-11-17 arrivals
+  email (9 sent by hand at 18:19 UTC, admin account among them, no picks and no `List-Unsubscribe`
+  because the secret was not set then); if that one is also in Junk, the cause predates S6. Disposition
+  unchanged: monitor. No new finding ID consumed.
 - **Related:** **F99** (the migration this surfaced during — `docs/f99-resend-migration.md` M7).
 
 #### F153 — `register-tenant` created a new tenant's admin account with no way to sign in at all
