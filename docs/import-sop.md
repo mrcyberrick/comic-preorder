@@ -1,6 +1,6 @@
 # Import SOP — Catalog & Shipment Data
 
-**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-11-14 (Run B gains "Late file: one or two titles after the weekly run", the way to load one extra PRH delivery file without redoing the week; its first use was 2026-11-14) · earlier: 2026-11-12 (added "A note on using the dashboard while an import runs"; a note, not a rule) · earlier: 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
+**STATUS:** REFERENCE · created 2026-09-06 · updated 2026-11-21 (the F164 "confirm there is no second tenant" pre-import check retired; the import reads only this shop's rows since 2026-11-14) · earlier: 2026-11-14 (Run B gains "Late file: one or two titles after the weekly run", the way to load one extra PRH delivery file without redoing the week; its first use was 2026-11-14) · earlier: 2026-11-12 (added "A note on using the dashboard while an import runs"; a note, not a rule) · earlier: 2026-10-29 (brought current with the scripts after the 2026-11 import: the import no longer publishes the newsletter feed (F135 S4), so Run B loses its `.env` and feed steps; Run C gains the 2026-10-19 sections (unreserved Lunar corrections under a second prompt, likely recodes, the hand-check list, confirm-to-mark) and its per-environment state file; the Order Deadline and Maintenance Mode are in the dashboard header in Ordering mode, not Settings; dry-run artifacts and the 14-day hold noted in Run A) · earlier: 2026-10-27 (added **Run E**, placing the monthly distributor order, written for someone new to the system, and a "New to the system?" primer; checked against `admin.html` on `staging` the same day) · earlier: 2026-10-09 (any number of shipment files per run; F165 S1 retired the automatic withdrawal mark; F165 S2 report and the recheck-folder rules; later the same day: the F164 pre-import check, handling for the F122 "PINNED" report, and recovery from a dead feed token) · earlier: 2026-09-18 (F157 zero-row guard; F159 frozen-catalog warning)
 **Audience:** whoever runs the import. Assumes portal logins and a working `.env` (see F131).
 **Scope:** the short, followable version. The *why* behind each step, and every warning-sign
 narrative, lives in `docs/monthly-catalog-refresh.md` — that file stays canonical for
@@ -82,7 +82,17 @@ CSV files go in the folder **above** that one (`..\catalogs\`).
 
 ---
 
-## Before ANY import (Run A or Run B): confirm there is no second tenant (F164)
+## ~~Before ANY import (Run A or Run B): confirm there is no second tenant (F164)~~ RETIRED 2026-11-21
+
+**No longer a required step.** Since 2026-11-14 (scripts repo `main` `e73e2ef`, F164 G-I S1) the
+import's auto-reserve reads only this shop's subscriptions and catalog rows, so a second shop's data
+cannot be reserved across shops by the import. The first production run on that code (the
+2026-11-20 weekly import) read normally, which is the condition the plan set for retiring this check
+(`docs/f164-g-i-same-shop-guard.md` § 5). **What to watch for instead**, in the auto-reserve lines the
+import prints (Run A Step 6, Run B Step 3): a line reading `Ignored N subscription(s) and M catalog
+row(s) from other shops (F164)` or `... rows arrived without tenant_id — skipping auto-reserve (F164)`.
+Either one means stop and report; neither has ever printed. The two queries below still work as an
+optional check. *(The section as it read until 2026-11-21:)*
 
 Until the guard in `docs/pre-phase-6-gate-closure.md` § 2e (session G-I) is built, the import's
 auto-reserve reads **every** tenant's subscriptions and catalog rows with no tenant filter. With one

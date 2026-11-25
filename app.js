@@ -1768,6 +1768,33 @@ const PageBanner = {
     img.onerror = () => { host.hidden = true; };
     img.src = pick.src;
     host.appendChild(img);
+    // Seasonal snow over the PLATFORM art only: a store that chose its own image
+    // has chosen how it looks, and 'off' returned above.
+    if (!pick.custom && this.snowActive()) this.addSnow(host);
+  },
+
+  // Snow over the default art, December 1 to January 5 (the customer's local
+  // date), then it stops by itself. `?snow=1` / `?snow=0` on a page address forces
+  // it on or off for THAT page load, which is how it is previewed out of season;
+  // it changes nothing stored. Purely cosmetic and never throws.
+  snowActive(now = new Date()) {
+    try {
+      const q = new URLSearchParams(location.search).get('snow');
+      if (q === '1') return true;
+      if (q === '0') return false;
+    } catch (_) { /* no location: fall through to the date */ }
+    const m = now.getMonth(), d = now.getDate();
+    return m === 11 || (m === 0 && d <= 5);
+  },
+
+  // Three empty layers; style.css draws the flakes and animates them with
+  // transform only (no layout, no repaint, no request, no image file).
+  addSnow(host) {
+    const snow = document.createElement('span');
+    snow.className = 'banner-snow';
+    snow.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 3; i++) snow.appendChild(document.createElement('i'));
+    host.appendChild(snow);
   },
 
   // The one call a customer page makes, FIRST THING in its init. Starts the

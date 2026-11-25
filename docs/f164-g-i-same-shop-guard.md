@@ -1,6 +1,6 @@
 # F164 guard (session G-I): the import reads only its own shop's rows, then a same-shop trigger on `preorders`
 
-**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9) · prod: — (never touched) · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
+**STATUS:** APPROVED 2026-11-11 (Rick: "Defaults") · **S1 MERGED to scripts `main` 2026-11-14 (`e437c4f`, with the paged-read sort) and its first production import (2026-11-20) read NORMAL per § 5, so the interim pre-import queries are retired (2026-11-21); S2a (the trigger, STAGING) DONE 2026-11-22 (§ 9): `docs/sql/2026-11-22-f164-preorders-same-shop-trigger.sql` applied on staging by Rick, T0 to T6 green; S2b (production): THE TRIGGER IS APPLIED ON PRODUCTION 2026-11-22 (Rick; § 9), V1 to V3 and the AFTER probe passed; T8 (Rick's reserve-then-cancel through the app) is DONE on his report, 2026-11-22 (§ 9; my read-back was refused, so not independently observed); T9 (the next production import) is OUTSTANDING; F164 stays OPEN until T9 is read** *(this said "S2 (the trigger) NOT STARTED: S2a on staging first, then S2b" until S2a ran, then "S2b (production) NOT STARTED" until it was applied)* · *(The rest of this line is as written 2026-11-11:)* **S1 BUILT AND VERIFIED ON STAGING 2026-11-11** (scripts repo branch `feature/f164-import-tenant-reads`, commits `124b59b` + `f226552` + `e73e2ef` (the `(series_name, id)` sort, Rick's call 2026-11-11), pushed to the scripts repo's `origin`, **NOT merged to scripts `main`**: the merge waits for Rick's read of the Fri 2026-11-13 import, D2; a second branch built on it, `feature/import-paged-read-order` `e437c4f` (the other seven paged reads sorted on `id`, not F164), merges right after it, § 9); **(then:) S2a / S2b NOT STARTED** · plan written 2026-11-11 · staging: S1 gates green (§ 9); S2a trigger APPLIED and verified 2026-11-22 (§ 9) · prod: the trigger APPLIED 2026-11-22 (S2b, Rick-run; § 9); the SQL file's STATUS reads `prod=APPLIED 2026-11-22` · PR: — (S1 = scripts repo, no PR flow; S2 = SQL only, Rick-run) · findings: F164 (stays OPEN), F181 (filed while planning) *(This line read "APPROVED 2026-11-11, NOT STARTED" until the S1 session ran.)*
 
 Plan written 2026-11-11 (planning session). Owner finding: `docs/technical-reference.md` § 13 F164 (Medium, OPEN).
 Design source: `docs/pre-phase-6-gate-closure.md` § 2e "G-I". This doc turns that design into two executable
@@ -664,3 +664,155 @@ END: plan § 6.6 records (F164 RESOLVED on both, G8 closed), doc-only commit to 
   three (routine `trig_01BYubBzX9uVvmCRvYWC9Z6m` and calendar event `10r4rjgo2k38gglf3n015noca0`, still 8:00 AM ET).
   No finding ID consumed (a latent defect, fixed the
   session it was found, nothing left open); **F182 remains the next free finding ID.**
+- **2026-11-14, the merge (Rick; recorded 2026-11-21, a week late).** The scripts repo reflog reads both fast-forwards at
+  2026-11-14 08:06:09 -05:00 (`feature/f164-import-tenant-reads` to `e73e2ef`, then `feature/import-paged-read-order`
+  to `e437c4f`); `main` == `origin/main` == `e437c4f`, clean, read 2026-11-21. Whether the Fri 11-13 import was read
+  first (F180 V3) is not recorded.
+- **2026-11-21, § 5: the first production import on S1's code read NORMAL (Rick's paste; main session, read-only).** A
+  same-month 2026-11 refresh plus two shipment files (Lunar shipment 914654, 68 rows; PRH delivery 0076080253, 36 rows;
+  on-sale 2026-11-25). Step 5 verbatim: `Found 69 subscription(s) to process`, `Catalog rows fetched: 2086`, `Matched:
+  36 | Already reserved: 35 | Carried forward: 0 | To insert: 1`, `Auto-reserved 1 item(s) for subscribers`. **All three
+  § 5 conditions hold:** (1) 69 is the founding shop's count by construction (the read carries
+  `tenant_id=eq.${TENANT_ID}`; read from the code; 66 on 2026-10-28), **not independently counted: a read-only
+  production count was refused by the session's permission check and not worked around**; (2) no `Ignored ... from
+  other shops` line and no `arrived without tenant_id` line; (3) a normal week (35 already reserved from the 10-28
+  run, 1 new). **So the interim pre-import queries are RETIRED** (`docs/import-sop.md`, same commit; the plan's own
+  rule). The API path stays open until S2. **S2a has NOT started** (no `docs/sql` F164 file exists), so the Sat
+  2026-11-21 S2b gate does not open yet: S2a on staging comes first (§ 8.2), then S2b (§ 8.3). The rest of the
+  output, for the record: 2074 catalog rows upserted (1289 Lunar / 785 PRH, all normalised); 4 reserved and 46
+  unreserved in-store dates corrected by the re-pull; 104 of 104 shipment rows matched; catalog notification sent to
+  21, 0 failed; 209 reservations checked before auto-fulfil, 197 fulfilled, so about 12 held back by the 14-day rule
+  (F155 S3(a)), which matches the 11 listed titles on sale 2026-11-11 and 2026-11-18; the warning still lists those as
+  "about to be marked fulfilled" (the wording gap recorded 2026-10-28). No finding ID consumed.
+- **2026-11-22, S2a: the same-shop trigger is APPLIED and VERIFIED ON STAGING (Rick ran every SQL block; the agent ran the
+  harnesses). Production untouched. F164 stays OPEN until S2b.** SQL file
+  `docs/sql/2026-11-22-f164-preorders-same-shop-trigger.sql`, STATUS `staging=APPLIED 2026-11-22 | prod=PENDING
+  (deliberately: production is session S2b)`; the trigger is `trg_preorders_require_same_tenant` (BEFORE INSERT OR UPDATE
+  OF `catalog_id`, `tenant_id`, `user_id`, FOR EACH ROW) on `public.preorders`, function `preorders_require_same_tenant()`
+  (SECURITY DEFINER, `search_path=public`, EXECUTE revoked from PUBLIC / anon / authenticated), exactly § 6.3.
+  **Operator-pasted by Rick (SQL Editor; I did not see the blocks run):** T0 on staging (the `tenants` list including
+  `demoshop` confirms the project); P1 all four 0; P2a (`catalog`, `preorders`, `user_profiles`: owner `postgres`, RLS on,
+  RLS not forced) and P2b (`postgres`, `rolbypassrls` true), so the definer function reads every row; the BEFORE probe read
+  `F164 FAIL 1` (the probe seen red). The migration, then V1 (two triggers: F109's `trg_preorders_block_ordered_delete`
+  unchanged, BEFORE, delete only; the new one BEFORE, insert and update, `update_columns` `catalog_id,tenant_id,user_id`,
+  ROW, enabled), V2 (anon false, authenticated false, security definer true, `search_path=public`), V3 (= P1) all four 0,
+  and the AFTER probe `F164 PASS: checks 1 2 3 4 passed` (check 3, the other-shop customer, ran). *(Rick's second T0 paste
+  was labelled "P2b" a second time; its content was the probe result, so the paste labels are not evidence of which block
+  ran; the contents are.)* **Observed by the agent, against the deployed staging database, throwaway fixtures only (the
+  harnesses live in the scripts repo's gitignored `playwright/` folder, local-only; the scripts repo is untouched, `main`
+  `e437c4f`, clean):**
+  - **Before the trigger (red, as required).** `f164-trigger-verify.mjs --pre-trigger`: all 11 refusal checks read RED
+    (the write was accepted) and all 7 controls passed, so the harness can fail. That reproduces G-D (a customer JWT
+    reserving a demoshop listing, 201; moving its own row onto one, 200) and adds two cases G-D did not test: **an admin JWT
+    can write a reservation for another shop's customer (201), and so can the service role.** A missing listing or customer
+    read 409 `23503` (the foreign key), not yet 23514.
+  - **T2 after, run `a7a06bfb`: 18 of 18 PASS** (11 refusals + 7 controls). Every refusal is HTTP 400, code `23514`, with
+    the right message ("...a listing of its own shop" or "...a customer of its own shop"), for a customer JWT, an admin JWT
+    and the service role, including the import's shape (the service role writing the founding tenant onto a demoshop
+    listing, the shape that wrote F164's two rows), a re-stamp of `tenant_id`, an upsert onto another shop's listing, and
+    a missing listing or customer (now 23514, failing closed). The controls that must keep working did: a customer
+    reserving a founding listing, moving its row to another founding listing, changing quantity (a column the trigger does
+    not watch), the app's upsert onto its own row (`upsertReservation` / `bulkUpsert` shape), an admin writing its own
+    customer's reservation, and the service role writing a same-shop reservation and a same-shop reservation in the OTHER
+    shop. Teardown re-read 0 on all nine checks.
+  - **T3, run `afcb9d10`: PASS.** The real `autoReserveSubscriptions()` from `import-staging.js` (scripts `main` `e437c4f`,
+    clean), phases preflight, setup, F3, F4, teardown, each its own process: F3 `Found 6` (the founding shop's count),
+    `Matched 1, Already reserved 0, To insert 1`, one preorder for the founding customer on the founding listing, none for
+    the demoshop customer or listing, no "Ignored ... from other shops" line, no "Auto-reserve batch failed" line; F4
+    idempotent (`Already reserved 1, To insert 0`). **So a legitimate auto-reserve is unaffected and a batch does not fail
+    silently.** Teardown re-read 0 on all eight checks.
+  - **T4: `f173-move-verify.mjs` 50 PASS, 0 FAIL**, teardown 0. The Move reservations control (`admin_move_reservations()`,
+    which repoints `catalog_id`, a watched column) still works with the trigger live.
+  - **T5, run `126a7671`: PASS.** Same-shop claim: 200, the reservation moved to the real customer, the paper profile and
+    auth user gone. Cross-shop claim: **HTTP 404 "Target real account not found"**, nothing moved, the paper account intact.
+    Teardown re-read 0 on all eleven checks.
+  - **T6: full Playwright suite on the deployed staging bytes, app repo on `staging` equal to `origin/staging`
+    (`03e4186`): 169 passed, 1 flaky, 1 skipped, 0 failed, 30.8 min, `EXIT=0`, read from the log's own summary line**
+    (169 + the flaky test's passing retry = 170, the 2026-11-21 baseline; the skip is the same as the baseline's).
+    `globalTeardown` restored `catalog_filters` (167 bytes) and deleted its synthetic tenant. **The flaky test is spec 06,
+    "Email button: enabled on a past week, disabled on a future week" (`:120`).** First attempt: the future-week card
+    rendered (`:139` passed) and then `.bagging-email-btn` was "element(s) not found" inside it (`:141`); the retry
+    passed. Spec 06 alone, three repeats, `--retries=0`: **12 of 12 passed.** **Not reproduced, cause not established.**
+    A refused seed write would have left no card at all, and the retry would have failed the same way, so it does not look
+    like the trigger; that is an inference, and a re-render race in the page is the guess, untested. (A background-task
+    notice, delivered after the run, called the suite "stopped"; the log and a process list showed it had finished and
+    nothing was left running.)
+  - **Deviations, and a stale premise in the handoff.** The handoff expected the cross-shop claim in T5-pre to SUCCEED
+    before the trigger and return "Failed to reassign preorders" after it. **Observed instead: HTTP 404 in both modes.**
+    F181 (the function's tenant filters) is already fixed and deployed on staging, so the function stops at its own
+    tenant-filtered read and never sends the `preorders` write the trigger would refuse. So I added **case Y**, the claim's
+    own write replayed directly as the service role (`PATCH preorders?user_id=eq.<paper>&tenant_id=eq.<founding>` with
+    `user_id` set to a demoshop customer): before the trigger it was accepted (HTTP 204; the harness undid it and re-read
+    the row, 1 on the paper customer, 0 on the demoshop customer), after it **HTTP 400 `23514` "...a customer of its own
+    shop"** with the reservation still on the paper customer. I also added `--pre-trigger` and `--mode=pre` to the
+    harnesses so each refusal check could be seen red first. **Not a defect, not filed.**
+  - **Not verified:** production (never touched; S2b); that the trigger refuses a write through a real browser session
+    (the T2 writes are direct REST calls with real JWTs; the suite's 169 passes cover the legitimate browser paths); a real
+    customer or the real import hitting the trigger; the subscriptions table (no guard, out of scope); `claim-paper-customer`
+    after F181 on real data; the unreproduced spec 06 flake above; `quantity` / `fulfilled` / `notes` updates were exercised
+    only by control A5 (a customer's quantity change) and the suite. Rollback is the commented block at the bottom of the SQL file
+    (drop the trigger, then the function); dropping the trigger alone restores prior behaviour at once, no deploy.
+  - **What this means for promotions.** Until S2b, `/promote-prod` step 0 will list this file as `prod=PENDING` on every
+    promotion; that is deliberate, not a blocker (no page or `app.js` references `preorders_require_same_tenant`), and each
+    promotion in the window should say so. **S2b is next** (§ 8.3; production is read-only for the agent: P1, P2, the probe
+    BEFORE, the migration, V1 to V3, the probe AFTER, all Rick-run). **Finding-ID disposition, in words: no finding ID
+    consumed** (S2a executes a designed fix for F164, which already owns the work and stays OPEN until S2b; the
+    handoff's stale expectation and the flake are recorded here and not filed).
+- **2026-11-22, S2b: the same-shop trigger is APPLIED ON PRODUCTION (Rick ran every SQL block in the SQL Editor on the
+  production project; the agent never writes to production and read nothing there in this session). T8 and T9 are
+  OUTSTANDING, so F164 stays OPEN.** Preconditions confirmed before any SQL: S2a applied on staging (entry above); S1 merged
+  to scripts `main` (`e437c4f`, read 2026-11-22: `main` == `origin/main`, clean); the first production import on S1's code
+  read normal (the 2026-11-21 entry above). **Operator-pasted (Rick), in the plan's order (T6b, then T7):** S0, `slug`:
+  `comicstore`, `rjbookstop` (so the project is production, not staging); **P1 all four 0**; **P2a** `catalog`,
+  `preorders`, `user_profiles` each owner `postgres`, RLS on, RLS not forced; **P2b** `postgres`, `rolbypassrls` true, so
+  the SECURITY DEFINER function reads every shop's rows; **the probe BEFORE read `F164 FAIL 1`** at the same line as on
+  staging (seen red on production, and a second shop's listing exists to test with); then the § 6.3 migration, run as one
+  block; **V1** two triggers (F109's `trg_preorders_block_ordered_delete`: BEFORE, delete only, ROW, enabled, unchanged; the
+  new `trg_preorders_require_same_tenant`: BEFORE, insert and update, ROW, enabled, `update_columns`
+  `catalog_id,tenant_id,user_id`); **V2** anon false, authenticated false, security definer true, `search_path=public`;
+  **V3 (= P1) all four 0**; **the AFTER probe `F164 PASS: checks 1 2 3 4 passed`**, check 3 included (so production holds
+  a second-shop customer, and the plan's "owner check not exercised on production" caveat does NOT apply). The pasted
+  probe in the BEFORE round carried the SQL Editor's page text (tab titles, "Expand sidebar", and so on) around the
+  error; only the error line was read. **Not independently observed by the agent:** the agent made no production read or
+  write in S2b (the probe and checks above are Rick's pastes), so the trigger's behaviour on production rests on his
+  pastes plus staging's observed behaviour (T2 to T6 above, run against the same SQL text). **Same SQL text on both:** the
+  block Rick ran on production was the block in the SQL file, copied from the plan's § 6.3, as on staging; I did not
+  diff Rick's editor contents against the file. **Not yet done, and not claimed:** **T8**, Rick's reserve-then-cancel
+  through the app on production (every reserve now passes through the trigger; the probe runs as the SQL Editor's role, so
+  it exercises the trigger, not RLS or a real customer JWT), and **T9**, the next production import's Step 5 printing no
+  "Auto-reserve batch failed" (the first import after S2; the weekly import is Fridays). Until both are read, the § 6.6
+  completion records (`technical-reference.md` § 7.1 and § 13 F164, `pre-phase-6-gate-closure.md` § 2e and the G8 row, the
+  CLAUDE.md row and entry) are NOT written and F164 is not marked RESOLVED. **Rollback, if either fails:** the commented
+  block at the bottom of the SQL file (drop the trigger, then the function); dropping the trigger alone restores prior
+  behaviour at once, no deploy. **What changes for promotions:** the SQL file's STATUS now reads `prod=APPLIED
+  2026-11-22`, so `/promote-prod` step 0 no longer lists it. No finding ID consumed.
+- **2026-11-22, S2b T8: Rick's write-smoke through the app on production is GREEN, on his report.** Rick, in his words:
+  "Smoke = green (Title: MAGNETO: END OF DAYS #1 COVER A) last few minutes completed", meaning a reserve then a cancel of
+  that title in the live app, signed in as himself (his words do not say which account or page, or what each screen
+  showed). **I tried to read the `reserve` and `cancel` events back from production (a `GET`-only, 90-minute window of
+  `usage_events`, no key printed) and the session's permission check REFUSED it ("Unauthorized Access"); I did not retry
+  by another route.** So the smoke is **not independently observed**: whether the two events landed, and with what
+  `tenant_id`, is unread. The cancel half exercises F109's unchanged delete trigger; the reserve half is the first
+  insert through the new trigger by a real customer session on production (the probe ran as the SQL Editor's role).
+  **Still outstanding: T9**, the next production import's Step 5 printing no "Auto-reserve batch failed" (Rick's next
+  Friday run; at first not scheduled, no reminder set, pending his say-so; he then asked for one, see the next entry).
+  **F164 stays OPEN** and the § 6.6 completion records are still not written; they follow T9. Nothing was changed on
+  production by the agent. No finding ID consumed.
+- **2026-11-22, Gate scheduled: T9, the first real production import after the trigger; reminders set for Fri 2026-11-27,
+  8:00 AM ET (Rick's ask: "Remind should be clear about what actions need to be taken").** The gate is event-based (one
+  real production import after 2026-11-22), not a duration; the date is Rick's usual Friday import, which falls the day
+  after Thanksgiving (Thu 2026-11-26), so it may move, and both reminders say so and say what to do if it does (ask for a
+  new reminder). Weekdays checked by command (2026-11-22 Sunday, 11-26 Thursday, 11-27 Friday). **Reminders:** a one-time
+  cloud routine `trig_01SstpiQPyUcCuMXBsQiEyWh` (`run_once_at` 2026-11-27T13:00:00Z, which is 8:00 AM ET since clocks
+  went back on 2026-11-01; the skill's template says 12:00 UTC, which is the daylight-time offset; allowed tools
+  PushNotification, Read, Grep, Glob; connectors cleared after the server auto-attached five, because a reminder needs
+  none; https://claude.ai/code/routines/trig_01SstpiQPyUcCuMXBsQiEyWh) and a Google Calendar event
+  `s73k5cppbbf4im57cdq247323s` (8:00 to 8:15 AM ET, popup at the start and email an hour before, same text). **Both carry
+  the same four numbered actions:** (1) run the next real import, a `--no-write` dry run does not count because it never
+  writes reservations; (2) find the Step 5 "Processing subscriptions" block; (3) check it (the expected lines, and the
+  three lines that must not appear); (4) paste the block into a Claude Code session and say "T9", which triggers the §
+  6.6 completion records. **And the failure branch:** do not re-run the import and do not change anything yet, paste the
+  output first, since an import failure does not stop customers reserving; run the rollback (drop the trigger, then the
+  function, after checking the project is production) only if customers cannot reserve or Claude says so. The routine only
+  reminds and takes no action. No credential appears in either. **Not verified:** that either reminder fires (the
+  routine's `next_run_at` reads 2026-11-27T13:00:00Z; the event's start reads 13:00Z, equal to 8:00 AM ET).
