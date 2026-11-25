@@ -1,6 +1,6 @@
 # Shelf-Copy Suggested Order — My List store-inventory automation
 
-**STATUS:** COMPLETE | staging=2026-07-17 | prod=2026-07-18 (PR #89) | findings=—
+**STATUS:** COMPLETE | staging=2026-07-17 | prod=2026-07-18 (PR #89) | findings=— | follow-up § 8 (Print Catalog order + editable qty) staging=2026-11-24, prod not promoted
 
 **Status:** **Complete and promoted to production.** Execution session ran
 2026-07-17, same day as planning. Both Open defaults confirmed as-is with
@@ -265,6 +265,34 @@ rollback is a single revert commit on staging. Data written by Apply is
 ordinary BookStop reservations, removable through the existing My List
 Remove button (for FOC-open rows) or left to flow into the order as a
 manual decision; no schema or RLS changes exist to unwind.
+
+## 8. Follow-up 2026-11-24 — Print Catalog order and an editable Suggested Qty
+
+Rick: "The Suggested Shelf Order should sort by title as in the Print Catalog. In
+addition the ability to edit the Suggested Qty." Built on staging (`43db3c2`, then
+`mylist.html` layout fix), not promoted when written.
+
+- **Order.** The list was in reservation-id order (effectively random). It is now
+  in Print Catalog order: a Lunar band, then a PRH band, each by title, with a
+  band row per distributor like the printed sheet. `ShelfOrder.comparePrintCatalogOrder`
+  reproduces the database's `order by title, item_code` (the Print Catalog's
+  query) exactly: measured on staging's 2026-10 catalog, 0 of 2,234 rows out of
+  place with `localeCompare('en', { sensitivity: 'base' })`; byte order put 44
+  Lunar and 814 PRH rows out of place. Deliberately NOT a "natural" numeric sort,
+  so `#10` comes before `#2` exactly as on the paper.
+- **Editable Suggested Qty (0-99).** The cell is a number box seeded with the
+  tier suggestion; the Action column and the Apply count follow it as you type,
+  and Apply writes the boxes as they stand. **The never-lower rule is kept:** an
+  existing store quantity is only raised here (`shelfActionForQty`); a typed value
+  below it reads "No change (lower it on My List)", because lowering belongs to
+  My List's stepper and its order-lock rules. 0 on a new title reads Skip.
+- **Evidence.** Unit suite `test/shelf-order.test.mjs` 16/16 (7 new), with three
+  deliberately broken copies each red (no sort, lowering allowed, edits ignored).
+  Local harness `admin-list-enhancements-verify.mjs` (scripts `playwright/`,
+  local-only) against the deployed staging bytes: bands Lunar then PRH, each band
+  in title order, tier suggestions, every edit path, 150 shown as 99, focus kept
+  while typing, and Apply wrote exactly the typed quantities (read back from the
+  database); the same harness against the previous build fails these checks.
 
 ## References
 
