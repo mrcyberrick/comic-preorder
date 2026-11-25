@@ -3795,6 +3795,7 @@ There is no undo in the app.`);
     obAlready.querySelectorAll('.ob-already-qty').forEach(inp => {
       inp.addEventListener('input', () => {
         builderOverrides[inp.dataset.code].qty = Math.max(0, parseInt(inp.value) || 0);
+        updateBuilderSummary(); // the copies total moves with this box
       });
     });
 
@@ -3876,12 +3877,28 @@ There is no undo in the app.`);
       ${nothingHeld && !fulfilledCount && !distributorCollapses.length && !buckets.orderedOtherCycle.length ? '<div style="font-size:0.78rem;color:var(--text-muted)">Nothing held back.</div>' : ''}
     `;
 
-    // Counts the ACTUAL export lines, via the same builder the Generate
-    // button uses — not buckets.included.length, which is reservation rows
-    // and overstated the file by 12 on production PRH while also ignoring
-    // approved already-ordered overrides.
-    const exportCount = buildExportRows(distributor, builderSelectedDates).length;
-    obSummary.textContent = `${exportCount} title${exportCount === 1 ? '' : 's'} ready to export`;
+    updateBuilderSummary();
+  }
+
+  // Counts the ACTUAL export lines, via the same builder the Generate
+  // button uses — not buckets.included.length, which is reservation rows
+  // and overstated the file by 12 on production PRH while also ignoring
+  // approved already-ordered overrides.
+  //
+  // Copies (2026-11-24, Rick: "a count of Titles but it does not show a total
+  // number of copies. This would be a good visual confirmation with the
+  // distributor's order page"): the sum of TotalQty over those same lines, i.e.
+  // the quantity column of the file, so it is the number the distributor's
+  // cart should total after the upload. The title count stays FIRST and its
+  // wording is unchanged: spec 15 reads the leading number as the line count
+  // and asserts "1 title ready to export".
+  function exportTotals(rows) {
+    return { titles: rows.length, copies: rows.reduce((n, r) => n + (Number(r.TotalQty) || 0), 0) };
+  }
+  function copiesLabel(n) { return `${n.toLocaleString()} cop${n === 1 ? 'y' : 'ies'}`; }
+  function updateBuilderSummary() {
+    const { titles, copies } = exportTotals(buildExportRows(builderDistributor, builderSelectedDates));
+    obSummary.textContent = `${titles} title${titles === 1 ? '' : 's'} ready to export · ${copiesLabel(copies)}`;
   }
 
   document.getElementById('order-builder-close').addEventListener('click', closeOrderBuilder);
@@ -3969,7 +3986,8 @@ There is no undo in the app.`);
     // This is F101 § 4.2's original principle reasserting itself: generating
     // a file is not proof of submission. Recording moved to step 2, which is
     // reached when the operator comes BACK from the supplier.
-    toast(`${distributor} order sheet downloaded — ${consolidated.length} title${consolidated.length===1?'':'s'}. ` +
+    toast(`${distributor} order sheet downloaded — ${consolidated.length} title${consolidated.length===1?'':'s'}, ` +
+          `${copiesLabel(exportTotals(consolidated).copies)}. ` +
           `Use "Record submitted order" when you're back from the supplier.`);
   });
 
@@ -4058,7 +4076,7 @@ There is no undo in the app.`);
 
     obStepRec.innerHTML = `
       <p style="color:var(--text-secondary);font-size:0.82rem;margin:0 0 6px;line-height:1.5">
-        These are the ${rows.length} title${rows.length===1?'':'s'} in the file you submitted to
+        These are the ${rows.length} title${rows.length===1?'':'s'} (${copiesLabel(exportTotals(rows).copies)}) in the file you submitted to
         ${escapeHtml(distributor)}. <strong style="color:var(--text-primary)">Untick anything the
         supplier rejected</strong> — that records it as rejected rather than ordered.
       </p>
@@ -4104,11 +4122,15 @@ There is no undo in the app.`);
 
   function updateRecordSummary() {
     const vals     = Object.values(recordSelections);
-    const ordered  = vals.filter(s => s.include && s.qty > 0).length;
+    const accepted = vals.filter(s => s.include && s.qty > 0);
+    const ordered  = accepted.length;
+    const copies   = accepted.reduce((n, s) => n + s.qty, 0);
     const rejected = vals.length - ordered;
+    // Copies sit beside "ordered", the number that is checked against the supplier's confirmation;
+    // "N rejected" stays last and unchanged (spec 15 asserts that substring).
     obRecSum.textContent = rejected
-      ? `${ordered} ordered · ${rejected} rejected`
-      : `${ordered} ordered`;
+      ? `${ordered} ordered (${copiesLabel(copies)}) · ${rejected} rejected`
+      : `${ordered} ordered (${copiesLabel(copies)})`;
   }
 
   document.getElementById('order-builder-record').addEventListener('click', () => {
@@ -6803,10 +6825,20 @@ There is no undo in the app.`);
   // data against production's 485 + 2,623. So a page count taken on staging says
   // nothing about the production print, and a count taken from a raw catalog
   // file says nothing about either. Measure against the environment you mean.
-  function buildCombinedCatalogHtml(groups, monthLabel) {
+  // orderDeadline: 'YYYY-MM-DD' or null. Shown in the page-1 header when set and not yet passed
+  // (2026-11-24, Rick: "When a deadline is set the Print Catalog should display this in the page
+  // header"). Same rule as the catalog page's "Reserve by" banner (catalog.html): a passed deadline
+  // is not printed, because a sheet that says to order by a date already gone is wrong on paper.
+  function buildCombinedCatalogHtml(groups, monthLabel, orderDeadline) {
     const printDate = new Date().toLocaleDateString('en-US', {
       month: 'long', day: 'numeric', year: 'numeric'
     });
+    const deadlineLabel = (orderDeadline && orderDeadline >= DateUtils.todayLocal())
+      ? (() => {
+          const [y, m, d] = orderDeadline.split('-').map(Number);
+          return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        })()
+      : '';
 
     // F72 S3: tier-gated identity for this print job's header + @page footer.
     const printTenant = TenantContext.current();
@@ -6924,6 +6956,18 @@ There is no undo in the app.`);
       color: #666;
       text-align: right;
       line-height: 1.5;
+    }
+    /* Order deadline: a ruled box, not a fill or a colour, so it survives a
+       black-and-white print with "Background graphics" off (the distributor
+       band below follows the same rule for the same reason). */
+    .ph-deadline {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #111;
+      border: 1px solid #111;
+      border-radius: 2px;
+      padding: 1px 5px;
+      white-space: nowrap;
     }
 
     /* ── Table ── */
@@ -7047,6 +7091,7 @@ There is no undo in the app.`);
     <div class="ph-left">
       <div class="ph-logo">PULL<span>LIST</span></div>
       <div class="ph-dist">Catalog &mdash; ${escapeHtml(monthLabel)}</div>
+      ${deadlineLabel ? `<div class="ph-deadline">Order deadline: ${escapeHtml(deadlineLabel)}</div>` : ''}
     </div>
     <div class="ph-right">
       <div>${total.toLocaleString()} titles</div>
@@ -7130,7 +7175,13 @@ There is no undo in the app.`);
         return;
       }
 
-      openPrintWindow(buildCombinedCatalogHtml(groups, catalogMonthLabel()));
+      // Read fresh, not the page-load copy: the deadline may have been set or cleared in
+      // the Order Deadline box at the top of this page since it opened. A failed read prints without it
+      // rather than blocking the print.
+      let deadline = null;
+      try { deadline = await Settings.getOrderDeadline(); } catch (e) { deadline = null; }
+
+      openPrintWindow(buildCombinedCatalogHtml(groups, catalogMonthLabel(), deadline));
     } finally {
       btn.disabled  = false;
       btn.innerHTML = origText;

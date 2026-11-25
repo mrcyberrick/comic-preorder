@@ -8,7 +8,10 @@ import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { suggestedQtyForDemand, buildShelfOrderPlan } = require('../shelf-order.js');
+const {
+  suggestedQtyForDemand, buildShelfOrderPlan, normalizeShelfQty,
+  comparePrintCatalogOrder, shelfActionForQty, buildShelfOrderPayload, MAX_SHELF_QTY,
+} = require('../shelf-order.js');
 
 // ── Tier rule ─────────────────────────────────────────────────────────────
 
@@ -33,7 +36,8 @@ test('buildShelfOrderPlan: no existing store row -> insert', () => {
   const demandRows = [{ catalogId: 'c1', title: 'Title A', openQty: 2 }];
   const { preview, payload } = buildShelfOrderPlan(demandRows, []);
   assert.deepEqual(preview, [
-    { catalogId: 'c1', title: 'Title A', openQty: 2, currentQty: 0, suggestedQty: 1, action: 'insert' },
+    { catalogId: 'c1', title: 'Title A', distributor: null, itemCode: null, openQty: 2,
+      currentQty: 0, hasStoreRow: false, suggestedQty: 1, action: 'insert' },
   ]);
   assert.deepEqual(payload, [{ catalogId: 'c1', quantity: 1 }]);
 });
@@ -105,4 +109,92 @@ test('buildShelfOrderPlan: mixed batch — insert, raise, and no-change coexist 
       { catalogId: 'raise-me', quantity: 3 },
     ]
   );
+});
+
+// ── Print Catalog order (2026-11-24) ─────────────────────────────────────────
+
+test('buildShelfOrderPlan: preview is in Print Catalog order (Lunar band, then PRH, each by title)', () => {
+  const demandRows = [
+    { catalogId: 'p2', title: 'zebra tales #1', distributor: 'PRH',   itemCode: 'P2', openQty: 1 },
+    { catalogId: 'l2', title: 'BATMAN #2',      distributor: 'Lunar', itemCode: 'L2', openQty: 1 },
+    { catalogId: 'p1', title: 'Absolute Flash', distributor: 'PRH',   itemCode: 'P1', openQty: 1 },
+    { catalogId: 'l1', title: 'batman #10',     distributor: 'Lunar', itemCode: 'L1', openQty: 1 },
+  ];
+  const { preview, payload } = buildShelfOrderPlan(demandRows, []);
+  // Case-insensitive, and "#10" before "#2" (text order, as the database sorts the printed sheet).
+  assert.deepEqual(preview.map(r => r.catalogId), ['l1', 'l2', 'p1', 'p2']);
+  assert.deepEqual(payload.map(r => r.catalogId), ['l1', 'l2', 'p1', 'p2'], 'payload follows the preview order');
+});
+
+test('comparePrintCatalogOrder: equal titles break on item code; unknown distributor sorts last', () => {
+  const rows = [
+    { distributor: 'Other', title: 'A', itemCode: '1' },
+    { distributor: 'Lunar', title: 'Same Title', itemCode: 'B' },
+    { distributor: 'Lunar', title: 'same title', itemCode: 'A' },
+  ];
+  rows.sort(comparePrintCatalogOrder);
+  assert.deepEqual(rows.map(r => r.itemCode), ['A', 'B', '1']);
+});
+
+// ── Editable Suggested Qty (2026-11-24) ──────────────────────────────────────
+
+test('normalizeShelfQty: whole numbers 0..MAX, blank or junk reads as 0', () => {
+  assert.equal(MAX_SHELF_QTY, 99);
+  assert.equal(normalizeShelfQty('4'), 4);
+  assert.equal(normalizeShelfQty(2.7), 2);
+  assert.equal(normalizeShelfQty(''), 0);
+  assert.equal(normalizeShelfQty('abc'), 0);
+  assert.equal(normalizeShelfQty(-3), 0);
+  assert.equal(normalizeShelfQty(500), 99);
+});
+
+test('shelfActionForQty: no store row -> insert, or skip at 0', () => {
+  const row = { hasStoreRow: false, currentQty: 0 };
+  assert.equal(shelfActionForQty(row, 2), 'insert');
+  assert.equal(shelfActionForQty(row, 0), 'skip');
+});
+
+test('shelfActionForQty: never lowers an existing store quantity', () => {
+  const row = { hasStoreRow: true, currentQty: 3 };
+  assert.equal(shelfActionForQty(row, 5), 'raise');
+  assert.equal(shelfActionForQty(row, 3), 'no change');
+  assert.equal(shelfActionForQty(row, 1), 'no change', 'a typed value below the current quantity does not lower it');
+  assert.equal(shelfActionForQty(row, 0), 'no change');
+});
+
+test('buildShelfOrderPayload: edits override the suggestion; unedited rows keep it', () => {
+  const demandRows = [
+    { catalogId: 'new-a',   title: 'A', distributor: 'Lunar', itemCode: 'A', openQty: 1 }, // suggests 1, no row
+    { catalogId: 'new-b',   title: 'B', distributor: 'Lunar', itemCode: 'B', openQty: 5 }, // suggests 3, no row
+    { catalogId: 'have-c',  title: 'C', distributor: 'Lunar', itemCode: 'C', openQty: 5 }, // suggests 3, row at 2
+    { catalogId: 'have-d',  title: 'D', distributor: 'Lunar', itemCode: 'D', openQty: 1 }, // suggests 1, row at 1
+  ];
+  const storeRows = [{ catalogId: 'have-c', quantity: 2 }, { catalogId: 'have-d', quantity: 1 }];
+  const { preview } = buildShelfOrderPlan(demandRows, storeRows);
+  const edits = new Map([
+    ['new-a', '4'],    // raised above the suggestion -> insert 4
+    ['new-b', 0],      // skipped
+    ['have-c', 1],     // below the current 2 -> no change (never lower)
+    ['have-d', 6],     // raised from 1 -> raise to 6
+  ]);
+  assert.deepEqual(buildShelfOrderPayload(preview, edits), [
+    { catalogId: 'new-a', quantity: 4 },
+    { catalogId: 'have-d', quantity: 6 },
+  ]);
+  // A plain object works too, and a row with no edit keeps its suggestion.
+  assert.deepEqual(buildShelfOrderPayload(preview, { 'new-a': 2 }), [
+    { catalogId: 'new-a', quantity: 2 },
+    { catalogId: 'new-b', quantity: 3 },
+    { catalogId: 'have-c', quantity: 3 },
+  ]);
+});
+
+test('buildShelfOrderPayload with no edits equals the plan payload', () => {
+  const demandRows = [
+    { catalogId: 'x', title: 'X', openQty: 3 },
+    { catalogId: 'y', title: 'Y', openQty: 1 },
+  ];
+  const plan = buildShelfOrderPlan(demandRows, [{ catalogId: 'y', quantity: 4 }]);
+  assert.deepEqual(buildShelfOrderPayload(plan.preview, null), plan.payload);
+  assert.deepEqual(plan.payload, [{ catalogId: 'x', quantity: 2 }]);
 });
