@@ -1,6 +1,6 @@
 # Shelf-Copy Suggested Order — My List store-inventory automation
 
-**STATUS:** COMPLETE | staging=2026-07-17 | prod=2026-07-18 (PR #89) | findings=— | follow-up § 8 (Print Catalog order + editable qty) staging=2026-11-24, prod not promoted
+**STATUS:** COMPLETE | staging=2026-07-17 | prod=2026-07-18 (PR #89) | findings=— | follow-up § 8 (Print Catalog order + editable qty) staging=2026-11-24 | prod=2026-11-25 (PR #193)
 
 **Status:** **Complete and promoted to production.** Execution session ran
 2026-07-17, same day as planning. Both Open defaults confirmed as-is with
@@ -270,7 +270,7 @@ manual decision; no schema or RLS changes exist to unwind.
 
 Rick: "The Suggested Shelf Order should sort by title as in the Print Catalog. In
 addition the ability to edit the Suggested Qty." Built on staging (`43db3c2`, then
-`mylist.html` layout fix), not promoted when written.
+`mylist.html` layout fix); promoted to production 2026-11-25 (PR #193, merge `cca911e`).
 
 - **Order.** The list was in reservation-id order (effectively random). It is now
   in Print Catalog order: a Lunar band, then a PRH band, each by title, with a
