@@ -520,6 +520,39 @@
     .confirm-modal p { margin: 0 0 20px; font-size: 0.95rem; }
     .confirm-actions { display: flex; gap: 10px; justify-content: center; }
     .confirm-actions .btn { min-width: 90px; }
+
+    /* ── Sortable column headers (2026-11-24) ─────────────────────
+       A plain button inside each sortable <th>, so a keyboard can reach it.
+       Deliberately NOT .btn: the print rules hide every .btn, and the header
+       labels must still print. The button adds no width and wraps exactly as
+       the old plain-text header did, and the arrow sits in the cell's right
+       padding (position: absolute), so the table lays out as it did before
+       this change and choosing a column never re-flows it. */
+    .th-sort-btn {
+      background: none; border: 0; padding: 0; margin: 0;
+      font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; text-align: inherit;
+      cursor: pointer; position: relative;
+    }
+    .th-sort-btn:hover, .th-sort-btn.is-active { color: var(--text-primary); }
+    .th-sort-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+    .th-sort-ind {
+      position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+      margin-left: 3px; font-size: 0.6rem; line-height: 1; pointer-events: none;
+    }
+    @media print { .th-sort-ind { display: none !important; } }
+
+    /* ── Suggested Shelf Order: editable qty + distributor bands (2026-11-24) ── */
+    #shelf-order-table .shelf-qty-input {
+      width: 60px; padding: 4px 6px; font-size: 0.85rem;
+      background: var(--bg-elevated); color: var(--text-primary);
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    #shelf-order-table .shelf-qty-input.is-edited { border-color: var(--accent); font-weight: 600; }
+    #shelf-order-table .shelf-qty-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #shelf-order-table .shelf-band td {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-secondary); padding-top: 14px; border-bottom: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
@@ -1121,6 +1154,71 @@ function confirmDialog(message, okLabel = 'Remove') {
     if (unavailableSection && host) host.appendChild(unavailableSection);
   }
 
+  // ── Column sort (2026-11-24, Rick: "make the columns in the reservations sortable (especially by title)") ──
+  // The default is the page's long-standing order, on-sale date earliest first, now with the title tiebreak the old
+  // "Sort by on_sale_date then title" comment promised and the code never did. A header click sorts by that column; a
+  // second click on the same header reverses it. The choice is remembered per signed-in account in this browser (the
+  // viewer's own preference, so an admin viewing a customer keeps the admin's choice); every storage access is wrapped,
+  // since storage throws outright in some private windows. The phone cards follow the same order; they have no header
+  // row to click. A quantity change does not re-sort on the spot (the stepper updates its row in place); the next render does.
+  const LIST_SORT_KEY = `pulllist_mylist_sort_${user.id}`;
+  const LIST_SORT_DEFAULT = { key: 'on_sale', dir: 'asc' };
+  const listPrice = i => parseFloat(i.catalog?.price_usd) || 0;
+  const LIST_SORT_COLUMNS = {
+    title:       { text: true, get: i => i.catalog?.title || '' },
+    publisher:   { text: true, get: i => i.catalog?.publisher || '' },
+    distributor: { text: true, get: i => i.catalog?.distributor || '' },
+    on_sale:     { text: true, get: i => i.catalog?.on_sale_date || '' },   // YYYY-MM-DD, so text order is date order
+    qty:         { get: i => i.quantity || 1 },
+    price:       { get: listPrice },
+    line_total:  { get: i => listPrice(i) * (i.quantity || 1) },
+  };
+  let listSort = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LIST_SORT_KEY) || 'null');
+      if (saved && LIST_SORT_COLUMNS[saved.key] && (saved.dir === 'asc' || saved.dir === 'desc')) return saved;
+    } catch (e) { /* unreadable or blocked storage: use the default */ }
+    return { ...LIST_SORT_DEFAULT };
+  })();
+
+  // Natural text order ("#2" before "#10"), case-insensitive.
+  const listTextCmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+
+  function sortListItems(items) {
+    const col = LIST_SORT_COLUMNS[listSort.key] || LIST_SORT_COLUMNS.on_sale;
+    const sign = listSort.dir === 'desc' ? -1 : 1;
+    const cmp = (a, b, c) => c.text ? listTextCmp(c.get(a), c.get(b)) : (c.get(a) - c.get(b));
+    items.sort((a, b) =>
+      sign * cmp(a, b, col)
+      // Ties always read in the same order, whichever way the chosen column runs:
+      // title, then on-sale date, then the row id (so equal rows never swap between renders).
+      || cmp(a, b, LIST_SORT_COLUMNS.title)
+      || cmp(a, b, LIST_SORT_COLUMNS.on_sale)
+      || String(a.id).localeCompare(String(b.id)));
+    return items;
+  }
+
+  function sortHeader(key, label) {
+    const active = listSort.key === key;
+    const ariaSort = active ? (listSort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    const arrow = active ? (listSort.dir === 'asc' ? '▲' : '▼') : '';
+    const next = active && listSort.dir === 'asc' ? 'descending' : 'ascending';
+    return `<th aria-sort="${ariaSort}"><button type="button" class="th-sort-btn${active ? ' is-active' : ''}" data-sort="${key}"
+      title="Sort by ${label}, ${next}">${label}<span class="th-sort-ind" aria-hidden="true">${arrow}</span></button></th>`;
+  }
+
+  container.addEventListener('click', e => {
+    const btn = e.target.closest('.th-sort-btn');
+    if (!btn || !container.contains(btn)) return;
+    const key = btn.dataset.sort;
+    if (!LIST_SORT_COLUMNS[key]) return;
+    listSort = { key, dir: listSort.key === key && listSort.dir === 'asc' ? 'desc' : 'asc' };
+    try { localStorage.setItem(LIST_SORT_KEY, JSON.stringify(listSort)); } catch (err) { /* not remembered; still sorts */ }
+    renderList();
+    // The header was rebuilt; put keyboard focus back on the same column's button.
+    container.querySelector(`.th-sort-btn[data-sort="${key}"]`)?.focus();
+  });
+
   function renderList() {
     parkUnavailableSection();          // FIRST, before anything can rewrite the container (see the hazard above)
     const search = searchEl.value.trim().toLowerCase();
@@ -1212,12 +1310,8 @@ function confirmDialog(message, okLabel = 'Remove') {
       return;
     }
 
-    // Sort by on_sale_date then title
-    filtered.sort((a, b) => {
-      const da   = a.catalog?.on_sale_date || '';
-      const dateB = b.catalog?.on_sale_date || '';
-      return da < dateB ? -1 : da > dateB ? 1 : 0;
-    });
+    // Sort by the chosen column (default: on-sale date, then title). See sortListItems().
+    sortListItems(filtered);
 
     container.innerHTML = `
       <div class="table-card">
@@ -1225,13 +1319,13 @@ function confirmDialog(message, okLabel = 'Remove') {
         <thead>
           <tr>
             <th class="td-cover"></th>
-            <th>Title</th>
-            <th>Publisher</th>
-            <th>Distributor</th>
-            <th>On Sale</th>
-            <th>Qty</th>
-            <th>Price</th>
-            <th>Line Total</th>
+            ${sortHeader('title',       'Title')}
+            ${sortHeader('publisher',   'Publisher')}
+            ${sortHeader('distributor', 'Distributor')}
+            ${sortHeader('on_sale',     'On Sale')}
+            ${sortHeader('qty',         'Qty')}
+            ${sortHeader('price',       'Price')}
+            ${sortHeader('line_total',  'Line Total')}
             <th></th>
           </tr>
         </thead>
@@ -2079,7 +2173,7 @@ function confirmDialog(message, okLabel = 'Remove') {
       const batch = await applyDemandFilters(
         db.from('preorders').select(`
           quantity,
-          catalog!inner ( id, title, foc_date, catalog_month ),
+          catalog!inner ( id, title, distributor, item_code, foc_date, catalog_month ),
           user_profiles ( is_admin )
         `)
       ).order('id').range(from, Math.min(from + 999, total - 1));
@@ -2093,38 +2187,105 @@ function confirmDialog(message, okLabel = 'Remove') {
       if (!c) return;
       if (p.user_profiles?.is_admin) return;
       if (isFocLocked(c.foc_date)) return;
-      const entry = byCatalog.get(c.id) || { title: c.title, openQty: 0 };
+      const entry = byCatalog.get(c.id) || { title: c.title, distributor: c.distributor, itemCode: c.item_code, openQty: 0 };
       entry.openQty += (p.quantity || 1);
       byCatalog.set(c.id, entry);
     });
 
-    const rows = Array.from(byCatalog, ([catalogId, v]) => ({ catalogId, title: v.title, openQty: v.openQty }));
+    const rows = Array.from(byCatalog, ([catalogId, v]) =>
+      ({ catalogId, title: v.title, distributor: v.distributor, itemCode: v.itemCode, openQty: v.openQty }));
     return { rows, error: null };
+  }
+
+  // Rows arrive in Print Catalog order (ShelfOrder.comparePrintCatalogOrder: Lunar, then PRH, each by title), with a
+  // band row per distributor like the printed sheet. The Suggested Qty cell is editable (2026-11-24): a typed quantity
+  // replaces the tier suggestion for that title, and the Action column and the Apply count follow it as you type.
+  // The never-lower rule still holds (ShelfOrder.shelfActionForQty): an existing store quantity is only raised here.
+  const shelfQtyEdits = new Map(); // catalogId -> typed qty, for this opening of the modal only
+
+  function shelfQtyFor(row) {
+    return shelfQtyEdits.has(row.catalogId) ? ShelfOrder.normalizeShelfQty(shelfQtyEdits.get(row.catalogId)) : row.suggestedQty;
+  }
+
+  function shelfActionLabel(row) {
+    const qty = shelfQtyFor(row);
+    const action = ShelfOrder.shelfActionForQty(row, qty);
+    if (action === 'insert') return 'Insert';
+    if (action === 'raise')  return `Raise to ${qty}`; // non-breaking: never "Raise to" over "6"
+    if (action === 'skip')   return 'Skip';
+    return row.hasStoreRow && qty < row.currentQty ? 'No change (lower it on My List)' : 'No change';
+  }
+
+  // Summary line, Apply button and every row's Action cell, from the current edits. Never rebuilds the rows, so the
+  // box being typed in keeps focus.
+  function refreshShelfOrderState() {
+    const preview = shelfOrderPlan.preview;
+    const payload = ShelfOrder.buildShelfOrderPayload(preview, shelfQtyEdits);
+    shelfOrderPlan.payload = payload;
+    if (preview.length) {
+      const copies = payload.reduce((n, p) => n + p.quantity, 0);
+      shelfSummary.textContent =
+        `${payload.length} title${payload.length !== 1 ? 's' : ''} to update out of ${preview.length} considered` +
+        (payload.length ? ` (${copies} cop${copies !== 1 ? 'ies' : 'y'}).` : '.') +
+        ' Change a Suggested Qty to override it; an existing store quantity is only raised here, never lowered.';
+    }
+    preview.forEach(r => {
+      const tr = shelfTbody.querySelector(`tr[data-catalog-id="${CSS.escape(r.catalogId)}"]`);
+      if (!tr) return;
+      tr.querySelector('.shelf-action').textContent = shelfActionLabel(r);
+      tr.querySelector('.shelf-qty-input').classList.toggle('is-edited', shelfQtyFor(r) !== r.suggestedQty);
+    });
+    shelfApplyBtn.disabled = !payload.length;
+    shelfApplyBtn.textContent = payload.length ? 'Apply' : 'Nothing to update';
   }
 
   function renderShelfOrderModal() {
     const preview = shelfOrderPlan.preview;
+    shelfQtyEdits.clear();
     if (!preview.length) {
       shelfSummary.textContent = 'No suggestions — no open customer demand found for this catalog month.';
       shelfTbody.innerHTML = '';
     } else {
-      const changeCount = preview.filter(r => r.action !== 'no change').length;
-      shelfSummary.textContent =
-        `${changeCount} title${changeCount !== 1 ? 's' : ''} to update out of ${preview.length} considered.`;
-      shelfTbody.innerHTML = preview.map(r => `
-        <tr>
+      const counts = preview.reduce((m, r) => m.set(r.distributor, (m.get(r.distributor) || 0) + 1), new Map());
+      let lastDist;
+      shelfTbody.innerHTML = preview.map(r => {
+        const n = counts.get(r.distributor);
+        const band = r.distributor !== lastDist
+          ? `<tr class="shelf-band"><td colspan="5">${escapeHtml(r.distributor || 'Other')} &middot; ${n} title${n !== 1 ? 's' : ''}</td></tr>`
+          : '';
+        lastDist = r.distributor;
+        return `${band}
+        <tr data-catalog-id="${escapeHtml(r.catalogId)}">
           <td>${escapeHtml(r.title)}</td>
           <td>${r.openQty}</td>
           <td>${r.currentQty}</td>
-          <td>${r.suggestedQty}</td>
-          <td>${r.action === 'insert' ? 'Insert' : r.action === 'raise' ? 'Raise' : 'No change'}</td>
-        </tr>
-      `).join('');
+          <td><input type="number" class="shelf-qty-input" min="0" max="${ShelfOrder.MAX_SHELF_QTY}" step="1" inputmode="numeric"
+                     value="${r.suggestedQty}" data-catalog-id="${escapeHtml(r.catalogId)}"
+                     title="Suggested ${r.suggestedQty} from ${r.openQty} open customer cop${r.openQty !== 1 ? 'ies' : 'y'}"
+                     aria-label="Suggested quantity: ${escapeHtml(r.title)}"></td>
+          <td class="shelf-action"></td>
+        </tr>`;
+      }).join('');
     }
-    shelfApplyBtn.disabled = !shelfOrderPlan.payload.length;
-    shelfApplyBtn.textContent = shelfOrderPlan.payload.length ? 'Apply' : 'Nothing to update';
+    refreshShelfOrderState();
     shelfOverlay.classList.add('open');
   }
+
+  shelfTbody.addEventListener('input', e => {
+    const inp = e.target.closest('.shelf-qty-input');
+    if (!inp) return;
+    shelfQtyEdits.set(inp.dataset.catalogId, inp.value);
+    refreshShelfOrderState();
+  });
+  // On leaving the box, show the number that will actually be written (blank -> 0, 150 -> 99, 2.5 -> 2).
+  shelfTbody.addEventListener('change', e => {
+    const inp = e.target.closest('.shelf-qty-input');
+    if (!inp) return;
+    const qty = ShelfOrder.normalizeShelfQty(inp.value);
+    inp.value = String(qty);
+    shelfQtyEdits.set(inp.dataset.catalogId, qty);
+    refreshShelfOrderState();
+  });
 
   function closeShelfOrderModal() {
     shelfOverlay.classList.remove('open');
@@ -2149,10 +2310,13 @@ function confirmDialog(message, okLabel = 'Remove') {
   shelfOverlay.addEventListener('click', e => { if (e.target === shelfOverlay) closeShelfOrderModal(); });
 
   shelfApplyBtn.addEventListener('click', async () => {
-    if (!shelfOrderPlan || !shelfOrderPlan.payload.length) return;
+    if (!shelfOrderPlan) return;
+    // Rebuilt from the boxes as they stand, so a value typed a moment ago is the one written.
+    const payload = ShelfOrder.buildShelfOrderPayload(shelfOrderPlan.preview, shelfQtyEdits);
+    if (!payload.length) return;
     shelfApplyBtn.disabled = true;
     shelfApplyBtn.textContent = 'Applying…';
-    const rows = shelfOrderPlan.payload.map(p => ({
+    const rows = payload.map(p => ({
       user_id: user.id,
       catalog_id: p.catalogId,
       quantity: p.quantity,
