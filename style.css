@@ -305,6 +305,89 @@ button { cursor: pointer; font-family: var(--font-body); }
   z-index: 1;
   background: linear-gradient(90deg, var(--bg-elevated) 0%, rgba(34,34,34,0.6) 36%, rgba(34,34,34,0) 80%);
 }
+/* Seasonal snow over the default art (PageBanner.addSnow; Dec 1 - Jan 5). It lives
+   inside .brand-banner, so it is clipped to the art, sits UNDER the fade above (the
+   flakes thin out toward the title with the art) and is never in the layout. No
+   image: each layer is a tile of soft dots that falls by exactly one tile height per
+   loop, so the repeat is seamless; a slow sideways sway on the wrapper gives drift.
+   transform only, so it is composited and costs no layout or paint per frame. */
+.banner-snow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24px;                      /* wider than the art, so the sway never shows an edge */
+  right: -24px;
+  z-index: 0;
+  animation: banner-snow-sway 7s ease-in-out infinite alternate;
+}
+.banner-snow i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--t) * -1);
+  height: calc(100% + var(--t));
+  background-size: var(--t) var(--t);
+  animation: banner-snow-fall var(--d) linear infinite;
+  will-change: transform;
+}
+.banner-snow i:nth-child(1) {       /* far: small, faint, slow */
+  --t: 160px; --d: 16s;
+  background-image:
+    radial-gradient(circle at 12% 13%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 44% 12%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 63% 14%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 82% 13%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 15% 42%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 31% 34%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 56% 42%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 91% 30%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 20% 70%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 40% 64%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 57% 55%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 88% 55%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 8% 83%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 30% 87%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 62% 93%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px),
+    radial-gradient(circle at 88% 90%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0.7) 1.0px, transparent 2.2px);
+}
+.banner-snow i:nth-child(2) {       /* middle */
+  --t: 240px; --d: 10s;
+  background-image:
+    radial-gradient(circle at 19% 20%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 44% 6%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 64% 11%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 88% 7%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 8% 37%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 33% 37%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 55% 31%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 91% 36%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 13% 66%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 35% 55%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 67% 64%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 90% 64%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 20% 85%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 42% 85%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 64% 90%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px),
+    radial-gradient(circle at 85% 81%, rgba(255,255,255,0.85) 0, rgba(255,255,255,0.85) 1.5px, transparent 3.2px);
+}
+.banner-snow i:nth-child(3) {       /* near: large, soft, fast */
+  --t: 270px; --d: 6s;
+  background-image:
+    radial-gradient(circle at 21% 8%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 53% 24%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 90% 17%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 19% 47%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 51% 42%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 87% 52%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 12% 81%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 55% 82%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px),
+    radial-gradient(circle at 93% 93%, rgba(255,255,255,0.95) 0, rgba(255,255,255,0.95) 2.2px, transparent 4.6px);
+}
+@keyframes banner-snow-fall { to { transform: translateY(var(--t)); } }
+@keyframes banner-snow-sway {
+  from { transform: translateX(-10px); }
+  to   { transform: translateX(10px); }
+}
 /* The title's accent: a hard offset shadow in the brand colour behind the letters,
    the way a comic title is printed with a misregistered spot-colour plate. Zero
    blur, so the edges stay crisp at every size. The offset is a fixed 2px at both
@@ -369,6 +452,7 @@ button { cursor: pointer; font-family: var(--font-body); }
 }
 @media (prefers-reduced-motion: reduce) {
   .brand-banner { transition: none; }
+  .banner-snow { display: none; }   /* a visitor who asked for less motion gets the plain art */
 }
 
 /* ── Order Deadline Banner ─────────────────────────────────── */
